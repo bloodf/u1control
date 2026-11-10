@@ -38,8 +38,11 @@ SVG_NS = "{http://www.w3.org/2000/svg}"
 MAX_PNG = 2 * 1024 * 1024   # Orca Cloud limit
 
 THEMES = {
-    "dark": {"--orca-bg": "#1e2228", "--orca-fg": "#eef0f3", "--orca-border": "#3a3f47", "--orca-muted": "#9aa1ab"},
-    "light": {"--orca-bg": "#ffffff", "--orca-fg": "#1f2328", "--orca-border": "#d0d7de", "--orca-muted": "#59636e"},
+    # OrcaSlicer's own colours, which the host injects into plugin pages
+    "dark": {"--orca-bg": "#2b2c30", "--orca-fg": "#eceef1", "--orca-border": "#43454c", "--orca-muted": "#a0a3aa",
+             "--orca-accent": "#009688", "--orca-accent-fg": "#ffffff"},
+    "light": {"--orca-bg": "#ffffff", "--orca-fg": "#262e30", "--orca-border": "#d0d7de", "--orca-muted": "#59636e",
+              "--orca-accent": "#009688", "--orca-accent-fg": "#ffffff"},
 }
 
 # Each shot: template svg, page (app|setup), nav section, zoom (>1 = bigger UI), optional selector to
@@ -51,9 +54,15 @@ SHOTS = [
     dict(svg=f"{R}/u1control-hero-light", page="app", section="dash", zoom=0.84),
     dict(svg=f"{O}/frame-print-setup", page="setup", zoom=0.95),
     dict(svg=f"{O}/frame-live-control", page="app", section="dash", zoom=0.9),
-    dict(svg=f"{O}/frame-toolheads-rfid", page="app", section="dash", zoom=0.88, scroll="#headCards"),
-    dict(svg=f"{O}/frame-spoolman", page="app", section="dash", zoom=0.8, spools=True, scroll="#headCards"),
-    dict(svg=f"{O}/frame-files-firmware", page="app", section="files", zoom=0.92),
+    dict(svg=f"{O}/frame-toolheads-rfid", page="app", section="dash", zoom=0.88,
+         js='document.querySelector("main").style.paddingBottom="420px";'
+            'document.querySelector("#headCards").closest(".card").scrollIntoView({block:"start"})'),
+    dict(svg=f"{O}/frame-spoolman", page="app", section="dash", zoom=0.8, spools=True, scroll="#headCards",
+         js='document.querySelector("main").style.paddingBottom="420px";'
+            'document.querySelector("#headCards").closest(".card").scrollIntoView({block:"start"});'
+            'document.querySelector("[data-pick=\\"2\\"]").click()'),
+    dict(svg=f"{O}/frame-files-firmware", page="app", section="files", zoom=0.92,
+         js='document.querySelector("[data-move=\\"benchy_PLA.gcode\\"]").click()'),
     dict(svg=f"{I}/u1control-install-01", page="app", section="settings", zoom=0.8, scroll="#cHost"),
     dict(svg=f"{I}/u1control-install-02", page="app", section="dash", zoom=0.8),
     dict(svg=f"{I}/u1control-install-03", page="app", section="settings", zoom=0.8, scroll="#autoBox"),
@@ -210,10 +219,10 @@ def font_css():
 
 # Render-only touches: keep long spool names inside their toolhead card, and don't draw the empty
 # thumbnail boxes (the fake file list has no G-code previews to show).
-FIXUPS = ".head select{font-size:11px;padding:5px 4px}"  # denser text for the small render only
+FIXUPS = ".pickb{font-size:11px;padding:5px 6px}"  # denser text for the small render only
 
 
-def make_page(html, theme, stub_data, section=None, scroll=None):
+def make_page(html, theme, stub_data, section=None, scroll=None, js=None):
     root = ":root{%s}" % ";".join("%s:%s" % kv for kv in THEMES[theme].items())
     head = "<style>%s%s%s</style>%s" % (font_css(), root, FIXUPS, STUB % json.dumps(stub_data).replace("</", "<\\/"))
     steps = []
@@ -221,6 +230,8 @@ def make_page(html, theme, stub_data, section=None, scroll=None):
         steps.append('document.querySelector(\'#nav button[data-s="%s"]\').click();' % section)
     if scroll:
         steps.append('setTimeout(()=>{const e=document.querySelector("%s");e.closest(".card,tr,section").scrollIntoView({block:"start"});},900);' % scroll)
+    if js:   # extra page script, run after the scroll (e.g. open the spool picker)
+        steps.append("setTimeout(()=>{%s},1300);" % js)
     html = html.replace("<head>", "<head>" + head, 1)
     return html.replace("</body>", "<script>%s</script></body>" % "".join(steps), 1)
 
@@ -330,7 +341,7 @@ def main(argv):
                 print("  %s: warnings %s" % (s["svg"], warnings))
                 page = make_page(html, theme, {"cmds": {}}, scroll=s.get("scroll"))
             else:
-                page = make_page(ns["_asset"]("app.html").replace("__VERSION__", ns["VERSION"]), theme, app_data(fakes, mods, s), s["section"], s.get("scroll"))
+                page = make_page(ns["_asset"]("app.html").replace("__VERSION__", ns["VERSION"]), theme, app_data(fakes, mods, s), s["section"], s.get("scroll"), s.get("js"))
             html_path, shot = tmp / ("page%d.html" % i), tmp / ("shot%d.png" % i)
             html_path.write_text(page, encoding="utf-8")
             zoom = s["zoom"]

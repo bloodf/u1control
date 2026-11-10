@@ -2,9 +2,9 @@
 <html><head><meta charset="utf-8"><title>U1 print setup</title>
 <style>
 :root{--bg:var(--orca-bg,#F6F7FB);--fg:var(--orca-fg,#14181F);--mut:var(--orca-muted,#5d6573);--bd:var(--orca-border,#d5d9e2);
---acc:#FFCD00;--accfg:#14181F;--acct:#806600;--t1:#FF997D;--t2:#F4CF78;--t3:#A99BFF;--t4:#78CFD5;--warn:#b25f00;
+--acc:var(--orca-accent,#009688);--accfg:var(--orca-accent-fg,#fff);--acct:color-mix(in srgb,var(--acc) 75%,var(--fg) 25%);--t1:#FF997D;--t2:#F4CF78;--t3:#A99BFF;--t4:#78CFD5;--warn:#b25f00;
 --ui:"Outfit",var(--orca-font,system-ui,sans-serif);--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
-:root[data-theme=dark]{--acct:#FFCD00;--warn:#f0a030}
+:root[data-theme=dark]{--warn:#f0a030}
 :focus-visible{outline:2px solid var(--acct);outline-offset:2px}
 .brand{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:13px}.brand svg{width:18px;height:18px}.brand b{font-weight:700}.brand span{font-weight:300}
 .i{display:inline-flex;pointer-events:none}.i svg{width:16px;height:16px}.i.badge svg{width:20px;height:20px}.i:empty{display:none}

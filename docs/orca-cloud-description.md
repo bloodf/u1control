@@ -2,9 +2,10 @@
 
 ![u1control](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-main.png){align=center}
 
-u1control brings the U1 parts of Snapmaker Orca to the regular OrcaSlicer and adds a full printer
-tab: camera, toolheads, RFID, Spoolman, a file manager and Extended Firmware settings. It works with
-the stock Snapmaker firmware and with the U1 Extended Firmware. Local network only, no cloud.
+u1control brings the U1 parts of Snapmaker Orca to the regular OrcaSlicer and adds a printer tab in
+OrcaSlicer's own colours: a dashboard with camera, status, toolheads, RFID and Spoolman, a file
+manager, and settings for calibration and the Extended Firmware. It works with the stock Snapmaker
+firmware and with the U1 Extended Firmware. Local network only, no cloud.
 
 ## Print setup
 
@@ -15,34 +16,37 @@ for empty heads or other materials. Auto bed leveling, flow calibration, time-la
 are set the way Snapmaker Orca sets them. u1control also fixes the U1 G-code: whole-bed mesh,
 print-by-object tool-change lift, real layer count, file colours.
 
-## Live control
+## Dashboard
 
 ![Live control](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-live-control.png){align=center}
 
-Camera, status, temperatures, pause, resume, cancel and emergency stop, chamber light and top cover,
-inside OrcaSlicer. Resume a print after a power cut.
+Camera, status, temperatures with each head's filament, pause, resume, cancel and emergency stop,
+chamber light and top cover, inside OrcaSlicer. With the Extended Firmware the printer's touchscreen
+is on the dashboard too, and you can tap it. Resume a print after a power cut.
 
 ## Toolheads and RFID
 
 ![Toolheads and RFID](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-toolheads-rfid.png){align=center}
 
-See and edit the filament in each head, load and unload, and run calibration. RFID tags (Snapmaker,
-and with the Extended Firmware OpenRFID, OpenSpool and NTAG) pick the right filament profile for your
-project.
+The four toolheads sit on the dashboard: see and edit the filament in each head, load and unload, and
+read tags again. RFID tags (Snapmaker, and with the Extended Firmware OpenRFID, OpenSpool and NTAG)
+pick the right filament profile for your project.
 
 ## Spoolman
 
 ![Spoolman](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-spoolman.png){align=center}
 
-One spool per toolhead. Filament use is recorded for each head when the print ends. Works with the
+One spool per toolhead, picked from a list that shows each spool's colour, brand, material and grams
+left. Filament use is recorded for each head when the print ends. Works with the
 [Spooler](https://github.com/bloodf/spooler) plugin, which turns your spools into OrcaSlicer filament
 profiles.
 
-## Files and firmware
+## Files and folders
 
-![Files and firmware](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-files-firmware.png){align=center}
+![Files and folders](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-files-firmware.png){align=center}
 
-Browse, print and delete files, save time-lapses, and change Extended Firmware settings.
+Browse, print and delete files, create folders and move files into them, and save time-lapses.
+Calibration, print options and the Extended Firmware settings are under Settings.
 
 ## Automagic or Expert
 
