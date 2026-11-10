@@ -142,9 +142,10 @@ def head_changed(old, new):
     return any((old or {}).get(k) != (new or {}).get(k) for k in keys)
 
 
-def filament_command_for(head_index, spool, extended):
-    """Printer command that applies a spool to a toolhead."""
+def filament_command_for(head_index, spool, extended, force=False):
+    """Printer command that applies a spool to a toolhead. force=True (FORCE=1) overrides an official /
+    RFID-tagged head: only for a manual bind the user confirmed, never for automatic follow."""
     if extended:
         return "SET_SPOOL_ID CHANNEL=%d SPOOL_ID=%d" % (int(head_index), int(spool["id"]))
     return u1.filament_config_command(head_index, spool["vendor"], spool["material"],
-                                      spool["name"] or "Basic", spool["colour"] or "#FFFFFF", force=True)
+                                      spool["name"] or "Basic", spool["colour"] or "#FFFFFF", force=force)

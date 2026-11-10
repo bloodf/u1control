@@ -13,6 +13,7 @@ import time
 import traceback
 
 import extended as ext
+import settings
 import spoolman as sm
 import u1
 from moonraker import Moonraker, PrinterError
@@ -20,6 +21,10 @@ from moonraker import Moonraker, PrinterError
 LEASE_SECONDS = 6.0
 STATUS_EVERY = 2.0
 CAMERA_KEEPALIVE = 50.0
+FRAME_MIN_INTERVAL = 0.2    # ~5 fps cap
+FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
+URGENT = ("emergency_stop", "pause", "cancel")   # never wait behind the command worker
+DEDICATED = URGENT + ("download",)               # own short-lived thread
 STOCK_CAMERA = "/server/files/camera/monitor.jpg"
 EXT_CAMERA = "/webcam/snapshot.jpg"
 GCODE_ROOT = "gcodes"
@@ -29,9 +34,9 @@ FILE_ROOTS = ("gcodes", "camera")   # camera = U1 timelapse videos and snapshots
 class Target:
     """Where to connect, resolved by the plugin on the UI thread."""
 
-    def __init__(self, host, api_key="", name="U1", spoolman_url="", spoolman_auto=True,
-                 spoolman_report_usage=True, spoolman_write_printer=True):
-        self.host, self.api_key, self.name = host, api_key, name or "U1"
+    def __init__(self, host, api_key="", name=settings.CONNECTION["printer_name"], spoolman_url="",
+                 spoolman_auto=True, spoolman_report_usage=True, spoolman_write_printer=True):
+        self.host, self.api_key, self.name = host, api_key, name or settings.CONNECTION["printer_name"]
         self.spoolman_url = spoolman_url
         self.spoolman_auto = spoolman_auto
         self.spoolman_report_usage = spoolman_report_usage
@@ -58,7 +63,11 @@ class Service:
         self.last_state = None
         self.last_view = None
         self.last_rfid = None
-        self.jobs_sent = {}         # filename -> {toolhead: grams}, recorded when u1control sends a print
+        self.jobs_sent = {}         # normalized basename -> {toolhead: grams}, recorded when u1control sends a print
+        self.generation = 0         # bumps when the target changes; results from an older one are dropped
+        self.frame_ack = threading.Event()
+        self.frame_ack.set()
+        self.last_frame_at = 0.0
         self.camera_on = False
         self.camera_keepalive_at = 0.0
         self.lease_until = 0.0
@@ -74,6 +83,7 @@ class Service:
     def set_target(self, target):
         with self.lock:
             if self.target is None or self.target.key() != target.key():
+                self.generation += 1
                 self.client = self.client_factory(target.host, target.api_key)
                 self.spoolman = None
                 self.spools, self.bindings, self.last_heads, self.written = [], {}, None, {}
@@ -89,31 +99,43 @@ class Service:
                 if not camera:
                     self.camera_keepalive_at = 0.0
 
+    def ack_frame(self):
+        self.frame_ack.set()
+
     def submit(self, request_id, command, args):
-        self.jobs.put((request_id, command, args or {}))
+        job = (request_id, command, args or {})
+        if command in DEDICATED:   # E-stop, pause, cancel and downloads must not queue behind a slow command
+            threading.Thread(target=self._run, args=job, name="u1control-" + str(command), daemon=True).start()
+        else:
+            self.jobs.put(job)
 
     def close(self):
         self.closed = True
         self.jobs.put(None)
+        for t in (self.worker, self.monitor):
+            if t is not threading.current_thread():
+                t.join(1.0)
 
     def _work(self):
         while not self.closed:
             job = self.jobs.get()
             if job is None:
                 return
-            request_id, command, args = job
-            handler = getattr(self, "cmd_" + str(command), None)
-            if handler is None:
-                self.publish({"type": "reply", "id": request_id, "error": "unknown command %s" % command})
-                continue
-            try:
-                result = handler(**args)
-                self.publish({"type": "reply", "id": request_id, "result": result})
-            except (PrinterError, sm.SpoolmanError, ValueError) as e:
-                self.publish({"type": "reply", "id": request_id, "error": str(e)})
-            except Exception as e:  # never kill the worker; keep details in the log only
-                self.log("u1control: %s failed: %s\n%s" % (command, e, traceback.format_exc()))
-                self.publish({"type": "reply", "id": request_id, "error": "%s failed: %s" % (command, e)})
+            self._run(*job)
+
+    def _run(self, request_id, command, args):
+        handler = getattr(self, "cmd_" + str(command), None)
+        if handler is None:
+            self.publish({"type": "reply", "id": request_id, "error": "unknown command %s" % command})
+            return
+        try:
+            result = handler(**args)
+            self.publish({"type": "reply", "id": request_id, "result": result})
+        except (PrinterError, sm.SpoolmanError, ValueError) as e:
+            self.publish({"type": "reply", "id": request_id, "error": str(e)})
+        except Exception as e:  # never kill the worker; keep details in the log only
+            self.log("u1control: %s failed: %s\n%s" % (command, e, traceback.format_exc()))
+            self.publish({"type": "reply", "id": request_id, "error": "%s failed: %s" % (command, e)})
 
     def _client(self):
         with self.lock:
@@ -137,38 +159,57 @@ class Service:
                 if now >= next_status:
                     next_status = now + STATUS_EVERY
                     self._push_status()
-                if camera:
+                if camera and self._frame_due():
                     self._push_frame()
                 else:
-                    time.sleep(0.2)
+                    time.sleep(0.05 if camera else 0.2)
             except Exception as e:
                 self.publish({"type": "offline", "error": str(e)})
                 next_status = time.monotonic() + 3
                 time.sleep(1)
 
+    def _current(self, gen):
+        with self.lock:
+            return gen == self.generation
+
     def _push_status(self):
+        with self.lock:
+            gen = self.generation
         client = self._client()
         if self.firmware["kind"] == "unknown":
             self.cmd_connect()
         status = client.query(u1.STATUS_OBJECTS)
+        if not self._current(gen):
+            return   # the target changed while we were asking: this answer is about the old printer
         view = u1.summarize(status)
         view["spool_ids"] = (status.get("print_task_config") or {}).get("filament_spool_id")
-        self._spoolman_follow(view)
+        self._spoolman_follow(view, gen)
         self._report_usage(view)
-        view["bindings"] = {str(k): v for k, v in self.bindings.items()}
-        self.last_view = view
-        self._rfid_follow(view)
+        with self.lock:
+            if gen != self.generation:
+                return
+            view["bindings"] = {str(k): v for k, v in self.bindings.items()}
+            self.last_view = view
+        self._rfid_follow(view, gen)
         self.publish({"type": "status", "data": view})
 
-    def _rfid_follow(self, view):
+    def _rfid_follow(self, view, gen):
         """Publish once when a toolhead reads a different tag than before (not on the first status)."""
         tags = view["rfid"]
-        previous, self.last_rfid = self.last_rfid, [u1.rfid_signature(t) for t in tags]
+        with self.lock:
+            if gen != self.generation:
+                return
+            previous, self.last_rfid = self.last_rfid, [u1.rfid_signature(t) for t in tags]
         if previous is None:
             return
         changed = [t for t, sig in enumerate(self.last_rfid) if sig != previous[t] and tags[t]]
         if changed:
             self.publish({"type": "rfid", "heads": changed, "tags": tags})
+
+    def _frame_due(self):
+        """~5 fps, and the page must have shown the previous frame (ack) unless FRAME_ACK_TIMEOUT passed."""
+        waited = time.monotonic() - self.last_frame_at
+        return waited >= FRAME_MIN_INTERVAL and (self.frame_ack.is_set() or waited >= FRAME_ACK_TIMEOUT)
 
     def _push_frame(self):
         client = self._client()
@@ -176,57 +217,75 @@ class Service:
         if not extended and time.monotonic() >= self.camera_keepalive_at:
             try:
                 client.ws_call("camera.start_monitor", {"domain": "lan", "interval": 0}, timeout=4)
-            except PrinterError as e:
+            except (PrinterError, OSError, ValueError) as e:
                 self.log("u1control: camera.start_monitor: %s" % e)
             self.camera_keepalive_at = time.monotonic() + CAMERA_KEEPALIVE
         path = EXT_CAMERA if extended else STOCK_CAMERA
         data, _ = client.raw("GET", path + "?t=%d" % int(time.time() * 1000), timeout=4)
         if data[:2] != b"\xff\xd8":
             raise PrinterError("camera returned no image")
+        self.frame_ack.clear()
+        self.last_frame_at = time.monotonic()
         self.publish({"type": "frame", "image": "data:image/jpeg;base64," + base64.b64encode(data).decode()})
-        time.sleep(0.05)
 
     # ------------------------------------------------------------------ spoolman
 
     def _spoolman(self):
-        if self.spoolman is None:
-            t = self.target
-            self.spoolman = sm.Spoolman(t.spoolman_url, self._client())
-            self.spoolman.connect()
-        return self.spoolman
+        with self.lock:
+            if self.spoolman is not None:
+                return self.spoolman
+            target, client, gen = self.target, self._client(), self.generation
+        smc = sm.Spoolman(target.spoolman_url, client)
+        smc.connect()
+        with self.lock:
+            if gen == self.generation:
+                self.spoolman = smc
+        return smc
 
-    def _spoolman_follow(self, view):
+    def _spoolman_follow(self, view, gen):
         """Keep toolhead bindings in sync when a head's filament changes on the printer."""
         heads = view["heads"]
-        previous, self.last_heads = self.last_heads, heads
-        if not self.target or (not self.target.spoolman_url and self.firmware["kind"] != "extended"):
-            return
-        if self.firmware["kind"] == "extended" and isinstance(view.get("spool_ids"), list):
-            self.bindings = {t: sid for t, sid in enumerate(view["spool_ids"]) if sid}
-            return  # SpoolLink owns the binding on extended firmware
-        if previous is None or not self.target.spoolman_auto:
-            return
-        changed = [t for t in range(u1.TOOLHEADS) if sm.head_changed(previous[t], heads[t])
-                   and not self._is_own_write(t, heads[t])]
+        with self.lock:
+            if gen != self.generation:
+                return
+            previous, self.last_heads = self.last_heads, heads
+            target, kind = self.target, self.firmware["kind"]
+            if not target or (not target.spoolman_url and kind != "extended"):
+                return
+            if kind == "extended" and isinstance(view.get("spool_ids"), list):
+                self.bindings = {t: sid for t, sid in enumerate(view["spool_ids"]) if sid}
+                return  # SpoolLink owns the binding on extended firmware
+            if previous is None or not target.spoolman_auto:
+                return
+            changed = [t for t in range(u1.TOOLHEADS) if sm.head_changed(previous[t], heads[t])
+                       and not self._is_own_write(t, heads[t])]
+        # Never overwrite a head that carries an RFID tag or is an official spool: that would destroy the
+        # tag's data and the head's flow calibration. Automatic writes never use FORCE=1.
+        changed = [t for t in changed if not heads[t]["official"] and not view["rfid"][t]]
         if not changed:
             return
         try:
             self.cmd_spools()
             for t in changed:
-                bound = next((s for s in self.spools if s["id"] == self.bindings.get(t)), None)
+                with self.lock:
+                    bound = next((s for s in self.spools if s["id"] == self.bindings.get(t)), None)
+                    taken = set(self.bindings.values())
+                    spools = list(self.spools)
                 if not heads[t]["loaded"]:
                     continue  # removed: keep the binding until a new spool shows up
                 if bound and sm.match_score(heads[t], bound) is not None and sm.match_score(heads[t], bound) < 60:
                     continue  # still the same spool
-                pick = sm.best_spool(heads[t], self.spools, exclude=set(self.bindings.values()))
+                pick = sm.best_spool(heads[t], spools, exclude=taken)
                 if pick:
+                    if not self._current(gen):
+                        return
                     self._bind(t, pick)
                     self.publish({"type": "notice", "text": "T%d now uses Spoolman spool #%d (%s %s)"
                                   % (t + 1, pick["id"], pick["vendor"], pick["name"])})
         except (PrinterError, sm.SpoolmanError) as e:
             self.publish({"type": "notice", "text": "Spoolman: %s" % e})
 
-    def _is_own_write(self, head, state):
+    def _is_own_write(self, head, state):   # caller holds self.lock
         """True once (and clears the mark) when the head now shows what _bind just wrote to it."""
         expected = self.written.get(head)
         if expected is None:
@@ -242,43 +301,49 @@ class Service:
         return (u1._gcode_word(state.get("vendor")).lower(), u1._gcode_word(state.get("type")).upper(),
                 u1.norm_colour(state.get("colour")))
 
-    def _bind(self, head, spool):
+    def _bind(self, head, spool, force=False):
         smc = self._spoolman()
-        location = sm.LOCATION_FMT % (self.target.name, head + 1)
-        previous = self.bindings.get(head)
-        if previous and previous != spool["id"] and self.firmware["kind"] != "extended":
+        with self.lock:
+            target, extended = self.target, self.firmware["kind"] == "extended"
+            previous = self.bindings.get(head)
+        location = sm.LOCATION_FMT % (target.name, head + 1)
+        if previous and previous != spool["id"] and not extended:
             smc.set_location(previous, "")
-        self.bindings = {h: sid for h, sid in self.bindings.items() if sid != spool["id"]}
-        if self.firmware["kind"] != "extended":
+        if not extended:
             smc.set_location(spool["id"], location)
-        self.bindings[head] = spool["id"]
-        extended = self.firmware["kind"] == "extended"
-        if extended or self.target.spoolman_write_printer:
-            self._client().gcode(sm.filament_command_for(head, spool, extended))
+        with self.lock:
+            self.bindings = {h: sid for h, sid in self.bindings.items() if sid != spool["id"]}
+            self.bindings[head] = spool["id"]
+        if extended or target.spoolman_write_printer:
+            self._client().gcode(sm.filament_command_for(head, spool, extended, force))
             if not extended:  # the next status shows this write; the change detector must not rebind on it
-                self.written[head] = self._signature({"vendor": spool["vendor"], "type": spool["material"],
-                                                      "colour": spool["colour"] or "#FFFFFF"})
+                with self.lock:
+                    self.written[head] = self._signature({"vendor": spool["vendor"], "type": spool["material"],
+                                                          "colour": spool["colour"] or "#FFFFFF"})
 
     def _report_usage(self, view):
         """Stock firmware without Moonraker's spoolman: deduct per-head filament at print end."""
         state, previous = view["state"], self.last_state
         self.last_state = state
-        if previous != "printing" or state != "complete" or not self.bindings:
+        with self.lock:
+            bindings, target, kind = dict(self.bindings), self.target, self.firmware["kind"]
+        if previous != "printing" or state != "complete" or not bindings:
             return
-        if self.firmware["kind"] == "extended" or not (self.target and self.target.spoolman_report_usage):
+        if kind == "extended" or not (target and target.spoolman_report_usage):
             return
         try:
             smc = self._spoolman()
             if smc.via_moonraker:
                 return  # Moonraker already reports usage for the active spool
-            per_head = self.jobs_sent.pop(view["filename"], None)
-            if per_head is None:  # printed from elsewhere: extended firmware's metadata has per-filament weights
-                weights = self._client().metadata(view["filename"]).get("filament_weights") or []
-                per_head = {t: w for t, w in enumerate(weights[:u1.TOOLHEADS]) if w}
-            for t, grams in per_head.items():
-                if grams and t in self.bindings:
-                    smc.use_weight(self.bindings[t], grams)
-            self.publish({"type": "notice", "text": "Spoolman updated with this print's filament use"})
+            with self.lock:
+                per_head = self.jobs_sent.pop(job_key(view["filename"]), None)
+            booked = False
+            for t, grams in (per_head or {}).items():   # only jobs u1control sent have known grams
+                if grams and t in bindings:
+                    smc.use_weight(bindings[t], grams)
+                    booked = True
+            if booked:
+                self.publish({"type": "notice", "text": "Spoolman updated with this print's filament use"})
         except (PrinterError, sm.SpoolmanError, ValueError, TypeError) as e:
             self.publish({"type": "notice", "text": "Spoolman usage not recorded: %s" % e})
 
@@ -291,19 +356,16 @@ class Service:
             t = mapping.get(f["index"])
             if t is not None and f.get("weight"):
                 per_head[t] = per_head.get(t, 0) + f["weight"]
-        self.jobs_sent[filename] = per_head
+        with self.lock:
+            self.jobs_sent[job_key(filename)] = per_head
 
     def cmd_connect(self):
         client = self._client()
         info = client.info()
         status = ext.Extended(client).status()
         self.firmware = u1.detect_firmware(info, status)
-        try:
-            cams = client.webcams()
-        except PrinterError:
-            cams = []
         return {"address": client.address, "firmware": self.firmware, "hostname": info.get("hostname"),
-                "klipper_state": info.get("state"), "webcams": cams, "printer": self.target.name}
+                "klipper_state": info.get("state"), "printer": self.target.name}
 
     def cmd_gcode(self, script):
         script = str(script or "").strip()
@@ -324,9 +386,6 @@ class Service:
     def cmd_emergency_stop(self):
         return self._client().emergency_stop()
 
-    def cmd_firmware_restart(self):
-        return self._client().firmware_restart()
-
     def cmd_light(self, on):
         return self.cmd_gcode("SET_LED LED=cavity_led WHITE=%d SYNC=0" % (1 if on else 0))
 
@@ -334,10 +393,7 @@ class Service:
         target = max(0, min(int(target), 320))
         if heater == "bed":
             return self.cmd_gcode("M140 S%d" % min(target, 110))
-        head = int(heater)
-        if not 0 <= head < u1.TOOLHEADS:
-            raise ValueError("bad toolhead")
-        return self.cmd_gcode("M104 T%d S%d" % (head, target))
+        return self.cmd_gcode("M104 T%d S%d" % (_head(heater), target))
 
     def cmd_speed(self, percent):
         return self.cmd_gcode("M220 S%d" % max(10, min(int(percent), 300)))
@@ -363,19 +419,16 @@ class Service:
     # toolheads -----------------------------------------------------------
 
     def cmd_set_filament(self, head, vendor, type, colour, sub_type="Basic"):
-        head = int(head)
-        if not 0 <= head < u1.TOOLHEADS:
-            raise ValueError("bad toolhead")
-        return self.cmd_gcode(u1.filament_config_command(head, vendor, type, sub_type, colour, force=True))
+        return self.cmd_gcode(u1.filament_config_command(_head(head), vendor, type, sub_type, colour, force=True))
 
     def cmd_load(self, head):
-        return self.cmd_gcode(u1.load_command(int(head)))
+        return self.cmd_gcode(u1.load_command(_head(head)))
 
     def cmd_unload(self, head):
-        return self.cmd_gcode(u1.unload_command(int(head)))
+        return self.cmd_gcode(u1.unload_command(_head(head)))
 
     def cmd_reread_rfid(self, head):
-        return self.cmd_gcode("FILAMENT_DT_UPDATE CHANNEL=%d" % int(head))
+        return self.cmd_gcode("FILAMENT_DT_UPDATE CHANNEL=%d" % _head(head))
 
     # files -----------------------------------------------------------------
 
@@ -407,10 +460,6 @@ class Service:
         data = self._client().thumbnail(folder + thumbs[0]["relative_path"])
         return "data:image/png;base64," + base64.b64encode(data).decode()
 
-    def cmd_metadata(self, path):
-        path = _safe_path(path, (GCODE_ROOT,))
-        return self._client().metadata(path[len(GCODE_ROOT) + 1:])
-
     def cmd_delete(self, path, is_dir=False):
         path = _safe_path(path)
         if "/" not in path:
@@ -425,14 +474,18 @@ class Service:
         return self._client().print_start(path[len(GCODE_ROOT) + 1:])
 
     def cmd_download(self, path):
-        """Save a printer file (e.g. a timelapse) to ~/Downloads/u1control/."""
+        """Stream a printer file (e.g. a timelapse) to ~/Downloads/u1control/, never overwriting.
+        Runs on its own thread (see DEDICATED). Returns the saved path."""
         path = _safe_path(path)
-        data = self._client().download(path)
         folder = os.path.join(os.path.expanduser("~"), "Downloads", "u1control")
         os.makedirs(folder, exist_ok=True)
-        target = os.path.join(folder, os.path.basename(path))
-        with open(target, "wb") as f:
-            f.write(data)
+        target, out = _new_file(folder, os.path.basename(path))
+        try:
+            with out:
+                self._client().download_to(path, out)
+        except BaseException:
+            os.remove(target)
+            raise
         return target
 
     def _require_idle(self):
@@ -462,31 +515,38 @@ class Service:
 
     def cmd_spools(self):
         smc = self._spoolman()
-        self.spools = [sm.spool_view(s) for s in smc.spools()]
-        if self.firmware["kind"] != "extended":
-            found = sm.bindings_from_locations(self.spools, self.target.name)
-            self.bindings = found or self.bindings
-        return {"spools": self.spools, "bindings": {str(k): v for k, v in self.bindings.items()},
-                "via": "moonraker" if smc.via_moonraker else "direct"}
+        spools = [sm.spool_view(s) for s in smc.spools()]
+        with self.lock:
+            self.spools = spools
+            if self.firmware["kind"] != "extended":
+                found = sm.bindings_from_locations(spools, self.target.name)
+                self.bindings = found or self.bindings
+            bindings = {str(k): v for k, v in self.bindings.items()}
+        return {"spools": spools, "bindings": bindings, "via": "moonraker" if smc.via_moonraker else "direct"}
 
-    def cmd_bind_spool(self, head, spool_id):
-        head = int(head)
+    def cmd_bind_spool(self, head, spool_id, force=False):
+        """force=True sends FORCE=1 (overrides an official/RFID head); only the page's confirmed manual bind sets it."""
+        head = _head(head)
         if not self.spools:
             self.cmd_spools()
-        spool = next((s for s in self.spools if s["id"] == int(spool_id)), None)
+        with self.lock:
+            spool = next((s for s in self.spools if s["id"] == int(spool_id)), None)
         if spool is None:
             raise ValueError("spool #%s not found" % spool_id)
-        self._bind(head, spool)
-        return {"bindings": {str(k): v for k, v in self.bindings.items()}}
+        self._bind(head, spool, bool(force))
+        with self.lock:
+            return {"bindings": {str(k): v for k, v in self.bindings.items()}}
 
     def cmd_unbind_spool(self, head):
-        head = int(head)
-        sid = self.bindings.pop(head, None)
+        head = _head(head)
+        with self.lock:
+            sid = self.bindings.pop(head, None)
         if self.firmware["kind"] == "extended":
             self._client().gcode("SET_SPOOL_ID CHANNEL=%d SPOOL_ID=0" % head)
         elif sid:
             self._spoolman().set_location(sid, "")
-        return {"bindings": {str(k): v for k, v in self.bindings.items()}}
+        with self.lock:
+            return {"bindings": {str(k): v for k, v in self.bindings.items()}}
 
     # extended firmware -----------------------------------------------------
 
@@ -504,6 +564,30 @@ class Service:
 
     def cmd_ext_action(self, action_id):
         return self._extended().action(action_id)
+
+
+def job_key(filename):
+    """Normalized job name: lowercase basename, so 'Dir/Part.gcode' and 'part.gcode' match."""
+    return str(filename or "").replace("\\", "/").rsplit("/", 1)[-1].lower()
+
+
+def _head(value):
+    head = int(value)
+    if not 0 <= head < u1.TOOLHEADS:
+        raise ValueError("bad toolhead")
+    return head
+
+
+def _new_file(folder, name):
+    """Open folder/name for writing without overwriting: 'name (1).ext', 'name (2).ext', ..."""
+    stem, ext = os.path.splitext(name or "download")
+    for n in range(10000):
+        target = os.path.join(folder, name if n == 0 else "%s (%d)%s" % (stem, n, ext))
+        try:
+            return target, open(target, "xb")
+        except FileExistsError:
+            continue
+    raise PrinterError("too many files named %s in %s" % (name, folder))
 
 
 def _safe_path(path, roots=FILE_ROOTS):

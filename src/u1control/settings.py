@@ -52,16 +52,6 @@ def _valid(kind, value):
     return isinstance(value, bool) if kind == "bool" else value in kind
 
 
-def legacy_to_new(legacy):
-    """Old per-capability config keys -> store keys."""
-    out = {k: v for k, v in (legacy or {}).items() if k in CONNECTION or k in automagic_values() or k == "prefs"}
-    if "show_dialog" in (legacy or {}):
-        out["print_dialog"] = "always" if legacy["show_dialog"] else "never"
-    if "remember" in (legacy or {}):
-        out["remember_print_options"] = bool(legacy["remember"])
-    return out
-
-
 class Store:
     """JSON file at `path`, or load() -> text / save(text) callables when no path is available."""
 
@@ -125,27 +115,20 @@ class Store:
                 elif key in CONNECTION or key in EXTRA:
                     default = {**CONNECTION, **EXTRA}[key]
                     if type(value) is type(default):
-                        data[key] = value
+                        data[key] = printer_label(value) if key == "printer_name" else value
             if data != self.data:
                 self._write(data)
             return self.effective()
 
-    def migrate(self, source, legacy, legacy_defaults):
-        """Copy one capability's old config once: only values the user changed from that config's defaults.
-        Changing an automation puts an existing user into Expert mode so nothing silently changes for them."""
-        with self.lock:
-            done = list(self.data.get("migrated") or [])
-            if source in done:
-                return
-            new, base = legacy_to_new(legacy), legacy_to_new(legacy_defaults)
-            changed = {k: v for k, v in new.items() if base.get(k) != v and k not in self.data}
-            data = {**self.data, **changed, "migrated": done + [source]}
-            if "mode" not in data and any(k in automagic_values() for k in changed):
-                data["mode"] = EXPERT
-            self._write(data)
-
 
 # ---------------------------------------------------------------------- Orca ConfigOptionStrings
+
+def printer_label(name):
+    """Spoolman location prefix. Spooler binds a "<name> T<n>" location only when the name is its own
+    printer label/model or ends in "U1", so keep that suffix: "Bob" -> "Bob U1"."""
+    name = " ".join(str(name or "").split())[:56] or CONNECTION["printer_name"]
+    return name if name.upper().endswith("U1") else name + " U1"
+
 
 def serialize_strings(values):
     """Orca's ";"-separated string list: an entry with a space, ";", quote or backslash is quoted."""

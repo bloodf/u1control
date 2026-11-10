@@ -106,7 +106,6 @@ def describe_toolheads(task):
             "colour": norm_colour(_at(task.get("filament_color_rgba"), t)),
             "colours": [c for c in (norm_colour(x) for x in multi) if c] if isinstance(multi, list) else [],
             "official": bool(_at(task.get("filament_official"), t, False)),
-            "present": bool(exist) if exist is not None else not none,
             "loaded": (bool(exist) if exist is not None else True) and not none,
         })
     return heads

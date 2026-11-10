@@ -49,12 +49,12 @@ def settings(lines):
     return out
 
 
-def split_list(value, sep=";"):
+def split_list(value, numeric=False):
+    """';'-separated list. Numeric fields (weights, softening) may use ',' instead; names never do."""
     if value is None:
         return []
     value = value.strip().strip('"')
-    if sep == ";" and ";" not in value and "," in value:
-        sep = ","
+    sep = "," if numeric and ";" not in value else ";"
     return [v.strip().strip('"') for v in value.split(sep)] if value else []
 
 
@@ -79,8 +79,8 @@ def filaments(lines, cfg):
     """[{index, type, colour, softening, weight}] for the filaments the print uses."""
     types = split_list(cfg.get("filament_type"))
     colours = split_list(cfg.get("filament_colour"))
-    soft = split_list(cfg.get("temperature_vitrification"), ",")
-    weights = split_list(cfg.get("filament used [g]") or cfg.get("filament_used_g"), ",")
+    soft = split_list(cfg.get("temperature_vitrification"), numeric=True)
+    weights = split_list(cfg.get("filament used [g]") or cfg.get("filament_used_g"), numeric=True)
     names = split_list(cfg.get("filament_settings_id"))
     used = used_tools(lines) or list(range(min(len(types), u1.TOOLHEADS) or 1))
     out = []
@@ -146,21 +146,34 @@ def _start_index(lines):
     return None
 
 
+LAYER_RE = re.compile(r"^\s*;\s*(CHANGE_LAYER|LAYER_CHANGE)\s*$")
+WAS_RE = re.compile(r"\(was: (.*)\)$")
+
+
 def ensure_purifier(lines, mode):
-    """Make the top-cover purifier line match mode ('auto' resolved by caller; 'off' removes ours).
-    Leaves a user's own SET_PURIFIER_MODE alone unless we wrote it."""
-    out, ours_at = [], None
-    for line in lines:
+    """Make the start G-code's top-cover purifier line match mode ('auto' resolved by caller; 'off' leaves
+    the file as sliced). The profile's first SET_PURIFIER_MODE before the first layer (upstream 2.5's U1
+    profile has one in its start G-code) is replaced by ours, with a '; u1control: purifier <mode> (was: ...)'
+    marker; without one ours goes after PRINT_START. Re-running first restores what the marker recorded."""
+    out, ours_next, was = [], False, None
+    for line in lines:   # undo an earlier run so the result only depends on the original file and mode
         if line.startswith(MARK + " purifier"):
-            ours_at = len(out)
+            m = WAS_RE.search(line)
+            ours_next, was = True, m.group(1) if m else None
             continue
-        if ours_at is not None and ours_at == len(out) and PURIFIER_RE.match(line):
-            continue  # drop the command that followed our marker
+        if ours_next:
+            ours_next = False
+            if PURIFIER_RE.match(line):
+                if was:
+                    out.append(was)
+                continue
         out.append(line)
     if mode == "off" or mode not in u1.PURIFIER:
         return out
-    if any(PURIFIER_RE.match(l) for l in out):
-        return out  # profile or user already sets it (upstream 2.5 U1 profile does)
+    limit = next((i for i, l in enumerate(out) if LAYER_RE.match(l)), len(out))
+    first = next((i for i in range(limit) if PURIFIER_RE.match(out[i])), None)
+    if first is not None:
+        return out[:first] + ["%s purifier %s (was: %s)" % (MARK, mode, out[first].strip()), u1.PURIFIER[mode]] + out[first + 1:]
     i = _start_index(out)
     if i is None:
         return out
@@ -192,29 +205,51 @@ def whole_bed_mesh(lines):
     return out
 
 
+SEQUENCE_RE = re.compile(r"^;\s*print_sequence\s*=?\s*(.*?)\s*$")
+MAX_HEIGHT_RE = re.compile(r"^;\s*max_print_height\s*=?\s*([\d.]+)")
+TOOL_CHANGE_RE = re.compile(r"^;\s*Change Tool\d+\s*->")
+LIFT_RE = re.compile(r"^G1 Z([\d.]+) F600\s*$")
+
+
+def _print_facts(lines):
+    """(print_sequence is 'by object', max_print_height or None) from the '; key = value' comments anywhere in the file."""
+    by_object, max_height = False, None
+    for line in lines:
+        m = SEQUENCE_RE.match(line)
+        if m:
+            by_object = m.group(1) in ("by object", "by_object")
+        m = MAX_HEIGHT_RE.match(line)
+        if m:
+            max_height = float(m.group(1))
+    return by_object, max_height
+
+
 def by_object_toolchange_lift(lines):
     """Snapmaker Orca fix #958 (head crashes in print-by-object): upstream 2.5's U1 change-filament
     G-code lifts *relatively* by an absolute target. Rewrite those lifts as absolute moves, and use
-    max_print_height when the profile fell back to the 1.5 mm hop."""
-    out, i, n = [], 0, len(lines)
-    by_object, max_height = False, None
+    max_print_height when the profile fell back to the 1.5 mm hop. Only the G91 / G1 Z.. F600 / G90
+    triple that directly follows a tool-change comment block (before the next T command) is touched."""
+    by_object, max_height = _print_facts(lines)
+    if not by_object:
+        return lines
+    out, i, n, in_block = [], 0, len(lines), False
     while i < n:
         line = lines[i]
-        m = re.match(r"^;\s*print_sequence\s+(.*)$", line)
-        if m:
-            by_object = m.group(1).strip() == "by object"
-        m = re.match(r"^;\s*max_print_height\s+([\d.]+)", line)
-        if m:
-            max_height = float(m.group(1))
-        if (by_object and line.strip() == "G91" and i + 2 < n and lines[i + 2].strip() == "G90"
-                and re.match(r"^G1 Z([\d.]+) F600\s*$", lines[i + 1].strip())):
-            z = float(re.match(r"^G1 Z([\d.]+)", lines[i + 1].strip()).group(1))
+        text = line.strip()
+        if TOOL_CHANGE_RE.match(line):
+            in_block = True
+        elif TOOL_RE.match(line) or (text and not text.startswith(";") and text != "G91"):
+            in_block = False   # next tool change, or any other command: the block is over
+        if in_block and text == "G91" and i + 2 < n and lines[i + 2].strip() == "G90" and LIFT_RE.match(lines[i + 1].strip()):
+            z = float(LIFT_RE.match(lines[i + 1].strip()).group(1))
             if z <= 1.5 and max_height:
                 z = max_height
             out += [MARK + " absolute tool-change lift (Snapmaker Orca #958)", "G90", "G1 Z%g F600" % z]
             i += 3
-            by_object = False
+            in_block = False
             continue
+        if in_block and text == "G91":
+            in_block = False   # a G91 that is not the lift triple
         out.append(line)
         i += 1
     return out
@@ -222,8 +257,11 @@ def by_object_toolchange_lift(lines):
 
 def real_total_layers(lines):
     """Snapmaker Orca writes the real layer count into SET_PRINT_STATS_INFO TOTAL_LAYER=;
-    upstream writes a pre-export estimate, so the touchscreen's layer counter can overshoot."""
-    count = sum(1 for l in lines if re.match(r"^;\s*(CHANGE_LAYER|LAYER_CHANGE)\s*$", l))
+    upstream writes a pre-export estimate, so the touchscreen's layer counter can overshoot.
+    Print-by-object restarts the layer count per object, so it is left alone there."""
+    if _print_facts(lines)[0]:
+        return lines
+    count = sum(1 for l in lines if LAYER_RE.match(l))
     if not count:
         return lines
     rx = re.compile(r"^(\s*SET_PRINT_STATS_INFO\b.*\bTOTAL_LAYER=)(\d+)", re.I)
@@ -272,6 +310,8 @@ def process(lines, cfg, options, mapping=None, heads=None, version="0"):
     if mode == "auto":
         mode = u1.purifier_mode(used)
     lines = ensure_purifier(lines, mode)
+    if mode in u1.PURIFIER and u1.PURIFIER[mode] not in lines:
+        mode = "off"   # nowhere to put it (no PRINT_START): report what actually happened
     if options.get("chamber_wait", True):
         lines = ensure_chamber_wait(lines)
     if options.get("whole_bed_mesh", True):

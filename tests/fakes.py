@@ -33,6 +33,7 @@ class FakePrinter:
     def __init__(self, version="2.0.0.205", state="standby", extended=False, spoolman=False):
         self.version, self.state, self.extended, self.spoolman = version, state, extended, spoolman
         self.scripts, self.deleted, self.started = [], [], []
+        self.files = {}   # "camera/t.mp4" -> bytes served under /server/files/
         self.task = task_config()
         self.tags = {}   # head -> filament_detect info dict
         self.spools = [
@@ -114,6 +115,9 @@ class FakePrinter:
                     return self._send(200, b"<html>fluidd</html>", "text/html")
                 if u.path == "/firmware-config/api/settings":
                     return self._send(200, {"settings": [{"id": "ssh", "current": "false", "options": ["false", "true"]}]})
+                rel = urllib.parse.unquote(u.path[len("/server/files/"):])
+                if u.path.startswith("/server/files/") and rel in fake.files:
+                    return self._send(200, fake.files[rel], "application/octet-stream")
                 if u.path == "/api/v1/health":
                     return self._send(200, {"status": "healthy"})
                 if u.path == "/api/v1/spool":

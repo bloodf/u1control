@@ -5,6 +5,7 @@ directly on 7125. The client tries the address as given, then :7125.
 """
 
 import base64
+import hashlib
 import json
 import os
 import socket
@@ -22,8 +23,13 @@ MAX_BODY = 64 * 1024 * 1024
 _NO_PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
+WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+FALLBACK_STATUSES = (404, 502, 503)   # "not Moonraker here": try the next candidate port
+
+
 class PrinterError(RuntimeError):
     """A printer request failed; the message is safe to show the user."""
+    status = None   # HTTP status when the printer answered with one
 
 
 def normalize_host(host):
@@ -70,13 +76,25 @@ class Moonraker:
                     raise PrinterError("printer response too large")
                 return data, resp.headers
         except urllib.error.HTTPError as e:
-            try:
-                msg = json.loads(e.read(65536).decode("utf-8"))["error"]["message"]
-            except Exception:
-                msg = "HTTP %d" % e.code
-            if e.code in (401, 403):
-                msg = "access denied (%s); set the API key in the printer connection settings" % msg
-            raise PrinterError("printer said: %s" % msg)
+            raise _http_error(e)
+
+    def download_to(self, path, out, timeout=30):
+        """Stream /server/files/<path> into the open binary file `out`; returns the byte count."""
+        req = urllib.request.Request((self.base or self.candidates[0]) + "/server/files/" + urllib.parse.quote(path),
+                                     headers=self._headers())
+        total = 0
+        try:
+            with self._open(req, timeout=timeout) as resp:
+                while True:
+                    chunk = resp.read(256 * 1024)
+                    if not chunk:
+                        return total
+                    out.write(chunk)
+                    total += len(chunk)
+        except urllib.error.HTTPError as e:
+            raise _http_error(e)
+        except OSError as e:
+            raise PrinterError("download failed (%s)" % getattr(e, "reason", e))
 
     def request(self, method, path, params=None, json_body=None, timeout=None):
         """JSON request; returns Moonraker's "result". Picks the working port on first use."""
@@ -92,8 +110,11 @@ class Moonraker:
             try:
                 data, _ = self.raw(method, path, body, headers, timeout, base)
                 payload = json.loads(data.decode("utf-8") or "{}")
-            except PrinterError:
-                raise
+            except PrinterError as e:
+                if self.base or e.status not in FALLBACK_STATUSES or base == bases[-1]:
+                    raise
+                errors.append("%s (HTTP %d)" % (base, e.status))
+                continue
             except (OSError, ValueError) as e:  # unreachable, or not Moonraker on this port
                 errors.append("%s (%s)" % (base, getattr(e, "reason", e)))
                 if isinstance(getattr(e, "reason", e), (TimeoutError, socket.timeout)):
@@ -111,9 +132,6 @@ class Moonraker:
 
     def info(self):
         return self.request("GET", "/printer/info")
-
-    def server_info(self):
-        return self.request("GET", "/server/info")
 
     def query(self, objects):
         """objects: {"print_stats": None | ["state", ...]} -> status dict."""
@@ -138,25 +156,14 @@ class Moonraker:
         return self.request("POST", "/printer/print/cancel")
 
     def emergency_stop(self):
-        # U1 Moonraker registers /printer/emergency_stop for websocket/MQTT only; M112 works everywhere.
-        return self.gcode("M112", timeout=5)
-
-    def firmware_restart(self):
-        return self.request("POST", "/printer/firmware_restart")
-
-    def server_restart(self):
-        return self.request("POST", "/server/restart")
-
-    def reboot(self):
-        return self.request("POST", "/machine/reboot")
-
-    def webcams(self):
-        return (self.request("GET", "/server/webcams/list") or {}).get("webcams", [])
+        # U1 Moonraker registers printer.emergency_stop for websocket/MQTT only. It bypasses the gcode
+        # queue, so it is tried first; M112 is the fallback when the websocket is unavailable.
+        try:
+            return self.ws_call("printer.emergency_stop", timeout=3)
+        except (PrinterError, OSError, ValueError):
+            return self.gcode("M112", timeout=5)
 
     # ---------------------------------------------------------------- files
-
-    def roots(self):
-        return self.request("GET", "/server/files/roots") or []
 
     def directory(self, path="gcodes", extended=True):
         return self.request("GET", "/server/files/directory",
@@ -177,33 +184,11 @@ class Moonraker:
     def delete_directory(self, path, force=False):
         return self.request("DELETE", "/server/files/directory", {"path": path, "force": str(bool(force)).lower()})
 
-    def download(self, path, limit=MAX_BODY):
-        data, _ = self.raw("GET", "/server/files/" + urllib.parse.quote(path))
-        return data[:limit]
-
-    def upload(self, root, name, content, print_after=False, timeout=120):
-        """Multipart upload. root: 'gcodes' or 'config'; name may contain sub dirs."""
-        boundary = "u1control" + os.urandom(8).hex()
-        fields = [("root", root), ("print", "true" if print_after else "false")]
-        if "/" in name:
-            fields.append(("path", name.rsplit("/", 1)[0]))
-        chunks = []
-        for key, value in fields:
-            chunks.append(('--%s\r\nContent-Disposition: form-data; name="%s"\r\n\r\n%s\r\n'
-                           % (boundary, key, value)).encode("utf-8"))
-        chunks.append(('--%s\r\nContent-Disposition: form-data; name="file"; filename="%s"\r\n'
-                       'Content-Type: application/octet-stream\r\n\r\n'
-                       % (boundary, name.rsplit("/", 1)[-1].replace('"', "_"))).encode("utf-8"))
-        body = b"".join(chunks) + content + ("\r\n--%s--\r\n" % boundary).encode("utf-8")
-        data, _ = self.raw("POST", "/server/files/upload", body,
-                           {"Content-Type": "multipart/form-data; boundary=" + boundary}, timeout)
-        return json.loads(data.decode("utf-8") or "{}")
-
     # ---------------------------------------------------------------- websocket rpc
 
     def ws_call(self, method, params=None, timeout=None):
-        """One JSON-RPC call over Moonraker's websocket. Some U1 methods (camera.*) are
-        registered for websocket/MQTT only, not HTTP."""
+        """One JSON-RPC call over Moonraker's websocket. Some U1 methods (camera.*, printer.emergency_stop)
+        are registered for websocket/MQTT only, not HTTP."""
         base = self.base or self.candidates[0]
         parts = urllib.parse.urlsplit(base)
         if parts.scheme != "http":
@@ -215,74 +200,112 @@ class Moonraker:
             sock.sendall(("GET /websocket HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\n"
                           "Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n%s\r\n"
                           % (parts.hostname, port, key, extra)).encode())
-            head = _read_until(sock, b"\r\n\r\n", 16384)
-            if b" 101 " not in head.split(b"\r\n", 1)[0]:
+            head, buf = _read_handshake(sock)
+            lines = head.split(b"\r\n")
+            if b" 101 " not in lines[0]:
                 raise PrinterError("printer refused the websocket")
+            accept = base64.b64encode(hashlib.sha1(key.encode() + WS_GUID).digest())
+            got = next((l.split(b":", 1)[1].strip() for l in lines[1:] if l.lower().startswith(b"sec-websocket-accept:")), b"")
+            if got != accept:
+                raise PrinterError("bad websocket handshake")
+            reader = _Reader(sock, buf)
             req_id = int(time.time() * 1000) & 0x7FFFFFFF
             _ws_send(sock, json.dumps({"jsonrpc": "2.0", "method": method, "params": params or {}, "id": req_id}))
             deadline = time.monotonic() + (timeout or self.timeout)
             while time.monotonic() < deadline:
-                msg = json.loads(_ws_recv(sock))
-                if msg.get("id") == req_id:
+                msg = json.loads(_ws_recv(reader))
+                if isinstance(msg, dict) and msg.get("id") == req_id:
                     if "error" in msg:
                         raise PrinterError("printer said: %s" % msg["error"].get("message", msg["error"]))
                     return msg.get("result")
             raise PrinterError("printer didn't answer %s" % method)
 
 
-def _read_until(sock, marker, limit):
+def _http_error(e):
+    try:
+        msg = json.loads(e.read(65536).decode("utf-8"))["error"]["message"]
+    except Exception:
+        msg = "HTTP %d" % e.code
+    finally:
+        e.close()
+    if e.code in (401, 403):
+        msg = "access denied (%s); set the API key in the printer connection settings" % msg
+    err = PrinterError("printer said: %s" % msg)
+    err.status = e.code
+    return err
+
+
+def _read_handshake(sock, limit=16384):
+    """(header bytes, bytes already received after the headers: the start of the frame stream)."""
     buf = b""
-    while marker not in buf:
+    while b"\r\n\r\n" not in buf:
         chunk = sock.recv(4096)
         if not chunk or len(buf) > limit:
             raise PrinterError("bad websocket handshake")
         buf += chunk
-    return buf
+    head, _, rest = buf.partition(b"\r\n\r\n")
+    return head, rest
 
 
-def _recv_exact(sock, n):
-    buf = b""
-    while len(buf) < n:
-        chunk = sock.recv(n - len(buf))
-        if not chunk:
-            raise PrinterError("websocket closed")
-        buf += chunk
-    return buf
+class _Reader:
+    def __init__(self, sock, buf=b""):
+        self.sock, self.buf = sock, buf
+
+    def exact(self, n):
+        while len(self.buf) < n:
+            chunk = self.sock.recv(max(4096, n - len(self.buf)))
+            if not chunk:
+                raise PrinterError("websocket closed")
+            self.buf += chunk
+        out, self.buf = self.buf[:n], self.buf[n:]
+        return out
 
 
-def _ws_send(sock, text):
-    data = text.encode("utf-8")
+def _ws_send(sock, text, opcode=0x1):
+    data = text if isinstance(text, bytes) else text.encode("utf-8")
     mask = os.urandom(4)
     n = len(data)
     if n < 126:
-        header = struct.pack("!BB", 0x81, 0x80 | n)
+        header = struct.pack("!BB", 0x80 | opcode, 0x80 | n)
     elif n < 65536:
-        header = struct.pack("!BBH", 0x81, 0x80 | 126, n)
+        header = struct.pack("!BBH", 0x80 | opcode, 0x80 | 126, n)
     else:
-        header = struct.pack("!BBQ", 0x81, 0x80 | 127, n)
+        header = struct.pack("!BBQ", 0x80 | opcode, 0x80 | 127, n)
     sock.sendall(header + mask + bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
 
 
-def _ws_recv(sock, limit=4 * 1024 * 1024):
-    """Next text message (fragments joined, pings ignored)."""
-    parts = []
+def _ws_recv(reader, limit=4 * 1024 * 1024):
+    """Next text message (fragments joined; pings answered, binary frames ignored)."""
+    parts, binary = [], False
     while True:
-        b1, b2 = _recv_exact(sock, 2)
+        b1, b2 = reader.exact(2)
         opcode, n = b1 & 0x0F, b2 & 0x7F
         if n == 126:
-            n = struct.unpack("!H", _recv_exact(sock, 2))[0]
+            n = struct.unpack("!H", reader.exact(2))[0]
         elif n == 127:
-            n = struct.unpack("!Q", _recv_exact(sock, 8))[0]
+            n = struct.unpack("!Q", reader.exact(8))[0]
         if n > limit:
             raise PrinterError("websocket message too large")
-        mask = _recv_exact(sock, 4) if b2 & 0x80 else None
-        payload = _recv_exact(sock, n)
+        mask = reader.exact(4) if b2 & 0x80 else None
+        payload = reader.exact(n)
         if mask:
             payload = bytes(b ^ mask[i % 4] for i, b in enumerate(payload))
         if opcode == 0x8:
             raise PrinterError("websocket closed")
-        if opcode in (0x9, 0xA):
+        if opcode == 0x9:
+            _ws_send(reader.sock, payload, 0xA)
             continue
-        parts.append(payload)
+        if opcode == 0xA:
+            continue
+        if opcode == 0x2:
+            binary = True
+        elif opcode == 0x1:
+            binary = False
+            parts = []
+        if not binary:
+            parts.append(payload)
         if b1 & 0x80:
+            if binary:
+                binary = False
+                continue
             return b"".join(parts).decode("utf-8")

@@ -41,21 +41,6 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["purifier"]), ("never", False, "auto"))
         self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective(), eff)  # persisted
 
-    def test_migration_once(self):
-        st, _ = self.store()
-        defaults = {"show_dialog": True, "remember": True, "chamber_wait": True, "prefs": {}}
-        st.migrate("pipeline", {**defaults}, defaults)
-        self.assertEqual(st.effective()["mode"], "automagic")  # untouched config: stay automagic
-        st2, _ = self.store()
-        st2.migrate("pipeline", {**defaults, "show_dialog": False, "prefs": {"bed_level": True}}, defaults)
-        eff = st2.effective()
-        self.assertEqual((eff["mode"], eff["print_dialog"], eff["prefs"]), ("expert", "never", {"bed_level": True}))
-        st2.migrate("pipeline", {**defaults, "chamber_wait": False}, defaults)  # one time only
-        self.assertTrue(st2.effective()["chamber_wait"])
-        st3, _ = self.store()
-        st3.migrate("page", {"printer_name": "U1", "host": "h"}, {"printer_name": "U1", "host": ""})
-        self.assertEqual((st3.effective()["printer_name"], st3.effective()["host"]), ("Snapmaker U1", "h"))
-
     def test_callable_backend(self):
         box = {}
         st = settings.Store(load=lambda: box.get("t", "{}"), save=lambda t: box.update(t=t))
@@ -129,11 +114,12 @@ class PipelineTests(PluginBase):
         orca, ns, page = self.page({"slicing_pipeline_plugin": ""})
         ctx = type("C", (), {"msg": "print", "name": "0.20"})()
         page.on_lifecycle_event(orca.LifecycleEvent.PresetSelected, ctx)
-        self.assertEqual(len(orca.process_calls), 1)
+        self.assertTrue(wait_for(lambda: len(orca.process_calls) == 1))
         orca.host.preset.process.begin_update = lambda n: (_ for _ in ()).throw(RuntimeError("busy"))
         orca2, ns2, page2 = self.page({"slicing_pipeline_plugin": ""})
         orca2.host.preset.process.begin_update = orca.host.preset.process.begin_update
         page2.on_lifecycle_event(orca2.LifecycleEvent.ProjectOpened, ctx)  # logged, no raise
+        time.sleep(0.3)
         self.assertEqual(orca2.process_calls, [])
 
     def test_hello_config_message(self):
@@ -145,7 +131,7 @@ class PipelineTests(PluginBase):
         page.on_message({"type": "save_settings", "settings": {"spooler_hint_dismissed": True, "api_key": "••••", "host": "127.0.0.1:1"}})
         config = [m for m in page.posted if m["type"] == "config"][-1]
         self.assertTrue(config["spooler"]["dismissed"])
-        self.assertTrue(any("U1 print setup added" in m.get("text", "") for m in page.posted))
+        self.assertTrue(wait_for(lambda: any("U1 print setup added" in m.get("text", "") for m in page.posted)))
         ns["service"]().close()
 
 
@@ -186,9 +172,8 @@ class SpoolerTests(PluginBase):
         self.assertEqual(sb.spooler_presets([a, b, {"name": "x", "bundle_id": ""}], ("My U1", "Snapmaker U1 (0.4 nozzle)")), [a])
         self.assertEqual(len(sb.spooler_presets([a, b], ())), 2)  # unknown printer: lenient
 
-    def test_name_rebuild_and_preference(self):
+    def test_nearest_colour_preference(self):
         spool = {"vendor": "Elegoo", "material": "PLA", "name": "Fire Red", "colour": "#FF0000"}
-        self.assertEqual(sb.profile_name(spool), "Elegoo PLA Fire Red")
         presets = [self.meta("Elegoo PLA Fire Red @Snapmaker U1"), self.meta("Elegoo PLA Blue @Snapmaker U1", "#0000FF"),
                    self.meta("_local/spooler/Elegoo PLA Fire Red #4 @Snapmaker U1 0.6")]
         self.assertEqual(sb.preset_for_spool(presets, spool), "Elegoo PLA Fire Red @Snapmaker U1")
@@ -314,8 +299,28 @@ class BindTests(unittest.TestCase):
         svc.submit(1, "bind_spool", {"head": 1, "spool_id": 7})
         self.assertTrue(wait_for(lambda: any(m.get("id") == 1 for m in pub)))
         self.assertEqual(fake.scripts, [])
-        self.assertIn((7, {"location": "U1 T2"}), fake.patches)
+        self.assertIn((7, {"location": "Snapmaker U1 T2"}), fake.patches)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SpoolerContractGapTests(unittest.TestCase):
+    """Gaps found by Spooler's side of the contract review."""
+
+    def test_printer_label_keeps_u1_suffix(self):
+        import settings
+        self.assertEqual(settings.printer_label("Bob"), "Bob U1")
+        self.assertEqual(settings.printer_label("Workshop  u1"), "Workshop u1")
+        self.assertEqual(settings.printer_label(""), "Snapmaker U1")
+        store = settings.Store()
+        self.assertEqual(store.update({"printer_name": "Bob"})["printer_name"], "Bob U1")
+
+    def test_keep_slots_marker_scoped_to_printer(self):
+        import spooler_bridge as sb
+        marker = {"active": True, "printer": "Snapmaker U1 0.4", "ts": 100}
+        self.assertTrue(sb.keep_slots_active(marker, 110, ("Snapmaker U1",)))
+        self.assertFalse(sb.keep_slots_active(dict(marker, printer="Sovol SV06"), 110, ("Snapmaker U1",)))
+        self.assertTrue(sb.keep_slots_active(dict(marker, printer=""), 110, ("Snapmaker U1",)))
+        self.assertFalse(sb.keep_slots_active(marker, 200, ("Snapmaker U1",)))

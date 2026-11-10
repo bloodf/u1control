@@ -158,7 +158,7 @@ class GcodeTests(unittest.TestCase):
         self.assertIn(u1.PURIFIER["strong"], text)
         self.assertIn("WAIT_CHAMBER_TEMP TIMEOUT=180", text)
         self.assertIn("\nBED_MESH_CALIBRATE PROBE_COUNT=11,11\n", text)
-        self.assertIn("TOTAL_LAYER=2 ", text)
+        self.assertIn("TOTAL_LAYER=99 ", text)  # print-by-object: the layer count is left alone
         self.assertIn("\nG90\nG1 Z2.4 F600\n", text)
         self.assertNotIn("G91\nG1 Z2.4", text)
         self.assertIn("; filament_colour = #FF0000;#000000", text)
@@ -176,7 +176,8 @@ class GcodeTests(unittest.TestCase):
         self.assertEqual(gcode.thumbnail(lines), "iVBORw0KGgo=")
 
     def test_by_object_fallback_uses_max_height(self):
-        lines = ["; print_sequence by object", "; max_print_height 270.05", "G91", "G1 Z1.5 F600", "G90"]
+        lines = ["; print_sequence by object", "; max_print_height 270.05", "; Change Tool0 -> Tool1 (layer 1)",
+                 "G91", "G1 Z1.5 F600", "G90"]
         self.assertIn("G1 Z270.05 F600", gcode.by_object_toolchange_lift(lines))
 
     def test_by_layer_lift_untouched(self):
@@ -272,15 +273,16 @@ class PrinterTests(unittest.TestCase):
         spools = self._call(svc, pub, "spools")
         self.assertEqual(len(spools["spools"]), 3)
         self._call(svc, pub, "bind_spool", head=3, spool_id=7)
-        self.assertIn((7, {"location": "U1 T4"}), self.fake.patches)
+        self.assertIn((7, {"location": "Snapmaker U1 T4"}), self.fake.patches)
         self.assertTrue(self.fake.scripts[-1].startswith("SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER=3 VENDOR=Generic "
                                                          "FILAMENT_TYPE=PLA FILAMENT_SUBTYPE=Matte_Black FILAMENT_COLOR_RGBA=111111FF"))
         # head 0's colour changes on the printer -> closest PLA spool (#9 red) gets bound automatically
         svc.touch()
         self.assertTrue(wait_for(lambda: any(m.get("type") == "status" for m in pub)))
+        self.fake.task["filament_official"][0] = False   # an official / tagged head is never rebound automatically
         self.fake.task["filament_color_rgba"][0] = "EE1111FF"
         self.assertTrue(wait_for(lambda: svc.bindings.get(0) == 9, 6))
-        self.assertIn((9, {"location": "U1 T1"}), self.fake.patches)
+        self.assertIn((9, {"location": "Snapmaker U1 T1"}), self.fake.patches)
         # print finishes -> grams from the job u1control sent are deducted per toolhead
         svc.remember_job("a.gcode", {0: 0, 1: 3}, [{"index": 0, "weight": 3.5}, {"index": 1, "weight": 1.2}])
         self.fake.state = "printing"
@@ -357,7 +359,7 @@ class PluginTests(unittest.TestCase):
         self.assertIn(u1.PURIFIER["weak"], text)
         data = json.loads(orca.windows[0].html.split("const D = ", 1)[1].split(";\nconst $", 1)[0])
         self.assertEqual(data["map"], {"0": 0, "1": 1})
-        self.assertTrue(ns["get_store"](cap, "pipeline", {}).effective()["prefs"]["bed_level"])  # remembered
+        self.assertTrue(ns["get_store"](cap).effective()["prefs"]["bed_level"])  # remembered
 
     def test_export_only_edits_file(self):
         _, ns = self.load()
@@ -433,9 +435,9 @@ class PluginTests(unittest.TestCase):
         page.on_message({"type": "sync_project"})
         self.assertIn("No printer status", page.posted[-1]["text"])
         ns["service"]().last_view = u1.summarize(self.fake.status())
-        page.on_message({"type": "sync_project"})
+        page.on_message({"type": "sync_project"})   # runs on a plugin thread, not the caller's
+        self.assertTrue(wait_for(lambda: "2: Generic PETG @U1" in page.posted[-1].get("text", "")))
         self.assertEqual(page.posted[-1]["type"], "notice")
-        self.assertIn("2: Generic PETG @U1", page.posted[-1]["text"])
         page.on_unload()
 
 

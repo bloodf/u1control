@@ -1,18 +1,22 @@
 """Build the single-file OrcaSlicer plugin: dist/u1control_any.py.
 
 Orca accepts one .py per plugin, so the helper modules are embedded as source strings and
-registered in sys.modules before plugin.py runs; their imports work unchanged.
+registered in sys.modules under prefixed names (u1control_<name>) before plugin.py runs. The
+sources keep their plain imports; the build rewrites them, so a generic name like `settings`
+or `service` never lands in the shared sys.modules.
 """
 
 import argparse
 import hashlib
 import json
+import re
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "u1control"
 MODULES = ("moonraker", "u1", "gcode", "extended", "spoolman", "settings", "spooler_bridge", "service")  # dependency order
+PREFIX = "u1control_"
 ASSETS = {"APP_HTML": "app.html", "SETUP_HTML": "setup.html", "ICON_SVG": "icon.svg"}
 
 LOADER = '''
@@ -32,6 +36,14 @@ for _name, _source in _U1CONTROL_SOURCES:
 '''
 
 
+def prefix_imports(source):
+    """`import X` -> `import u1control_X as X`, `from X import` -> `from u1control_X import` for our modules."""
+    names = "|".join(MODULES)
+    source = re.sub(r"^(\s*)import (%s)\s*$" % names, r"\1import %s\2 as \2" % PREFIX, source, flags=re.M)
+    source = re.sub(r"^(\s*)import (%s) as (\w+)\s*$" % names, r"\1import %s\2 as \3" % PREFIX, source, flags=re.M)
+    return re.sub(r"^(\s*)from (%s) import " % names, r"\1from %s\2 import " % PREFIX, source, flags=re.M)
+
+
 def build(out_dir=ROOT / "dist", release_tag=None):
     project = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"]
     version = project["version"]
@@ -45,7 +57,8 @@ def build(out_dir=ROOT / "dist", release_tag=None):
         if plugin.count(old) != 1:
             raise SystemExit("plugin.py must contain exactly one %r" % old)
         plugin = plugin.replace(old, new, 1)
-    sources = [(m, (SRC / (m + ".py")).read_text("utf-8")) for m in MODULES]
+    plugin = prefix_imports(plugin)
+    sources = [(PREFIX + m, prefix_imports((SRC / (m + ".py")).read_text("utf-8"))) for m in MODULES]
     header = "\n".join([
         "# /// script",
         "# requires-python = " + json.dumps(project["requires-python"]),

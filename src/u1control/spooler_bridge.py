@@ -7,22 +7,18 @@ preset meta: {"name", "bundle_id", "compatible_printers": [..], "colour": "#RRGG
 import json
 import os
 import re
-import unicodedata
 
 import u1
 
 BUNDLE_ID = "spooler"
 URL = "https://github.com/bloodf/spooler"
 NAME_PREFIX = "_local/spooler/"
-NAME_MAX = 60
 DATA_SUBDIR = "spooler"                  # <Orca data dir>/spooler/, the data dir being the parent of orca_plugins
 SETTINGS_FILE = "spooler_settings.json"
 PROFILES_FILE = "profiles.json"          # {"version": 1, "filaments": {"<filament id>": {"<printer label>": "<preset>"}}}
 KEEP_SLOTS_FILE = "keep_slots.json"      # {"active": true, "printer": "<label>", "ts": <unix s>}, refreshed ~5 s
 KEEP_SLOTS_FRESH = 30.0                  # seconds
 COLOUR_CAP = 120.0   # redmean distance beyond which "nearest colour" is no longer the same spool
-_RESERVED = re.compile(r"(CON|PRN|AUX|NUL|COM\d|LPT\d)(\..*)?", re.I)
-_DENIED = re.compile(r"(?i)secret|cert|conf")
 
 
 def detect(bundle_ids, filament_presets_meta, settings_file_exists=False):
@@ -53,12 +49,19 @@ def read_json(folder, name):
     return data if isinstance(data, dict) else None
 
 
-def keep_slots_active(marker, now):
-    """Spooler's "Keep Slots Synced" is running: active and refreshed within KEEP_SLOTS_FRESH seconds."""
+def keep_slots_active(marker, now, printer_labels=()):
+    """Spooler's "Keep Slots Synced" is running for this printer: active, refreshed within
+    KEEP_SLOTS_FRESH seconds, and its "printer" label matches one of printer_labels (a marker without
+    a label, or no labels to compare, counts as a match). Spooler's label is the printer model, or
+    "<model> <nozzle>" when two presets share a model."""
     try:
-        return bool(marker and marker.get("active")) and abs(now - float(marker.get("ts"))) < KEEP_SLOTS_FRESH
+        fresh = bool(marker and marker.get("active")) and abs(now - float(marker.get("ts"))) < KEEP_SLOTS_FRESH
     except (TypeError, ValueError):
         return False
+    label = str(marker.get("printer") or "").strip().lower() if fresh else ""
+    wanted = [str(p).strip().lower() for p in printer_labels if p]
+    return fresh and (not label or not wanted or any(label == w or label.startswith(w + " ") or w.startswith(label + " ")
+                                                    for w in wanted))
 
 
 def profile_lookup(profiles, filament_id, printer_label):
@@ -101,42 +104,18 @@ def _norm(text):
     return re.sub(r"[^a-z0-9+]", "", str(text or "").lower())
 
 
-def _safe_name(text):
-    name = re.sub(r'[\x00-\x1f​\\/:*?"<>|;@]', " ", unicodedata.normalize("NFC", text))
-    name = re.sub(r"\s+", " ", name).strip(" .")[:NAME_MAX].strip(" .")
-    name = "_" + name if _RESERVED.fullmatch(name) else name
-    return _DENIED.sub(lambda m: m.group(0)[0] + "​" + m.group(0)[1:], name)
-
-
-def profile_name(spool):
-    """Spooler's profile_name() for a Spoolman spool view ({vendor, material, name})."""
-    vendor, material, name = (str(spool.get(k) or "").strip() for k in ("vendor", "material", "name"))
-    if material and _norm(material) not in _norm(name):
-        name = ("%s %s" % (material, name)).strip()
-    if vendor and _norm(vendor) not in _norm(name):
-        name = "%s %s" % (vendor, name)
-    return _safe_name(name)
-
-
 def _bare(name):
     return name[len(NAME_PREFIX):] if name.startswith(NAME_PREFIX) else name
 
 
 def preset_for_spool(presets, spool, profiles=None, printer_label=""):
     """Name of the Spooler preset for a bound spool: Spooler's published profiles.json entry, else the
-    rebuilt name (any printer label, with or without the " #<id>" clash suffix), else the nearest
-    colour of the same vendor + material."""
+    nearest colour of the same vendor + material."""
     published = profile_lookup(profiles, spool.get("filament_id"), printer_label)
     if published:
         by_bare = {_bare(p["name"]).casefold(): p["name"] for p in presets}
         if _bare(published).casefold() in by_bare:
             return by_bare[_bare(published).casefold()]
-    base = profile_name(spool).casefold()
-    if base:
-        pattern = re.compile(r"^%s(?: #\d+)? @" % re.escape(base))
-        exact = sorted((p["name"] for p in presets if pattern.match(_bare(p["name"]).casefold())), key=len)
-        if exact:
-            return exact[0]
     vendor, material = _norm(spool.get("vendor")), _norm(spool.get("material"))
     near = []
     for p in presets:

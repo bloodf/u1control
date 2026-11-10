@@ -13,7 +13,7 @@ from moonraker import PrinterError
 API = "/firmware-config/api"
 SETTING_ID_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
 VALUE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
-ACTIONS = ("restart-klipper", "restart-moonraker", "reboot-system", "show-status")
+ACTIONS = ("restart-klipper", "restart-moonraker", "reboot-system")
 
 
 class Extended:
