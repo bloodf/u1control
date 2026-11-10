@@ -244,6 +244,24 @@ class StockFirmwareTest(JointCase):
         self.assertEqual({s["id"]: s["location"] for s in self.spoolman()}[9], "Workshop U1 T1")
         self.assertEqual(self.spooler_trays()[0]["spool_id"], 9)  # Spooler accepts any name ending in "U1"
 
+    def test_duplicate_legacy_and_archived_locations_resolve_identically(self):
+        spools = [
+            spoolman_spool(51, 61, "Snapmaker", "PLA", "Fire Red", "EE1111", "Snapmaker U1 T1", last_used="2026-11-01T00:00:00Z"),
+            spoolman_spool(52, 61, "Snapmaker", "PLA", "Fire Red", "EE1111", "snapmaker u1 t1", last_used="2026-11-09T00:00:00Z"),
+            spoolman_spool(53, 62, "Generic", "PLA", "Matte Black", "111111", "U1 T2"),
+            dict(spoolman_spool(54, 63, "Generic", "PETG", "White", "FAFAFA", "Snapmaker U1 T3"), archived=True),
+            spoolman_spool(55, 64, "Snapmaker", "PLA", "Silk Gold", "F4C032", "Workshop U1 T4", last_used="2026-11-09T00:00:00Z"),
+            spoolman_spool(56, 64, "Snapmaker", "PLA", "Silk Gold", "F4C032", "Snapmaker U1 T4", last_used="2026-01-01T00:00:00Z"),
+        ]
+        fake, svc = self.start(spools=spools)
+        fake.spools = [s for s in spools if not s["archived"]] + [s for s in spools if s["archived"]]
+        svc.cmd_spools()
+        live = [s for s in self.spoolman() if not s.get("archived")]
+        self.assertEqual(svc.bindings, {0: 52, 1: 53, 3: 56})
+        trays = self.sp.moon_report(self.printer_status(), None, live, U1_TARGET)[0]["print"]["ams"]["ams"][0]["tray"]
+        for head, spool_id in svc.bindings.items():
+            self.assertEqual(trays[head]["spool_id"], spool_id, "toolhead T%d" % (head + 1))
+
     def test_sub_type_u1control_wrote_breaks_a_colour_tie(self):
         twins = [spoolman_spool(21, 41, "Snapmaker", "PLA", "Basic Black", "080A0D"),
                  spoolman_spool(22, 42, "Snapmaker", "PLA", "Silk Black", "080A0D")]
