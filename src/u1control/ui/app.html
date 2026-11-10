@@ -1,0 +1,366 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>U1 Control</title>
+<style>
+:root{--bg:var(--orca-bg,#fff);--fg:var(--orca-fg,#222);--mut:var(--orca-muted,#777);--acc:var(--orca-accent,#009688);
+--accfg:var(--orca-accent-fg,#fff);--bd:var(--orca-border,#ddd);--warn:#e08a00;--bad:#d64545;--ok:#2e9d5b}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px var(--orca-font,system-ui,sans-serif);display:flex;flex-direction:column}
+header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--bd)}
+header b{font-size:14px}.pill{padding:2px 8px;border-radius:10px;border:1px solid var(--bd);font-size:11px}
+.pill.ext{border-color:var(--acc);color:var(--acc)}
+nav{display:flex;gap:2px;margin-left:auto}nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);padding:6px 10px;font:inherit;cursor:pointer}
+nav button.on{color:var(--fg);border-bottom-color:var(--acc)}
+main{flex:1;overflow:auto;padding:14px}section{display:none}section.on{display:block}
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:14px}
+@media (max-width:900px){.grid{grid-template-columns:1fr}}
+.card{border:1px solid var(--bd);border-radius:10px;padding:12px}.card h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+.cam{position:relative;background:#000;border-radius:8px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.cam img,.cam iframe{width:100%;height:100%;object-fit:contain;border:0}.cam .msg{position:absolute;color:#ccc}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}.sp{flex:1}
+button.b,select,input{font:inherit;color:var(--fg);background:transparent;border:1px solid var(--bd);border-radius:6px;padding:5px 10px}
+button.b{cursor:pointer}button.b:disabled{opacity:.45;cursor:default}button.p{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+button.d{border-color:var(--bad);color:var(--bad)}input[type=number]{width:72px}input[type=color]{padding:0;width:34px;height:28px}
+.bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden}.bar i{display:block;height:100%;background:var(--acc)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px}.mut{color:var(--mut)}
+.heads{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}@media (max-width:900px){.heads{grid-template-columns:repeat(2,1fr)}}
+.head{border:1px solid var(--bd);border-radius:10px;padding:10px}.head.active{border-color:var(--acc)}
+.sw{display:inline-block;width:16px;height:16px;border-radius:50%;border:1px solid var(--bd);vertical-align:middle}
+.big{width:44px;height:44px}
+table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:middle}
+th{color:var(--mut);font-weight:normal;font-size:12px}tr.dir td:first-child{cursor:pointer}td img{width:40px;height:40px;object-fit:contain}
+.toast{position:fixed;right:14px;bottom:14px;max-width:420px;padding:8px 12px;border-radius:8px;background:var(--fg);color:var(--bg);opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.on{opacity:.92}.err{color:var(--bad)}.ok{color:var(--ok)}
+pre{white-space:pre-wrap;max-height:260px;overflow:auto;border:1px solid var(--bd);border-radius:6px;padding:8px;font-size:12px}
+.set{display:grid;grid-template-columns:200px 1fr;gap:8px;align-items:center}
+</style></head>
+<body>
+<header><b>U1 Control</b><span class="pill" id="fw">connecting…</span><span class="mut" id="addr"></span>
+<nav id="nav"><button data-s="dash" class="on">Dashboard</button><button data-s="heads">Toolheads</button><button data-s="files">Files</button>
+<button data-s="firmware">Firmware</button><button data-s="console">Console</button><button data-s="settings">Settings</button></nav></header>
+<main>
+<section id="dash" class="on">
+<div class="card" id="plBox" hidden style="border-color:var(--warn);margin-bottom:14px"><b>A print was interrupted by a power cut.</b>
+ <span class="mut" id="plInfo"></span><div class="row"><button class="b p" id="plResume">Resume print</button><button class="b d" id="plDiscard">Discard</button></div></div>
+<div class="card" id="excBox" hidden style="border-color:var(--bad);margin-bottom:14px"><b class="err">Printer reports errors</b><pre id="excList"></pre></div>
+<div class="grid">
+ <div class="card"><h3>Camera</h3>
+  <div class="cam" id="cam"><img id="frame" alt="" hidden><iframe id="stream" hidden></iframe><span class="msg" id="camMsg">Camera off</span></div>
+  <div class="row"><button class="b p" id="camBtn">Start camera</button><button class="b" id="streamBtn" hidden>Live stream</button>
+   <span class="sp"></span><label><input type="checkbox" id="light"> Chamber light</label></div></div>
+ <div class="card"><h3>Status</h3>
+  <div class="row"><b id="state">—</b><span class="sp"></span><span class="mut" id="layer"></span></div>
+  <div class="bar"><i id="prog" style="width:0"></i></div>
+  <div class="row mut" id="file"></div>
+  <div class="kv" id="times"></div>
+  <div class="row"><button class="b" id="pause">Pause</button><button class="b" id="resume">Resume</button>
+   <button class="b d" id="cancel">Cancel</button><button class="b d" id="estop" title="Emergency stop">E-stop</button></div>
+  <h3 style="margin-top:14px">Temperatures</h3><div id="temps"></div>
+  <div class="row">Speed <input type="number" id="speed" min="10" max="300" step="5"> % <button class="b" id="speedSet">Set</button></div>
+  <div class="row mut" id="mstate"></div>
+  <div class="row">Top cover <select id="purMode"><option value="">—</option><option value="strong">Strong cooling</option>
+   <option value="weak">Weak cooling</option><option value="keep-warm">Keep warm</option><option value="idle">Idle</option></select>
+   <button class="b" id="purSet">Set</button><span class="mut" id="purInfo"></span></div>
+ </div></div></section>
+
+<section id="heads"><div class="card" id="spHint" hidden style="margin-bottom:14px"></div><div class="row" style="margin-bottom:10px"><button class="b p" id="syncProject" title="Pick the matching Orca filament profile and colour for each project slot from the loaded spools / RFID tags">Apply to project filaments</button></div>
+ <div class="heads" id="headCards"></div>
+ <div class="card" style="margin-top:14px"><h3>Spoolman</h3><div class="row"><span id="smInfo" class="mut">Not loaded</span>
+  <span class="sp"></span><button class="b" id="smLoad">Refresh spools</button></div></div>
+ <div class="card" style="margin-top:14px"><h3>Printer print options</h3><div id="prefs" class="row"></div></div>
+ <div class="card" style="margin-top:14px"><h3>Calibration</h3><div class="row">
+  <button class="b" data-cal="bed_mesh">Bed mesh</button><button class="b" data-cal="input_shaper">Input shaper</button>
+  <button class="b" data-cal="flow">Flow (active toolhead)</button><span class="mut">Printer must be idle. Toolhead XYZ offset calibration needs the touchscreen (manual nozzle cleaning).</span></div></div></section>
+
+<section id="files"><div class="card"><div class="row"><select id="root"><option value="gcodes">Print files</option>
+ <option value="camera">Timelapses &amp; camera</option></select><b id="path">gcodes</b><span class="sp"></span><span class="mut" id="disk"></span>
+ <button class="b" id="up">Up</button><button class="b" id="refresh">Refresh</button></div>
+ <table><thead><tr><th></th><th>Name</th><th>Size</th><th>Modified</th><th>Est. time</th><th></th></tr></thead><tbody id="list"></tbody></table></div></section>
+
+<section id="firmware"><div class="card"><h3>U1 Extended Firmware</h3><div id="extBody" class="mut">Detecting…</div></div></section>
+
+<section id="console"><div class="card"><h3>G-code console</h3><div class="row"><input id="cmd" class="sp" placeholder="e.g. M105 or GET_PRINT_TASK_CONFIG">
+ <button class="b p" id="send">Send</button></div><pre id="out"></pre></div></section>
+
+<section id="settings">
+<div class="card"><h3>Mode</h3><div class="row"><button class="b" id="modeAuto">Automagic</button><button class="b" id="modeExpert">Expert</button></div>
+ <p class="mut" id="modeHelp"></p><div id="autoBox"></div></div>
+<div class="card" id="spSet" style="margin-top:14px"><h3>Spooler</h3><div id="spSetBody"></div></div>
+<div class="card" style="margin-top:14px"><h3>Connection &amp; Spoolman</h3><div class="set">
+ <label for="cHost">Printer address</label><input id="cHost" placeholder="blank = selected U1 preset's address">
+ <label for="cKey">API key</label><input id="cKey" placeholder="only if Moonraker requires it">
+ <label for="cName">Printer name (Spoolman location)</label><input id="cName">
+ <label for="cSm">Spoolman URL</label><input id="cSm" placeholder="http://192.168.1.10:7912 (blank = printer's own link)">
+ </div><div class="row"><span class="sp"></span><button class="b p" id="save">Save</button></div>
+ <p class="mut">u1control __VERSION__ · Independent project, not made by Snapmaker.</p></div></section>
+</main>
+<div class="toast" id="toast"></div>
+<div id="modal" hidden style="position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center">
+ <div class="card" style="background:var(--bg);max-width:440px;width:90%"><p id="mText"></p><input id="mInput" hidden style="width:100%">
+ <div class="row"><span class="sp"></span><button class="b" id="mNo">Cancel</button><button class="b p" id="mYes">OK</button></div></div></div>
+<script>
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const fmtT = s => s == null ? "—" : (s >= 3600 ? Math.floor(s/3600) + "h " : "") + Math.floor(s%3600/60) + "m";
+const fmtB = b => b == null ? "" : b > 1e6 ? (b/1e6).toFixed(1) + " MB" : (b/1e3).toFixed(0) + " kB";
+let rfidAuto = false, seq = 0, pending = {}, st = null, info = null, camOn = false, path = "gcodes", spools = [], bindings = {};
+function call(cmd, args) {
+  const id = ++seq;
+  return new Promise((ok, no) => { pending[id] = {ok, no}; orca.postMessage({type: "cmd", id, cmd, args: args || {}}); });
+}
+function toast(t, bad) { const e = $("toast"); e.textContent = t; e.className = "toast on" + (bad ? " err" : ""); clearTimeout(e._t); e._t = setTimeout(() => e.className = "toast", 4000); }
+async function act(cmd, args, okText) { try { const r = await call(cmd, args); if (okText) toast(okText); return r; } catch (e) { toast(String(e), true); throw e; } }
+// In-page dialogs: native confirm()/prompt() may be unavailable in Orca's webview.
+function ask(text, input) {
+  return new Promise(done => {
+    $("mText").textContent = text; $("mInput").hidden = input == null; $("mInput").value = input || ""; $("modal").hidden = false;
+    $("modal").style.display = "flex";
+    const close = v => { $("modal").hidden = true; $("modal").style.display = "none"; done(v); };
+    $("mYes").onclick = () => close(input == null ? true : $("mInput").value); $("mNo").onclick = () => close(input == null ? false : null);
+  });
+}
+async function confirmAct(text, cmd, args, okText) { if (await ask(text)) return act(cmd, args, okText); }
+
+orca.onMessage(m => {
+  if (!m) return;
+  if (m.type === "reply" && pending[m.id]) { const p = pending[m.id]; delete pending[m.id]; "error" in m ? p.no(m.error) : p.ok(m.result); }
+  else if (m.type === "reply" && m.error) toast(m.error, true);
+  else if (m.type === "status") render(m.data);
+  else if (m.type === "frame") { $("frame").src = m.image; $("frame").hidden = false; $("camMsg").textContent = ""; }
+  else if (m.type === "offline") { $("state").textContent = "Offline"; $("camMsg").textContent = m.error; }
+  else if (m.type === "notice") toast(m.text);
+  else if (m.type === "rfid") onRfid(m);
+  else if (m.type === "config") fillConfig(m);
+  else if (m.type === "selection_changed") hello();
+});
+function hello() {
+  const id = ++seq;
+  pending[id] = {ok: r => { info = r; $("fw").textContent = r.firmware.kind + " " + (r.firmware.version || "");
+    $("fw").className = "pill" + (r.firmware.kind === "extended" ? " ext" : ""); $("addr").textContent = r.address;
+    $("streamBtn").hidden = r.firmware.kind !== "extended"; loadExt(); }, no: e => { $("fw").textContent = "not connected"; toast(e, true); }};
+  orca.postMessage({type: "hello", id});
+}
+setInterval(() => orca.postMessage({type: "lease", camera: camOn && !document.hidden}), 2000);
+document.addEventListener("visibilitychange", () => { if (document.hidden) orca.postMessage({type: "lease", camera: false}); });
+
+$("nav").onclick = e => { const b = e.target.closest("button"); if (!b) return;
+  document.querySelectorAll("nav button,section").forEach(x => x.classList.toggle("on", x === b || x.id === b.dataset.s));
+  if (b.dataset.s === "files") loadFiles(); if (b.dataset.s === "heads" && !spools.length) loadSpools(true); };
+
+// ---------------------------------------------------------------- dashboard
+$("camBtn").onclick = () => { camOn = !camOn; $("camBtn").textContent = camOn ? "Stop camera" : "Start camera";
+  $("camMsg").textContent = camOn ? "Starting…" : "Camera off"; if (!camOn) $("frame").hidden = true;
+  orca.postMessage({type: "lease", camera: camOn}); };
+$("streamBtn").onclick = () => { const f = $("stream"); f.hidden = !f.hidden;
+  f.src = f.hidden ? "about:blank" : "http://" + info.address.split(":")[0] + "/webcam/player"; $("frame").hidden = !f.hidden || !camOn; };
+$("light").onchange = e => act("light", {on: e.target.checked});
+$("pause").onclick = () => act("pause", {}, "Pausing");
+$("resume").onclick = () => act("resume", {}, "Resuming");
+$("cancel").onclick = () => confirmAct("Cancel the current print?", "cancel", {}, "Cancelling");
+$("estop").onclick = () => confirmAct("Emergency stop? Klipper will halt and need a firmware restart.", "emergency_stop", {});
+$("speedSet").onclick = () => act("speed", {percent: +$("speed").value}, "Speed set");
+$("plResume").onclick = () => confirmAct("Resume the interrupted print from where it stopped?", "power_loss", {action: "resume"}, "Resuming");
+$("plDiscard").onclick = () => confirmAct("Discard the interrupted print? It can't be resumed afterwards.", "power_loss", {action: "discard"}, "Discarded");
+document.addEventListener("click", e => { const k = e.target.dataset && e.target.dataset.cal;
+  if (k) confirmAct(`Run ${e.target.textContent} calibration now?`, "calibrate", {kind: k}, "Calibration started"); });
+$("purSet").onclick = () => $("purMode").value && act("purifier", {mode: $("purMode").value}, "Top cover set");
+
+function render(d) {
+  st = d; bindings = d.bindings || bindings;
+  const busy = d.state === "printing" || d.state === "paused";
+  $("state").textContent = d.state[0].toUpperCase() + d.state.slice(1) + (d.message ? " · " + d.message : "");
+  $("prog").style.width = ((d.progress || 0) * 100).toFixed(1) + "%";
+  $("layer").textContent = d.layer ? `Layer ${d.layer}/${d.total_layers || "?"}` : "";
+  $("file").textContent = d.filename ? d.filename + (busy ? ` · ${((d.progress || 0) * 100).toFixed(0)}%` : "") : "";
+  const left = d.progress > 0.01 && d.print_duration ? d.print_duration / d.progress - d.print_duration : null;
+  $("times").innerHTML = busy ? `<span class="mut">Elapsed</span><span>${fmtT(d.total_duration)}</span><span class="mut">Left (est.)</span><span>${fmtT(left)}</span>` : "";
+  $("pause").disabled = d.state !== "printing"; $("resume").disabled = d.state !== "paused"; $("cancel").disabled = !busy;
+  if (document.activeElement !== $("speed")) $("speed").value = Math.round((d.speed_factor || 1) * 100);
+  if (d.light != null) $("light").checked = d.light;
+  $("plBox").hidden = !d.power_loss; $("plInfo").textContent = d.reprint ? " Options: " + JSON.stringify(d.reprint) : "";
+  $("excBox").hidden = !(d.exceptions && d.exceptions.length); $("excList").textContent = (d.exceptions || []).map(x => JSON.stringify(x)).join("\n");
+  $("mstate").textContent = d.machine_state && d.machine_state !== "IDLE" ? "Machine: " + d.machine_state.toLowerCase().replace(/_/g, " ") : "";
+  $("purInfo").textContent = d.purifier.fitted === false ? "top cover not detected" : "";
+  $("temps").innerHTML = d.extruders.map((e, i) => tempRow("T" + (i + 1) + (e.active ? " ●" : ""), i, e)).join("") + tempRow("Bed", "bed", d.bed);
+  renderHeads(d);
+}
+const tempRow = (label, key, t) => `<div class="row"><span style="width:44px">${label}</span><span style="width:110px">${t.temp == null ? "—" : t.temp.toFixed(1)} / ${t.target ?? 0} °C</span>
+  <input type="number" data-heater="${key}" placeholder="°C"><button class="b" data-set="${key}">Set</button><button class="b" data-off="${key}">Off</button></div>`;
+$("temps").onclick = e => { const s = e.target.dataset.set, o = e.target.dataset.off;
+  if (s != null) act("temperature", {heater: s, target: +document.querySelector(`[data-heater="${s}"]`).value || 0});
+  if (o != null) act("temperature", {heater: o, target: 0}); };
+
+// ---------------------------------------------------------------- toolheads
+const TYPES = ["PLA","PLA+","PLA-CF","PETG","PETG-CF","PCTG","ABS","ASA","TPU","PA","PA-CF","PC","PVA","HIPS"];
+let editing = null;
+function renderHeads(d) {
+  if (editing !== null) return;  // don't clobber an open edit form
+  const busy = d.state === "printing" || d.state === "paused";
+  $("headCards").innerHTML = d.heads.map((h, i) => {
+    const feed = (d.feed || [])[i] || {}, sid = bindings[i], sp = spools.find(s => s.id === sid);
+    const opts = spools.filter(s => !h.type || famOf(s.material) === famOf(h.type) || s.id === sid)
+      .map(s => `<option value="${s.id}" ${s.id === sid ? "selected" : ""}>#${s.id} ${esc(s.vendor)} ${esc(s.name)} (${esc(s.material)}${s.remaining != null ? ", " + Math.round(s.remaining) + " g" : ""})</option>`).join("");
+    return `<div class="head ${d.extruders[i].active ? "active" : ""}">
+      <div class="row"><span class="sw big" style="background:${h.colour || "transparent"}"></span><div><b>T${i + 1}</b><br>
+      <span>${h.loaded ? esc(h.type) : "Empty"}</span> <span class="mut">${esc(h.vendor)} ${esc(h.sub_type)}</span>${tagPill(d.rfid && d.rfid[i])}</div></div>
+      ${tagDetail(d.rfid && d.rfid[i])}
+      <div class="mut">Feeder: ${esc(feed.state || "—")}${feed.detected ? " · filament at inlet" : ""}</div>
+      <div class="row"><button class="b" data-edit="${i}" ${busy ? "disabled" : ""}>Edit</button>
+       <button class="b" data-load="${i}" ${busy ? "disabled" : ""}>Load</button><button class="b" data-unload="${i}" ${busy ? "disabled" : ""}>Unload</button>
+       <button class="b" data-rfid="${i}" title="Read the spool's RFID tag again">RFID</button></div>
+      ${spools.length ? `<div class="row"><select data-spool="${i}" class="sp"><option value="">— no spool —</option>${opts}</select></div>
+        ${sp ? `<div class="mut">Spoolman #${sp.id}: ${sp.remaining != null ? Math.round(sp.remaining) + " g left" : ""}</div>` : ""}` : ""}</div>`;
+  }).join("");
+  $("prefs").innerHTML = Object.entries(d.options || {}).map(([k, v]) =>
+    `<label><input type="checkbox" data-pref="${k}" ${v ? "checked" : ""} ${busy ? "disabled" : ""}> ${esc(PREF_LABELS[k] || k)}</label>`).join("") || '<span class="mut">Printer reports no options</span>';
+}
+const tagPill = t => t ? ` <span class="pill" title="${t.official ? "Snapmaker" : "Third-party / open"} tag${t.uid ? " " + esc(t.uid) : ""}">Tag</span>` : "";
+function tagDetail(t) {
+  if (!t) return "";
+  const temp = t.hotend_min || t.hotend_max ? `${t.hotend_min || "?"}–${t.hotend_max || "?"}°C` : "";
+  const bits = [[t.vendor || t.manufacturer, t.type, t.sub_type].filter(Boolean).join(" "), temp, t.bed_temp ? `bed ${t.bed_temp}°C` : "",
+    t.sku ? "SKU " + t.sku : ""].filter(Boolean);
+  return `<div class="mut">Tag: ${esc(bits.join(" · "))}</div>`;
+}
+function onRfid(m) {
+  if (rfidAuto) return orca.postMessage({type: "sync_project", auto: true});
+  const names = m.heads.map(i => { const t = m.tags[i]; return `T${i + 1} ${[t.vendor || t.manufacturer, t.type, t.sub_type].filter(Boolean).join(" ")}`; });
+  toast("RFID tag read: " + names.join(", "));
+}
+$("syncProject").onclick = () => orca.postMessage({type: "sync_project"});
+const famOf = t => ((t || "").match(/[A-Za-z]+/) || [""])[0].toUpperCase();
+const PREF_LABELS = {bed_level:"Auto bed leveling", flow_calibrate:"Flow calibration", time_lapse_camera:"Time-lapse", auto_refill:"Auto-refill",
+  refill_any_colour:"Refill from any colour", tangle_detect:"Tangle detection", unload_when_done:"Unload when done", light_off_when_done:"Light off when done"};
+$("prefs").onchange = e => { const k = e.target.dataset.pref; if (k) act("preferences", {prefs: {[k]: e.target.checked}}, "Saved on printer"); };
+$("headCards").onclick = e => {
+  const t = e.target.dataset;
+  if (t.load != null) confirmAct(`Load T${+t.load + 1}? Insert filament in its inlet first and keep the work area clear.`, "load", {head: +t.load}, "Loading…");
+  if (t.unload != null) confirmAct(`Unload T${+t.unload + 1}? The nozzle will heat up.`, "unload", {head: +t.unload}, "Unloading…");
+  if (t.rfid != null) act("reread_rfid", {head: +t.rfid}, "Reading tag");
+  if (t.edit != null) editHead(+t.edit);
+  if (t.cancelEdit != null) { editing = null; render(st); }
+  if (t.saveEdit != null) { const i = +t.saveEdit, card = e.target.closest(".head");
+    const v = n => card.querySelector(`[name=${n}]`).value;
+    act("set_filament", {head: i, vendor: v("vendor"), type: v("type"), sub_type: v("sub"), colour: v("colour")}, `T${i + 1} updated`)
+      .finally(() => { editing = null; }); }
+};
+$("headCards").onchange = e => { const i = e.target.dataset.spool; if (i == null) return;
+  const id = e.target.value; act(id ? "bind_spool" : "unbind_spool", id ? {head: +i, spool_id: +id} : {head: +i}, id ? `T${+i + 1} → spool #${id}` : "Spool unlinked")
+    .then(r => { bindings = r.bindings; }); };
+function editHead(i) {
+  editing = i; const h = st.heads[i], card = $("headCards").children[i];
+  card.innerHTML = `<b>Edit T${i + 1}</b><div class="set" style="grid-template-columns:70px 1fr;margin-top:8px">
+   <label>Vendor</label><input name="vendor" value="${esc(h.vendor || "Generic")}">
+   <label>Type</label><select name="type">${TYPES.map(t => `<option ${t === h.type ? "selected" : ""}>${t}</option>`).join("")}</select>
+   <label>Subtype</label><input name="sub" value="${esc(h.sub_type || "Basic")}">
+   <label>Colour</label><input name="colour" type="color" value="${h.colour || "#ffffff"}"></div>
+   ${h.official ? '<p class="mut">RFID spool: saving overrides its tag data.</p>' : ""}
+   <div class="row"><button class="b p" data-save-edit="${i}">Save</button><button class="b" data-cancel-edit="1">Cancel</button></div>`;
+}
+async function loadSpools(quiet) {
+  try { const r = await call("spools"); spools = r.spools; bindings = r.bindings;
+    $("smInfo").textContent = `${spools.length} spools (${r.via === "moonraker" ? "through the printer" : "direct"})`; if (st) render(st); }
+  catch (e) { $("smInfo").textContent = String(e); if (!quiet) toast(e, true); }
+}
+$("smLoad").onclick = () => loadSpools(false);
+
+// ---------------------------------------------------------------- files
+async function loadFiles() {
+  $("path").textContent = path;
+  try { const r = await call("files", {path}); $("disk").textContent = r.disk ? `${fmtB(r.disk.free)} free` : "";
+    $("list").innerHTML = r.dirs.map(d => `<tr class="dir" data-dir="${esc(d.name)}"><td>📁</td><td>${esc(d.name)}</td><td></td><td></td><td></td>
+      <td><button class="b d" data-deldir="${esc(d.name)}">Delete</button></td></tr>`).join("") +
+      r.files.map(f => `<tr><td><img data-thumb="${esc(f.name)}" alt=""></td><td>${esc(f.name)}</td><td>${fmtB(f.size)}</td>
+      <td>${f.modified ? new Date(f.modified * 1000).toLocaleString() : ""}</td><td>${fmtT(f.time)}</td>
+      <td>${path.startsWith("gcodes") ? `<button class="b" data-print="${esc(f.name)}">Print</button>` : `<button class="b" data-dl="${esc(f.name)}">Save</button>`} <button class="b d" data-del="${esc(f.name)}">Delete</button></td></tr>`).join("")
+      || '<tr><td colspan="6" class="mut">No files</td></tr>';
+    if (path.startsWith("gcodes")) for (const img of document.querySelectorAll("[data-thumb]")) call("thumbnail", {path: path + "/" + img.dataset.thumb}).then(src => { if (src) img.src = src; }).catch(() => {});
+  } catch (e) { $("list").innerHTML = `<tr><td colspan="6" class="err">${esc(e)}</td></tr>`; }
+}
+$("list").onclick = e => {
+  const t = e.target.dataset, row = e.target.closest("tr");
+  if (t.del) return confirmAct(`Delete ${t.del} from the printer?`, "delete", {path: path + "/" + t.del}, "Deleted").then(loadFiles);
+  if (t.deldir) return confirmAct(`Delete folder ${t.deldir} and everything in it?`, "delete", {path: path + "/" + t.deldir, is_dir: true}, "Deleted").then(loadFiles);
+  if (t.print) return confirmAct(`Print ${t.print}? Toolhead mapping and print options stay as last set on the printer.`, "print_file", {path: path + "/" + t.print}, "Print started");
+  if (t.dl) return act("download", {path: path + "/" + t.dl}).then(p => toast("Saved to " + p));
+  if (row && row.dataset.dir) { path += "/" + row.dataset.dir; loadFiles(); }
+};
+$("root").onchange = e => { path = e.target.value; loadFiles(); };
+$("up").onclick = () => { if (path.includes("/")) { path = path.split("/").slice(0, -1).join("/"); loadFiles(); } };
+$("refresh").onclick = loadFiles;
+
+// ---------------------------------------------------------------- extended firmware
+async function loadExt() {
+  if (!info || info.firmware.kind !== "extended") {
+    $("extBody").innerHTML = 'Stock Snapmaker firmware detected. Install <a href="https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware">U1 Extended Firmware</a> to configure camera, Spoolman, SSH, web UI and more from here.';
+    return;
+  }
+  try {
+    const r = await call("ext_settings"), s = r.status || {};
+    const list = Array.isArray(r.settings) ? r.settings : Object.entries(r.settings || {}).map(([id, v]) => ({id, ...v}));
+    $("extBody").innerHTML = `<div class="kv">${Object.entries(s).map(([k, v]) => `<span class="mut">${esc(k)}</span><span>${esc(v)}</span>`).join("")}</div>
+      <table style="margin-top:10px">${list.map(x => { const opts = (x.options || []).map(o => typeof o === "object" ? o : {id: o, label: o});
+        return `<tr><td>${esc(x.label || x.name || x.id)}</td><td><select data-ext="${esc(x.id)}">${opts.map(o =>
+        `<option value="${esc(o.id ?? o.value)}" ${(o.id ?? o.value) == x.current ? "selected" : ""}>${esc(o.label ?? o.name ?? o.id)}</option>`).join("")}</select></td>
+        <td><button class="b" data-extset="${esc(x.id)}">Apply</button></td></tr>`; }).join("")}</table>
+      <div class="row"><button class="b" data-extact="restart-klipper">Restart Klipper</button><button class="b" data-extact="restart-moonraker">Restart Moonraker</button>
+      <button class="b d" data-extact="reboot-system">Reboot printer</button></div><pre id="extLog" hidden></pre>`;
+  } catch (e) { $("extBody").innerHTML = `<span class="err">${esc(e)}</span><p class="mut">Turn on Advanced Mode on the printer and make sure Firmware Config is enabled.</p>`; }
+}
+$("extBody").onclick = async e => {
+  const t = e.target.dataset;
+  if (t.extset) { const v = document.querySelector(`[data-ext="${t.extset}"]`).value;
+    let inputs = null;
+    if (t.extset === "spoolman" && v !== "disabled") { const url = await ask("Spoolman URL", "http://"); if (!url) return; inputs = {SPOOLMAN_URL: url}; }
+    if (!await ask(`Apply ${t.extset} = ${v}? The printer may restart services or reboot.`)) return;
+    const r = await act("ext_set", {setting_id: t.extset, value: v, inputs}, "Applied"); $("extLog").hidden = false; $("extLog").textContent = r.log; }
+  if (t.extact && await ask(`Run ${t.extact}?`)) act("ext_action", {action_id: t.extact}, "Done");
+};
+
+// ---------------------------------------------------------------- console
+$("send").onclick = async () => { const c = $("cmd").value.trim(); if (!c) return;
+  $("out").textContent += "> " + c + "\n"; try { await call("gcode", {script: c}); $("out").textContent += "ok\n"; }
+  catch (e) { $("out").textContent += "!! " + e + "\n"; } $("cmd").value = ""; };
+$("cmd").onkeydown = e => { if (e.key === "Enter") $("send").click(); };
+
+// ---------------------------------------------------------------- settings
+let cfg = null, uiMode = "automagic";
+const MODE_HELP = {automagic: "Automagic: everything that can run by itself does. Nothing to configure.",
+  expert: "Expert: choose how each step behaves. Your choices apply only in Expert mode."};
+function fillConfig(m) {
+  cfg = m; const c = m.settings; uiMode = m.mode;
+  $("cHost").value = c.host || ""; $("cKey").value = c.api_key || ""; $("cName").value = c.printer_name || "Snapmaker U1";
+  $("cSm").value = c.spoolman_url || ""; rfidAuto = !!c.rfid_auto_sync;
+  renderMode(); renderSpooler();
+}
+function renderMode() {
+  $("modeAuto").className = "b" + (uiMode === "automagic" ? " p" : ""); $("modeExpert").className = "b" + (uiMode === "expert" ? " p" : "");
+  $("modeHelp").textContent = MODE_HELP[uiMode];
+  const value = a => uiMode === "expert" && a.key in cfg.stored ? cfg.stored[a.key] : (uiMode === "expert" ? cfg.settings[a.key] : a.automagic);
+  const shown = v => v === true ? "on" : v === false ? "off" : v;
+  $("autoBox").innerHTML = uiMode === "automagic"
+    ? `<table>${cfg.automations.map(a => `<tr><td>${esc(a.label)}</td><td class="mut">${esc(shown(a.automagic))}</td></tr>`).join("")}</table>`
+    : `<div class="set" style="grid-template-columns:minmax(0,1fr) auto">${cfg.automations.map(a => {
+        const v = value(a);
+        const ctl = a.choices ? `<select data-auto="${a.key}">${a.choices.map(o => `<option ${o === v ? "selected" : ""}>${esc(o)}</option>`).join("")}</select>`
+          : `<input type="checkbox" data-auto="${a.key}" ${v ? "checked" : ""}>`;
+        return `<label title="${esc(a.help)}">${esc(a.label)}<br><span class="mut">${esc(a.help)}</span></label>${ctl}`; }).join("")}</div>`;
+}
+$("modeAuto").onclick = () => { uiMode = "automagic"; renderMode(); };
+$("modeExpert").onclick = () => { uiMode = "expert"; renderMode(); };
+function renderSpooler() {
+  const sp = cfg.spooler || {}, link = `<a href="${esc(sp.url)}">${esc(sp.url)}</a>`;
+  const text = sp.installed ? "Spooler detected \u2014 filament profiles come from Spooler."
+    : `Install Spooler to get your Spoolman spools as OrcaSlicer filament profiles. ${link} <span class="mut">(${esc(sp.url)})</span>`;
+  $("spSetBody").innerHTML = `<p>${text}</p>` + (!sp.installed && !sp.dismissed ? '<div class="row"><button class="b" data-dismiss-sp="1">Don\'t show again</button></div>' : "");
+  $("spHint").hidden = sp.installed || sp.dismissed;
+  $("spHint").innerHTML = sp.installed || sp.dismissed ? "" : `<p>${text}</p><div class="row"><button class="b" data-dismiss-sp="1">Don't show again</button></div>`;
+}
+document.addEventListener("click", e => { if (e.target.dataset && e.target.dataset.dismissSp) {
+  orca.postMessage({type: "save_settings", settings: {spooler_hint_dismissed: true}}); } });
+$("save").onclick = () => {
+  const s = {mode: uiMode, host: $("cHost").value.trim(), printer_name: $("cName").value.trim() || "Snapmaker U1", spoolman_url: $("cSm").value.trim()};
+  if (uiMode === "expert") document.querySelectorAll("[data-auto]").forEach(el => { s[el.dataset.auto] = el.type === "checkbox" ? el.checked : el.value; });
+  if ($("cKey").value !== "\u2022\u2022\u2022\u2022") s.api_key = $("cKey").value.trim();
+  orca.postMessage({type: "save_settings", settings: s}); toast("Saved"); spools = []; setTimeout(hello, 300); };
+hello();
+</script></body></html>
