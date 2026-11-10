@@ -18,6 +18,8 @@ SRC = ROOT / "src" / "u1control"
 MODULES = ("moonraker", "u1", "gcode", "extended", "spoolman", "settings", "spooler_bridge", "service")  # dependency order
 PREFIX = "u1control_"
 ASSETS = {"APP_HTML": "app.html", "SETUP_HTML": "setup.html", "ICON_SVG": "icon.svg"}
+ICON_DIRS = {"icon": "icons", "toolhead": "toolheads"}   # ui/<dir>/<name>.svg -> key "<prefix>/<name>"; spot-*.svg -> "spot/*"
+PLACEHOLDER = "__ICONS__"
 
 LOADER = '''
 import sys as _sys
@@ -36,6 +38,32 @@ for _name, _source in _U1CONTROL_SOURCES:
 '''
 
 
+def clean_svg(text, name):
+    """Strip prolog/comments/ids, mark decorative, and refuse anything scriptable."""
+    text = re.sub(r"<\?xml.*?\?>|<!--.*?-->|\s+id=\"[^\"]*\"", "", text, flags=re.S)
+    text = re.sub(r">\s+<", "><", text.replace('role="img"', 'aria-hidden="true"')).strip()
+    if re.search(r"<script|\bon\w+\s*=|javascript:", text, flags=re.I):
+        raise SystemExit("%s: scriptable content in svg" % name)
+    return text
+
+
+def all_icons():
+    ui = SRC / "ui"
+    files = {"%s/%s" % (k, f.stem): f for k, d in ICON_DIRS.items() for f in sorted((ui / d).glob("*.svg"))}
+    files.update({"spot/" + f.stem[5:]: f for f in sorted(ui.glob("spot-*.svg"))})
+    return {k: clean_svg(f.read_text("utf-8"), k) for k, f in files.items()}
+
+
+def page_html(name):
+    """ui/<name> with the icon map injected; only icons the page references (plus all toolhead badges) are inlined."""
+    html = (SRC / "ui" / name).read_text("utf-8")
+    if PLACEHOLDER not in html:
+        return html
+    used = {k: v for k, v in all_icons().items() if k.startswith("toolhead/") or k in html}
+    blob = json.dumps(used, separators=(",", ":")).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
+    return html.replace(PLACEHOLDER, blob)
+
+
 def prefix_imports(source):
     """`import X` -> `import u1control_X as X`, `from X import` -> `from u1control_X import` for our modules."""
     names = "|".join(MODULES)
@@ -52,7 +80,7 @@ def build(out_dir=ROOT / "dist", release_tag=None):
     plugin = (SRC / "plugin.py").read_text("utf-8")
     replacements = {'VERSION = "0.0.0-dev"': "VERSION = %r" % version}
     for const, name in ASSETS.items():
-        replacements["%s = None" % const] = "%s = %r" % (const, (SRC / "ui" / name).read_text("utf-8"))
+        replacements["%s = None" % const] = "%s = %r" % (const, page_html(name))
     for old, new in replacements.items():
         if plugin.count(old) != 1:
             raise SystemExit("plugin.py must contain exactly one %r" % old)

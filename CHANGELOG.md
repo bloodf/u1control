@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.0] - 2026-11-10
+
+- New look: brand symbol as the tab icon, icons across the U1 Control tab and the print setup pop-up,
+  toolhead badges in the toolhead colours, and illustrations for empty states.
+- Documentation: architecture, definitions, settings, firmware and Spooler contract references,
+  contributing guide and security policy.
+- README with diagrams and install steps.
+- Temperature rows show readable toolhead badges.
+
 ## [0.1.0] - 2026-11-10
 
 - U1 print setup (Slicing Pipeline plugin): filament to toolhead mapping, print options, top-cover mode,

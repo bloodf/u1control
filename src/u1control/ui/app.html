@@ -1,89 +1,105 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>U1 Control</title>
 <style>
-:root{--bg:var(--orca-bg,#fff);--fg:var(--orca-fg,#222);--mut:var(--orca-muted,#777);--acc:var(--orca-accent,#009688);
---accfg:var(--orca-accent-fg,#fff);--bd:var(--orca-border,#ddd);--warn:#e08a00;--bad:#d64545;--ok:#2e9d5b}
+:root{--bg:var(--orca-bg,#F6F7FB);--fg:var(--orca-fg,#14181F);--mut:var(--orca-muted,#5d6573);--bd:var(--orca-border,#d5d9e2);
+--acc:#FFCD00;--accfg:#14181F;--acct:#806600;--t1:#FF997D;--t2:#F4CF78;--t3:#A99BFF;--t4:#78CFD5;
+--warn:#b25f00;--bad:#c23535;--ok:#23804a;--ui:"Outfit",var(--orca-font,system-ui,sans-serif);--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+:root[data-theme=dark]{--acct:#FFCD00;--warn:#f0a030;--bad:#ff7a7a;--ok:#4cc98a}
 *{box-sizing:border-box}html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:13px var(--orca-font,system-ui,sans-serif);display:flex;flex-direction:column}
+body{margin:0;background:var(--bg);color:var(--fg);font:13px var(--ui);display:flex;flex-direction:column}
+:focus-visible{outline:2px solid var(--acct);outline-offset:2px}
+.i{display:inline-flex;vertical-align:-3px;pointer-events:none}.i svg{width:16px;height:16px;pointer-events:none}
+button .i{margin-right:5px}.i.lg svg{width:20px;height:20px}.i.badge svg{width:20px;height:20px}.i.badge.big svg{width:32px;height:32px}
+.i:empty{display:none}
 header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--bd)}
-header b{font-size:14px}.pill{padding:2px 8px;border-radius:10px;border:1px solid var(--bd);font-size:11px}
-.pill.ext{border-color:var(--acc);color:var(--acc)}
+.brand{display:flex;align-items:center;gap:8px;font-size:16px;color:var(--fg)}.brand svg{width:24px;height:24px}
+.wm b{font-weight:700}.wm span{font-weight:300}
+.pill{padding:2px 8px;border-radius:10px;border:1px solid var(--bd);font:11px var(--mono)}
+.pill.ext{border-color:var(--acct);color:var(--acct)}
 nav{display:flex;gap:2px;margin-left:auto}nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);padding:6px 10px;font:inherit;cursor:pointer}
-nav button.on{color:var(--fg);border-bottom-color:var(--acc)}
+nav button:hover{color:var(--fg)}nav button.on{color:var(--fg);border-bottom-color:var(--acct)}
 main{flex:1;overflow:auto;padding:14px}section{display:none}section.on{display:block}
 .grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(260px,1fr);gap:14px}
 @media (max-width:900px){.grid{grid-template-columns:1fr}}
-.card{border:1px solid var(--bd);border-radius:10px;padding:12px}.card h3{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut)}
+.card{border:1px solid var(--bd);border-radius:10px;padding:12px}.card h3{margin:0 0 10px;font:11px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--mut)}
 .cam{position:relative;background:#000;border-radius:8px;aspect-ratio:16/9;display:flex;align-items:center;justify-content:center;overflow:hidden}
-.cam img{width:100%;height:100%;object-fit:contain;border:0}.cam .msg{position:absolute;color:#ccc}
+.cam img{width:100%;height:100%;object-fit:contain;border:0}
+.empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px;text-align:center;color:var(--mut)}.empty[hidden]{display:none}
+.empty .spot svg{width:128px;height:96px}.empty .spot{display:inline-flex;pointer-events:auto}.cam .empty{position:absolute;color:#aab1bf}
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:6px 0}.sp{flex:1}
 button.b,select,input{font:inherit;color:var(--fg);background:transparent;border:1px solid var(--bd);border-radius:6px;padding:5px 10px}
-button.b{cursor:pointer}button.b:disabled{opacity:.45;cursor:default}button.p{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+button.b{cursor:pointer;display:inline-flex;align-items:center}button.b:hover:not(:disabled){border-color:var(--acct)}button.b:disabled{opacity:.45;cursor:default}
+button.p{background:var(--acc);color:var(--accfg);border-color:var(--acc);font-weight:600}button.p:hover:not(:disabled){border-color:var(--accfg)}
 button.d{border-color:var(--bad);color:var(--bad)}input[type=number]{width:72px}input[type=color]{padding:0;width:34px;height:28px}
-.bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden}.bar i{display:block;height:100%;background:var(--acc)}
+input[type=checkbox]{accent-color:var(--acct)}
+a{color:var(--acct)}
+.bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden}.bar i{display:block;height:100%;background:var(--acc);box-shadow:inset 0 0 0 1px var(--acct)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px}.mut{color:var(--mut)}
 .heads{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}@media (max-width:900px){.heads{grid-template-columns:repeat(2,1fr)}}
-.head{border:1px solid var(--bd);border-radius:10px;padding:10px}.head.active{border-color:var(--acc)}
+.head{border:1px solid var(--bd);border-top:3px solid var(--tc,var(--bd));border-radius:10px;padding:10px}.head.active{border-color:var(--acct);border-top-color:var(--tc)}
+.head .tn{display:flex;align-items:center;gap:6px;font:600 13px var(--mono)}
 .sw{display:inline-block;width:16px;height:16px;border-radius:50%;border:1px solid var(--bd);vertical-align:middle}
 .big{width:44px;height:44px}
 table{width:100%;border-collapse:collapse}td,th{padding:6px;border-bottom:1px solid var(--bd);text-align:left;vertical-align:middle}
-th{color:var(--mut);font-weight:normal;font-size:12px}tr.dir td:first-child{cursor:pointer}td img{width:40px;height:40px;object-fit:contain}
+th{color:var(--mut);font:11px var(--mono);text-transform:uppercase;letter-spacing:.04em}tr.dir td:first-child{cursor:pointer}td img{width:40px;height:40px;object-fit:contain}
 .toast{position:fixed;right:14px;bottom:14px;max-width:420px;padding:8px 12px;border-radius:8px;background:var(--fg);color:var(--bg);opacity:0;transition:opacity .2s;pointer-events:none}
 .toast.on{opacity:.92}.err{color:var(--bad)}.ok{color:var(--ok)}
-pre{white-space:pre-wrap;max-height:260px;overflow:auto;border:1px solid var(--bd);border-radius:6px;padding:8px;font-size:12px}
+.note{display:flex;gap:8px;align-items:center}.note.warn{color:var(--warn)}
+pre{white-space:pre-wrap;max-height:260px;overflow:auto;border:1px solid var(--bd);border-radius:6px;padding:8px;font:12px var(--mono)}
 .set{display:grid;grid-template-columns:200px 1fr;gap:8px;align-items:center}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition:none!important;animation:none!important;scroll-behavior:auto!important}}
 </style></head>
 <body>
-<header><b>U1 Control</b><span class="pill" id="fw">connecting…</span><span class="mut" id="addr"></span>
-<nav id="nav"><button data-s="dash" class="on">Dashboard</button><button data-s="heads">Toolheads</button><button data-s="files">Files</button>
-<button data-s="firmware">Firmware</button><button data-s="console">Console</button><button data-s="settings">Settings</button></nav></header>
+<header><span class="brand"><svg viewBox="0 0 256 256" aria-hidden="true"><path fill="currentColor" d="M40 96H72V160A32 32 0 0 0 104 192H152A32 32 0 0 0 184 160V96H216V160A64 64 0 0 1 152 224H104A64 64 0 0 1 40 160Z"/><rect x="40" y="40" width="32" height="64" rx="8" fill="#FF997D"/><rect x="88" y="40" width="32" height="64" rx="8" fill="#F4CF78"/><rect x="136" y="40" width="32" height="64" rx="8" fill="#A99BFF"/><rect x="184" y="40" width="32" height="64" rx="8" fill="#78CFD5"/></svg><span class="wm"><b>u1</b><span>control</span></span></span><span class="pill" id="fw">connecting…</span><span class="mut" id="addr"></span>
+<nav id="nav"><button data-s="dash" class="on"><span class="i" data-ic="icon/dashboard"></span>Dashboard</button><button data-s="heads"><span class="i" data-ic="icon/toolheads-rfid"></span>Toolheads</button><button data-s="files"><span class="i" data-ic="icon/files"></span>Files</button>
+<button data-s="firmware"><span class="i" data-ic="icon/firmware"></span>Firmware</button><button data-s="console"><span class="i" data-ic="icon/terminal"></span>Console</button><button data-s="settings"><span class="i" data-ic="icon/settings"></span>Settings</button></nav></header>
 <main>
 <section id="dash" class="on">
-<div class="card" id="plBox" hidden style="border-color:var(--warn);margin-bottom:14px"><b>A print was interrupted by a power cut.</b>
- <span class="mut" id="plInfo"></span><div class="row"><button class="b p" id="plResume">Resume print</button><button class="b d" id="plDiscard">Discard</button></div></div>
-<div class="card" id="excBox" hidden style="border-color:var(--bad);margin-bottom:14px"><b class="err">Printer reports errors</b><pre id="excList"></pre></div>
+<div class="card" id="plBox" hidden style="border-color:var(--warn);margin-bottom:14px"><b class="note warn"><span class="i" data-ic="icon/power-loss-resume"></span>A print was interrupted by a power cut.</b>
+ <span class="mut" id="plInfo"></span><div class="row"><button class="b p" id="plResume"><span class="i" data-ic="icon/resume"></span>Resume print</button><button class="b d" id="plDiscard"><span class="i" data-ic="icon/delete"></span>Discard</button></div></div>
+<div class="card" id="excBox" hidden style="border-color:var(--bad);margin-bottom:14px"><b class="err note"><span class="i" data-ic="icon/error"></span>Printer reports errors</b><pre id="excList"></pre></div>
 <div class="grid">
  <div class="card"><h3>Camera</h3>
-  <div class="cam" id="cam"><img id="frame" alt="" hidden><span class="msg" id="camMsg">Camera off</span></div>
-  <div class="row"><button class="b p" id="camBtn">Start camera</button><span class="sp"></span><label><input type="checkbox" id="light"> Chamber light</label></div></div>
+  <div class="cam" id="cam"><img id="frame" alt="" hidden><div class="empty" id="camEmpty"><span class="spot" id="camSpot" data-ic="spot/camera-off"></span><span id="camMsg">Camera off</span></div></div>
+  <div class="row"><button class="b p" id="camBtn"><span class="i" data-ic="icon/live-stream"></span><span id="camBtnT">Start camera</span></button><span class="sp"></span><label><span class="i" data-ic="icon/chamber-light"></span><input type="checkbox" id="light"> Chamber light</label></div></div>
  <div class="card"><h3>Status</h3>
   <div class="row"><b id="state">—</b><span class="sp"></span><span class="mut" id="layer"></span></div>
   <div class="bar"><i id="prog" style="width:0"></i></div>
   <div class="row mut" id="file"></div>
   <div class="kv" id="times"></div>
-  <div class="row"><button class="b" id="pause">Pause</button><button class="b" id="resume">Resume</button>
-   <button class="b d" id="cancel">Cancel</button><button class="b d" id="estop" title="Emergency stop">E-stop</button></div>
-  <h3 style="margin-top:14px">Temperatures</h3><div id="temps"></div>
+  <div class="row"><button class="b" id="pause"><span class="i" data-ic="icon/pause"></span>Pause</button><button class="b" id="resume"><span class="i" data-ic="icon/resume"></span>Resume</button>
+   <button class="b d" id="cancel"><span class="i" data-ic="icon/cancel"></span>Cancel</button><button class="b d" id="estop" title="Emergency stop"><span class="i" data-ic="icon/emergency-stop"></span>E-stop</button></div>
+  <h3 style="margin-top:14px"><span class="i" data-ic="icon/temperature"></span> Temperatures</h3><div id="temps"></div>
   <div class="row">Speed <input type="number" id="speed" min="10" max="300" step="5"> % <button class="b" id="speedSet">Set</button></div>
   <div class="row mut" id="mstate"></div>
-  <div class="row">Top cover <select id="purMode"><option value="">—</option><option value="strong">Strong cooling</option>
+  <div class="row"><span class="i" data-ic="icon/fan"></span>Top cover <select id="purMode"><option value="">—</option><option value="strong">Strong cooling</option>
    <option value="weak">Weak cooling</option><option value="keep-warm">Keep warm</option><option value="idle">Idle</option></select>
    <button class="b" id="purSet">Set</button><span class="mut" id="purInfo"></span></div>
  </div></div></section>
 
-<section id="heads"><div class="card" id="spHint" hidden style="margin-bottom:14px"></div><div class="row" style="margin-bottom:10px"><button class="b p" id="syncProject" title="Pick the matching Orca filament profile and colour for each project slot from the loaded spools / RFID tags">Apply to project filaments</button></div>
+<section id="heads"><div class="card" id="spHint" hidden style="margin-bottom:14px"></div><div class="row" style="margin-bottom:10px"><button class="b p" id="syncProject" title="Pick the matching Orca filament profile and colour for each project slot from the loaded spools / RFID tags"><span class="i" data-ic="icon/filament-spool"></span>Apply to project filaments</button></div>
  <div class="heads" id="headCards"></div>
- <div class="card" style="margin-top:14px"><h3>Spoolman</h3><div class="row"><span id="smInfo" class="mut">Not loaded</span>
-  <span class="sp"></span><button class="b" id="smLoad">Refresh spools</button></div></div>
+ <div class="card" style="margin-top:14px"><h3><span class="i" data-ic="icon/spoolman"></span> Spoolman</h3><div class="row"><span id="smInfo" class="mut">Not loaded</span>
+  <span class="sp"></span><button class="b" id="smLoad"><span class="i" data-ic="icon/spoolman"></span>Refresh spools</button></div></div>
  <div class="card" style="margin-top:14px"><h3>Printer print options</h3><div id="prefs" class="row"></div></div>
- <div class="card" style="margin-top:14px"><h3>Calibration</h3><div class="row">
-  <button class="b" data-cal="bed_mesh">Bed mesh</button><button class="b" data-cal="input_shaper">Input shaper</button>
-  <button class="b" data-cal="flow">Flow (active toolhead)</button><span class="mut">Printer must be idle. Toolhead XYZ offset calibration needs the touchscreen (manual nozzle cleaning).</span></div></div></section>
+ <div class="card" style="margin-top:14px"><h3><span class="i" data-ic="icon/calibration"></span> Calibration</h3><div class="empty" id="calBusy" hidden><span class="spot" data-ic="spot/printer-busy"></span><span>Printer is busy. Calibration runs when it is idle.</span></div><div class="row">
+  <button class="b" data-cal="bed_mesh"><span class="i" data-ic="icon/calibration"></span>Bed mesh</button><button class="b" data-cal="input_shaper"><span class="i" data-ic="icon/calibration"></span>Input shaper</button>
+  <button class="b" data-cal="flow"><span class="i" data-ic="icon/calibration"></span>Flow (active toolhead)</button><span class="mut">Printer must be idle. Toolhead XYZ offset calibration needs the touchscreen (manual nozzle cleaning).</span></div></div></section>
 
 <section id="files"><div class="card"><div class="row"><select id="root"><option value="gcodes">Print files</option>
  <option value="camera">Timelapses &amp; camera</option></select><b id="path">gcodes</b><span class="sp"></span><span class="mut" id="disk"></span>
- <button class="b" id="up">Up</button><button class="b" id="refresh">Refresh</button></div>
+ <button class="b" id="up"><span class="i" data-ic="icon/folder"></span>Up</button><button class="b" id="refresh">Refresh</button></div>
  <table><thead><tr><th></th><th>Name</th><th>Size</th><th>Modified</th><th>Est. time</th><th></th></tr></thead><tbody id="list"></tbody></table></div></section>
 
-<section id="firmware"><div class="card"><h3>U1 Extended Firmware</h3><div id="extBody" class="mut">Detecting…</div></div></section>
+<section id="firmware"><div class="card"><h3><span class="i" data-ic="icon/firmware"></span> U1 Extended Firmware</h3><div id="extBody" class="mut">Detecting…</div></div></section>
 
 <section id="console"><div class="card"><h3>G-code console</h3><div class="row"><input id="cmd" class="sp" placeholder="e.g. M105 or GET_PRINT_TASK_CONFIG">
- <button class="b p" id="send">Send</button></div><pre id="out"></pre></div></section>
+ <button class="b p" id="send"><span class="i" data-ic="icon/terminal"></span>Send</button></div><pre id="out"></pre></div></section>
 
 <section id="settings">
-<div class="card"><h3>Mode</h3><div class="row"><button class="b" id="modeAuto">Automagic</button><button class="b" id="modeExpert">Expert</button></div>
+<div class="card"><h3>Mode</h3><div class="row"><button class="b" id="modeAuto"><span class="i" data-ic="icon/automagic"></span>Automagic</button><button class="b" id="modeExpert"><span class="i" data-ic="icon/expert"></span>Expert</button></div>
  <p class="mut" id="modeHelp"></p><div id="autoBox"></div></div>
-<div class="card" id="spSet" style="margin-top:14px"><h3>Spooler</h3><div id="spSetBody"></div></div>
+<div class="card" id="spSet" style="margin-top:14px"><h3><span class="i" data-ic="icon/spoolman"></span> Spooler</h3><div id="spSetBody"></div></div>
 <div class="card" style="margin-top:14px"><h3>Connection &amp; Spoolman</h3><div class="set">
  <label for="cHost">Printer address</label><input id="cHost" placeholder="blank = selected U1 preset's address">
  <label for="cKey">API key</label><input id="cKey" placeholder="only if Moonraker requires it">
@@ -97,10 +113,17 @@ pre{white-space:pre-wrap;max-height:260px;overflow:auto;border:1px solid var(--b
  <div class="card" style="background:var(--bg);max-width:440px;width:90%"><p id="mText"></p><input id="mInput" hidden style="width:100%">
  <div class="row"><span class="sp"></span><button class="b" id="mNo">Cancel</button><button class="b p" id="mYes">OK</button></div></div></div>
 <script>
+const ICONS = __ICONS__;
+const ic = (n, c) => `<span class="i${c ? " " + c : ""}">${ICONS[n] || ""}</span>`;
+const spot = (n, text) => `<div class="empty"><span class="spot">${ICONS[n] || ""}</span><span>${text}</span></div>`;
+const fill = root => root.querySelectorAll("[data-ic]").forEach(e => { e.innerHTML = ICONS[e.dataset.ic] || ""; e.removeAttribute("data-ic"); });
+const luma = c => { const m = (c || "").match(/\d+/g); return m ? (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) : 255; };
+document.documentElement.dataset.theme = luma(getComputedStyle(document.body).backgroundColor) < 128 ? "dark" : "light";
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const fmtT = s => s == null ? "—" : (s >= 3600 ? Math.floor(s/3600) + "h " : "") + Math.floor(s%3600/60) + "m";
 const fmtB = b => b == null ? "" : b > 1e6 ? (b/1e6).toFixed(1) + " MB" : (b/1e3).toFixed(0) + " kB";
+fill(document);
 let rfidAuto = false, seq = 0, pending = {}, st = null, info = null, camOn = false, onDash = true, path = "gcodes", spools = [], bindings = {};
 function call(cmd, args) {
   const id = ++seq;
@@ -124,8 +147,8 @@ orca.onMessage(m => {
   if (m.type === "reply" && pending[m.id]) { const p = pending[m.id]; delete pending[m.id]; "error" in m ? p.no(m.error) : p.ok(m.result); }
   else if (m.type === "reply" && m.error) toast(m.error, true);
   else if (m.type === "status") render(m.data);
-  else if (m.type === "frame") { $("frame").src = m.image; $("frame").hidden = false; $("camMsg").textContent = ""; }
-  else if (m.type === "offline") { $("state").textContent = "Offline"; $("camMsg").textContent = m.error; }
+  else if (m.type === "frame") { $("frame").src = m.image; $("frame").hidden = false; $("camEmpty").hidden = true; }
+  else if (m.type === "offline") { $("state").textContent = "Offline"; camEmpty("spot/not-connected", m.error); }
   else if (m.type === "notice") toast(m.text);
   else if (m.type === "rfid") onRfid(m);
   else if (m.type === "config") fillConfig(m);
@@ -135,9 +158,10 @@ function hello() {
   const id = ++seq;
   pending[id] = {ok: r => { info = r; $("fw").textContent = r.firmware.kind + " " + (r.firmware.version || "");
     $("fw").className = "pill" + (r.firmware.kind === "extended" ? " ext" : ""); $("addr").textContent = r.address;
-    loadExt(); }, no: e => { $("fw").textContent = "not connected"; toast(e, true); }};
+    loadExt(); }, no: e => { $("fw").textContent = "not connected"; camEmpty("spot/not-connected", String(e)); toast(e, true); }};
   orca.postMessage({type: "hello", id});
 }
+function camEmpty(name, text) { $("camSpot").innerHTML = ICONS[name] || ""; $("camMsg").textContent = text; $("camEmpty").hidden = false; $("frame").hidden = true; }
 const camLease = () => orca.postMessage({type: "lease", camera: camOn && !document.hidden && onDash});
 setInterval(camLease, 2000);
 document.addEventListener("visibilitychange", camLease);
@@ -149,8 +173,8 @@ $("nav").onclick = e => { const b = e.target.closest("button"); if (!b) return;
   if (b.dataset.s === "files") loadFiles(); if (b.dataset.s === "heads" && !spools.length) loadSpools(true); };
 
 // ---------------------------------------------------------------- dashboard
-$("camBtn").onclick = () => { camOn = !camOn; $("camBtn").textContent = camOn ? "Stop camera" : "Start camera";
-  $("camMsg").textContent = camOn ? "Starting…" : "Camera off"; if (!camOn) $("frame").hidden = true;
+$("camBtn").onclick = () => { camOn = !camOn; $("camBtnT").textContent = camOn ? "Stop camera" : "Start camera";
+  if (camOn) { $("camMsg").textContent = "Starting…"; $("camEmpty").hidden = $("frame").hidden === false; } else camEmpty("spot/camera-off", "Camera off");
   camLease(); };
 $("light").onchange = e => act("light", {on: e.target.checked});
 $("pause").onclick = () => act("pause", {}, "Pausing");
@@ -173,17 +197,17 @@ function render(d) {
   $("file").textContent = d.filename ? d.filename + (busy ? ` · ${((d.progress || 0) * 100).toFixed(0)}%` : "") : "";
   const left = d.progress > 0.01 && d.print_duration ? d.print_duration / d.progress - d.print_duration : null;
   $("times").innerHTML = busy ? `<span class="mut">Elapsed</span><span>${fmtT(d.total_duration)}</span><span class="mut">Left (est.)</span><span>${fmtT(left)}</span>` : "";
-  $("pause").disabled = d.state !== "printing"; $("resume").disabled = d.state !== "paused"; $("cancel").disabled = !busy;
+  $("calBusy").hidden = !busy; $("pause").disabled = d.state !== "printing"; $("resume").disabled = d.state !== "paused"; $("cancel").disabled = !busy;
   if (document.activeElement !== $("speed")) $("speed").value = Math.round((d.speed_factor || 1) * 100);
   if (d.light != null) $("light").checked = d.light;
   $("plBox").hidden = !d.power_loss; $("plInfo").textContent = d.reprint ? " Options: " + JSON.stringify(d.reprint) : "";
   $("excBox").hidden = !(d.exceptions && d.exceptions.length); $("excList").textContent = (d.exceptions || []).map(x => JSON.stringify(x)).join("\n");
   $("mstate").textContent = d.machine_state && d.machine_state !== "IDLE" ? "Machine: " + d.machine_state.toLowerCase().replace(/_/g, " ") : "";
   $("purInfo").textContent = d.purifier.fitted === false ? "top cover not detected" : "";
-  $("temps").innerHTML = d.extruders.map((e, i) => tempRow("T" + (i + 1) + (e.active ? " ●" : ""), i, e)).join("") + tempRow("Bed", "bed", d.bed);
+  $("temps").innerHTML = d.extruders.map((e, i) => tempRow(ic("toolhead/t" + (i + 1), "badge") + (e.active ? " ●" : ""), i, e)).join("") + tempRow("Bed", "bed", d.bed);
   renderHeads(d);
 }
-const tempRow = (label, key, t) => `<div class="row"><span style="width:44px">${label}</span><span style="width:110px">${t.temp == null ? "—" : t.temp.toFixed(1)} / ${t.target ?? 0} °C</span>
+const tempRow = (label, key, t) => `<div class="row"><span style="width:54px">${label}</span><span style="width:110px">${t.temp == null ? "—" : t.temp.toFixed(1)} / ${t.target ?? 0} °C</span>
   <input type="number" data-heater="${key}" placeholder="°C"><button class="b" data-set="${key}">Set</button><button class="b" data-off="${key}">Off</button></div>`;
 $("temps").onclick = e => { const s = e.target.dataset.set, o = e.target.dataset.off;
   if (s != null) act("temperature", {heater: s, target: +document.querySelector(`[data-heater="${CSS.escape(s)}"]`).value || 0});
@@ -199,14 +223,14 @@ function renderHeads(d) {
     const feed = (d.feed || [])[i] || {}, sid = bindings[i], sp = spools.find(s => s.id === sid);
     const opts = spools.filter(s => !h.type || famOf(s.material) === famOf(h.type) || s.id === sid)
       .map(s => `<option value="${s.id}" ${s.id === sid ? "selected" : ""}>#${s.id} ${esc(s.vendor)} ${esc(s.name)} (${esc(s.material)}${s.remaining != null ? ", " + Math.round(s.remaining) + " g" : ""})</option>`).join("");
-    return `<div class="head ${d.extruders[i].active ? "active" : ""}">
-      <div class="row"><span class="sw big" style="background:${h.colour || "transparent"}"></span><div><b>T${i + 1}</b><br>
+    return `<div class="head ${d.extruders[i].active ? "active" : ""}" style="--tc:var(--t${i + 1})">
+      <div class="row"><span class="tn">${ic("toolhead/t" + (i + 1), "badge big")}</span><span class="sw big" style="background:${h.colour || "transparent"}"></span><div><b>T${i + 1}</b><br>
       <span>${h.loaded ? esc(h.type) : "Empty"}</span> <span class="mut">${esc(h.vendor)} ${esc(h.sub_type)}</span>${tagPill(d.rfid && d.rfid[i])}</div></div>
       ${tagDetail(d.rfid && d.rfid[i])}
       <div class="mut">Feeder: ${esc(feed.state || "—")}${feed.detected ? " · filament at inlet" : ""}</div>
       <div class="row"><button class="b" data-edit="${i}" ${busy ? "disabled" : ""}>Edit</button>
-       <button class="b" data-load="${i}" ${busy ? "disabled" : ""}>Load</button><button class="b" data-unload="${i}" ${busy ? "disabled" : ""}>Unload</button>
-       <button class="b" data-rfid="${i}" title="Read the spool's RFID tag again">RFID</button></div>
+       <button class="b" data-load="${i}" ${busy ? "disabled" : ""}>${ic("icon/load-filament")}Load</button><button class="b" data-unload="${i}" ${busy ? "disabled" : ""}>${ic("icon/unload-filament")}Unload</button>
+       <button class="b" data-rfid="${i}" title="Read the spool's RFID tag again">${ic("icon/rfid-tag")}RFID</button></div>
       ${spools.length ? `<div class="row"><select data-spool="${i}" class="sp"><option value="">— no spool —</option>${opts}</select></div>
         ${sp ? `<div class="mut">Spoolman #${sp.id}: ${sp.remaining != null ? Math.round(sp.remaining) + " g left" : ""}</div>` : ""}` : ""}</div>`;
   }).join("");
@@ -276,12 +300,12 @@ $("smLoad").onclick = () => loadSpools(false);
 async function loadFiles() {
   $("path").textContent = path;
   try { const r = await call("files", {path}); $("disk").textContent = r.disk ? `${fmtB(r.disk.free)} free` : "";
-    $("list").innerHTML = r.dirs.map(d => `<tr class="dir" data-dir="${esc(d.name)}"><td>📁</td><td>${esc(d.name)}</td><td></td><td></td><td></td>
-      <td><button class="b d" data-deldir="${esc(d.name)}">Delete</button></td></tr>`).join("") +
+    $("list").innerHTML = r.dirs.map(d => `<tr class="dir" data-dir="${esc(d.name)}"><td>${ic("icon/folder")}</td><td>${esc(d.name)}</td><td></td><td></td><td></td>
+      <td><button class="b d" data-deldir="${esc(d.name)}">${ic("icon/delete")}Delete</button></td></tr>`).join("") +
       r.files.map(f => `<tr><td><img data-thumb="${esc(f.name)}" alt=""></td><td>${esc(f.name)}</td><td>${fmtB(f.size)}</td>
       <td>${f.modified ? new Date(f.modified * 1000).toLocaleString() : ""}</td><td>${fmtT(f.time)}</td>
-      <td>${path.startsWith("gcodes") ? `<button class="b" data-print="${esc(f.name)}">Print</button>` : `<button class="b" data-dl="${esc(f.name)}">Save</button>`} <button class="b d" data-del="${esc(f.name)}">Delete</button></td></tr>`).join("")
-      || '<tr><td colspan="6" class="mut">No files</td></tr>';
+      <td>${path.startsWith("gcodes") ? `<button class="b" data-print="${esc(f.name)}">${ic("icon/print-setup")}Print</button>` : `<button class="b" data-dl="${esc(f.name)}">${ic("icon/download")}Save</button>`} <button class="b d" data-del="${esc(f.name)}">${ic("icon/delete")}Delete</button></td></tr>`).join("")
+      || `<tr><td colspan="6">${spot("spot/no-files", "No files")}</td></tr>`;
     if (path.startsWith("gcodes")) for (const img of document.querySelectorAll("[data-thumb]")) call("thumbnail", {path: path + "/" + img.dataset.thumb}).then(src => { if (src) img.src = src; }).catch(() => {});
   } catch (e) { $("list").innerHTML = `<tr><td colspan="6" class="err">${esc(e)}</td></tr>`; }
 }
@@ -300,7 +324,7 @@ $("refresh").onclick = loadFiles;
 // ---------------------------------------------------------------- extended firmware
 async function loadExt() {
   if (!info || info.firmware.kind !== "extended") {
-    $("extBody").innerHTML = 'Stock Snapmaker firmware detected. Install <a href="https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware">U1 Extended Firmware</a> to configure camera, Spoolman, SSH, web UI and more from here.';
+    $("extBody").innerHTML = spot("spot/stock-firmware", 'Stock Snapmaker firmware detected. Install <a href="https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware">U1 Extended Firmware</a> to configure camera, Spoolman, SSH, web UI and more from here.');
     return;
   }
   try {
@@ -360,9 +384,9 @@ function renderSpooler() {
   const sp = cfg.spooler || {}, link = `<a href="${esc(sp.url)}">${esc(sp.url)}</a>`;
   const text = sp.installed ? "Spooler detected \u2014 filament profiles come from Spooler."
     : `Install Spooler to get your Spoolman spools as OrcaSlicer filament profiles. ${link} <span class="mut">(${esc(sp.url)})</span>`;
-  $("spSetBody").innerHTML = `<p>${text}</p>` + (!sp.installed && !sp.dismissed ? '<div class="row"><button class="b" data-dismiss-sp="1">Don\'t show again</button></div>' : "");
+  $("spSetBody").innerHTML = (sp.installed ? `<p>${text}</p>` : spot("spot/spooler-suggestion", text)) + (!sp.installed && !sp.dismissed ? '<div class="row"><button class="b" data-dismiss-sp="1">Don\'t show again</button></div>' : "");
   $("spHint").hidden = sp.installed || sp.dismissed;
-  $("spHint").innerHTML = sp.installed || sp.dismissed ? "" : `<p>${text}</p><div class="row"><button class="b" data-dismiss-sp="1">Don't show again</button></div>`;
+  $("spHint").innerHTML = sp.installed || sp.dismissed ? "" : spot("spot/spooler-suggestion", text) + `<div class="row"><span class="sp"></span><button class="b" data-dismiss-sp="1">Don't show again</button></div>`;
 }
 document.addEventListener("click", e => { if (e.target.dataset && e.target.dataset.dismissSp) {
   orca.postMessage({type: "save_settings", settings: {spooler_hint_dismissed: true}}); } });

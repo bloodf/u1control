@@ -30,13 +30,34 @@ _presets_lock = threading.Lock()   # preset edits (begin_update/commit) run one 
 SETUP_TIMEOUT = 15 * 60  # seconds the print setup window may stay open before the send is abandoned
 
 
+def _read_svg(path):
+    with open(path, encoding="utf-8") as f:
+        svg = re.sub(r"<\?xml.*?\?>|<!--.*?-->|\s+id=\"[^\"]*\"", "", f.read(), flags=re.S)
+    return re.sub(r">\s+<", "><", svg.replace('role="img"', 'aria-hidden="true"')).strip()
+
+
+def _with_icons(html):
+    """Dev mode twin of build.page_html: inline the icon files the page references."""
+    ui = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui")
+    used = {}
+    for prefix, folder in (("icon", "icons"), ("toolhead", "toolheads"), ("spot", "")):
+        for fname in sorted(os.listdir(os.path.join(ui, folder))):
+            if not fname.endswith(".svg") or (not folder and not fname.startswith("spot-")):
+                continue
+            key = "%s/%s" % (prefix, fname[5:-4] if prefix == "spot" else fname[:-4])
+            if prefix == "toolhead" or key in html:
+                used[key] = _read_svg(os.path.join(ui, folder, fname))
+    return html.replace("__ICONS__", json_for_html(used))
+
+
 def _asset(name):
     """Inlined at build time; read from src/u1control/ui during development."""
     inlined = {"app.html": APP_HTML, "setup.html": SETUP_HTML, "icon.svg": ICON_SVG}[name]
     if inlined is not None:
         return inlined
     with open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", name), encoding="utf-8") as f:
-        return f.read()
+        text = f.read()
+    return _with_icons(text) if name.endswith(".html") else text
 
 
 def log(msg):

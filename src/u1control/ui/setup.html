@@ -1,18 +1,24 @@
 <!doctype html>
 <html><head><meta charset="utf-8"><title>U1 print setup</title>
 <style>
-:root{--bg:var(--orca-bg,#fff);--fg:var(--orca-fg,#222);--mut:var(--orca-muted,#777);--acc:var(--orca-accent,#009688);
---accfg:var(--orca-accent-fg,#fff);--bd:var(--orca-border,#ddd);--warn:#e08a00}
-*{box-sizing:border-box}body{margin:0;padding:14px 16px;background:var(--bg);color:var(--fg);font:13px var(--orca-font,system-ui,sans-serif)}
+:root{--bg:var(--orca-bg,#F6F7FB);--fg:var(--orca-fg,#14181F);--mut:var(--orca-muted,#5d6573);--bd:var(--orca-border,#d5d9e2);
+--acc:#FFCD00;--accfg:#14181F;--acct:#806600;--t1:#FF997D;--t2:#F4CF78;--t3:#A99BFF;--t4:#78CFD5;--warn:#b25f00;
+--ui:"Outfit",var(--orca-font,system-ui,sans-serif);--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
+:root[data-theme=dark]{--acct:#FFCD00;--warn:#f0a030}
+:focus-visible{outline:2px solid var(--acct);outline-offset:2px}
+.brand{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:13px}.brand svg{width:18px;height:18px}.brand b{font-weight:700}.brand span{font-weight:300}
+.i{display:inline-flex;pointer-events:none}.i svg{width:16px;height:16px}.i.badge svg{width:20px;height:20px}.i:empty{display:none}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+*{box-sizing:border-box}body{margin:0;padding:14px 16px;background:var(--bg);color:var(--fg);font:13px var(--ui)}
 .job{display:flex;gap:12px;align-items:center;margin-bottom:12px}.job img{width:84px;height:84px;object-fit:contain;border:1px solid var(--bd);border-radius:8px}
 .job h1{font-size:15px;margin:0 0 4px}.mut{color:var(--mut)}
-h2{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--mut);margin:14px 0 6px}
+h2{font:11px var(--mono);text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:14px 0 6px}
 .row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--bd)}
 .sw{width:18px;height:18px;border-radius:50%;border:1px solid var(--bd);flex:none}
 .fil{min-width:150px}.heads{display:flex;gap:6px;flex-wrap:wrap}
 .head{display:flex;align-items:center;gap:6px;padding:4px 8px;border:1px solid var(--bd);border-radius:6px;background:transparent;color:var(--fg);cursor:pointer;font:inherit}
-.head.on{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}.head.empty{opacity:.55}
-.warn{color:var(--warn);font-size:12px;margin:6px 0}
+.head.on{border-color:var(--acct);box-shadow:0 0 0 1px var(--acct)}.head.empty{opacity:.55}
+.warn{display:flex;gap:6px;align-items:center;color:var(--warn);font-size:12px;margin:6px 0}
 .opts{display:grid;grid-template-columns:1fr 1fr;gap:6px 16px}.opts label{display:flex;gap:6px;align-items:center}
 select{font:inherit}
 .bar{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}
@@ -20,6 +26,7 @@ button.p{background:var(--acc);color:var(--accfg);border:0;border-radius:6px;pad
 button.s{background:transparent;color:var(--fg);border:1px solid var(--bd);border-radius:6px;padding:7px 14px;font:inherit;cursor:pointer}
 </style></head>
 <body>
+<div class="brand" aria-hidden="true"><svg viewBox="0 0 256 256"><path fill="currentColor" d="M40 96H72V160A32 32 0 0 0 104 192H152A32 32 0 0 0 184 160V96H216V160A64 64 0 0 1 152 224H104A64 64 0 0 1 40 160Z"/><rect x="40" y="40" width="32" height="64" rx="8" fill="#FF997D"/><rect x="88" y="40" width="32" height="64" rx="8" fill="#F4CF78"/><rect x="136" y="40" width="32" height="64" rx="8" fill="#A99BFF"/><rect x="184" y="40" width="32" height="64" rx="8" fill="#78CFD5"/></svg><span><b>u1</b>control</span></div>
 <div class="job"><img id="thumb" alt="" hidden><div><h1 id="name"></h1><div class="mut" id="meta"></div></div></div>
 <h2>Filament → toolhead</h2><div id="rows"></div><div id="warns"></div>
 <h2>Print options</h2><div class="opts" id="opts"></div>
@@ -30,6 +37,10 @@ button.s{background:transparent;color:var(--fg);border:1px solid var(--bd);borde
 <span class="mut" id="autoPur"></span>
 <div class="bar"><button class="s" id="cancel">Cancel</button><button class="p" id="send">Send to U1</button></div>
 <script>
+const ICONS = __ICONS__;
+const ic = (n, c) => `<span class="i${c ? " " + c : ""}">${ICONS[n] || ""}</span>`;
+const luma = c => { const m = (c || "").match(/\d+/g); return m ? (0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2]) : 255; };
+document.documentElement.dataset.theme = luma(getComputedStyle(document.body).backgroundColor) < 128 ? "dark" : "light";
 const D = __DATA__;
 const $ = id => document.getElementById(id);
 let heads = D.heads, map = Object.assign({}, D.map), touched = new Set();
@@ -46,7 +57,7 @@ function render() {
   $("rows").innerHTML = D.filaments.map(f => {
     const btns = heads.map(h => `<button class="head ${map[f.index] == h.index ? "on" : ""} ${h.loaded ? "" : "empty"}"
       data-f="${f.index}" data-t="${h.index}" title="${esc(h.vendor)} ${esc(h.sub_type)}">
-      <span class="sw" style="background:${h.colour || "transparent"}"></span>T${h.index + 1} ${esc(h.loaded ? h.type : "empty")}</button>`).join("");
+      ${ic("toolhead/t" + (h.index + 1), "badge")}<span class="sw" style="background:${h.colour || "transparent"}"></span>T${h.index + 1} ${esc(h.loaded ? h.type : "empty")}</button>`).join("");
     return `<div class="row"><span class="sw" style="background:${f.colour || "#ccc"}"></span>
       <span class="fil">Filament ${f.index + 1} · ${esc(f.type)}${f.weight ? ` <span class="mut">${f.weight} g</span>` : ""}</span>
       <div class="heads">${btns}</div></div>`;
@@ -58,7 +69,7 @@ function render() {
     if (!h.loaded) w.push(`Filament ${f.index + 1} → T${h.index + 1}: toolhead is empty`);
     else if (fam(h.type) !== fam(f.type)) w.push(`Filament ${f.index + 1} is ${esc(f.type)} but T${h.index + 1} has ${esc(h.type)}`);
   }
-  $("warns").innerHTML = w.map(x => `<div class="warn">⚠ ${x}</div>`).join("");
+  $("warns").innerHTML = w.map(x => `<div class="warn">${ic("icon/warning")}<span>${x}</span></div>`).join("");
 }
 $("rows").addEventListener("click", e => {
   const b = e.target.closest("button.head"); if (!b) return;
