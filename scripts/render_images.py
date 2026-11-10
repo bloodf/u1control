@@ -51,8 +51,8 @@ SHOTS = [
     dict(svg=f"{R}/u1control-hero-light", page="app", section="dash", zoom=0.84),
     dict(svg=f"{O}/frame-print-setup", page="setup", zoom=0.95),
     dict(svg=f"{O}/frame-live-control", page="app", section="dash", zoom=0.9),
-    dict(svg=f"{O}/frame-toolheads-rfid", page="app", section="heads", zoom=0.88),
-    dict(svg=f"{O}/frame-spoolman", page="app", section="heads", zoom=0.8, spools=True),
+    dict(svg=f"{O}/frame-toolheads-rfid", page="app", section="dash", zoom=0.88, scroll="#headCards"),
+    dict(svg=f"{O}/frame-spoolman", page="app", section="dash", zoom=0.8, spools=True, scroll="#headCards"),
     dict(svg=f"{O}/frame-files-firmware", page="app", section="files", zoom=0.92),
     dict(svg=f"{I}/u1control-install-01", page="app", section="settings", zoom=0.8, scroll="#cHost"),
     dict(svg=f"{I}/u1control-install-02", page="app", section="dash", zoom=0.8),
@@ -133,7 +133,7 @@ def printer_status(fakes, u1, tags=False):
 
 def app_data(fakes, mods, scenario):
     u1, sm, st = mods["u1"], mods["spoolman"], mods["settings"]
-    status = printer_status(fakes, u1, tags=scenario["section"] == "heads")
+    status = printer_status(fakes, u1, tags=True)
     view = u1.summarize(status)
     fp = fakes.FakePrinter()
     try:
@@ -159,6 +159,7 @@ def app_data(fakes, mods, scenario):
             "spools": {"spools": spools, "bindings": view["bindings"], "via": "moonraker"},
             "ext_settings": {"status": {"Version": fw["version"], "Profile": "extended"},
                              "settings": [{"id": i, "label": label, "current": cur, "options": opts} for i, label, cur, opts in EXT_SETTINGS]},
+            "folders": ["gcodes", "gcodes/calibration", "gcodes/functional"],
             "thumbnail": None,
         },
     }

@@ -1,6 +1,6 @@
 [project]
 name = "u1control"
-version = "0.2.3"
+version = "0.3.0"
 description = "Snapmaker U1 control for OrcaSlicer: print setup with toolhead mapping, camera, toolheads & filament, Spoolman, file manager, Extended Firmware config and Snapmaker Orca fixes."
 authors = [{ name = "bloodf" }]
 license = "GPL-3.0-only"

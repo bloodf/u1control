@@ -74,20 +74,23 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
 
 ### U1 Control tab
 
-- **Dashboard:** camera, status and progress, pause, resume, cancel and emergency stop,
-  temperatures, speed, chamber light and top cover. Resume or discard a print interrupted by a power
-  cut, and see the printer's error list.
-- **Toolheads:** the filament in each head, with RFID tag details (Snapmaker tags, and with the
-  Extended Firmware OpenRFID, OpenSpool, NTAG and external readers). Edit a head's filament, load,
-  unload, read the tag again, set the printer's print options and run bed mesh, input shaper or flow
-  calibration.
-- **Spoolman:** one spool per toolhead. Pick a spool and its filament is written to the head. Change
-  the filament on the printer and the closest spool is linked. Each head's filament use is recorded
-  when the print finishes.
-- **Files:** browse, print and delete G-code files; browse, save and delete time-lapses.
-- **Firmware:** the Extended Firmware's settings (web UI, camera, RFID system, Spoolman, SSH and more),
-  and restart Klipper, restart Moonraker or reboot.
+- **Dashboard:** everything about the printer on one page.
+  - Camera, status and progress, pause, resume, cancel and emergency stop, temperatures with each
+    head's filament, speed, chamber light and top cover.
+  - The four toolheads: filament and colour, RFID tag details (Snapmaker tags, and with the Extended
+    Firmware OpenRFID, OpenSpool, NTAG and external readers), edit, load, unload and read the tag again.
+  - Spoolman: one spool per toolhead, picked from a list that shows each spool's colour, brand,
+    material and grams left. Pick a spool and its filament is written to the head. Change the filament
+    on the printer and the closest spool is linked. Each head's filament use is recorded when the print
+    finishes.
+  - With the Extended Firmware: the printer's touchscreen (Remote Screen), live, and tappable.
+  - Resume or discard a print interrupted by a power cut, and see the printer's error list.
+- **Files:** browse, print and delete G-code files; browse, save and delete time-lapses. Create
+  folders, and move files and folders with **Move** or by dragging a row onto a folder.
 - **Console:** send G-code.
+- **Settings:** Automagic or Expert, Spoolman, the printer's print options, bed mesh, input shaper
+  and flow calibration, the Extended Firmware's settings (web UI, camera, RFID system, Spoolman, Remote
+  Screen, SSH and more) with restart Klipper, restart Moonraker and reboot, Spooler, and the connection.
 
 ### Firmware support
 
