@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.3.1] - 2026-11-10
+
+- The pages use OrcaSlicer's accent colour (teal by default) instead of yellow.
+- README and store images re-rendered: the open spool picker, the Move dialog and the merged
+  dashboard. The Orca Cloud description describes the new layout.
+
 ## [0.3.0] - 2026-11-10
 
 - One Dashboard: camera, status, temperatures with each head's filament, and the four toolheads with

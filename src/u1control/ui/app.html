@@ -2,9 +2,9 @@
 <html><head><meta charset="utf-8"><title>U1 Control</title>
 <style>
 :root{--bg:var(--orca-bg,#F6F7FB);--fg:var(--orca-fg,#14181F);--mut:var(--orca-muted,#5d6573);--bd:var(--orca-border,#d5d9e2);
---acc:#FFCD00;--accfg:#14181F;--acct:#806600;--t1:#FF997D;--t2:#F4CF78;--t3:#A99BFF;--t4:#78CFD5;
+--acc:var(--orca-accent,#009688);--accfg:var(--orca-accent-fg,#fff);--acct:color-mix(in srgb,var(--acc) 75%,var(--fg) 25%);--t1:#FF997D;--t2:#F4CF78;--t3:#A99BFF;--t4:#78CFD5;
 --warn:#b25f00;--bad:#c23535;--ok:#23804a;--ui:"Outfit",var(--orca-font,system-ui,sans-serif);--mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace}
-:root[data-theme=dark]{--acct:#FFCD00;--warn:#f0a030;--bad:#ff7a7a;--ok:#4cc98a}
+:root[data-theme=dark]{--warn:#f0a030;--bad:#ff7a7a;--ok:#4cc98a}
 *{box-sizing:border-box}html,body{height:100%}
 body{margin:0;background:var(--bg);color:var(--fg);font:13px var(--ui);display:flex;flex-direction:column}
 :focus-visible{outline:2px solid var(--acct);outline-offset:2px}
