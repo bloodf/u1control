@@ -195,7 +195,7 @@ class DownloadTests(unittest.TestCase):
         self.addCleanup(fake.close)
         fake.files["camera/t.mp4"] = b"x" * (3 * 1024 * 1024)
         home = tempfile.mkdtemp()
-        with mock.patch.dict(os.environ, {"HOME": home}):
+        with mock.patch.dict(os.environ, {"HOME": home, "USERPROFILE": home}):
             svc, pub = make_service(self, fake)
             first = call(self, svc, pub, "download", path="camera/t.mp4")["result"]
             second = call(self, svc, pub, "download", path="camera/t.mp4")["result"]
@@ -207,7 +207,7 @@ class DownloadTests(unittest.TestCase):
         fake = fakes.FakePrinter()
         self.addCleanup(fake.close)
         home = tempfile.mkdtemp()
-        with mock.patch.dict(os.environ, {"HOME": home}):
+        with mock.patch.dict(os.environ, {"HOME": home, "USERPROFILE": home}):
             svc, pub = make_service(self, fake)
             self.assertIn("error", call(self, svc, pub, "download", path="camera/missing.mp4"))
         self.assertEqual(os.listdir(os.path.join(home, "Downloads", "u1control")), [])
