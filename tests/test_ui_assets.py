@@ -1,10 +1,11 @@
-"""Built plugin ships its icons, sanitized, with no unresolved placeholders."""
+"""Built wheel ships its icons, sanitized, with no unresolved placeholders."""
 
 import json
 import re
 import sys
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +20,8 @@ class UiAssets(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.artifact = build.build(out_dir=Path(tempfile.mkdtemp()))
-        cls.text = cls.artifact.read_text("utf-8")
+        with zipfile.ZipFile(cls.artifact) as z:
+            cls.text = z.read("u1control/_assets.py").decode("utf-8")
 
     def page_icons(self, name):
         html = build.page_html(name)
@@ -36,7 +38,7 @@ class UiAssets(unittest.TestCase):
             self.assertEqual(used - set(icons), set(), page)
             self.assertTrue({"toolhead/t%d" % n for n in range(1, 5)} <= set(icons), page)
             self.assertNotIn("__ICONS__", html)
-            self.assertIn(repr(html), self.text)   # the built plugin carries exactly this page
+            self.assertIn(repr(html), self.text)   # the wheel carries exactly this page
 
     def test_app_uses_expected_icons(self):
         names = set(re.findall(r"\bicon/([a-z0-9-]+)", (UI / "app.html").read_text("utf-8")))

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2] - 2026-11-10
+
+- Ships as a standard Python wheel (`u1control_any.whl`) with no embedded or dynamically executed
+  code, and declares its permissions up front.
+- Spoolman locations bind the way Spooler does (#2): archived spools never bind, "<printer name> T<n>"
+  beats other names ending in "U1", and when two spools claim one toolhead the one used last wins.
+
 ## [0.2.1] - 2026-11-10
 
 - README, install and store images now show real screenshots of the plugin, and the Spooler image

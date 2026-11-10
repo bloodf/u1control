@@ -55,7 +55,7 @@ jobs:
             '{version: $version, changelog: ($changelog | .[0:4000])}')"
           status="$(curl -sS -o response.json -w '%{http_code}' \
             -H "Authorization: Bearer $oidc_token" \
-            --form-string "metadata=$metadata" -F "files=@dist/u1control_any.py" \
+            --form-string "metadata=$metadata" -F "files=@dist/u1control_any.whl" \
             https://api.orcaslicer.com/api/v1/plugin-publish/releases)"
           cat response.json; echo
           if [ "$status" != "201" ]; then

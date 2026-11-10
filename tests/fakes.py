@@ -282,3 +282,16 @@ def install_orca(answer=None, preset=None, filament_names=(), filament_meta=None
         preset_bundle=lambda: bundle, plugin=types.SimpleNamespace(storage=lambda: store_dir))
     sys.modules["orca"] = orca
     return orca
+
+
+def load_wheel(path):
+    """Import the built wheel as package `u1control` (zipimport) with a fresh module set; returns its namespace.
+    Call after install_orca()."""
+    import importlib
+    for name in [n for n in sys.modules if n == "u1control" or n.startswith("u1control.")]:
+        del sys.modules[name]
+    sys.path[:] = [p for p in sys.path if not p.endswith(".whl")]
+    sys.path.insert(0, str(path))
+    sys.path_importer_cache.pop(str(path), None)
+    importlib.invalidate_caches()
+    return vars(importlib.import_module("u1control"))

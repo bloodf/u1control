@@ -135,7 +135,7 @@ once. The details are in [docs/spooler-contract.md](docs/spooler-contract.md).
   <img src="assets/install/u1control-install-04.png" width="390" alt="Step 4: print">
 </p>
 
-1. Subscribe to u1control on the OrcaSlicer Plugin Hub, or download `u1control_any.py` from the
+1. Subscribe to u1control on the OrcaSlicer Plugin Hub, or download `u1control_any.whl` from the
    [latest release](../../releases/latest) and use **File > Plugins > Install local plugin**.
 2. Tick **Activate** and allow the background thread when OrcaSlicer asks.
 3. Select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name).

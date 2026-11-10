@@ -1,7 +1,7 @@
 """Fill the screenshot frames in the u1control brand images with real renders of the plugin's pages.
 
 What it does
-  * Builds dist/u1control_any.py, loads it against the fake `orca` module (tests/fakes.py) and takes the
+  * Builds dist/u1control_any.whl, loads it against the fake `orca` module (tests/fakes.py) and takes the
     real app.html / setup.html it serves.
   * Injects a stub `window.orca` that answers the page's messages with realistic fake printer data
     (built from tests/fakes.FakePrinter + u1.summarize, so the shapes are exactly what the plugin sends),
@@ -23,7 +23,6 @@ import base64
 import json
 import os
 import re
-import runpy
 import subprocess
 import sys
 import tempfile
@@ -69,7 +68,7 @@ def load_plugin():
     sys.path[:0] = [str(ROOT / "tests"), str(ROOT / "src" / "u1control")]
     import fakes
     fakes.install_orca()
-    return fakes, runpy.run_path(str(ROOT / "dist" / "u1control_any.py"))
+    return fakes, fakes.load_wheel(ROOT / "dist" / "u1control_any.whl")
 
 
 def ts(y, mo, d, h, mi):
@@ -318,7 +317,7 @@ def main(argv):
         if not shots:
             return
         fakes, ns = load_plugin()
-        mods = {n: sys.modules["u1control_" + n] for n in ("u1", "spoolman", "settings")}
+        mods = {n: sys.modules["u1control." + n] for n in ("u1", "spoolman", "settings")}
         for i, s in enumerate(shots):
             svg_path = ASSETS / (s["svg"] + ".svg")
             svg_text = svg_path.read_text(encoding="utf-8")
