@@ -18,7 +18,7 @@ print-by-object tool-change lift, real layer count, file colours.
 
 ## Dashboard
 
-![Live control](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-live-control.png){align=center}
+![Dashboard](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-live-control.png){align=center}
 
 Camera, status, temperatures with each head's filament, pause, resume, cancel and emergency stop,
 chamber light and top cover, inside OrcaSlicer. With the Extended Firmware the printer's touchscreen
