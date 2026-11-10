@@ -1,7 +1,7 @@
 # Architecture
 
-u1control ships as one Python file, `u1control_any.py`, because OrcaSlicer loads one `.py` per
-plugin. The sources live in `src/u1control/`, and `scripts/build.py` puts them together.
+u1control ships as a standard pure-Python wheel, `u1control_any.whl`, which OrcaSlicer loads as a
+plugin. The sources live in `src/u1control/`, and `scripts/build.py` packs them.
 
 ## Modules
 
@@ -20,10 +20,14 @@ plugin. The sources live in `src/u1control/`, and `scripts/build.py` puts them t
 
 Only `plugin.py` imports `orca`, so everything else is tested without OrcaSlicer.
 
-The build embeds each module as source text and installs it in `sys.modules` under a
-`u1control_` prefix (`u1control_service`, and so on). Plain names like `settings` or `service` would
-clash with other plugins in the same interpreter. The build also inlines the HTML pages and the SVG
-icons. It refuses any SVG that contains a script or an event attribute.
+The wheel is the package `u1control`: `plugin.py` becomes `u1control/__init__.py`, each module keeps
+its name (`u1control.service`, and so on), and `u1control/_assets.py` holds the HTML pages and SVG
+icons as string constants. Nothing is embedded as source text or executed at load time, and the
+modules never use plain names like `settings` or `service` that could clash with other plugins.
+The sources keep `import u1` style so they run and test in place; the build rewrites those imports
+to relative form (`from . import u1`) in the wheel copies. The build refuses any SVG that contains a
+script or an event attribute, and writes the zip with fixed timestamps so the same sources give the
+same bytes. It also writes `dist/SHA256SUMS`.
 
 ## Capabilities
 

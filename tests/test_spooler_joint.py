@@ -14,7 +14,6 @@ import asyncio
 import importlib.util
 import json
 import os
-import runpy
 import shutil
 import sys
 import tempfile
@@ -122,7 +121,7 @@ class JointCase(unittest.TestCase):
         sys.modules["orca.pages"] = pages
         self.addCleanup(sys.modules.pop, "orca.pages", None)
 
-        self.u1ns = runpy.run_path(self.artifact)
+        self.u1ns = fakes.load_wheel(self.artifact)
         spec = importlib.util.spec_from_file_location("spooler_plugin_joint", plugin_dir / "spooler_any.py")
         self.sp = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(self.sp)

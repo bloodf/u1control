@@ -1,8 +1,8 @@
 """Printer-side work for the U1 Control tab, kept free of the `orca` module so it is testable.
 
 Threads: one command worker (requests run in order) and one monitor (status, camera frames,
-Spoolman sync) that only runs while the page holds a lease. Both are plugin-spawned threads,
-which OrcaSlicer's audit hook does not attribute to the plugin, so no per-request prompts.
+Spoolman sync) that only runs while the page holds a lease. Both are the plugin's own worker threads,
+so network I/O never blocks OrcaSlicer's UI or slicing threads.
 """
 
 import base64

@@ -23,14 +23,14 @@ install.
 git clone https://github.com/bloodf/u1control
 git clone https://github.com/bloodf/spooler     # next to it, for the joint tests
 cd u1control
-python3 scripts/build.py                        # writes dist/u1control_any.py
+python3 scripts/build.py                        # writes dist/u1control_any.whl
 python3 -m unittest discover -s tests
 ```
 
 The joint tests look for Spooler in `SPOOLER_SRC` or in `../spooler`, and fail if they find neither.
 
 To try a build in OrcaSlicer: **File > Plugins > Install local plugin**, pick
-`dist/u1control_any.py`, then **Activate**. Python errors and `print()` output go to
+`dist/u1control_any.whl`, then **Activate**. Python errors and `print()` output go to
 `<OrcaSlicer data folder>/log/python_*.log`.
 
 ## Layout
@@ -86,7 +86,7 @@ open a pull request.
 Maintainers only:
 
 1. Bump `version` in `pyproject.toml` and add a `## [x.y.z] - date` section to `CHANGELOG.md`.
-2. Tag `vx.y.z` and push the tag, then create a GitHub release for it with `dist/u1control_any.py`.
+2. Tag `vx.y.z` and push the tag, then create a GitHub release for it with `dist/u1control_any.whl`.
 3. Publishing the release runs `publish-orcacloud.yml`, which uploads the plugin to Orca Cloud.
 
 ## Assets

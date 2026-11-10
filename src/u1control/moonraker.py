@@ -15,7 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-# Load hostname codecs now: lazy imports inside audited callbacks trigger prompts.
+# Load hostname codecs up front so the first request on a worker thread does not import them lazily.
 import encodings.idna  # noqa: F401
 
 MOONRAKER_PORT = 7125

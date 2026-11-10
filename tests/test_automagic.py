@@ -2,7 +2,6 @@
 
 import json
 import os
-import runpy
 import sys
 import tempfile
 import time
@@ -84,7 +83,7 @@ class PluginBase(unittest.TestCase):
 
     def load(self, **kw):
         orca = fakes.install_orca(**kw)
-        return orca, runpy.run_path(self.artifact)
+        return orca, fakes.load_wheel(self.artifact)
 
 
 class PipelineTests(PluginBase):

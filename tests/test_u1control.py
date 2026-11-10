@@ -2,7 +2,6 @@
 
 import json
 import os
-import runpy
 import sys
 import tempfile
 import time
@@ -331,7 +330,7 @@ class PrinterTests(unittest.TestCase):
 
 
 class PluginTests(unittest.TestCase):
-    """Loads the built single-file plugin against a fake orca module."""
+    """Loads the built wheel against a fake orca module."""
 
     @classmethod
     def setUpClass(cls):
@@ -340,7 +339,7 @@ class PluginTests(unittest.TestCase):
 
     def load(self, answer=None, preset=None, filament_names=()):
         orca = fakes.install_orca(answer, preset, filament_names)
-        ns = runpy.run_path(self.artifact)
+        ns = fakes.load_wheel(self.artifact)
         return orca, ns
 
     def setUp(self):

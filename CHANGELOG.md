@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.2.2] - 2026-11-10
+
+- Ships as a standard Python wheel; no embedded or dynamically executed code; permissions declared up front.
+
 ## [0.2.1] - 2026-11-10
 
 - README, install and store images now show real screenshots of the plugin, and the Spooler image

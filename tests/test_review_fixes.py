@@ -3,7 +3,6 @@
 import http.server
 import json
 import os
-import runpy
 import socket
 import struct
 import subprocess
@@ -320,6 +319,11 @@ class GcodeFixTests(unittest.TestCase):
         self.assertEqual(gcode.split_list("45;70", numeric=True), ["45", "70"])
 
 
+def build_modules():
+    import build
+    return build.MODULES
+
+
 class PluginFixTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -328,27 +332,27 @@ class PluginFixTests(unittest.TestCase):
 
     def load(self, **kw):
         orca = fakes.install_orca(**kw)
-        return orca, runpy.run_path(self.artifact)
+        return orca, fakes.load_wheel(self.artifact)
 
     def test_no_unprefixed_modules_in_sys_modules(self):
-        code = ("import sys, json; sys.path.insert(0, %r); import fakes, runpy, build\n"
-                "fakes.install_orca(); runpy.run_path(%r)\n"
+        code = ("import sys, json; sys.path.insert(0, %r); import fakes, build\n"
+                "fakes.install_orca(); fakes.load_wheel(%r)\n"
                 "print(json.dumps([m for m in build.MODULES if m in sys.modules]),"
-                " '|', json.dumps(sorted(m for m in sys.modules if m.startswith('u1control_'))), sep='')"
+                " '|', json.dumps(sorted(m for m in sys.modules if m.split('.')[0] == 'u1control')), sep='')"
                 % (os.path.join(ROOT, "tests"), self.artifact))
         env = {**os.environ, "PYTHONPATH": os.path.join(ROOT, "scripts")}
         out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, cwd=tempfile.mkdtemp(),
                              env=env, timeout=60)
         self.assertEqual(out.returncode, 0, out.stderr)
-        bare, prefixed = (json.loads(part) for part in out.stdout.strip().splitlines()[-1].split("|"))
-        self.assertEqual(bare, [])
-        self.assertEqual(len(prefixed), 8)
+        bare, packaged = (json.loads(part) for part in out.stdout.strip().splitlines()[-1].split("|"))
+        self.assertEqual(bare, [])   # no top-level u1 / gcode / settings / ... leaks into the shared interpreter
+        self.assertEqual(packaged, sorted(["u1control"] + ["u1control." + m for m in build_modules()]))
 
-    def test_prefix_imports(self):
+    def test_relative_imports(self):
         import build
         src = "import u1\nimport extended as ext\nfrom moonraker import X\n    import settings\nimport json\n"
-        self.assertEqual(build.prefix_imports(src), "import u1control_u1 as u1\nimport u1control_extended as ext\n"
-                         "from u1control_moonraker import X\n    import u1control_settings as settings\nimport json\n")
+        self.assertEqual(build.relative_imports(src), "from . import u1\nfrom . import extended as ext\n"
+                         "from .moonraker import X\n    from . import settings\nimport json\n")
 
     def test_json_for_html(self):
         _, ns = self.load()
