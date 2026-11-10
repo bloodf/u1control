@@ -1,0 +1,24 @@
+name: Feature request
+description: Suggest something u1control should do.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: The problem or workflow, not only the solution.
+    validations:
+      required: true
+  - type: dropdown
+    id: firmware
+    attributes:
+      label: Which firmware does it need?
+      options:
+        - Any
+        - Stock Snapmaker firmware
+        - U1 Extended Firmware
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: How it could work. Links to the firmware command or API help a lot.

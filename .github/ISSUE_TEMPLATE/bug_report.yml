@@ -1,0 +1,63 @@
+name: Bug report
+description: Something doesn't work as described.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for the report. Please leave out your printer's API key and other private details.
+  - type: input
+    id: version
+    attributes:
+      label: u1control version
+      description: Settings page of the U1 Control tab.
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: input
+    id: orca
+    attributes:
+      label: OrcaSlicer version and OS
+      placeholder: "OrcaSlicer 2.5.0, macOS 15"
+    validations:
+      required: true
+  - type: dropdown
+    id: firmware
+    attributes:
+      label: Printer firmware
+      options:
+        - Stock Snapmaker firmware
+        - U1 Extended Firmware
+    validations:
+      required: true
+  - type: input
+    id: firmware_version
+    attributes:
+      label: Firmware version
+      placeholder: "2.1.0 or 2.0.0-paxx12-24"
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Print setup / G-code
+        - Dashboard / camera
+        - Toolheads / RFID
+        - Spoolman
+        - Files
+        - Extended Firmware settings
+        - Spooler integration
+        - Settings / Automagic
+        - Other
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Steps, what you expected, what you got.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Plugin log
+      description: Relevant lines from <OrcaSlicer data folder>/log/python_*.log
+      render: text

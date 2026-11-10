@@ -5,6 +5,13 @@
   </picture>
 </p>
 
+<p align="center">
+  <a href="https://github.com/bloodf/u1control/actions/workflows/ci.yml"><img src="https://github.com/bloodf/u1control/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/bloodf/u1control/releases/latest"><img src="https://img.shields.io/github/v/release/bloodf/u1control" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/bloodf/u1control" alt="License: GPL-3.0"></a>
+  <img src="https://img.shields.io/badge/OrcaSlicer-2.5%2B-informational" alt="OrcaSlicer 2.5+">
+</p>
+
 # u1control
 
 u1control is an OrcaSlicer 2.5 plugin for the Snapmaker U1. It adds the U1-specific parts of
@@ -146,7 +153,9 @@ Requirements: OrcaSlicer 2.5.0 or newer, and a Snapmaker U1 on the same network.
 - [Settings](docs/settings.md): every setting and its Automagic value
 - [Firmware](docs/firmware.md): the printer commands and endpoints u1control uses
 - [Spooler contract](docs/spooler-contract.md): how u1control and Spooler share work
-- [Contributing](CONTRIBUTING.md) and [Security](SECURITY.md)
+- [Contributing](CONTRIBUTING.md), [Code of conduct](CODE_OF_CONDUCT.md) and [Security](SECURITY.md)
+
+Questions and ideas: [Discussions](https://github.com/bloodf/u1control/discussions). Bugs: [Issues](https://github.com/bloodf/u1control/issues).
 
 ## Credits
 
