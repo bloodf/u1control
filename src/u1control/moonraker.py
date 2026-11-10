@@ -78,13 +78,14 @@ class Moonraker:
         except urllib.error.HTTPError as e:
             raise _http_error(e)
 
-    def download_to(self, path, out, timeout=30):
-        """Stream /server/files/<path> into the open binary file `out`; returns the byte count."""
+    def download_to(self, path, open_out, timeout=30):
+        """Stream /server/files/<path> into the binary file returned by open_out(), which is only
+        called once the printer has answered, so a missing file creates nothing. Returns the byte count."""
         req = urllib.request.Request((self.base or self.candidates[0]) + "/server/files/" + urllib.parse.quote(path),
                                      headers=self._headers())
         total = 0
         try:
-            with self._open(req, timeout=timeout) as resp:
+            with self._open(req, timeout=timeout) as resp, open_out() as out:
                 while True:
                     chunk = resp.read(256 * 1024)
                     if not chunk:

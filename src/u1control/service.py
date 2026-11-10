@@ -475,17 +475,27 @@ class Service:
 
     def cmd_download(self, path):
         """Stream a printer file (e.g. a timelapse) to ~/Downloads/u1control/, never overwriting.
-        Runs on its own thread (see DEDICATED). Returns the saved path."""
+        The data goes to '<name>.part', renamed when complete; an interrupted download keeps its
+        .part file. Runs on its own thread (see DEDICATED). Returns the saved path."""
         path = _safe_path(path)
         folder = os.path.join(os.path.expanduser("~"), "Downloads", "u1control")
         os.makedirs(folder, exist_ok=True)
-        target, out = _new_file(folder, os.path.basename(path))
+        name = os.path.basename(path)
+        part = []
+
+        def open_out():
+            target, out = _new_file(folder, name + ".part")
+            part.append(target)
+            return out
+
         try:
-            with out:
-                self._client().download_to(path, out)
-        except BaseException:
-            os.remove(target)
+            self._client().download_to(path, open_out)
+        except BaseException as e:
+            if part:
+                raise PrinterError("download interrupted, partial file kept at %s (%s)" % (part[0], e))
             raise
+        target = _free_name(folder, name)
+        os.rename(part[0], target)
         return target
 
     def _require_idle(self):
@@ -576,6 +586,16 @@ def _head(value):
     if not 0 <= head < u1.TOOLHEADS:
         raise ValueError("bad toolhead")
     return head
+
+
+def _free_name(folder, name):
+    """folder/name, or 'name (1).ext', 'name (2).ext', ... when taken."""
+    stem, ext = os.path.splitext(name or "download")
+    for n in range(10000):
+        target = os.path.join(folder, name if n == 0 else "%s (%d)%s" % (stem, n, ext))
+        if not os.path.exists(target):
+            return target
+    raise PrinterError("too many files named %s in %s" % (name, folder))
 
 
 def _new_file(folder, name):
