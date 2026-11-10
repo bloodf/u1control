@@ -11,6 +11,7 @@ Binding toolhead -> spool:
 """
 
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -101,6 +102,8 @@ def spool_view(spool):
         "colours": [c for c in colours if c],
         "remaining": spool.get("remaining_weight"),
         "location": spool.get("location") or "",
+        "last_used": spool.get("last_used") or "",
+        "archived": bool(spool.get("archived")),
         "extruder_temp": f.get("settings_extruder_temp"),
         "bed_temp": f.get("settings_bed_temp"),
     }
@@ -127,13 +130,37 @@ def best_spool(head, spools, exclude=(), max_score=120.0):
     return ranked[0][1] if ranked and ranked[0][0] <= max_score else None
 
 
+def _location_key(text):
+    return " ".join(str(text or "").split()).lower()
+
+
+def location_score(location, printer_name, head):
+    """How surely a Spoolman location binds toolhead index `head` (0-based) of this printer, the same
+    rule Spooler uses: 2 for "<printer name> T<n>", 1 for any name ending in the word "U1" (the old
+    "U1 T<n>" included), 0 for none."""
+    key, suffix = _location_key(location), " t%d" % (head + 1)
+    if not key.endswith(suffix):
+        return 0
+    name = key[:-len(suffix)].strip()
+    if name == _location_key(printer_name):
+        return 2
+    return 1 if re.fullmatch(r"(?:.*\s)?u1", name) else 0
+
+
 def bindings_from_locations(spools, printer_name):
-    """{toolhead: spool_id} from spool locations like 'U1 T2' (1-based in the UI)."""
+    """{toolhead: spool_id} from spool locations like "Snapmaker U1 T2" (1-based in the UI). Matches
+    Spooler (github.com/bloodf/spooler) so both plugins see the same spool on each head: archived
+    spools never bind; this printer's exact name beats a name that only ends in "U1"; between equals
+    the spool used last wins."""
     out = {}
-    for sp in spools:
-        for t in range(u1.TOOLHEADS):
-            if sp["location"].strip().lower() == (LOCATION_FMT % (printer_name, t + 1)).lower():
-                out[t] = sp["id"]
+    for t in range(u1.TOOLHEADS):
+        scored = [(location_score(sp.get("location"), printer_name, t), sp) for sp in spools
+                  if not sp.get("archived")]
+        best = max((score for score, _ in scored), default=0)
+        found = [sp for score, sp in scored if score and score == best]
+        if found:
+            found.sort(key=lambda sp: str(sp.get("last_used") or ""), reverse=True)
+            out[t] = found[0]["id"]
     return out
 
 

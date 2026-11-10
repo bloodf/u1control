@@ -198,6 +198,22 @@ class SpoolmanMatchTests(unittest.TestCase):
         spools = [{"id": 4, "location": "U1 T2"}, {"id": 5, "location": "shelf"}]
         self.assertEqual(sm.bindings_from_locations(spools, "U1"), {1: 4})
 
+    def test_locations_follow_spoolers_rule(self):
+        spools = [
+            {"id": 1, "location": "Snapmaker U1 T1", "last_used": "2026-11-01T00:00:00Z"},
+            {"id": 2, "location": "  snapmaker  u1 t1 ", "last_used": "2026-11-09T00:00:00Z"},  # used last: wins
+            {"id": 3, "location": "U1 T2"},                                   # the older form
+            {"id": 4, "location": "Snapmaker U1 T3", "archived": True},       # archived never binds
+            {"id": 5, "location": "Workshop U1 T4", "last_used": "2026-11-09T00:00:00Z"},
+            {"id": 6, "location": "Snapmaker U1 T4", "last_used": "2026-01-01T00:00:00Z"},  # exact name beats it
+            {"id": 7, "location": "Shelf T1"}, {"id": 8, "location": "Snapmaker U1 T10"},
+        ]
+        self.assertEqual(sm.bindings_from_locations(spools, "Snapmaker U1"), {0: 2, 1: 3, 3: 6})
+
+    def test_spool_view_keeps_what_binding_needs(self):
+        view = sm.spool_view({"id": 1, "location": "U1 T1", "last_used": "2026-11-09T00:00:00Z", "archived": True})
+        self.assertEqual((view["last_used"], view["archived"]), ("2026-11-09T00:00:00Z", True))
+
 
 class PrinterTests(unittest.TestCase):
     def setUp(self):
