@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="120" viewBox="0 0 160 120" role="img">
+<g id="spot-illustration-1"><g id="camera-body"><path d="M40 40L48 28H80L88 40H112A8 8 0 0 1 120 48V88A8 8 0 0 1 112 96H32A8 8 0 0 1 24 88V48A8 8 0 0 1 32 40Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g><g id="camera-lens"><circle cx="72" cy="68" r="16" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="108" cy="52" r="3" fill="#A99BFF" stroke="currentColor" stroke-width="2"/></g><g id="camera-disabled"><path d="M28 24L128 104" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></g></g>
+</svg>
