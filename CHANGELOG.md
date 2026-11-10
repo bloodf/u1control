@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.2.3] - 2026-11-10
+
+- Time-lapse downloads go to `<name>.part` and are renamed when complete. The plugin no longer
+  deletes files on your computer; an interrupted download keeps its `.part` file and says where.
+
 ## [0.2.2] - 2026-11-10
 
 - Ships as a standard Python wheel (`u1control_any.whl`) with no embedded or dynamically executed
