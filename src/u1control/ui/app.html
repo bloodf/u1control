@@ -14,7 +14,7 @@ button .i{margin-right:5px}.i.lg svg{width:20px;height:20px}.i.badge svg{width:2
 header{display:flex;align-items:center;gap:12px;padding:8px 14px;border-bottom:1px solid var(--bd)}
 .brand{display:flex;align-items:center;gap:8px;font-size:16px;color:var(--fg)}.brand svg{width:24px;height:24px}
 .wm b{font-weight:700}.wm span{font-weight:300}
-.pill{padding:2px 8px;border-radius:10px;border:1px solid var(--bd);font:11px var(--mono)}
+.row.temp{flex-wrap:nowrap}.pill{white-space:nowrap;padding:2px 8px;border-radius:10px;border:1px solid var(--bd);font:11px var(--mono)}
 .pill.ext{border-color:var(--acct);color:var(--acct)}
 nav{display:flex;gap:2px;margin-left:auto}nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--mut);padding:6px 10px;font:inherit;cursor:pointer}
 nav button:hover{color:var(--fg)}nav button.on{color:var(--fg);border-bottom-color:var(--acct)}
@@ -36,7 +36,7 @@ a{color:var(--acct)}
 .bar{height:8px;border-radius:4px;background:var(--bd);overflow:hidden}.bar i{display:block;height:100%;background:var(--acc);box-shadow:inset 0 0 0 1px var(--acct)}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:3px 12px}.mut{color:var(--mut)}
 .heads{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}@media (max-width:900px){.heads{grid-template-columns:repeat(2,1fr)}}
-.head{border:1px solid var(--bd);border-top:3px solid var(--tc,var(--bd));border-radius:10px;padding:10px}.head.active{border-color:var(--acct);border-top-color:var(--tc)}
+.head{min-width:0;border:1px solid var(--bd);border-top:3px solid var(--tc,var(--bd));border-radius:10px;padding:10px}.head.active{border-color:var(--acct);border-top-color:var(--tc)}.head select{min-width:0;max-width:100%;text-overflow:ellipsis}td img:not([src]){visibility:hidden}
 .head .tn{display:flex;align-items:center;gap:6px;font:600 13px var(--mono)}
 .sw{display:inline-block;width:16px;height:16px;border-radius:50%;border:1px solid var(--bd);vertical-align:middle}
 .big{width:44px;height:44px}
@@ -207,8 +207,8 @@ function render(d) {
   $("temps").innerHTML = d.extruders.map((e, i) => tempRow(ic("toolhead/t" + (i + 1), "badge") + (e.active ? " ●" : ""), i, e)).join("") + tempRow("Bed", "bed", d.bed);
   renderHeads(d);
 }
-const tempRow = (label, key, t) => `<div class="row"><span style="width:54px">${label}</span><span style="width:110px">${t.temp == null ? "—" : t.temp.toFixed(1)} / ${t.target ?? 0} °C</span>
-  <input type="number" data-heater="${key}" placeholder="°C"><button class="b" data-set="${key}">Set</button><button class="b" data-off="${key}">Off</button></div>`;
+const tempRow = (label, key, t) => `<div class="row temp"><span style="width:44px">${label}</span><span style="min-width:96px">${t.temp == null ? "—" : t.temp.toFixed(1)} / ${t.target ?? 0} °C</span>
+  <input type="number" data-heater="${key}" placeholder="°C" style="width:64px"><button class="b" data-set="${key}">Set</button><button class="b" data-off="${key}">Off</button></div>`;
 $("temps").onclick = e => { const s = e.target.dataset.set, o = e.target.dataset.off;
   if (s != null) act("temperature", {heater: s, target: +document.querySelector(`[data-heater="${CSS.escape(s)}"]`).value || 0});
   if (o != null) act("temperature", {heater: o, target: 0}); };
