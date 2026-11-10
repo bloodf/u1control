@@ -6,8 +6,10 @@ so network I/O never blocks OrcaSlicer's UI or slicing threads.
 """
 
 import base64
+import hashlib
 import os
 import queue
+import re
 import threading
 import time
 import traceback
@@ -24,10 +26,15 @@ CAMERA_KEEPALIVE = 50.0
 FRAME_MIN_INTERVAL = 0.2    # ~5 fps cap
 FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
 URGENT = ("emergency_stop", "pause", "cancel")   # never wait behind the command worker
-DEDICATED = URGENT + ("download",)               # own short-lived thread
+DEDICATED = URGENT + ("download", "screen_touch")  # own short-lived thread
 STOCK_CAMERA = "/server/files/camera/monitor.jpg"
 EXT_CAMERA = "/webcam/snapshot.jpg"
+EXT_SCREEN = "/screen/snapshot"    # Extended Firmware remote screen (touchscreen mirror), PNG
+EXT_TOUCH = "/screen/touch"
+SCREEN_INTERVAL = 0.5             # remote screen refresh, as its own viewer (~2 Hz)
+SCREEN_RETRY = 5.0
 GCODE_ROOT = "gcodes"
+FOLDER_NAME_RE = re.compile(r"^[\w .-]{1,64}$")
 FILE_ROOTS = ("gcodes", "camera")   # camera = U1 timelapse videos and snapshots
 
 
@@ -70,6 +77,9 @@ class Service:
         self.last_frame_at = 0.0
         self.camera_on = False
         self.camera_keepalive_at = 0.0
+        self.screen_on = False
+        self.screen_at = 0.0
+        self.screen_digest = None
         self.lease_until = 0.0
         self.closed = False
         self.jobs = queue.Queue()
@@ -91,9 +101,13 @@ class Service:
                 self.firmware = {"kind": "unknown", "version": ""}
             self.target = target
 
-    def touch(self, camera=None):
+    def touch(self, camera=None, screen=None):
         with self.lock:
             self.lease_until = time.monotonic() + LEASE_SECONDS
+            if screen is not None:
+                if screen and not self.screen_on:
+                    self.screen_digest = None   # send the first frame even when unchanged
+                self.screen_on = bool(screen)
             if camera is not None:
                 self.camera_on = bool(camera)
                 if not camera:
@@ -152,6 +166,7 @@ class Service:
             with self.lock:
                 active = now < self.lease_until and self.client is not None
                 camera = active and self.camera_on
+                screen = active and self.screen_on
             if not active:
                 time.sleep(0.25)
                 continue
@@ -159,6 +174,8 @@ class Service:
                 if now >= next_status:
                     next_status = now + STATUS_EVERY
                     self._push_status()
+                if screen and now >= self.screen_at:
+                    self._push_screen()
                 if camera and self._frame_due():
                     self._push_frame()
                 else:
@@ -227,6 +244,26 @@ class Service:
         self.frame_ack.clear()
         self.last_frame_at = time.monotonic()
         self.publish({"type": "frame", "image": "data:image/jpeg;base64," + base64.b64encode(data).decode()})
+
+    def _push_screen(self):
+        """Extended Firmware remote screen: publish the touchscreen PNG when it changed."""
+        self.screen_at = time.monotonic() + SCREEN_INTERVAL
+        if self.firmware["kind"] != "extended":
+            return
+        try:
+            data, _ = self._client().raw("GET", EXT_SCREEN + "?t=%d" % int(time.time() * 1000), timeout=4)
+            if data[:8] != b"\x89PNG\r\n\x1a\n":
+                raise PrinterError("remote screen is off: turn on Remote Screen in Settings > Firmware")
+        except (PrinterError, OSError) as e:
+            self.screen_at = time.monotonic() + SCREEN_RETRY
+            self.screen_digest = None
+            self.publish({"type": "screen_error", "error": str(e)})
+            return
+        digest = hashlib.sha1(data).digest()
+        if digest == self.screen_digest:
+            return
+        self.screen_digest = digest
+        self.publish({"type": "screen", "image": "data:image/png;base64," + base64.b64encode(data).decode()})
 
     # ------------------------------------------------------------------ spoolman
 
@@ -467,6 +504,53 @@ class Service:
         if is_dir:
             return self._client().delete_directory(path, force=True)
         return self._client().delete_file(path)
+
+    def cmd_mkdir(self, path):
+        path = _safe_path(path)
+        name = path.rsplit("/", 1)[-1]
+        if "/" not in path or name.startswith(".") or not FOLDER_NAME_RE.match(name):
+            raise ValueError("folder names use letters, digits, spaces, '-', '_' and '.'")
+        return self._client().create_directory(path)
+
+    def cmd_folders(self, root=GCODE_ROOT, limit=200):
+        """Every folder under a root (breadth first, at most `limit`), for the Move dialog."""
+        root = _safe_path(root)
+        if "/" in root:
+            raise ValueError("folders are listed from a file root")
+        client, out, todo = self._client(), [root], [root]
+        while todo and len(out) < limit:
+            here = todo.pop(0)
+            for d in client.directory(here, extended=False).get("dirs", []):
+                name = str(d.get("dirname") or "")
+                if name and not name.startswith("."):
+                    out.append(here + "/" + name)
+                    todo.append(here + "/" + name)
+        return sorted(out[:limit], key=str.lower)
+
+    def cmd_move(self, path, folder):
+        """Move a file or folder into another folder of the same root (keeps its name)."""
+        path, folder = _safe_path(path), _safe_path(folder)
+        if "/" not in path:
+            raise ValueError("refusing to move a file root")
+        if path.split("/")[0] != folder.split("/")[0]:
+            raise ValueError("files stay in their own root")
+        if folder == path or folder.startswith(path + "/"):
+            raise ValueError("can't move a folder into itself")
+        dest = folder + "/" + path.rsplit("/", 1)[-1]
+        if dest == path:
+            return {"path": path}
+        self._client().move(path, dest)
+        return {"path": dest}
+
+    def cmd_screen_touch(self, x, y):
+        """Tap the printer's touchscreen at framebuffer pixel (x, y) through the remote screen."""
+        x, y = int(x), int(y)
+        if not (0 <= x < 4096 and 0 <= y < 4096):
+            raise ValueError("touch outside the screen")
+        self._client().raw("POST", "%s?a=tap&x=%d&y=%d" % (EXT_TOUCH, x, y), b"", timeout=4)
+        with self.lock:
+            self.screen_at = 0.0   # show the result of the tap right away
+        return True
 
     def cmd_print_file(self, path):
         path = _safe_path(path, (GCODE_ROOT,))

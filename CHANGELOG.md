@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.0] - 2026-11-10
+
+- One Dashboard: camera, status, temperatures with each head's filament, and the four toolheads with
+  their spools. The Toolheads and Firmware tabs are gone.
+- Spoolman, the printer's print options, calibration and the Extended Firmware settings moved to
+  Settings.
+- With the Extended Firmware the Dashboard shows the printer's touchscreen (Remote Screen) and passes
+  clicks on it to the printer as taps.
+- New spool picker: a list with each spool's colour, brand, material, location and grams left,
+  compatible materials first. It no longer closes on its own when the status refreshes, and works
+  during a print.
+- A temperature you are typing is no longer wiped by the status refresh.
+- Files: create folders, and move files and folders into another folder with Move or by dragging a
+  row onto a folder (or onto Up). Moves stay inside their own root.
+
 ## [0.2.3] - 2026-11-10
 
 - Time-lapse downloads go to `<name>.part` and are renamed when complete. The plugin no longer

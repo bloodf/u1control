@@ -51,7 +51,10 @@ they are sent before the upload and not written into the G-code.
 | websocket `camera.start_monitor` | wakes the stock camera every 50 s |
 | `GET /server/files/camera/monitor.jpg` | stock camera frame |
 | `GET /webcam/snapshot.jpg` | Extended Firmware camera frame |
+| `GET /screen/snapshot` | Extended Firmware Remote Screen: the touchscreen as PNG (Settings > Firmware > Remote Screen must be on) |
+| `POST /screen/touch?a=tap&x=&y=` | tap the touchscreen at a framebuffer pixel |
 | `GET /server/files/directory`, `/metadata`, `DELETE /server/files/...` | file manager (`gcodes` and `camera` roots) |
+| `POST /server/files/directory`, `POST /server/files/move` | new folder; move a file or folder (same root only) |
 | `GET /server/spoolman/status`, `POST /server/spoolman/proxy` | the printer's own Spoolman link |
 | `/firmware-config/api/status`, `/settings`, `/settings/<id>/<value>`, `/action/<id>` | Extended Firmware settings |
 

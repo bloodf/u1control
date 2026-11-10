@@ -182,6 +182,13 @@ class Moonraker:
         """path includes the root, e.g. 'gcodes/sub/part.gcode'."""
         return self.request("DELETE", "/server/files/" + urllib.parse.quote(path))
 
+    def create_directory(self, path):
+        return self.request("POST", "/server/files/directory", json_body={"path": path})
+
+    def move(self, source, dest):
+        """Move or rename a file or folder; both paths include the root."""
+        return self.request("POST", "/server/files/move", json_body={"source": source, "dest": dest})
+
     def delete_directory(self, path, force=False):
         return self.request("DELETE", "/server/files/directory", {"path": path, "force": str(bool(force)).lower()})
 

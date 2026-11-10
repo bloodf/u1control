@@ -45,6 +45,9 @@ class FakePrinter:
              "filament": {"name": "White", "material": "PETG", "color_hex": "FAFAFA", "vendor": {"name": "Generic"}}},
         ]
         self.patches, self.uses = [], []
+        self.screen = None   # PNG bytes served at /screen/snapshot (Extended Firmware remote screen)
+        self.taps = []
+        self.made, self.moved = [], []
         handler = self._handler()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -101,7 +104,8 @@ class FakePrinter:
                 if u.path == "/server/webcams/list":
                     return self._send(200, {"result": {"webcams": []}})
                 if u.path == "/server/files/directory":
-                    return self._send(200, {"result": {"dirs": [{"dirname": "sub"}, {"dirname": ".thumbs"}],
+                    dirs = [{"dirname": "sub"}, {"dirname": ".thumbs"}] if q.get("path") == "gcodes" else []
+                    return self._send(200, {"result": {"dirs": dirs,
                                                        "files": [{"filename": "a.gcode", "size": 10, "modified": 2},
                                                                  {"filename": "b.gcode", "size": 20, "modified": 5}],
                                                        "disk_usage": {"free": 100}}})
@@ -113,6 +117,8 @@ class FakePrinter:
                     if fake.extended:
                         return self._send(200, {"Version": fake.version, "Profile": "extended"})
                     return self._send(200, b"<html>fluidd</html>", "text/html")
+                if u.path == "/screen/snapshot" and fake.screen:
+                    return self._send(200, fake.screen, "image/png")
                 if u.path == "/firmware-config/api/settings":
                     return self._send(200, {"settings": [{"id": "ssh", "current": "false", "options": ["false", "true"]}]})
                 rel = urllib.parse.unquote(u.path[len("/server/files/"):])
@@ -126,6 +132,7 @@ class FakePrinter:
 
             def do_POST(self):
                 u = urllib.parse.urlsplit(self.path)
+                q = dict(urllib.parse.parse_qsl(u.query))
                 body = self._body()
                 if u.path == "/printer/gcode/script":
                     if fake.state == "printing" and "SET_PRINT_EXTRUDER_MAP" in body.get("script", ""):
@@ -135,6 +142,15 @@ class FakePrinter:
                 if u.path == "/printer/print/start":
                     fake.started.append(body.get("filename"))
                     return self._send(200, {"result": "ok"})
+                if u.path == "/server/files/directory":
+                    fake.made.append(body.get("path"))
+                    return self._send(200, {"result": {"action": "create_dir"}})
+                if u.path == "/server/files/move":
+                    fake.moved.append((body.get("source"), body.get("dest")))
+                    return self._send(200, {"result": {"action": "move_file"}})
+                if u.path == "/screen/touch":
+                    fake.taps.append(q)
+                    return self._send(200, {"status": "ok"})
                 if u.path.startswith("/firmware-config/api/settings/"):
                     return self._send(200, b"running...\nSUCCESS: Setting updated successfully\n", "text/plain")
                 return self._send(404, {"error": {"message": "not found"}})

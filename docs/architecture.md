@@ -77,7 +77,7 @@ Page to plugin:
 | type | fields | effect |
 |---|---|---|
 | `hello` | `id` | resolve the printer, connect, send `config` |
-| `lease` | `camera` | keep the monitor running; camera on or off |
+| `lease` | `camera`, `screen` | keep the monitor running; camera and remote screen on or off |
 | `cmd` | `id`, `cmd`, `args` | run `Service.cmd_<cmd>(**args)` |
 | `frame_ack` | | the page has shown the last camera frame |
 | `save_settings` | `settings` | validate and store settings |
@@ -90,6 +90,8 @@ Plugin to page:
 | `reply` | `id`, `result` or `error` |
 | `status` | `data` (see `u1.summarize`) |
 | `frame` | `image` (JPEG data URL) |
+| `screen` | `image` (PNG data URL), sent only when the touchscreen changed |
+| `screen_error` | `error` (remote screen off or unreachable; retried every 5 s) |
 | `rfid` | `heads` (changed indices), `tags` |
 | `config` | settings, Automagic metadata, Spooler state, version |
 | `notice` | `text` |

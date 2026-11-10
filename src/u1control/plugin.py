@@ -197,7 +197,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                 self.post_message(self._config_message())
                 self._auto_pipeline()
             elif kind == "lease":
-                svc.touch(camera=data.get("camera"))
+                svc.touch(camera=data.get("camera"), screen=data.get("screen"))
             elif kind == "frame_ack":
                 svc.ack_frame()
             elif kind == "cmd":
