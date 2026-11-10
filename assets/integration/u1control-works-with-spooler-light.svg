@@ -10,7 +10,13 @@
 <g id="symbol-4-t3"><rect x="136" y="40" width="32" height="64" rx="8" fill="#A99BFF"/></g>
 <g id="symbol-4-t4"><rect x="184" y="40" width="32" height="64" rx="8" fill="#78CFD5"/></g></svg></g>
 <g id="wordmark-6"><text data-text="u1control" fill="#14181F" font-family="Outfit" font-size="64"><tspan x="328" y="216" font-weight="700">u1</tspan><tspan x="387" y="216" font-weight="300">control</tspan></text></g>
-<g id="rect-7"><rect x="1016" y="128" width="128" height="128" rx="16" fill="#FFFFFF" stroke="#ACB2BD" stroke-width="2"/></g>
+<g id="rect-7"><!--spooler-logo--><svg x="1016" y="128" width="128" height="128" viewBox="0 0 256 256"><rect x="0" y="0" width="256" height="256" rx="32" fill="#14181F"/><g fill="none" stroke-linecap="round" stroke-linejoin="round">
+<path d="M188.36 107.66A77 77 0 1 1 116 57H216M201 42L216 57L201 72" stroke="#A99BFF" stroke-width="16"/>
+<path d="M85.59 103.59A43 43 0 0 1 146.41 103.59" stroke="#78CFD5" stroke-width="14"/>
+<path d="M157.53 122.87A43 43 0 0 1 127.13 175.53" stroke="#F4CF78" stroke-width="14"/>
+<path d="M104.87 175.53A43 43 0 0 1 74.47 122.87" stroke="#FF997D" stroke-width="14"/>
+<circle cx="116" cy="134" r="14" stroke="#F6F7FB" stroke-width="10"/>
+</g></svg><rect x="1016" y="128" width="128" height="128" rx="16" stroke="#ACB2BD" stroke-width="2" fill="none"/><!--/spooler-logo--></g>
 <g id="text-8"><text data-text="Spooler" fill="#14181F" font-family="Outfit" font-weight="400" font-size="64" xml:space="preserve"><tspan x="1176" y="216">Spooler</tspan></text></g>
 <g id="icon-link-10"><svg xmlns="http://www.w3.org/2000/svg" x="768" y="160" width="64" height="64" viewBox="0 0 24 24" fill="none" color="#806600" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><g id="link-9-link"><path d="M10 8L12 6A4 4 0 0 1 18 12L16 14M14 16L12 18A4 4 0 0 1 6 12L8 10M8 16L16 8"/></g></svg></g>
 <g id="text-11"><text data-text="Same spool for every toolhead" fill="#14181F" font-family="Outfit" font-weight="400" font-size="32" xml:space="preserve"><tspan x="582.5" y="400">Same spool for every toolhead</tspan></text></g>

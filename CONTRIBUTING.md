@@ -93,6 +93,9 @@ Maintainers only:
 
 Images live in `assets/` and the UI icons in `src/u1control/ui/`. Keep the SVG and PNG of an image
 together and update both. Fonts stay with their licence files.
+The screenshots inside the README, Orca Cloud and install images are real renders of the plugin's pages: regenerate them with
+`python3 scripts/render_images.py` (needs Google Chrome; pass a name such as `hero` to redo one image) instead of editing the PNGs.
+The script also inlines Spooler's logo into the integration SVGs and keeps every PNG under Orca Cloud's 2 MB limit.
 
 ## License
 

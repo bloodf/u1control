@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.2.1] - 2026-11-10
+
+- README, install and store images now show real screenshots of the plugin, and the Spooler image
+  shows Spooler's logo. `scripts/render_images.py` regenerates them.
+- The spool picker no longer overflows the toolhead cards, the firmware badge stays on one line and
+  the temperature rows keep their buttons on one line.
+- Open-source project setup: issue forms, pull request template, code of conduct, Dependabot and the
+  Orca Cloud description text.
+
 ## [0.2.0] - 2026-11-10
 
 - New look: brand symbol as the tab icon, icons across the U1 Control tab and the print setup pop-up,
