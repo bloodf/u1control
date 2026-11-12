@@ -18,6 +18,7 @@ SETTINGS_FILE = "spooler_settings.json"
 PROFILES_FILE = "profiles.json"          # {"version": 1, "filaments": {"<filament id>": {"<printer label>": "<preset>"}}}
 KEEP_SLOTS_FILE = "keep_slots.json"      # {"active": true, "printer": "<label>", "ts": <unix s>}, refreshed ~5 s
 KEEP_SLOTS_FRESH = 30.0                  # seconds
+PROFILES_VERSION = 1
 COLOUR_CAP = 120.0   # redmean distance beyond which "nearest colour" is no longer the same spool
 
 
@@ -50,33 +51,52 @@ def read_json(folder, name):
 
 
 def keep_slots_active(marker, now, printer_labels=()):
-    """Spooler's "Keep Slots Synced" is running for this printer: active, refreshed within
-    KEEP_SLOTS_FRESH seconds, and its "printer" label matches one of printer_labels (a marker without
-    a label, or no labels to compare, counts as a match). Spooler's label is the printer model, or
-    "<model> <nozzle>" when two presets share a model."""
-    try:
-        fresh = bool(marker and marker.get("active")) and abs(now - float(marker.get("ts"))) < KEEP_SLOTS_FRESH
-    except (TypeError, ValueError):
+    """Spooler's "Keep Slots Synced" is running for this printer: "active" is true, "ts" was refreshed within
+    KEEP_SLOTS_FRESH seconds, and its "printer" label matches one of printer_labels. Spooler's label is the
+    printer model, or "<model> <nozzle>" when two presets share a model.
+    A fresh marker without a usable "printer" label (or nothing to compare it with) also counts as a match:
+    the printer it is for is unknown, so u1control pauses its automatic sync rather than risk two automations
+    writing the same project slots. Manual sync is never paused. A marker of the wrong shape counts as
+    inactive."""
+    if not isinstance(marker, dict) or marker.get("active") is not True:
         return False
-    label = str(marker.get("printer") or "").strip().lower() if fresh else ""
+    ts = marker.get("ts")
+    if isinstance(ts, bool) or not isinstance(ts, (int, float)) or abs(now - ts) >= KEEP_SLOTS_FRESH:
+        return False
+    printer = marker.get("printer")
+    label = printer.strip().lower() if isinstance(printer, str) else ""
     wanted = [str(p).strip().lower() for p in printer_labels if p]
-    return fresh and (not label or not wanted or any(label == w or label.startswith(w + " ") or w.startswith(label + " ")
-                                                    for w in wanted))
+    return not label or not wanted or any(label == w or label.startswith(w + " ") or w.startswith(label + " ")
+                                          for w in wanted)
+
+
+def profiles_problem(profiles):
+    """Why a profiles.json can't be used ("" when it can, or when there is none): callers then fall back
+    to colour matching."""
+    if profiles is None:
+        return ""
+    if profiles.get("version") != PROFILES_VERSION or isinstance(profiles.get("version"), bool):
+        return "unsupported version %r" % (profiles.get("version"),)
+    if not isinstance(profiles.get("filaments"), dict):
+        return "\"filaments\" is not an object"
+    return ""
 
 
 def profile_lookup(profiles, filament_id, printer_label):
-    """Preset name Spooler published for a Spoolman filament on the printer with this label, or None."""
-    if not isinstance(profiles, dict) or filament_id is None:
+    """Preset name Spooler published for a Spoolman filament on the printer with this label, or None
+    (also for a file of another version or shape)."""
+    if not isinstance(profiles, dict) or filament_id is None or profiles_problem(profiles):
         return None
-    entry = (profiles.get("filaments") or {}).get(str(filament_id))
+    entry = profiles["filaments"].get(str(filament_id))
     if not isinstance(entry, dict) or not entry:
         return None
     label = str(printer_label or "").casefold()
-    for key, name in entry.items():
-        if str(key).casefold() == label:
+    names = [(str(k).casefold(), v) for k, v in entry.items() if isinstance(v, str) and v]
+    for key, name in names:
+        if key == label:
             return name
-    for key, name in entry.items():  # "Snapmaker U1 0.4" style labels when the model is duplicated
-        if label and str(key).casefold().startswith(label):
+    for key, name in names:  # "Snapmaker U1 0.4" style labels when the model is duplicated
+        if label and key.startswith(label):
             return name
     return None
 

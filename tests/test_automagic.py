@@ -189,7 +189,7 @@ class SpoolerTests(PluginBase):
         self.assertEqual(sb.preset_for_spool(presets, spool, profiles, "Other"), "Elegoo PLA Fire Red @Snapmaker U1")
         self.assertEqual(sb.preset_for_spool(presets, spool, {"filaments": {}}, "Snapmaker U1"),
                          "Elegoo PLA Fire Red @Snapmaker U1")
-        longer = {"filaments": {"12": {"Snapmaker U1 0.4": "p"}}}
+        longer = {"version": 1, "filaments": {"12": {"Snapmaker U1 0.4": "p"}}}
         self.assertEqual(sb.profile_lookup(longer, 12, "snapmaker u1"), "p")
 
     def test_files_and_marker(self):

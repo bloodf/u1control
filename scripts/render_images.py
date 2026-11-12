@@ -2,7 +2,7 @@
 
 What it does
   * Builds dist/u1control_any.whl, loads it against the fake `orca` module (tests/fakes.py) and takes the
-    real app.html / setup.html it serves.
+    real Vue page in app and setup modes.
   * Injects a stub `window.orca` that answers the page's messages with realistic fake printer data
     (built from tests/fakes.FakePrinter + u1.summarize, so the shapes are exactly what the plugin sends),
     then screenshots each page with headless Chrome at 2x.
@@ -11,18 +11,19 @@ What it does
   * Inlines Spooler's full-colour icon (../spooler/assets/spooler-icon.svg) into the Spooler integration
     SVGs and re-exports their PNGs. The other SVG templates are never changed.
 
-Needs: Python 3 (stdlib only) and Google Chrome (override with CHROME=/path/to/chrome). The Spooler
+Needs: Python 3 (stdlib only), Node 24+ and Google Chrome (override with CHROME=/path/to/chrome). The Spooler
 repo is expected next to this one (override with SPOOLER_ICON=/path/to/spooler-icon.svg).
 
 Run from anywhere:  python3 scripts/render_images.py [name ...]
 Names filter the outputs by substring (e.g. `hero`, `install-03`). Re-running overwrites the PNGs with
-identical content for identical input, so it is safe to repeat.
+new mock previews. Set RENDER_OUT=/path/to/output to keep the existing artwork unchanged.
 """
 
 import base64
 import json
 import os
 import re
+import runpy
 import subprocess
 import sys
 import tempfile
@@ -32,6 +33,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ASSETS = ROOT / "assets"
+OUT = Path(os.environ.get("RENDER_OUT", ASSETS))
 CHROME = os.environ.get("CHROME", "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
 SPOOLER_ICON = Path(os.environ.get("SPOOLER_ICON", ROOT.parent / "spooler" / "assets" / "spooler-icon.svg"))
 SVG_NS = "{http://www.w3.org/2000/svg}"
@@ -56,28 +58,26 @@ SHOTS = [
     dict(svg=f"{O}/frame-live-control", page="app", section="dash", zoom=0.9),
     dict(svg=f"{O}/frame-toolheads-rfid", page="app", section="dash", zoom=0.88,
          js='document.querySelector("main").style.paddingBottom="420px";'
-            'document.querySelector("#headCards").closest(".card").scrollIntoView({block:"start"})'),
-    dict(svg=f"{O}/frame-spoolman", page="app", section="dash", zoom=0.8, spools=True, scroll="#headCards",
+            'document.querySelector("#heads-h").closest("section").scrollIntoView({block:"start"})'),
+    dict(svg=f"{O}/frame-spoolman", page="app", section="dash", zoom=0.8, spools=True, scroll="#heads-h",
          js='document.querySelector("main").style.paddingBottom="420px";'
-            'document.querySelector("#headCards").closest(".card").scrollIntoView({block:"start"});'
-            'document.querySelector("[data-pick=\\"2\\"]").click()'),
-    dict(svg=f"{O}/frame-files-firmware", page="app", section="files", zoom=0.92,
-         js='document.querySelector("[data-move=\\"benchy_PLA.gcode\\"]").click()'),
-    dict(svg=f"{I}/u1control-install-01", page="app", section="settings", zoom=0.8, scroll="#cHost"),
+            'document.querySelector("#heads-h").closest("section").scrollIntoView({block:"start"})'),
+    dict(svg=f"{O}/frame-files-firmware", page="app", section="files", zoom=0.92),
+    dict(svg=f"{I}/u1control-install-01", page="app", section="settings", zoom=0.8, scroll="#c-host"),
     dict(svg=f"{I}/u1control-install-02", page="app", section="dash", zoom=0.8),
-    dict(svg=f"{I}/u1control-install-03", page="app", section="settings", zoom=0.8, scroll="#autoBox"),
-    dict(svg=f"{I}/u1control-install-04", page="setup", zoom=0.8, scroll="#rows"),
+    dict(svg=f"{I}/u1control-install-03", page="app", section="settings", zoom=0.8, scroll="#mode-h"),
+    dict(svg=f"{I}/u1control-install-04", page="setup", zoom=0.8, scroll="#su-map"),
 ]
 
 
 # ------------------------------------------------------------------ plugin + fake data
 
-def load_plugin():
-    subprocess.run([sys.executable, str(ROOT / "scripts" / "build.py")], check=True, cwd=ROOT, stdout=subprocess.DEVNULL)
+def load_plugin(output):
     sys.path[:0] = [str(ROOT / "tests"), str(ROOT / "src" / "u1control")]
     import fakes
     fakes.install_orca()
-    return fakes, fakes.load_wheel(ROOT / "dist" / "u1control_any.whl")
+    runpy.run_path(str(ROOT / "scripts" / "build.py"))["build"](output)
+    return fakes, fakes.load_wheel(output / "u1control_any.whl")
 
 
 def ts(y, mo, d, h, mi):
@@ -157,11 +157,16 @@ def app_data(fakes, mods, scenario):
                    for k, label, hint, value, kind in st.AUTOMATIONS if k != "mode"]
     fw = {"kind": "extended", "version": "2.0.0-paxx12-24"}
     return {
-        "hello": {"address": "192.168.1.50", "firmware": fw, "hostname": "u1", "klipper_state": "ready", "printer": "Snapmaker U1"},
+        "hello": {"address": "192.168.1.50", "firmware": fw, "hostname": "u1", "klipper_state": "ready", "printer": "Snapmaker U1", "generation": 1},
         "config": {"settings": cfg, "automations": automations, "mode": "automagic", "stored": {}, "version": "0.2.0",
                    "spooler": {"installed": True, "presets": 12, "url": "https://github.com/bloodf/spooler", "dismissed": False}},
         "status": view,
         "cmds": {
+            "stock": {"spooler": {"state": "active", "text": "", "version": "0.20.1"},
+                      "stock": {"state": "ok", "code": "ok", "text": "", "rows": spools}, "same_spoolman": True,
+                      "bindings": view["bindings"], "usage": "u1control"},
+            "usage": {"pending": [], "unconfirmed": [], "acknowledged": [], "acknowledged_total": 0,
+                      "save_error": "", "restore_notice": ""},
             "files": {"path": "gcodes", "disk": {"free": 21.3e9},
                       "dirs": [{"name": "calibration"}, {"name": "functional"}],
                       "files": [{"name": n, "size": b, "modified": m, "time": t, "weight": None, "thumbs": []} for n, b, m, t in FILES]},
@@ -197,6 +202,8 @@ def setup_data(fakes, mods):
 
 STUB = """<script>
 const DATA = %s;
+window.addEventListener('error', e => { document.documentElement.dataset.renderError = e.message; });
+window.addEventListener('unhandledrejection', e => { document.documentElement.dataset.renderError = String(e.reason); });
 let handler = null;
 const emit = m => handler && handler(m);
 window.orca = {
@@ -217,31 +224,26 @@ def font_css():
     return face("Outfit", "Outfit.ttf", "100 900") + face("JetBrains Mono", "JetBrainsMono.ttf", "100 800")
 
 
-# Render-only touches: keep long spool names inside their toolhead card, and don't draw the empty
-# thumbnail boxes (the fake file list has no G-code previews to show).
-FIXUPS = ".pickb{font-size:11px;padding:5px 6px}"  # denser text for the small render only
-
-
 def make_page(html, theme, stub_data, section=None, scroll=None, js=None):
     root = ":root{%s}" % ";".join("%s:%s" % kv for kv in THEMES[theme].items())
-    head = "<style>%s%s%s</style>%s" % (font_css(), root, FIXUPS, STUB % json.dumps(stub_data).replace("</", "<\\/"))
+    head = "<style>%s%s</style>%s" % (font_css(), root, STUB % json.dumps(stub_data).replace("</", "<\\/"))
     steps = []
     if section:
-        steps.append('document.querySelector(\'#nav button[data-s="%s"]\').click();' % section)
+        steps.append('setTimeout(()=>document.querySelector(\'[data-tab="%s"]\').click(),300);' % section)
     if scroll:
-        steps.append('setTimeout(()=>{const e=document.querySelector("%s");e.closest(".card,tr,section").scrollIntoView({block:"start"});},900);' % scroll)
+        steps.append('setTimeout(()=>{const e=document.querySelector("%s");e.closest("section").scrollIntoView({block:"start"});},900);' % scroll)
     if js:   # extra page script, run after the scroll (e.g. open the spool picker)
         steps.append("setTimeout(()=>{%s},1300);" % js)
+    steps.append("setTimeout(()=>{if(!document.querySelector('#app .p-button'))throw Error('Vue did not mount');document.documentElement.dataset.renderReady='true';},1800);")
     html = html.replace("<head>", "<head>" + head, 1)
     return html.replace("</body>", "<script>%s</script></body>" % "".join(steps), 1)
 
 
-def chrome(url, out, w, h, scale):
-    with tempfile.TemporaryDirectory() as profile:
-        subprocess.run([CHROME, "--headless=new", "--hide-scrollbars", "--virtual-time-budget=2500", "--no-first-run",
-                        "--disable-gpu", f"--user-data-dir={profile}", f"--window-size={w},{h}",
-                        f"--force-device-scale-factor={scale}", f"--screenshot={out}", url],
-                       check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
+def chrome(url, out, w, h, scale, validate=False):
+    # The shared test launcher supplies --use-mock-keychain --password-store=basic.
+    subprocess.run(["node", str(ROOT / "scripts/render_page.mjs"), url, str(out), str(w), str(h),
+                    str(scale), str(validate).lower(), str(OUT)],
+                   env={**os.environ, "CHROME": CHROME}, check=True, timeout=120)
 
 
 # ------------------------------------------------------------------ frames + compositing
@@ -305,7 +307,7 @@ def report(png, g=None):
     size = png.stat().st_size
     flag = "" if size <= MAX_PNG else "  OVER 2 MB!"
     geo = "" if g is None else "  frame x=%g y=%g %gx%g rx=%g" % (g["x"], g["y"], g["width"], g["height"], g["rx"])
-    print("%-52s %7.0f kB%s%s" % (png.relative_to(ROOT), size / 1024, geo, flag))
+    print("MOCK %-52s %7.0f kB%s%s" % (png, size / 1024, geo, flag))
 
 
 def main(argv):
@@ -321,14 +323,15 @@ def main(argv):
                 continue
             path = ASSETS / (name + ".svg")
             text, g = inline_spooler(path.read_text(encoding="utf-8"))
-            if text != path.read_text(encoding="utf-8"):
-                path.write_text(text, encoding="utf-8")
-            export_svg(path, ASSETS / (name + ".png"), tmp)
-            report(ASSETS / (name + ".png"), g)
+            output = OUT / (name + ".svg")
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_text(text, encoding="utf-8")
+            export_svg(output, OUT / (name + ".png"), tmp)
+            report(OUT / (name + ".png"), g)
         shots = [s for s in SHOTS if pick(s["svg"])]
         if not shots:
             return
-        fakes, ns = load_plugin()
+        fakes, ns = load_plugin(tmp / 'wheel')
         mods = {n: sys.modules["u1control." + n] for n in ("u1", "spoolman", "settings")}
         for i, s in enumerate(shots):
             svg_path = ASSETS / (s["svg"] + ".svg")
@@ -337,18 +340,19 @@ def main(argv):
             theme = "light" if s["svg"].endswith("light") else "dark"
             if s["page"] == "setup":
                 data, warnings = setup_data(fakes, mods)
-                html = ns["_asset"]("setup.html").replace("__DATA__", json.dumps(data).replace("</", "<\\/"))
+                html = ns["page_html"]("setup", data, language="en")
                 print("  %s: warnings %s" % (s["svg"], warnings))
                 page = make_page(html, theme, {"cmds": {}}, scroll=s.get("scroll"))
             else:
-                page = make_page(ns["_asset"]("app.html").replace("__VERSION__", ns["VERSION"]), theme, app_data(fakes, mods, s), s["section"], s.get("scroll"), s.get("js"))
+                page = make_page(ns["page_html"]("app", language="en"), theme, app_data(fakes, mods, s), s["section"], s.get("scroll"), s.get("js"))
             html_path, shot = tmp / ("page%d.html" % i), tmp / ("shot%d.png" % i)
             html_path.write_text(page, encoding="utf-8")
             zoom = s["zoom"]
-            chrome(html_path.as_uri(), str(shot), round(g["width"] / zoom), round(g["height"] / zoom), 2 * zoom)
+            chrome(html_path.as_uri(), str(shot), round(g["width"] / zoom), round(g["height"] / zoom), 2 * zoom, validate=True)
             out = tmp / ("final%d.svg" % i)
             out.write_text(composite(svg_text, g, shot), encoding="utf-8")
-            png = ASSETS / (s["svg"] + ".png")
+            png = OUT / (s["svg"] + ".png")
+            png.parent.mkdir(parents=True, exist_ok=True)
             export_svg(out, png, tmp)
             report(png, g)
 

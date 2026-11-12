@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      spooler_ref:
+        description: "Spooler ref (branch, tag or SHA) for the joint tests"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -15,6 +21,8 @@ concurrency:
 jobs:
   check:
     name: Check (${{ matrix.os }})
+    env:
+      WORKERS: "1"
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -22,19 +30,58 @@ jobs:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
       - uses: actions/checkout@v7
-      # Spooler (the other OrcaSlicer plugin) for tests/test_spooler_joint.py.
-      # Spooler (>= 0.10.0) for the joint integration test.
+      # Spooler (the other OrcaSlicer plugin) for tests/test_spooler_joint.py and tests/test_unified.py.
+      # The ref is explicit: the run input, else the repository variable SPOOLER_REF, else the Spooler release this
+      # version is tested against. The joint tests (DiscoveryTest) need Spooler's presence/stock-list API
+      # (start_presence, peer_tick; first released in v0.21.0); a Spooler ref without it fails them, on purpose,
+      # instead of skipping. Bump the default (and docs/release.md, tests/test_release.py) with a compatible release.
       - uses: actions/checkout@v7
         with:
           repository: bloodf/spooler
-          ref: main
+          ref: ${{ inputs.spooler_ref || vars.SPOOLER_REF || 'v0.21.0' }}
           path: spooler
+      - name: Spooler ref under test
+        shell: bash
+        run: git -C spooler log -1 --format='Spooler %H %s'
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      # Node runs the UI build and the page test driver; provision it rather than rely on the runner image.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      # The page tests drive the built Vue page in headless Chrome (always --use-mock-keychain --password-store=basic).
+      - uses: browser-actions/setup-chrome@v2
+        id: chrome
+        with:
+          chrome-version: stable
+      - name: Allow Chrome sandbox on Ubuntu
+        if: runner.os == 'Linux'
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: bash scripts/ci_chrome_sandbox.sh
       - name: Build the plugin
         run: python scripts/build.py
       - name: Unit tests
         env:
           SPOOLER_SRC: ${{ github.workspace }}/spooler
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: python -m unittest discover -s tests
+
+  ui-build:
+    name: UI build is reproducible
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      # Vue 3 + PrimeVue from ui/ (exact versions, lockfile); the committed page must be exactly what this builds.
+      - name: Build the page from ui/
+        working-directory: ui
+        run: npm ci --ignore-scripts && npm run build
+      - name: Committed page matches the build
+        run: git diff --exit-code -- src/u1control/ui/app.html ui/build.json

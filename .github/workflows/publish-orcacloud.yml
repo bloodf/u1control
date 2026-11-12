@@ -1,8 +1,14 @@
 name: Publish to Orca Cloud
 
-# Publishing a GitHub release publishes that version to Orca Cloud.
+# Publishing a GitHub release publishes that version to Orca Cloud (and attaches the wheel to the release).
+#
+# Flow: bump pyproject.toml (and ui/package.json) and CHANGELOG.md on main, push the tag vX.Y.Z at that commit,
+# then publish a GitHub release for the tag (gh release create vX.Y.Z --verify-tag ...). That event runs this
+# workflow. docs/release.md has the exact steps and what to verify afterwards.
+#
 # One-time setup: connect this repository on Orca Cloud (Edit plugin > GitHub publishing).
-# No secrets: the run proves its origin with a short-lived GitHub OIDC token.
+# No secrets: the run proves its origin with a short-lived GitHub OIDC token (audience orcacloud).
+# Orca Cloud only accepts runs triggered by a published release. Re-running a run that already published is safe.
 
 on:
   release:
@@ -10,55 +16,109 @@ on:
 
 permissions:
   id-token: write
-  contents: read
+  contents: write # gh release upload (the wheel and SHA256SUMS)
 
 env:
   TAG: ${{ github.event.release.tag_name }}
+  GH_TOKEN: ${{ github.token }}
+  WORKERS: "1" # page tests run one scenario at a time, as in CI
 
 jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
+      - name: Tag must look like v1.2.3
+        run: |
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::release tag '$TAG' must be vX.Y.Z (Orca Cloud takes numeric X.Y.Z versions)"
+            exit 1
+          fi
       - uses: actions/checkout@v7
-      # Spooler (the other OrcaSlicer plugin) for tests/test_spooler_joint.py.
-      # Spooler (>= 0.10.0) for the joint integration test.
+        with:
+          ref: refs/tags/${{ github.event.release.tag_name }}
+      # Spooler (the other OrcaSlicer plugin) for tests/test_spooler_joint.py and tests/test_unified.py: the release
+      # this version is tested against (the joint tests need its presence/stock-list API, first released in v0.21.0).
       - uses: actions/checkout@v7
         with:
           repository: bloodf/spooler
-          ref: main
+          ref: v0.21.0
           path: spooler
+      - name: Spooler ref under test
+        run: git -C spooler log -1 --format='Spooler %H %s'
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+      # Node runs the UI build and the page test driver; the page tests drive the built Vue page in headless Chrome
+      # (always --use-mock-keychain --password-store=basic). Same setup as ci.yml.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - uses: browser-actions/setup-chrome@v2
+        id: chrome
+        with:
+          chrome-version: stable
+      - name: Allow Chrome sandbox on Ubuntu
+        if: runner.os == 'Linux'
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: bash scripts/ci_chrome_sandbox.sh
+      - name: Tag must equal pyproject version
+        run: |
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match pyproject version $version"
+            exit 1
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+      # Vue 3 + PrimeVue from ui/ (exact versions, lockfile); the committed page must be exactly what this builds.
+      - name: Build the page from ui/
+        working-directory: ui
+        run: npm ci --ignore-scripts && npm run build
+      - name: Committed page matches the build
+        run: git diff --exit-code -- src/u1control/ui/app.html ui/build.json
       - name: Unit tests
         env:
           SPOOLER_SRC: ${{ github.workspace }}/spooler
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: python -m unittest discover -s tests
       - name: Build (tag must match pyproject version)
         run: python scripts/build.py --release-tag "$TAG"
+      - name: Built wheel matches SHA256SUMS and carries the version
+        run: |
+          (cd dist && sha256sum -c SHA256SUMS)
+          unzip -p dist/u1control_any.whl "u1control-$VERSION.dist-info/METADATA" | grep -Fx "Version: $VERSION"
+          unzip -p dist/u1control_any.whl u1control/__init__.py | grep -F "VERSION = '$VERSION'"
+          cat dist/SHA256SUMS >> "$GITHUB_STEP_SUMMARY"
       - name: Changelog section for this version
         run: |
-          awk -v v="${TAG#v}" '
-            /^## \[/ { if (found) exit; found = index($0, "[" v "]") > 0; next }
-            found { print }
-          ' CHANGELOG.md | sed '/./,$!d' > notes.md
-          if [ ! -s notes.md ]; then
-            echo "::error::CHANGELOG.md has no section for ${TAG#v}"
-            exit 1
+          release_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/releases/tag/$TAG"
+          python scripts/release_notes.py "$VERSION" --limit 0 > notes-full.md
+          python scripts/release_notes.py "$VERSION" --url "$release_url" > notes.md
+      - name: Attach the wheel and checksums, fill empty release notes
+        run: |
+          gh release upload "$TAG" dist/u1control_any.whl dist/SHA256SUMS --clobber
+          if [ -z "$(gh release view "$TAG" --json body --jq .body)" ]; then
+            gh release edit "$TAG" --notes-file notes-full.md
           fi
       - name: Publish to Orca Cloud
         run: |
           set -euo pipefail
           oidc_token="$(curl -sS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=orcacloud" | jq -r .value)"
-          metadata="$(jq -cn --arg version "${TAG#v}" --rawfile changelog notes.md \
-            '{version: $version, changelog: ($changelog | .[0:4000])}')"
+          if [ -z "$oidc_token" ] || [ "$oidc_token" = "null" ]; then
+            echo "::error::no OIDC token (the job needs permissions: id-token: write)"
+            exit 1
+          fi
+          echo "::add-mask::$oidc_token"
+          metadata="$(jq -cn --arg version "$VERSION" --rawfile changelog notes.md \
+            '{version: $version, changelog: $changelog}')"
           status="$(curl -sS -o response.json -w '%{http_code}' \
             -H "Authorization: Bearer $oidc_token" \
             --form-string "metadata=$metadata" -F "files=@dist/u1control_any.whl" \
             https://api.orcaslicer.com/api/v1/plugin-publish/releases)"
           cat response.json; echo
           if [ "$status" != "201" ]; then
-            echo "::error::Orca Cloud returned HTTP $status"
+            echo "::error::Orca Cloud returned HTTP $status (401: repository not connected to exactly one plugin, or the run was not triggered by a published release; version error: tag not higher than the current plugin version)"
             exit 1
           fi
+          echo "Published $TAG to Orca Cloud." >> "$GITHUB_STEP_SUMMARY"

@@ -19,8 +19,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "u1control"
-MODULES = ("moonraker", "u1", "gcode", "extended", "spoolman", "settings", "spooler_bridge", "service")  # dependency order
-ASSETS = {"APP_HTML": "app.html", "SETUP_HTML": "setup.html", "ICON_SVG": "icon.svg"}
+MODULES = ("moonraker", "u1", "gcode", "extended", "spoolman", "settings", "spooler_bridge", "peers", "usage", "files", "stockview", "service")  # dependency order
+ASSETS = {"APP_HTML": "app.html", "ICON_SVG": "icon.svg"}   # app.html: the compiled Vue page (ui/, npm run build)
 ICON_DIRS = {"icon": "icons", "toolhead": "toolheads"}   # ui/<dir>/<name>.svg -> key "<prefix>/<name>"; spot-*.svg -> "spot/*"
 PLACEHOLDER = "__ICONS__"
 
@@ -93,6 +93,10 @@ def dist_info(project, files):
         di + "top_level.txt": "u1control\n",
     }
     meta = {k: v.encode("utf-8") for k, v in meta.items()}
+    # the Vue page bundles Vue, PrimeVue and PrimeUIX (MIT): their notices travel with the wheel, next to our LICENSE
+    meta[di + "licenses/LICENSE"] = (ROOT / "LICENSE").read_bytes()
+    for lic in sorted((ROOT / "ui" / "shared" / "licenses").glob("*.txt")):
+        meta[di + "licenses/" + lic.name] = lic.read_bytes()
     record = []
     for path, data in {**files, **meta}.items():
         digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()

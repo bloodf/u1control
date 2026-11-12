@@ -1,6 +1,7 @@
 """Run: python3 -m unittest discover -s tests"""
 
 import json
+import re
 import os
 import sys
 import tempfile
@@ -277,7 +278,9 @@ class PrinterTests(unittest.TestCase):
         self.fake.extended, self.fake.version = True, "2.0.0-paxx12-24"
         svc, pub = self._service()
         self.assertEqual(self._call(svc, pub, "connect")["firmware"]["kind"], "extended")
-        self.assertEqual(self._call(svc, pub, "ext_settings")["settings"][0]["id"], "ssh")
+        groups = self._call(svc, pub, "ext_settings")["settings"]
+        self.assertEqual([g["id"] for g in groups], ["web", "remote_access", "snapmaker_components"])
+        self.assertEqual(groups[1]["items"][0]["id"], "ssh")
         self.assertTrue(self._call(svc, pub, "ext_set", setting_id="ssh", value="true")["ok"])
         with self.assertRaises(RuntimeError):
             self._call(svc, pub, "ext_set", setting_id="../x", value="1")
@@ -361,7 +364,8 @@ class PluginTests(unittest.TestCase):
                          ["U1ControlPage", "U1PrintSetup", "CheckConnection", "SyncHeadsToProject", "ApplyForkTuning"])
 
     def test_print_setup_sends_mapping(self):
-        orca, ns = self.load(answer={"map": {"1": 3}, "prefs": {"bed_level": True}, "purifier": "weak"})
+        orca, ns = self.load(answer={"map": {"1": 3}, "prefs": {"bed_level": True}, "purifier": "weak",
+                                     "acknowledged": ["material:1:3"]})   # PETG on a PLA toolhead, confirmed
         cap = ns["U1PrintSetup"]()
         result = cap.execute(self.ctx("OctoPrint"))
         self.assertEqual(result.status, "success", result.message)
@@ -372,9 +376,34 @@ class PluginTests(unittest.TestCase):
         with open(self.path) as f:
             text = f.read()
         self.assertIn(u1.PURIFIER["weak"], text)
-        data = json.loads(orca.windows[0].html.split("const D = ", 1)[1].split(";\nconst $", 1)[0])
+        boot = json.loads(re.search(r'<script type="application/json" id="u1-boot">(.*?)</script>',
+                                    orca.windows[0].html, re.S).group(1))
+        self.assertEqual(boot["mode"], "setup")   # the one Vue page, in print-setup mode
+        data = boot["data"]
         self.assertEqual(data["map"], {"0": 0, "1": 1})
         self.assertTrue(ns["get_store"](cap).effective()["prefs"]["bed_level"])  # remembered
+
+    def test_print_setup_with_unconfirmed_warning_sends_nothing(self):
+        for acked in (None, [], ["material:1:2"], "material:1:3"):   # missing, empty, other toolhead, not a list
+            with self.subTest(acked=acked):
+                answer = {"map": {"1": 3}, "prefs": {}, "purifier": "auto"}
+                if acked is not None:
+                    answer["acknowledged"] = acked
+                _, ns = self.load(answer=answer)
+                before = len(self.fake.scripts)
+                result = ns["U1PrintSetup"]().execute(self.ctx("OctoPrint"))
+                self.assertEqual(result.status, "failure")
+                self.assertIn("weren't confirmed", result.message)
+                self.assertEqual(len(self.fake.scripts), before)          # nothing reached the printer
+
+    def test_warning_ids_match_the_human_warnings(self):
+        fils = [{"index": 0, "type": "PLA"}, {"index": 1, "type": "PETG"}, {"index": 2, "type": "PLA"}]
+        heads = [{"loaded": True, "type": "PLA"}, {"loaded": True, "type": "PLA"}, {"loaded": False, "type": ""},
+                 {"loaded": True, "type": "PLA Matte"}]
+        mapping = {0: 3, 1: 1, 2: 2}
+        self.assertEqual(u1.warning_ids(fils, heads, mapping), ["material:1:1", "empty:2:2"])
+        self.assertEqual(len(u1.mapping_warnings(fils, heads, mapping)), 2)
+        self.assertEqual(u1.warning_ids(fils, heads, {0: 0}), [])
 
     def test_export_only_edits_file(self):
         _, ns = self.load()

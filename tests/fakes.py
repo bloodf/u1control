@@ -25,6 +25,33 @@ def task_config():
     }
 
 
+def ext_settings():
+    """GET /firmware-config/api/settings as firmware-config.py answers it (release v2.0.0-paxx12-24,
+    handle_get_settings), with items from its functions/*.yaml: groups -> items -> options by value."""
+    return {
+        "web": {"label": "Web", "items": [
+            {"id": "remote-screen", "label": "Remote Screen", "description": "Stream the printer touchscreen to the browser.",
+             "help_url": None, "current": "false", "hidden": False,
+             "options": {"true": {"label": "Enabled"}, "false": {"label": "Disabled"}}}]},
+        "remote_access": {"label": "Remote Access", "items": [
+            {"id": "ssh", "label": "SSH Access", "description": "Enable remote shell access to the printer over SSH.",
+             "help_url": None, "current": "false", "hidden": False,
+             "options": {"true": {"label": "Enabled"}, "false": {"label": "Disabled"}}}]},
+        "snapmaker_components": {"label": "Snapmaker Components", "items": [
+            {"id": "spoolman", "label": "Spoolman Integration",
+             "description": "Track filament usage and metadata with Spoolman spool management.",
+             "help_url": "http://snapmakeru1-extended-firmware.pages.dev/spoolman", "current": "disabled", "hidden": False,
+             "options": {
+                 "enabled": {"label": "Enabled", "confirm": "Enable Spoolman integration? Enter the Spoolman server URL below.",
+                             "inputs": [{"name": "SPOOLMAN_URL", "label": "Spoolman URL",
+                                         "placeholder": "http://192.168.1.100:7912", "regex": "^https?://.+"}]},
+                 "disabled": {"label": "Disabled"},
+                 "legacy": {"label": "Legacy", "hidden": True}}},
+            {"id": "debug-only", "label": "Debug only", "description": None, "help_url": None, "current": "a",
+             "hidden": True, "options": {"a": {"label": "A"}}}]},
+    }
+
+
 def fake_tag_info(tags):
     return [tags.get(t, {"VENDOR": "NONE", "MAIN_TYPE": "NONE"}) for t in range(4)]
 
@@ -120,7 +147,7 @@ class FakePrinter:
                 if u.path == "/screen/snapshot" and fake.screen:
                     return self._send(200, fake.screen, "image/png")
                 if u.path == "/firmware-config/api/settings":
-                    return self._send(200, {"settings": [{"id": "ssh", "current": "false", "options": ["false", "true"]}]})
+                    return self._send(200, ext_settings())
                 rel = urllib.parse.unquote(u.path[len("/server/files/"):])
                 if u.path.startswith("/server/files/") and rel in fake.files:
                     return self._send(200, fake.files[rel], "application/octet-stream")
