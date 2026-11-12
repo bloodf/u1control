@@ -73,6 +73,10 @@ jobs:
         run: bash scripts/ci_chrome_sandbox.sh
       - name: Build the plugin
         run: python scripts/build.py
+      # ui/tests/unit imports vue from ui/node_modules (node --test runs the TypeScript sources).
+      - name: Install page dependencies
+        working-directory: ui
+        run: npm ci --ignore-scripts
       - name: Unit tests
         env:
           SPOOLER_SRC: ${{ github.workspace }}/spooler

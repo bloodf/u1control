@@ -612,7 +612,7 @@ try {
   }));
 } finally {
   await browser.close();
-  await rm(dir, { recursive: true, force: true });
+  await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
 }
 if (process.env.RESULTS) await writeFile(process.env.RESULTS, JSON.stringify(results, null, 2));
 console.log(`${chosen.length - failed}/${chosen.length} page scenarios passed`);

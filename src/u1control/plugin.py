@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import sys
 import tempfile
 import threading
 import time
@@ -82,7 +83,13 @@ def page_html(mode, data=None, language="auto"):
 
 
 def log(msg):
-    print("[u1control] " + str(msg))
+    # Logging must never raise: a Windows console (cp1252) cannot encode characters such as "\u2192".
+    line = "[u1control] " + str(msg)
+    try:
+        print(line)
+    except UnicodeEncodeError:
+        enc = getattr(sys.stdout, "encoding", None) or "ascii"
+        print(line.encode(enc, "replace").decode(enc))
 
 
 def _storage():

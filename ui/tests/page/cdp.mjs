@@ -42,7 +42,7 @@ export async function launch() {
     async close() {
       proc.kill('SIGTERM');
       await new Promise(r => (proc.exitCode !== null ? r() : proc.once('exit', r)));
-      await rm(profile, { recursive: true, force: true });
+      await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };
 }
