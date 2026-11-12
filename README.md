@@ -36,6 +36,40 @@ u1control is an independent project. It is not made or supported by Snapmaker.
   <img src="assets/features/feature-automagic.svg" width="72" alt="Automagic">
 </p>
 
+<!-- related-plugins:start -->
+## Explore the other plugins
+
+Complete your OrcaSlicer workflow: arrange, price, manage filament and print. Click an image, icon or name to open its repository.
+
+<table>
+  <tr>
+    <td width="33%" valign="top">
+      <a href="https://github.com/bloodf/orca_organizer"><img src="docs/related-plugins/orca_organizer-icon.png" width="40" height="40" alt="Organizer"></a>
+      <h3><a href="https://github.com/bloodf/orca_organizer">Organizer</a></h3>
+      <a href="https://github.com/bloodf/orca_organizer"><img src="docs/related-plugins/orca_organizer-preview.jpg" width="280" alt="Organizer: promotional artwork"></a>
+      <p>Arrange objects using their actual footprints and fill a build plate with more copies.</p>
+      <p><a href="https://github.com/bloodf/orca_organizer">View repository →</a></p>
+    </td>
+    <td width="33%" valign="top">
+      <a href="https://github.com/bloodf/orca_print_calculator"><img src="docs/related-plugins/orca_print_calculator-icon.png" width="40" height="40" alt="Orca Print Calculator"></a>
+      <h3><a href="https://github.com/bloodf/orca_print_calculator">Orca Print Calculator</a></h3>
+      <a href="https://github.com/bloodf/orca_print_calculator"><img src="docs/related-plugins/orca_print_calculator-preview.png" width="280" alt="Orca Print Calculator: promotional artwork"></a>
+      <p>Calculate plate costs and selling prices, including extras such as keychain rings and magnets.</p>
+      <p><a href="https://github.com/bloodf/orca_print_calculator">View repository →</a></p>
+    </td>
+    <td width="33%" valign="top">
+      <a href="https://github.com/bloodf/spooler"><img src="docs/related-plugins/spooler-icon.png" width="40" height="40" alt="Spooler"></a>
+      <h3><a href="https://github.com/bloodf/spooler">Spooler</a></h3>
+      <a href="https://github.com/bloodf/spooler"><img src="docs/related-plugins/spooler-preview.png" width="280" alt="Spooler: promotional artwork"></a>
+      <p>Bring your Spoolman spools and filament profiles into OrcaSlicer.</p>
+      <p><a href="https://github.com/bloodf/spooler">View repository →</a></p>
+    </td>
+  </tr>
+</table>
+
+Illustrative project artwork. [Credits and licenses](docs/related-plugins/README.md).
+<!-- related-plugins:end -->
+
 ## How it works
 
 <picture>
@@ -81,13 +115,14 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
     Firmware OpenRFID, OpenSpool, NTAG and external readers), edit, load, unload and read the tag again.
   - Spoolman: one spool per toolhead, picked from a list that shows each spool's colour, brand,
     material and grams left. Pick a spool and its filament is written to the head. Change the filament
-    on the printer and the closest spool is linked. Each head's filament use is recorded when the print
-    finishes.
+    on the printer and the closest spool is linked. For prints sent through the U1 print setup, each
+    head's estimated filament use is recorded when the print finishes (stock firmware; see
+    [the Spooler contract](docs/spooler-contract.md#filament-use) for what is and isn't covered).
   - With the Extended Firmware: the printer's touchscreen (Remote Screen), live, and tappable.
   - Resume or discard a print interrupted by a power cut, and see the printer's error list.
 - **Files:** browse, print and delete G-code files; browse, save and delete time-lapses. Create
   folders, and move files and folders with **Move** or by dragging a row onto a folder.
-- **Console:** send G-code.
+- **Console:** send G-code and see the printer's replies; `M112` runs the E-stop.
 - **Settings:** Automagic or Expert, Spoolman, the printer's print options, bed mesh, input shaper
   and flow calibration, the Extended Firmware's settings (web UI, camera, RFID system, Spoolman, Remote
   Screen, SSH and more) with restart Klipper, restart Moonraker and reboot, Spooler, and the connection.
@@ -118,7 +153,10 @@ Automagic is on. See [docs/settings.md](docs/settings.md) for every setting.
 profiles. With Spooler installed, u1control applies Spooler's profile for the spool in each toolhead
 and steps aside while Spooler's "Keep Slots Synced" runs. Without it, u1control's own Spoolman tools
 do the job. The two plugins agree on which spool is in which toolhead and record filament use only
-once. The details are in [docs/spooler-contract.md](docs/spooler-contract.md).
+once. While Spooler runs in the same OrcaSlicer, the U1 Control Dashboard also lists Spooler's stock
+(search, filters, low stock) and links a spool to a toolhead from there. OrcaSlicer can't hide a
+plugin's tab, so Spooler's own tab stays unless you turn its page off in the Plugins dialog. The
+details are in [docs/spooler-contract.md](docs/spooler-contract.md).
 
 ### Plugins > Run
 
@@ -156,6 +194,7 @@ Requirements: OrcaSlicer 2.5.0 or newer, and a Snapmaker U1 on the same network.
 - [Settings](docs/settings.md): every setting and its Automagic value
 - [Firmware](docs/firmware.md): the printer commands and endpoints u1control uses
 - [Spooler contract](docs/spooler-contract.md): how u1control and Spooler share work
+- [Releasing](docs/release.md): tags, GitHub release, Orca Cloud publishing and what the tests do and do not cover
 - [Contributing](CONTRIBUTING.md), [Code of conduct](CODE_OF_CONDUCT.md) and [Security](SECURITY.md)
 
 Questions and ideas: [Discussions](https://github.com/bloodf/u1control/discussions). Bugs: [Issues](https://github.com/bloodf/u1control/issues).

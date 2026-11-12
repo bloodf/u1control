@@ -56,7 +56,8 @@ they are sent before the upload and not written into the G-code.
 | `GET /server/files/directory`, `/metadata`, `DELETE /server/files/...` | file manager (`gcodes` and `camera` roots) |
 | `POST /server/files/directory`, `POST /server/files/move` | new folder; move a file or folder (same root only) |
 | `GET /server/spoolman/status`, `POST /server/spoolman/proxy` | the printer's own Spoolman link |
-| `/firmware-config/api/status`, `/settings`, `/settings/<id>/<value>`, `/action/<id>` | Extended Firmware settings |
+| `GET /server/gcode_store?count=` | console: the printer's replies logged since a command (u1-moonraker `data_store`) |
+| `/firmware-config/api/status`, `/settings`, `/settings/<id>/<value>`, `/action/<id>` | Extended Firmware settings: groups of settings, each option with its label and, when the firmware sets them, a confirmation text, required inputs or `hidden`. Only a log ending in `SUCCESS` counts as applied; a log that ends without `SUCCESS` or `ERROR` is shown as unknown and is not retried |
 
 ## Not supported
 

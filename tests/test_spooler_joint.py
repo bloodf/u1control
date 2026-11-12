@@ -46,7 +46,7 @@ def find_spooler():
             return plugin.parent.parent.parent if not c.is_file() else c.parent.parent.parent, plugin
     raise RuntimeError(
         "Spooler source not found (looked at %s). Set SPOOLER_SRC to a checkout of github.com/bloodf/spooler "
-        "(branch feat/u1control-contract or later) or put it next to this repo as ../spooler; "
+        "(release v0.21.0 or later: the joint tests need its presence/stock-list API) or put it next to this repo as ../spooler; "
         "expected <checkout>/plugin/spooler/spooler_any.py." % ", ".join(str(c) for c in candidates))
 
 
@@ -480,6 +480,140 @@ class UsageTest(JointCase):
         self.fake.task["filament_spool_id"] = [9, 7, 11, 13]
         self.assertEqual(self.run_print(), [])
         self.assertEqual(self.fake.uses, [])  # extended firmware: SpoolLink books, not u1control and not Spooler
+
+
+class DiscoveryTest(UsageTest):
+    """Both plugins as built now, in one process and one data folder: presence files, Spooler's stock in
+    U1 Control, load orders, unload and reload. Spooler's beat thread is held still (PEER_BEAT) and its
+    ticks are run by hand, so nothing depends on timing."""
+
+    def setUp(self):
+        super().setUp()
+        patch = mock.patch.object(self.sp, "PEER_BEAT", 3600.0)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def spooler_settings(self):
+        return mock.patch.object(self.sp, "get_settings", return_value={
+            "spool_source": "spoolman", "spoolman_url": "http://" + self.fake.host, "low_stock_grams": 100})
+
+    def load_u1control(self):
+        link = self.u1ns["start_link"]()
+        self.addCleanup(self.u1ns["stop_link"])
+        self.assertIs(self.u1ns["service"]().peers, link)
+        return link
+
+    def load_spooler(self):
+        self.sp._peer.update(users=0, thread=None, stop=None)
+        self.sp.start_presence()
+        self.addCleanup(lambda: self.sp._peer["users"] and self.sp.stop_presence())
+
+    def shown(self, refresh=False):
+        """U1 Control's tab asks for the stock; Spooler's next beat answers; U1 Control reads it."""
+        self.svc.cmd_stock(refresh)
+        self.u1ns["_link"].presence.write()
+        self.sp.peer_tick()
+        return self.svc.cmd_stock()
+
+    def check_linked(self):
+        view = self.shown(refresh=True)
+        self.assertEqual((view["spooler"]["state"], view["stock"]["state"], view["same_spoolman"], view["usage"]),
+                         ("active", "ok", True, "u1control"))
+        self.assertEqual(sorted(r["id"] for r in view["stock"]["rows"]), [7, 9, 11, 13])
+        before = len(self.fake.scripts)
+        self.assertEqual(self.svc.cmd_stock_assign(0, 9, view["stock"]["key"])["bindings"], {"0": 9})
+        apply_scripts(self.fake, self.fake.scripts[before:])
+        trays = self.spooler_trays()            # Spooler's own printer view agrees on what is on T1
+        self.assertEqual((trays[0]["spool_id"], trays[0].get("linked")), (9, "u1control"))
+        return view
+
+    def test_u1control_first_then_spooler(self):
+        self.start()
+        with self.spooler_settings():
+            self.load_u1control()
+            self.assertEqual(self.svc.cmd_stock()["spooler"]["state"], "absent")
+            self.load_spooler()
+            self.check_linked()
+
+    def test_spooler_first_then_u1control(self):
+        self.start()
+        with self.spooler_settings():
+            self.load_spooler()
+            self.sp.peer_tick()
+            self.assertFalse((self.bridge / "stock.json").exists())     # nobody asked: no stock file
+            self.load_u1control()
+            self.check_linked()
+
+    def test_spooler_unload_and_reload(self):
+        self.start()
+        with self.spooler_settings():
+            self.load_u1control()
+            self.load_spooler()
+            old = self.shown()["stock"]["key"]
+            self.sp.stop_presence()                                     # Spooler unloaded / disabled
+            view = self.svc.cmd_stock()
+            self.assertEqual((view["spooler"]["state"], view["stock"]["rows"]), ("stopped", []))
+            with self.assertRaises(ValueError):
+                self.svc.cmd_stock_assign(0, 9, old)
+            self.load_spooler()                                         # reloaded: a new run
+            self.svc.cmd_stock()
+            self.u1ns["_link"].presence.write()
+            with self.assertRaises(ValueError) as e:                    # its old list is not this run's
+                self.svc.cmd_stock_assign(0, 9, old)
+            self.assertIn("changed since", str(e.exception))
+            new = self.shown()["stock"]["key"]
+            self.assertNotEqual(new, old)
+            self.assertEqual(self.svc.cmd_stock_assign(0, 9, new)["bindings"], {"0": 9})
+        self.assertEqual(sum(s.startswith("SET_PRINT_FILAMENT_CONFIG") for s in self.fake.scripts), 1)
+
+    def test_u1control_unload_stops_spooler_publishing(self):
+        self.start()
+        with self.spooler_settings():
+            self.load_spooler()
+            self.load_u1control()
+            seq = self.shown()["stock"]
+            first = json.loads((self.bridge / "stock.json").read_text())["seq"]
+            self.u1ns["stop_link"]()
+            gone = json.loads((self.data / "u1control" / "presence.json").read_text())
+            self.assertEqual(gone["state"], "stopped")
+            self.sp._peer["stock_at"] = 0.0
+            self.sp.peer_tick()
+            self.assertEqual(json.loads((self.bridge / "stock.json").read_text())["seq"], first)
+            self.assertIsNone(self.sp.u1control_wants())
+            self.assertTrue(seq["rows"])
+
+    def test_stock_link_then_print_books_once_from_u1control_only(self):
+        self.start()
+        with self.spooler_settings():
+            self.load_u1control()
+            self.load_spooler()
+            key = self.shown()["stock"]["key"]
+            for head, sid in ((0, 9), (3, 13)):
+                before = len(self.fake.scripts)
+                self.svc.cmd_stock_assign(head, sid, key)
+                apply_scripts(self.fake, self.fake.scripts[before:])
+        self.assertEqual(self.run_print(), [])                           # Spooler books nothing
+        self.assertEqual(sorted((sid, body["use_weight"]) for sid, body in self.fake.uses), [(9, 3.5), (13, 1.5)])
+
+    def test_capability_lifecycle_drives_both_presences(self):
+        """on_load (OrcaSlicer calls it for every capability, tab enabled or not) starts each presence;
+        on_unload says "stopped"."""
+        self.start()
+        with self.spooler_settings(), mock.patch.object(self.sp, "sync_config"):
+            page = self.u1ns["U1ControlPage"]()
+            page.on_load()
+            self.addCleanup(self.u1ns["stop_link"])
+            self.sp._peer.update(users=0, thread=None, stop=None)
+            spooler_page = self.sp.SpoolerPage()
+            spooler_page.on_load()
+            mine = json.loads((self.data / "u1control" / "presence.json").read_text())
+            theirs = json.loads((self.bridge / "presence.json").read_text())
+            self.assertEqual((mine["state"], theirs["state"]), ("active", "active"))
+            self.assertEqual(self.svc.cmd_stock()["spooler"]["state"], "active")
+            spooler_page.on_unload()
+            page.on_unload()
+        self.assertEqual(json.loads((self.bridge / "presence.json").read_text())["state"], "stopped")
+        self.assertEqual(json.loads((self.data / "u1control" / "presence.json").read_text())["state"], "stopped")
 
 
 if __name__ == "__main__":

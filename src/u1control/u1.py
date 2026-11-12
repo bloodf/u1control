@@ -314,6 +314,23 @@ def mapping_warnings(filaments, heads, mapping):
     return out
 
 
+def warning_ids(filaments, heads, mapping):
+    """Stable ids of a mapping's warnings, the ones the print setup must have acknowledged before sending:
+    "empty:<filament>:<toolhead>" and "material:<filament>:<toolhead>" (0-based). The page builds the same ids
+    from what it shows; a mismatch (another mapping, toolheads refreshed meanwhile) means nothing is sent."""
+    out = []
+    by_index = {f["index"]: f for f in filaments}
+    for fi, t in sorted(mapping.items()):
+        f, h = by_index.get(fi), heads[t] if 0 <= t < len(heads) else None
+        if f is None or h is None:
+            continue
+        if not h["loaded"]:
+            out.append("empty:%d:%d" % (fi, t))
+        elif material_family(f.get("type")) != material_family(h["type"]):
+            out.append("material:%d:%d" % (fi, t))
+    return out
+
+
 def needs_dialog(filaments, heads, mapping, prefs_known, first_print):
     """True when the print setup pop-up should open in "auto" mode: something needs a decision."""
     if first_print or not prefs_known or mapping_warnings(filaments, heads, mapping):

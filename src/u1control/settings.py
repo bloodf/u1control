@@ -41,7 +41,8 @@ AUTOMATIONS = [
     ("time_lapse_camera", "Print option: time-lapse", "Default for the print setup.", False, "bool"),
 ]
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
-EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False}
+EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto"}
+UI_LANGUAGES = ("auto", "en", "pt-BR")   # "auto": OrcaSlicer's language, then the system's
 
 
 def automagic_values():
@@ -111,6 +112,9 @@ class Store:
             for key, value in (changes or {}).items():
                 if key in kinds:
                     if _valid(kinds[key], value):
+                        data[key] = value
+                elif key == "ui_language":
+                    if value in UI_LANGUAGES:
                         data[key] = value
                 elif key in CONNECTION or key in EXTRA:
                     default = {**CONNECTION, **EXTRA}[key]

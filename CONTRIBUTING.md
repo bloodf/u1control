@@ -21,13 +21,16 @@ install.
 
 ```sh
 git clone https://github.com/bloodf/u1control
-git clone https://github.com/bloodf/spooler     # next to it, for the joint tests
+git clone https://github.com/bloodf/spooler     # next to it, for the joint tests (release v0.21.0 or newer)
 cd u1control
 python3 scripts/build.py                        # writes dist/u1control_any.whl
 python3 -m unittest discover -s tests
 ```
 
-The joint tests look for Spooler in `SPOOLER_SRC` or in `../spooler`, and fail if they find neither.
+The joint tests look for Spooler in `SPOOLER_SRC` or in `../spooler`, and fail if they find neither. They need a
+Spooler with the presence/stock-list API (release v0.21.0 or newer); CI checks out `v0.21.0` unless the run input
+`spooler_ref` or the repository variable `SPOOLER_REF` says otherwise. Page tests need Node 24 and Chrome or
+Chromium (`CHROME=...`); CI runs them with `WORKERS=1` (one scenario at a time). Releases: [docs/release.md](docs/release.md).
 
 To try a build in OrcaSlicer: **File > Plugins > Install local plugin**, pick
 `dist/u1control_any.whl`, then **Activate**. Python errors and `print()` output go to
@@ -69,7 +72,10 @@ docs/               reference documentation
 
 ## Tests
 
-Every change needs a test that fails without it. `tests/fakes.py` has `FakePrinter` (Moonraker and
+Every change needs a test that fails without it. The page is a Vue 3 + PrimeVue project in `ui/`: change it there,
+then `cd ui && npm ci && npm run build` (writes `src/u1control/ui/app.html` and `ui/build.json`; commit both).
+`tests/test_ui_page.py` runs the built page in headless Chrome under a CSP with a scripted bridge
+(`ui/tests/page/run.mjs`): it needs Node.js 22.6+ (`node` on PATH or `NODE`) and Chrome or Chromium (or `CHROME`). `tests/fakes.py` has `FakePrinter` (Moonraker and
 Spoolman on a local port) and `install_orca` (a fake `orca` module). Run the whole suite before you
 open a pull request.
 
@@ -94,7 +100,10 @@ Maintainers only:
 Images live in `assets/` and the UI icons in `src/u1control/ui/`. Keep the SVG and PNG of an image
 together and update both. Fonts stay with their licence files.
 The screenshots inside the README, Orca Cloud and install images are real renders of the plugin's pages: regenerate them with
-`python3 scripts/render_images.py` (needs Google Chrome; pass a name such as `hero` to redo one image) instead of editing the PNGs.
+`python3 scripts/render_images.py` (needs Node 24+ and Google Chrome; pass a name such as `hero` to redo one image) instead of editing the PNGs.
+Build the Vue page with `npm --prefix ui run build` first. These are mock previews, not captures from OrcaSlicer.
+Set `RENDER_OUT=/tmp/u1control-artwork` to inspect the output without replacing existing artwork.
+The renderer blocks network access, validates the page before capturing and saves HTML/JSON evidence if it fails.
 The script also inlines Spooler's logo into the integration SVGs and keeps every PNG under Orca Cloud's 2 MB limit.
 
 ## License

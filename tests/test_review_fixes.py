@@ -115,14 +115,14 @@ class SpoolSafetyTests(unittest.TestCase):
 
 
 class UsageTests(unittest.TestCase):
-    def run_print(self, remember):
+    def run_print(self, remember, filename="a.gcode"):
         fake = fakes.FakePrinter()
         self.addCleanup(fake.close)
         svc, pub = make_service(self, fake, spoolman_url="http://" + fake.host)
         call(self, svc, pub, "connect")
         call(self, svc, pub, "bind_spool", head=3, spool_id=7)
         if remember:
-            svc.remember_job("Some/Dir/A.GCODE", {1: 3}, [{"index": 1, "weight": 2.0}])
+            svc.remember_job(filename, {1: 3}, [{"index": 1, "weight": 2.0}])
         fake.state = "printing"
         svc.touch()
         self.assertTrue(wait_for(lambda: svc.last_state == "printing", 6))
@@ -132,10 +132,14 @@ class UsageTests(unittest.TestCase):
         time.sleep(0.5)
         return fake, pub
 
-    def test_basename_match_and_notice(self):
-        fake, pub = self.run_print(True)
+    def test_case_insensitive_path_match_and_notice(self):
+        fake, pub = self.run_print(True, "gcodes/A.GCODE")
         self.assertEqual(fake.uses, [(7, {"use_weight": 2.0})])
         self.assertTrue(any("Spoolman updated" in m.get("text", "") for m in pub))
+
+    def test_same_name_in_another_folder_is_another_job(self):
+        fake, pub = self.run_print(True, "Some/Dir/a.gcode")   # the printer reports "a.gcode" in the root
+        self.assertEqual(fake.uses, [])
 
     def test_no_guessing_without_a_known_job(self):
         fake, pub = self.run_print(False)
@@ -143,7 +147,8 @@ class UsageTests(unittest.TestCase):
         self.assertFalse(any("Spoolman updated" in m.get("text", "") for m in pub))
 
     def test_job_key(self):
-        self.assertEqual(service_mod.job_key("Dir\\Sub/Part.GCode"), "part.gcode")
+        self.assertEqual(service_mod.job_key("Dir\\Sub/Part.GCode"), "dir/sub/part.gcode")
+        self.assertEqual(service_mod.job_key("/gcodes/Part.gcode"), "part.gcode")
 
 
 class GenerationTests(unittest.TestCase):
@@ -368,7 +373,7 @@ class PluginFixTests(unittest.TestCase):
         with open(path, "w") as f:
             f.write("old")
         self.assertEqual(page.get_icon(), path)
-        self.assertIn("<svg", open(path).read())
+        self.assertIn("<svg", Path(path).read_text())
         orca.host.plugin.storage = mock.Mock(side_effect=RuntimeError("no storage"))
         fallback = page.get_icon()
         self.assertTrue(os.path.exists(fallback))
