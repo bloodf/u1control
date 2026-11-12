@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-11-12
+
+- Build tools only: shared Orca UI foundation 2.0.3 (Vite 8.3.8, @vitejs/plugin-vue 6.0.11). No change to printer control or the interface. Joint tests still run against Spooler `v0.21.0`.
+
 ## [0.4.0] - 2026-11-12
 
 Checked with fakes only: a fake `orca` module, a fake U1 (Moonraker) and Spoolman server, the Spooler source in the same process, and the built page in headless Chrome with a scripted bridge. Nothing here has run inside a real OrcaSlicer or against a real printer, camera or Spoolman.
