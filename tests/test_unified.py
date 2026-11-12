@@ -152,7 +152,8 @@ class PresenceFileTests(unittest.TestCase):
         self.assertEqual(len(logs), 1)
 
     def test_data_root_from_storage(self):
-        self.assertEqual(peers.data_root("/x/OrcaSlicer/orca_plugins/plugin_data/u1control"), "/x/OrcaSlicer")
+        root = os.path.abspath(os.path.join(os.sep, "x", "OrcaSlicer"))  # D:\x\OrcaSlicer on Windows
+        self.assertEqual(peers.data_root(os.path.join(root, "orca_plugins", "plugin_data", "u1control")), root)
         self.assertEqual(peers.data_root("/somewhere/else"), "")
 
 
