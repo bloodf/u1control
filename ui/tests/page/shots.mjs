@@ -34,7 +34,7 @@ ans('stock', {spooler: {state: 'active', text: '', version: '0.20.1'}, stock: {s
   same_spoolman: true, usage: 'u1control', bindings: {'0': 7}});
 ans('usage', {pending: [], unconfirmed: [{id: 'a', at: null, spool: 7, grams: 12.5, head: 0, file: 'gcodes/benchy.gcode', error: 'Spoolman timed out', printer: '192.168.1.40', printer_name: 'Bench U1'}],
   acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: ''});
-__t.handler({type: 'config', mode: 'expert', stored: {}, version: '0.4.1', spooler: {installed: true}, settings: {mode: 'expert', host: '', api_key: '••••', printer_name: 'Bench U1', spoolman_url: 'http://192.168.1.10:7912', rfid_auto_sync: true, purifier: 'auto'},
+__t.handler({type: 'config', mode: 'expert', stored: {}, version: '0.4.2', spooler: {installed: true}, settings: {mode: 'expert', host: '', api_key: '••••', printer_name: 'Bench U1', spoolman_url: 'http://192.168.1.10:7912', rfid_auto_sync: true, purifier: 'auto'},
   automations: [{key: 'rfid_auto_sync', label: 'Apply RFID tags', help: 'When a toolhead reads a new tag.', automagic: true, choices: null}, {key: 'purifier', label: 'Top cover', help: 'auto follows the rule.', automagic: 'auto', choices: ['auto','strong','off']}]});
 await settle();
 if (SCN === 'settings' || SCN === 'files' || SCN === 'console') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
@@ -54,7 +54,7 @@ const browser = await launch();
 const metrics = [];
 try {
   for (const [scn, theme, lang, width, scale] of SCENES) {
-    const boot = scn === 'setup' ? { mode: 'setup', version: '0.4.1', lang, data: SETUP } : { mode: 'app', version: '0.4.1', lang };
+    const boot = scn === 'setup' ? { mode: 'setup', version: '0.4.2', lang, data: SETUP } : { mode: 'app', version: '0.4.2', lang };
     const file = join(dir, `${scn}.html`);
     await writeFile(file, preparePage(page, boot));
     const p = await browser.newPage();

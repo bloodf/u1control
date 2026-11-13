@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-11-12
+
+- Fix the Spooler link (stock, profiles, Keep Slots) and the print ledger silently falling back when used from the tab or a worker thread. OrcaSlicer 2.5 answers `plugin.storage()` only inside plugin callbacks and raises "must be called from a plugin callback" elsewhere; the folder is now read while loading and kept.
+
 ## [0.4.1] - 2026-11-12
 
 - Build tools only: shared Orca UI foundation 2.0.3 (Vite 8.3.8, @vitejs/plugin-vue 6.0.11). No change to printer control or the interface. Joint tests still run against Spooler `v0.21.0`.
