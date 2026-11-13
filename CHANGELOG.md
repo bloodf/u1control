@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-13
+
+- Dark theme: a style meant for the reel and the level bar was applied to the whole page (a faint glow filter and a different background). It now reaches only the reel and the bar.
+- Near-black filament on the dark theme, and near-white on the light theme, get a clear edge on the level bar, so a full black spool no longer looks like an empty bar. Same as Spooler 0.22.2.
+
 ## [0.5.0] - 2026-11-13
 
 - Toolhead cards show the loaded spool as a reel in its filament colour, drawn fuller or emptier from what is left of the linked Spoolman spool, with the grams, the percentage and a level bar in the filament's colours. An empty toolhead shows a bare reel.
