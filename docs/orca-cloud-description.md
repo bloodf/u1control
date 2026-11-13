@@ -65,3 +65,11 @@ Requires OrcaSlicer 2.5.0 or newer. Independent project, not made or supported b
 
 Source, documentation and issues: [github.com/bloodf/u1control](https://github.com/bloodf/u1control)
 · License: GPL-3.0-only
+
+## More plugins for your OrcaSlicer workflow
+
+- **[Organizer](https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54)**: Arrange objects by their real outline and fill a build plate with more copies.
+- **[Orca Print Calculator](https://cloud.orcaslicer.com/app/plugins/shared-plugins/5f807b01-bfb8-4ad4-a77d-e85e337e4c7f)**: Price every build plate: Spoolman filament cost, energy, labor, fees and a suggested selling price.
+- **[Spooler](https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368)**: Your Spoolman spools and filament presets in OrcaSlicer, with what is left on each spool.
+
+Each plugin works on its own; installed together they share data where it helps (U1 Control shows Spooler's stock; the Print Calculator uses Spooler's Spoolman address and filament presets).

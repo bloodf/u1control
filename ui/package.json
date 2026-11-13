@@ -1,6 +1,6 @@
 {
   "name": "u1control-ui",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "description": "U1 Control pages (Vue 3 + PrimeVue 4, shared Orca UI foundation 2.0.3), built into one offline HTML file",

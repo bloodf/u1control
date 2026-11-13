@@ -87,6 +87,11 @@ class Spoolman:
 
 # ---------------------------------------------------------------------- matching
 
+def _weight(v):
+    """A positive weight in grams, or None (Spoolman leaves these empty when unknown)."""
+    return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
+
+
 def spool_view(spool):
     """Flatten a Spoolman spool for the UI and for matching."""
     f = spool.get("filament") or {}
@@ -101,6 +106,7 @@ def spool_view(spool):
         "colour": u1.norm_colour(f.get("color_hex")) or (colours[0] if colours else None),
         "colours": [c for c in colours if c],
         "remaining": spool.get("remaining_weight"),
+        "initial": _weight(spool.get("initial_weight")) or _weight(f.get("weight")),
         "location": spool.get("location") or "",
         "last_used": spool.get("last_used") or "",
         "archived": bool(spool.get("archived")),

@@ -1,6 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import Button from 'primevue/button';
+import SpoolFigure from './SpoolFigure.vue';
+import LevelBar from './LevelBar.vue';
+import { spoolFraction, spoolPaint } from '../core/spool-level';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
@@ -53,7 +56,6 @@ const bound = computed(() => boundHeads(s.bindings, s.stock?.bindings ?? {}));
 const why = computed(() => (!targetKnown.value || !s.info ? t('stock.why.connect') : busy.value ? t('stock.why.busy')
   : s.stock?.same_spoolman === false ? t('stock.why.spoolman') : ''));
 const heads = [0, 1, 2, 3].map(h => ({ value: h, label: `T${h + 1}` }));
-const swatch = (r: Spool) => (r.colours && r.colours.length > 1 ? `linear-gradient(90deg,${r.colours.join(',')})` : r.colour || 'transparent');
 function clear() { q.value = ''; mat.value = null; fit.value = false; }
 
 async function link(r: Spool) {
@@ -99,12 +101,14 @@ async function link(r: Spool) {
             <th scope="col" class="sc-loc">{{ t('stock.col.location') }}</th><th scope="col">{{ t('stock.col.action') }}</th></tr></thead>
           <tbody>
             <tr v-for="r in shown" :key="r.id">
-              <td><span class="sc-nm"><span class="u1-sw" :style="{ background: swatch(r) }" />
+              <td><span class="sc-nm"><SpoolFigure :paint="spoolPaint(r.colour, r.colours)" :fraction="spoolFraction(r.remaining, r.initial) ?? 1" :size="40" />
                 <span><strong>{{ r.vendor }} {{ r.name }}</strong> <span class="oui-muted">#{{ r.id }}</span>
                   <span v-if="r.use_first" class="u1-pill sc-chip">{{ t('stock.useFirst') }}</span>
                   <span v-if="bound[r.id]" class="u1-pill sc-chip on">{{ t('stock.on', { n: bound[r.id].slice(1) }) }}</span></span></span></td>
               <td>{{ r.material }}</td>
-              <td class="u1-num" :class="{ 'u1-warn': r.low }">{{ fmt.grams(r.remaining) }}<template v-if="r.low"> · {{ t('stock.low') }}</template></td>
+              <td class="u1-num sc-left" :class="{ 'u1-warn': r.low }">{{ fmt.grams(r.remaining) }}<template v-if="r.low"> · {{ t('stock.low') }}</template>
+                <LevelBar v-if="spoolFraction(r.remaining, r.initial) !== null" class="sc-bar" :pct="Math.round(spoolFraction(r.remaining, r.initial)! * 100)"
+                          :paint="spoolPaint(r.colour, r.colours) || '#888'" :level="r.low ? 'low' : ''" /></td>
               <td class="sc-loc oui-muted">{{ r.location }}</td>
               <td><Button size="small" severity="secondary" outlined :disabled="!!why || tracker.isBusy(`bind:${head}`)" :data-focus-key="`stock:${r.id}`" :data-stock="r.id"
                           :aria-label="t('stock.linkLabel', { id: r.id, name: `${r.vendor} ${r.name}`, n: head + 1 })" @click="link(r)">
@@ -137,4 +141,7 @@ async function link(r: Spool) {
 .sc-tabs summary { cursor: pointer; color: var(--p-primary-color); }
 .sc-tabs p { margin: 8px 0 0; }
 @media (max-width: 640px) { .sc-loc { display: none; } .sc-q { flex: 1 1 100%; min-width: 0; } }
+
+.sc-left { min-width: 96px; }
+.sc-bar { margin-top: 4px; height: 6px; }
 </style>

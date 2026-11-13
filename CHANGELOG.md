@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-13
+
+- Toolhead cards show the loaded spool as a reel in its filament colour, drawn fuller or emptier from what is left of the linked Spoolman spool, with the grams, the percentage and a level bar in the filament's colours. An empty toolhead shows a bare reel.
+- The stock list shows each spool's reel and a small level bar next to the grams left.
+- Spoolman spools carry their full weight (the spool's initial weight, else the filament's) so the fill can be drawn; without it the reel is drawn full and no bar is shown.
+- Same reel and bar as Spooler 0.22.0.
+
 ## [0.4.2] - 2026-11-12
 
 - Fix the Spooler link (stock, profiles, Keep Slots) and the print ledger silently falling back when used from the tab or a worker thread. OrcaSlicer 2.5 answers `plugin.storage()` only inside plugin callbacks and raises "must be called from a plugin callback" elsewhere; the folder is now read while loading and kept.
