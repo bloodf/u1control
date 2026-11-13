@@ -27,14 +27,14 @@ if (SCN !== 'notarget') {
 await settle();
 const ans = (cmd, r) => { const m = [...__t.sent].reverse().find(x => x.type === 'cmd' && x.cmd === cmd); if (m) __t.handler({type: 'reply', id: m.id, result: r}); };
 await sleep(50);
-ans('spools', {spools: [{id: 7, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', remaining: 640}, {id: 11, name: 'Cobalt Blue', vendor: 'Acme', material: 'PETG', colour: '#2850a8', remaining: 40}], bindings: {'0': 7}, via: 'direct'});
+ans('spools', {spools: [{id: 7, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', remaining: 640, initial: 1000}, {id: 11, name: 'Cobalt Blue', vendor: 'Acme', material: 'PETG', colour: '#2850a8', remaining: 40, initial: 1000}], bindings: {'0': 7}, via: 'direct'});
 ans('stock', {spooler: {state: 'active', text: '', version: '0.20.1'}, stock: {state: 'stale', code: 'stale', text: '', key: 's:1', ts: Date.now() / 1000 - 300,
-  rows: [{id: 7, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', colours: [], remaining: 640, low: false, use_first: true, location: 'Shelf A'},
-         {id: 11, name: 'Cobalt Blue', vendor: 'Acme', material: 'PETG', colour: '#2850a8', colours: [], remaining: 40, low: true, use_first: false, location: 'Dry box'}]},
+  rows: [{id: 7, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', colours: [], remaining: 640, initial: 1000, low: false, use_first: true, location: 'Shelf A'},
+         {id: 11, name: 'Cobalt Blue', vendor: 'Acme', material: 'PETG', colour: '#2850a8', colours: [], remaining: 40, initial: 1000, low: true, use_first: false, location: 'Dry box'}]},
   same_spoolman: true, usage: 'u1control', bindings: {'0': 7}});
 ans('usage', {pending: [], unconfirmed: [{id: 'a', at: null, spool: 7, grams: 12.5, head: 0, file: 'gcodes/benchy.gcode', error: 'Spoolman timed out', printer: '192.168.1.40', printer_name: 'Bench U1'}],
   acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: ''});
-__t.handler({type: 'config', mode: 'expert', stored: {}, version: '0.4.2', spooler: {installed: true}, settings: {mode: 'expert', host: '', api_key: '••••', printer_name: 'Bench U1', spoolman_url: 'http://192.168.1.10:7912', rfid_auto_sync: true, purifier: 'auto'},
+__t.handler({type: 'config', mode: 'expert', stored: {}, version: '0.5.0', spooler: {installed: true}, settings: {mode: 'expert', host: '', api_key: '••••', printer_name: 'Bench U1', spoolman_url: 'http://192.168.1.10:7912', rfid_auto_sync: true, purifier: 'auto'},
   automations: [{key: 'rfid_auto_sync', label: 'Apply RFID tags', help: 'When a toolhead reads a new tag.', automagic: true, choices: null}, {key: 'purifier', label: 'Top cover', help: 'auto follows the rule.', automagic: 'auto', choices: ['auto','strong','off']}]});
 await settle();
 if (SCN === 'settings' || SCN === 'files' || SCN === 'console') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
@@ -54,7 +54,7 @@ const browser = await launch();
 const metrics = [];
 try {
   for (const [scn, theme, lang, width, scale] of SCENES) {
-    const boot = scn === 'setup' ? { mode: 'setup', version: '0.4.2', lang, data: SETUP } : { mode: 'app', version: '0.4.2', lang };
+    const boot = scn === 'setup' ? { mode: 'setup', version: '0.5.0', lang, data: SETUP } : { mode: 'app', version: '0.5.0', lang };
     const file = join(dir, `${scn}.html`);
     await writeFile(file, preparePage(page, boot));
     const p = await browser.newPage();

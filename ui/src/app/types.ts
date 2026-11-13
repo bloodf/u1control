@@ -12,7 +12,7 @@ export interface Status {
 export interface Info { address: string; firmware: { kind: string; version?: string }; printer: string; generation: number;
   limits?: { hotend: number; bed: number } }
 export interface Spool { id: number; name: string; vendor: string; material: string; colour?: string; colours?: string[];
-  remaining?: number | null; location?: string; filament_id?: number; low?: boolean; use_first?: boolean }
+  remaining?: number | null; initial?: number | null; location?: string; filament_id?: number; low?: boolean; use_first?: boolean }
 export interface StockView {
   spooler: { state: string; text: string; detail?: string; version?: string };
   stock: { state: string; code?: string; text: string; detail?: string; rows: Spool[]; key: string; ts?: number };

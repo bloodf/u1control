@@ -4,6 +4,9 @@ import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Icon from './Icon.vue';
+import SpoolFigure from './SpoolFigure.vue';
+import LevelBar from './LevelBar.vue';
+import { spoolFraction, spoolPaint } from '../core/spool-level';
 import { s, run, tracker, controlsOff, busy, loadSpools } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, fmt } from '../core/i18n';
@@ -57,6 +60,11 @@ async function saveEdit() {
 
 // ---------------------------------------------------------------- Spoolman spool
 const bound = computed(() => s.bindings[String(i)] ?? null);
+// The linked Spoolman spool, when there is one: its colour(s) and how much is left draw the spool and the bar.
+const linked = computed(() => (bound.value != null ? s.spools.find(x => x.id === bound.value) ?? null : null));
+const fraction = computed(() => (linked.value ? spoolFraction(linked.value.remaining, linked.value.initial) : null));
+const paint = computed(() => (linked.value ? spoolPaint(linked.value.colour, linked.value.colours) : '') || head.value?.colour || '');
+const pct = computed(() => (fraction.value === null ? null : Math.round(fraction.value * 100)));
 const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material, grams: fmt.grams(sp.remaining) });
 const groups = computed(() => {
   const fam = head.value?.type ? family(head.value.type) : '';
@@ -92,13 +100,18 @@ const swatch = (sp: Spool | null) => !sp ? 'transparent'
     <template v-if="!editing">
       <div class="hc-top">
         <Icon :name="`toolhead/t${n}`" :size="32" />
-        <span class="u1-sw hc-sw" :style="{ background: head.colour || 'transparent' }" />
+        <SpoolFigure class="hc-spool" :paint="paint" :fraction="!head.loaded ? 0 : fraction === null ? 1 : fraction" :size="60" />
         <div class="hc-name">
           <strong :id="`hc-${i}`">T{{ n }}<span v-if="active" class="oui-meta"> · {{ t('heads.active') }}</span></strong>
           <div>{{ head.loaded ? head.type : t('heads.empty') }} <span class="oui-muted">{{ head.vendor }} {{ head.sub_type }}</span>
             <span v-if="tag" class="u1-pill hc-tag" :title="tag.official ? t('heads.tagOfficial', { uid: tag.uid || '' }) : t('heads.tagThird', { uid: tag.uid || '' })">{{ t('heads.tag') }}</span></div>
         </div>
       </div>
+      <template v-if="head.loaded && linked">
+        <div class="hc-left u1-num"><strong :class="{ 'u1-warn': linked.low }">{{ fmt.grams(linked.remaining) }}</strong>
+          <span v-if="linked.initial" class="oui-muted">/ {{ fmt.grams(linked.initial) }}</span><span v-if="pct !== null" class="oui-muted">· {{ pct }}%</span></div>
+        <LevelBar :pct="pct" :paint="paint || '#888'" :level="linked.low ? 'low' : ''" />
+      </template>
       <p v-if="tag" class="oui-meta hc-p">{{ t('heads.tagDetail', { text: tagText }) }}</p>
       <p class="oui-meta hc-p">{{ t('heads.feeder', { state: feed.state || '—' }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
       <div class="u1-row hc-actions">
@@ -151,7 +164,9 @@ const swatch = (sp: Spool | null) => !sp ? 'transparent'
 .hc { min-width: 0; border: 1px solid var(--oui-border); border-top: 4px solid var(--tc); border-radius: 12px; padding: 12px; background: var(--oui-surface); display: grid; gap: 6px; align-content: start; }
 .hc.active { border-color: var(--p-primary-color); border-top-color: var(--tc); }
 .hc-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.hc-sw { width: 32px; height: 32px; }
+.hc-spool { margin: -4px 0; }
+.hc-left { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
+.hc-left strong { font-size: 18px; }
 .hc-name { min-width: 0; overflow-wrap: anywhere; }
 .hc-tag { margin-left: 4px; }
 .hc-p { margin: 0; }

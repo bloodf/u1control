@@ -214,6 +214,13 @@ class SpoolmanMatchTests(unittest.TestCase):
         view = sm.spool_view({"id": 1, "location": "U1 T1", "last_used": "2026-11-09T00:00:00Z", "archived": True})
         self.assertEqual((view["last_used"], view["archived"]), ("2026-11-09T00:00:00Z", True))
 
+    def test_spool_view_has_the_full_weight_for_the_spool_picture(self):
+        # the spool's own initial weight, else the filament's net weight, else unknown
+        self.assertEqual(sm.spool_view({"id": 1, "initial_weight": 750, "filament": {"weight": 1000}})["initial"], 750)
+        self.assertEqual(sm.spool_view({"id": 1, "filament": {"weight": 1000}})["initial"], 1000)
+        self.assertIsNone(sm.spool_view({"id": 1, "filament": {}})["initial"])
+        self.assertIsNone(sm.spool_view({"id": 1, "initial_weight": True})["initial"])
+
 
 class PrinterTests(unittest.TestCase):
     def setUp(self):
