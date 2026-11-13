@@ -146,7 +146,8 @@ def app_data(fakes, mods, scenario):
     view = u1.summarize(status)
     fp = fakes.FakePrinter()
     try:
-        spools = [sm.spool_view(s) for s in fp.spools]
+        # demo spools are 1 kg spools, so the images show each reel's fill and level bar
+        spools = [sm.spool_view({"initial_weight": 1000, **s}) for s in fp.spools]
     finally:
         fp.close()
     view["bindings"] = {"0": 9, "1": 11, "3": 7} if scenario.get("spools") else {}
