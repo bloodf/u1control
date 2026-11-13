@@ -92,12 +92,31 @@ def log(msg):
         print(line.encode(enc, "replace").decode(enc))
 
 
+_storage_dir = None
+
+
 def _storage():
+    """The plugin's storage folder ("" when unknown).
+
+    OrcaSlicer 2.5 only answers plugin.storage() inside a plugin callback (load, tab hooks); from a page message
+    or a worker thread it raises "plugin.storage() must be called from a plugin callback". The first answer is
+    kept, so later calls from anywhere get the same folder.
+    """
+    global _storage_dir
+    if _storage_dir:
+        return _storage_dir
     try:
-        return orca.host.plugin.storage()
+        _storage_dir = orca.host.plugin.storage() or None
     except Exception as e:
         log("no storage folder (%s)" % e)
-        return ""
+    return _storage_dir or ""
+
+
+def _storage_or_raise():
+    folder = _storage()
+    if not folder:
+        raise RuntimeError("no storage folder")
+    return folder
 
 
 def service(publish=None):
@@ -149,7 +168,7 @@ def get_store(cap):
     with _store_lock:
         if _store is None:
             try:
-                _store = settings.Store(os.path.join(orca.host.plugin.storage(), "settings.json"))
+                _store = settings.Store(os.path.join(_storage_or_raise(), "settings.json"))
             except Exception as e:
                 log("settings: no storage folder (%s); using the plugin config" % e)
                 _store = settings.Store(load=lambda: json.dumps(_cap_config(cap).get("u1_settings") or {}),
@@ -208,7 +227,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
     def get_icon(self):
         svg = _asset("icon.svg")
         try:
-            folders = [orca.host.plugin.storage(), tempfile.gettempdir()]
+            folders = [_storage_or_raise(), tempfile.gettempdir()]
         except Exception as e:
             log("icon: no storage folder (%s); using the temp folder" % e)
             folders = [tempfile.gettempdir()]
@@ -378,6 +397,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
 
     def on_load(self):
         # OrcaSlicer calls this when the plugin loads, whether or not the tab is enabled or shown.
+        _storage()  # a plugin callback: the one place storage() is sure to answer
         try:
             start_link()
         except Exception as e:   # never fail the plugin load over discovery
@@ -727,7 +747,7 @@ def pick_filament_preset(names, head, tag=None, overrides=None, printer_hint="U1
 
 def spooler_dir():
     try:
-        return spooler_bridge.data_dir(orca.host.plugin.storage())
+        return spooler_bridge.data_dir(_storage_or_raise())
     except Exception:
         return ""
 
@@ -899,6 +919,7 @@ class U1Control(orca.base):
         # Network I/O runs on the plugin's own worker threads; downloads are saved under ~/Downloads/u1control.
         # (Declarations match exact target strings, so the folder is informational for the user.)
         orca.request_permissions(threading=True, fs_readwrite=[os.path.join(os.path.expanduser("~"), "Downloads", "u1control")])
+        _storage()
         orca.register_capability(U1ControlPage)
         orca.register_capability(U1PrintSetup)
         orca.register_capability(CheckConnection)

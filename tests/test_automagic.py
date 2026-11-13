@@ -256,6 +256,32 @@ class SpoolerTests(PluginBase):
         ns["service"]().close()
 
 
+class StorageOutsideCallbackTests(PluginBase):
+    """OrcaSlicer 2.5 answers plugin.storage() only inside plugin callbacks; page messages and worker threads
+    get "plugin.storage() must be called from a plugin callback". The folder seen while loading must be kept."""
+
+    def test_storage_folder_is_kept_from_the_load_callback(self):
+        root = tempfile.mkdtemp()
+        store = os.path.join(root, "orca_plugins", "plugin_data", "u1")
+        os.makedirs(store)
+        os.makedirs(os.path.join(root, "spooler"))
+        orca, ns = self.load(storage=store)
+        inside = {"callback": False}
+
+        def strict_storage():
+            if not inside["callback"]:
+                raise RuntimeError("plugin.storage() must be called from a plugin callback")
+            return store
+
+        orca.host.plugin.storage = strict_storage
+        self.assertEqual(ns["spooler_dir"](), "")  # nothing known yet, outside a callback
+        inside["callback"] = True
+        ns["U1Control"]().register_capabilities()
+        inside["callback"] = False
+        self.assertEqual(ns["_storage"](), store)
+        self.assertEqual(ns["spooler_dir"](), os.path.join(root, "spooler"))  # from a message or thread later
+
+
 class BindTests(unittest.TestCase):
     def test_bind_writes_printer_and_no_rebind_loop(self):
         fake = fakes.FakePrinter(spoolman=False)
