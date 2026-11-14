@@ -49,7 +49,7 @@ class UiAssets(unittest.TestCase):
         html = data.decode("utf-8")
         self.assertEqual(html.count("__BOOT__"), 1)
         self.assertEqual(html.count("__ICONS__"), 1)
-        self.assertNotRegex(html, r"<script[^>]+src=|<link[^>]+href=\"https?:|@import|url\(https?:")
+        self.assertNotRegex(html, r"<script[^>]+src=|<link[^>]+href=\"https?:|@import\s*(?:url\(|['\"])|url\(https?:")
         self.assertNotRegex(html, r"\bnew Function\b|\beval\(")
         self.assertIn("__VUE_OPTIONS_API__", (ROOT / "ui" / "vite.config.ts").read_text("utf-8"))
         self.assertFalse((UI / "setup.html").exists(), "the legacy setup page was replaced by the Vue page")

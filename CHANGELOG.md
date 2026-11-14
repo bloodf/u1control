@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-13
+
+- The page now runs on PrimeVue 5.0.5 and @primeuix/themes 3.1.1 (shared Orca UI foundation 3.0.2, shared with Spooler, Organizer and the Print Calculator). No visible change is intended: same palette, sizes, fonts, focus rings and reduced-motion behaviour. The dialog close button is a few pixels smaller.
+- PrimeVue 5 is under the PrimeUI License (Community tier); its key ships with the page and is checked offline, without any network access.
+- Newer web view needed: PrimeVue 5 writes colours with CSS `light-dark()`, so OrcaSlicer's web view must be WebKit 17.5+ on macOS, WebView2 on Windows or WebKitGTK 2.44+ on Linux.
+
 ## [0.5.1] - 2026-11-13
 
 - Dark theme: a style meant for the reel and the level bar was applied to the whole page (a faint glow filter and a different background). It now reaches only the reel and the bar.
