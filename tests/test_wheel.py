@@ -20,7 +20,8 @@ DIST_INFO = "u1control-%s.dist-info/" % PROJECT["version"]
 EXPECTED = {"u1control/%s.py" % n for n in ("__init__", "_assets") + build.MODULES} | {
     DIST_INFO + n for n in ("METADATA", "WHEEL", "RECORD", "top_level.txt", "licenses/LICENSE", "licenses/PrimeUIX.txt",
                             "licenses/PrimeVue.txt", "licenses/Vue.txt")}
-FORBIDDEN = re.compile(r"\bexec\(|\beval\(|__import__|importlib")
+# (?<![.\w]): a JS method call such as RegExp .exec( in the embedded page is not Python exec().
+FORBIDDEN = re.compile(r"(?<![.\w])exec\(|(?<![.\w])eval\(|__import__|importlib")
 DYNAMIC_BUILTINS = {"exec", "eval", "compile", "__import__"}
 
 
