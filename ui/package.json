@@ -6,8 +6,8 @@
   "description": "U1 Control pages (Vue 3 + PrimeVue 4, shared Orca UI foundation 2.0.3), built into one offline HTML file",
   "scripts": {
     "check:shared": "node shared/scripts/check.mjs",
-    "typecheck": "vue-tsc --noEmit",
-    "build": "node shared/scripts/check.mjs && vue-tsc --noEmit && vite build && node scripts/emit.mjs",
+    "typecheck": "node shared/scripts/vue-tsc.mjs --noEmit",
+    "build": "node shared/scripts/check.mjs && node shared/scripts/vue-tsc.mjs --noEmit && vite build && node scripts/emit.mjs",
     "test:unit": "node --test tests/unit/*.test.ts",
     "test:page": "node tests/page/run.mjs",
     "test": "npm run test:unit && npm run test:page"
@@ -18,8 +18,9 @@
     "vue": "3.5.45"
   },
   "devDependencies": {
+    "@typescript/typescript6": "6.0.2",
     "@vitejs/plugin-vue": "6.0.11",
-    "typescript": "6.0.3",
+    "typescript": "7.0.2",
     "vite": "8.3.8",
     "vite-plugin-singlefile": "2.3.4",
     "vue-tsc": "3.3.14"
