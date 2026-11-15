@@ -3,7 +3,6 @@
 import os
 import sys
 import tempfile
-import time
 import unittest
 from unittest import mock
 
@@ -104,10 +103,13 @@ class SnapshotTests(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.home, "Downloads", "u1control")))
 
     def test_an_old_picture_is_not_saved(self):
+        # The frame is aged by arithmetic on its own timestamp, not by sleeping: time.monotonic() ticks every
+        # ~15.6 ms on Windows (Python 3.12), so a short sleep could leave the age at exactly 0.
         self.svc._push_frame()
-        with mock.patch.object(service_mod, "SNAPSHOT_MAX_AGE", 0.0):
-            time.sleep(0.01)
-            self.assertIn("error", call(self, self.svc, self.pub, "snapshot"))
+        data, at = self.svc.last_frame
+        self.svc.last_frame = (data, at - service_mod.SNAPSHOT_MAX_AGE - 1)
+        self.assertIn("no recent camera picture", call(self, self.svc, self.pub, "snapshot").get("error", ""))
+        self.assertFalse(os.path.exists(os.path.join(self.home, "Downloads", "u1control")))
 
     def test_a_picture_of_the_previous_printer_is_not_saved(self):
         self.svc._push_frame()

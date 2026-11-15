@@ -11,7 +11,6 @@ import struct
 import sys
 import tempfile
 import threading
-import time
 import unittest
 from unittest import mock
 
@@ -216,10 +215,8 @@ class ExtendedActionTests(unittest.TestCase):
 
 
 class FirmwareRedetectTests(unittest.TestCase):
-    def setUp(self):
-        patch = mock.patch.object(service_mod, "FIRMWARE_RETRY", 0.3)
-        patch.start()
-        self.addCleanup(patch.stop)
+    """The retry is made due by setting firmware_retry_at, never by sleeping: on a slow runner two status reads
+    can take longer than a short FIRMWARE_RETRY, and time.monotonic() ticks every ~15.6 ms on Windows."""
 
     def service(self, fake):
         pub = []
@@ -240,13 +237,13 @@ class FirmwareRedetectTests(unittest.TestCase):
         svc._push_status()
         self.assertEqual((svc.firmware["kind"], self.shown(pub)), ("stock", "stock"))
         fake.ext_error = None
-        svc._push_status()   # too soon: not asked again yet
+        svc._push_status()   # too soon (FIRMWARE_RETRY is 30 s): not asked again yet
         self.assertEqual(svc.firmware["kind"], "stock")
-        time.sleep(0.35)
+        svc.firmware_retry_at = 0.0   # the retry is due
         svc._push_status()
         self.assertEqual((svc.firmware["kind"], self.shown(pub)), ("extended", "extended"))
         probes = fake.ext_probes
-        time.sleep(0.35)
+        svc.firmware_retry_at = 0.0
         svc._push_status()
         self.assertEqual(fake.ext_probes, probes)   # sure now: no more probes
 
@@ -256,7 +253,7 @@ class FirmwareRedetectTests(unittest.TestCase):
         svc, pub = self.service(fake)
         svc._push_status()
         probes = fake.ext_probes
-        time.sleep(0.35)
+        svc.firmware_retry_at = 0.0
         svc._push_status()
         self.assertEqual(fake.ext_probes, probes)
         self.assertEqual(self.shown(pub), "stock")
