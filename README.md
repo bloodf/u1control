@@ -47,7 +47,7 @@ Complete your OrcaSlicer workflow: arrange, price, manage filament and print. Ea
       <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54"><img src="docs/related-plugins/orca_organizer-icon.png" width="40" height="40" alt="Organizer"></a>
       <h3><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54">Organizer</a></h3>
       <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54"><img src="docs/related-plugins/orca_organizer-preview.jpg" width="280" alt="Organizer: preview"></a>
-      <p>Arrange objects by their real outline and fill a build plate with more copies, from a tab next to Prepare.</p>
+      <p>Arrange objects by their real outline and fill a build plate with more copies.</p>
       <p><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/orca_organizer">Source on GitHub →</a></p>
     </td>
     <td width="33%" valign="top">
@@ -61,9 +61,26 @@ Complete your OrcaSlicer workflow: arrange, price, manage filament and print. Ea
       <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368"><img src="docs/related-plugins/spooler-icon.png" width="40" height="40" alt="Spooler"></a>
       <h3><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368">Spooler</a></h3>
       <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368"><img src="docs/related-plugins/spooler-preview.png" width="280" alt="Spooler: preview"></a>
-      <p>Your Spoolman spools and filament presets in OrcaSlicer: what is left on each spool, plate checks and live printer slots.</p>
+      <p>Your Spoolman spools and filament presets in OrcaSlicer, with what is left on each spool.</p>
       <p><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/spooler">Source on GitHub →</a></p>
     </td>
+  </tr>
+  <tr>
+    <td width="33%" valign="top">
+      <a href="https://github.com/bloodf/kobracontrol"><img src="docs/related-plugins/kobracontrol-icon.png" width="40" height="40" alt="Kobra Control"></a>
+      <h3><a href="https://github.com/bloodf/kobracontrol">Kobra Control</a></h3>
+      <a href="https://github.com/bloodf/kobracontrol"><img src="docs/related-plugins/kobracontrol-preview.png" width="280" alt="Kobra Control: preview"></a>
+      <p>The Anycubic Kobra X in OrcaSlicer: Print and Send, the Device tab, ACE slots and a dashboard.</p>
+      <p><a href="https://github.com/bloodf/kobracontrol">Source on GitHub →</a></p>
+    </td>
+    <td width="33%" valign="top">
+      <a href="https://github.com/bloodf/embedder"><img src="docs/related-plugins/embedder-icon.png" width="40" height="40" alt="Embedder"></a>
+      <h3><a href="https://github.com/bloodf/embedder">Embedder</a></h3>
+      <a href="https://github.com/bloodf/embedder"><img src="docs/related-plugins/embedder-preview.png" width="280" alt="Embedder: preview"></a>
+      <p>Cut magnet and NFC sticker pockets into a part, with a pause at the right layer to drop each insert in.</p>
+      <p><a href="https://github.com/bloodf/embedder">Source on GitHub →</a></p>
+    </td>
+    <td width="33%" valign="top"></td>
   </tr>
 </table>
 
