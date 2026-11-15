@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-14
+
 - Files: rename a file or folder (**Rename** on each row). A name the folder already has, a name with `/ \ : * ? " < > |` or control characters, a hidden name, and a print file losing its `.gcode` / `.gco` / `.g` extension are refused.
 - Files: filter the list by name, and see each print file's filament in a new Filament column.
 - Camera: **Save picture** saves the camera picture on screen to `~/Downloads/u1control` as `<printer> <date time>.jpg`, never replacing a file. It sends nothing to the printer.
