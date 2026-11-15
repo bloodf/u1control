@@ -20,6 +20,13 @@ VALUE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 INPUT_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
 INPUT_MAX = 512
 ACTIONS = ("restart-klipper", "restart-moonraker", "reboot-system")
+PRINT_ENDING_ACTIONS = ("restart-klipper", "reboot-system")
+# Settings whose change leaves Klipper running, so they can change during a print. From the option commands in
+# firmware-config/functions/*.yaml (paxx12 Extended Firmware, main of 2026-11-07): these restart only nginx, Moonraker,
+# SSH, the USB camera, the remote screen, VPN, cloud or metrics services, or the Firmware Config service itself.
+# Every other setting restarts Klipper or reboots, and so does any setting a newer release adds: those wait.
+PRINT_SAFE = ("web-frontend", "firmware-config", "remote-screen", "ssh", "camera-usb", "camera-usb-resolution",
+              "camera-rtsp", "vpn", "cloud", "object_processing", "spoolman_tag_store", "klipper-metrics")
 
 
 class Extended:
@@ -35,10 +42,25 @@ class Extended:
 
     def status(self):
         """Version info, or None when this isn't extended firmware / Advanced Mode is off."""
+        return self.probe()[0]
+
+    def probe(self):
+        """(status, conclusive). status: the API's version info, or None. conclusive: the printer really answered
+        (JSON, or the web UI's page / a 4xx that says there is no API here). A timeout, a refused connection, a 5xx
+        or a broken answer is not conclusive: the API may just be starting, so ask again later."""
         try:
-            return self._get("/status", timeout=3)
-        except (PrinterError, OSError, ValueError):
-            return None
+            data, headers = self.mr.raw("GET", API + "/status", timeout=3)
+        except PrinterError as e:
+            return None, e.status is not None and e.status < 500
+        except OSError:
+            return None, False
+        if "json" not in (headers.get("Content-Type") or ""):
+            return None, True   # stock nginx falls through to the web UI's index.html with 200
+        try:
+            status = json.loads(data.decode("utf-8"))
+        except ValueError:
+            return None, False
+        return (status, True) if isinstance(status, dict) else (None, False)
 
     def settings(self):
         """The firmware's settings as groups, see normalize_settings."""
@@ -109,13 +131,14 @@ def _item(raw):
     current = raw.get("current")
     return {"id": raw["id"], "label": _text(raw.get("label")) or raw["id"], "description": _text(raw.get("description")),
             "help_url": _text(raw.get("help_url")), "current": "" if current is None else str(current),
-            "hidden": raw.get("hidden") is True,
+            "hidden": raw.get("hidden") is True, "print_safe": raw["id"] in PRINT_SAFE,
             "options": [_option(k, v) for k, v in raw["options"].items()]}
 
 
 def normalize_settings(data):
-    """[{"id", "label", "items": [{"id", "label", "description", "help_url", "current", "hidden",
+    """[{"id", "label", "items": [{"id", "label", "description", "help_url", "current", "hidden", "print_safe",
     "options": [{"value", "label", "confirm", "hidden", "inputs": [...]}]}]}] from the API answer.
+    print_safe: the setting can change during a print (PRINT_SAFE).
     Raises PrinterError when the answer has another shape."""
     try:
         if not isinstance(data, dict):

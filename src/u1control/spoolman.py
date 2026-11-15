@@ -10,6 +10,7 @@ Binding toolhead -> spool:
     Spoolman and every client sees it; the plugin writes filament info with SET_PRINT_FILAMENT_CONFIG.
 """
 
+import http.client
 import json
 import re
 import urllib.error
@@ -58,7 +59,8 @@ class Spoolman:
                 "use_v2_response": True, "request_method": method, "path": path,
                 "query": urllib.parse.urlencode(query or {}), "body": body})
             if isinstance(result, dict) and result.get("error"):
-                raise SpoolmanError("Spoolman: %s" % result["error"].get("message", result["error"]))
+                err = result["error"]
+                raise SpoolmanError("Spoolman: %s" % (err.get("message", err) if isinstance(err, dict) else err))
             return result.get("response") if isinstance(result, dict) else result
         url = self.url + "/api" + path + ("?" + urllib.parse.urlencode(query) if query else "")
         data = json.dumps(body).encode("utf-8") if body is not None else None
@@ -69,9 +71,12 @@ class Spoolman:
                 raw = resp.read(32 * 1024 * 1024)
         except urllib.error.HTTPError as e:
             raise SpoolmanError("Spoolman said HTTP %d" % e.code)
-        except (OSError, ValueError) as e:
+        except (OSError, ValueError, http.client.HTTPException) as e:
             raise SpoolmanError("can't reach Spoolman at %s (%s)" % (self.url, getattr(e, "reason", e)))
-        return json.loads(raw.decode("utf-8")) if raw else None
+        try:
+            return json.loads(raw.decode("utf-8")) if raw else None
+        except ValueError as e:   # a proxy's login page, or not Spoolman at that address
+            raise SpoolmanError("%s didn't answer like Spoolman (%s)" % (self.url, e)) from e
 
     # ------------------------------------------------------------------ api
 

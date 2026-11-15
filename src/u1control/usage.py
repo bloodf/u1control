@@ -483,9 +483,13 @@ class UsageMixin:
 
     def _job_on_extended(self, job, client):
         with self.lock:
-            if self.target is not None and self.target.ident == job.host and self.firmware["kind"] != "unknown":
+            if self.target is not None and self.target.ident == job.host and self.firmware_sure:
                 return self.firmware["kind"] == "extended"
-        return u1.detect_firmware(client.info(), ext.Extended(client).status())["kind"] == "extended"
+        status, conclusive = ext.Extended(client).probe()
+        firmware = u1.detect_firmware(client.info(), status)
+        if firmware["kind"] != "extended" and not conclusive:   # booking now could book it twice: SpoolLink books too
+            raise PrinterError("can't tell yet whether the printer runs the Extended Firmware")
+        return firmware["kind"] == "extended"
 
     def cmd_usage(self):
         """What the page shows about filament use: unconfirmed entries (with identity), the last acknowledged

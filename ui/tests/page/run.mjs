@@ -567,6 +567,109 @@ test('B-11: theme follows the host colour while the page runs', `
   eq(getComputedStyle(document.body).backgroundColor, 'rgb(24, 28, 34)', 'dark palette background');
 `);
 
+// ------------------------------------------------------------------ 2026-11 audit: firmware, files, camera
+test('a late Extended answer in the status turns the Firmware card on', `
+  await connect('stock');
+  await until(() => last('cmd', 'spools'));
+  await reply(last('cmd', 'spools'), {spools: [], bindings: {}, via: 'direct'});
+  await tab('settings');
+  assert(text(q('#fw-h').parentElement).includes('Official Snapmaker firmware'), 'stock first: ' + text(q('#fw-h').parentElement));
+  await post({type: 'status', data: VIEW({firmware: {kind: 'stock', version: '1'}})});
+  eq(cmds('ext_settings').length, 0, 'stock: no firmware settings asked');
+  await post({type: 'status', data: VIEW({firmware: {kind: 'extended', version: '1.2.0'}})});
+  await until(() => last('cmd', 'ext_settings'), 'asked once the printer turned out Extended');
+  assert(text(document.body).includes('Extended firmware 1.2.0'), 'header follows');
+`);
+
+test('firmware settings that restart Klipper wait for the print; the others stay', `
+  await connect('extended');
+  await until(() => last('cmd', 'spools'));
+  await reply(last('cmd', 'spools'), {spools: [], bindings: {}, via: 'direct'});
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  await tab('settings');
+  await until(() => last('cmd', 'ext_settings'));
+  await reply(last('cmd', 'ext_settings'), {status: {}, settings: GROUPS});
+  assert(btn('Apply Spoolman Integration').disabled, 'Spoolman restarts Klipper: waits');
+  assert(!btn('Apply Remote Screen').disabled && !btn('Apply SSH Access').disabled, 'safe ones stay');
+  assert(btn('Restart Klipper').disabled && btn('Reboot printer').disabled, 'print-ending actions wait');
+  assert(!btn('Restart Moonraker').disabled, 'Moonraker restart stays');
+  assert(text(byTest('ext-print-why')).includes('print'), 'says why: ' + text(byTest('ext-print-why')));
+  await post({type: 'status', data: VIEW()});
+  assert(!btn('Apply Spoolman Integration').disabled && !btn('Restart Klipper').disabled, 'idle again: all on');
+  eq(byTest('ext-print-why'), null, 'no reason when idle');
+`, { needsGroups: true });
+
+const FILES = {path: 'gcodes', dirs: [{name: 'sub'}], disk: {free: 2e9},
+  files: [{name: 'benchy.gcode', size: 10, modified: 5, time: 60, weight: 12.3}, {name: 'clip.gcode', size: 5, modified: 4, time: 30}]};
+test('files: a newly selected printer starts at the top folder', `
+  await connect();
+  await tab('files');
+  await until(() => last('cmd', 'files'));
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  await click(btn('Open folder sub'));
+  eq(last('cmd', 'files').args.path, 'gcodes/sub', 'in the folder');
+  await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [], files: []});
+  const before = cmds('files').length;
+  await post({type: 'selection_changed'});
+  await connect('stock', 2);
+  await until(() => cmds('files').length > before, 'listed again');
+  eq(last('cmd', 'files').args.path, 'gcodes', 'top folder of the new printer');
+`);
+
+test('files: rename asks for the new name and never sends an unchanged one', `
+  await connect();
+  await tab('files');
+  await until(() => last('cmd', 'files'));
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  await click(btn('Rename benchy.gcode'));
+  await until(dialogOpen);
+  eq(q('#dlg-input').value, 'benchy.gcode', 'starts from the current name');
+  await yes();
+  eq(cmds('rename'), [], 'same name: nothing sent');
+  await click(btn('Rename benchy.gcode'));
+  await until(() => document.activeElement === q('#dlg-input'));
+  await type(q('#dlg-input'), 'boat.gcode');
+  await yes();
+  eq(last('cmd', 'rename').args, {path: 'gcodes/benchy.gcode', name: 'boat.gcode'}, 'path and new name');
+  const listed = cmds('files').length;
+  await reply(last('cmd', 'rename'), {path: 'gcodes/boat.gcode'});
+  await until(() => cmds('files').length > listed, 'listed again after the rename');
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  await click(btn('Rename sub'));
+  await until(dialogOpen);
+  await no();
+  eq(cmds('rename').length, 1, 'cancel sends nothing');
+`);
+
+test('files: filter by name and show each file\'s filament', `
+  await connect();
+  await tab('files');
+  await until(() => last('cmd', 'files'));
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  assert(text(q('.u1-table')).includes('12 g'), 'filament weight shown: ' + text(q('.u1-table')));
+  await type(q('#files-filter'), 'BEN');
+  eq(qa('.fv-name').map(text), ['benchy.gcode'], 'case-insensitive match');
+  assert(!btn('Open folder sub'), 'folders filtered too');
+  await type(q('#files-filter'), 'zzz');
+  assert(text(q('.u1-table')).includes('No file or folder matches'), 'says nothing matches');
+  await type(q('#files-filter'), '');
+  eq(qa('.fv-name').length, 2, 'all back');
+`);
+
+test('camera: save the picture on screen', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  eq(byTest('cam-save'), null, 'no button while the camera is off');
+  await click(byTest('camera'));
+  eq(byTest('cam-save'), null, 'no button before the first picture');
+  await post({type: 'frame', image: 'data:image/jpeg;base64,/9j/'});
+  await click(byTest('cam-save'));
+  const cmd = last('cmd', 'snapshot');
+  eq(cmd.args, {}, 'asks the plugin to save its last picture');
+  await reply(cmd, '/home/u/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
+  await until(() => text(q('.notices [role=status]')).includes('Saved to'), 'says where it was saved');
+`);
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');

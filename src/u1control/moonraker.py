@@ -6,6 +6,7 @@ directly on 7125. The client tries the address as given, then :7125.
 
 import base64
 import hashlib
+import http.client
 import json
 import os
 import socket
@@ -77,6 +78,8 @@ class Moonraker:
                 return data, resp.headers
         except urllib.error.HTTPError as e:
             raise _http_error(e)
+        except http.client.HTTPException as e:   # not an OSError: a broken answer must not escape as one
+            raise PrinterError("the printer sent a broken answer (%s)" % (type(e).__name__,)) from e
 
     def download_to(self, path, open_out, timeout=30):
         """Stream /server/files/<path> into the binary file returned by open_out(), which is only
@@ -94,7 +97,7 @@ class Moonraker:
                     total += len(chunk)
         except urllib.error.HTTPError as e:
             raise _http_error(e)
-        except OSError as e:
+        except (OSError, http.client.HTTPException) as e:
             raise PrinterError("download failed (%s)" % getattr(e, "reason", e))
 
     def request(self, method, path, params=None, json_body=None, timeout=None):
@@ -224,7 +227,8 @@ class Moonraker:
                 msg = json.loads(_ws_recv(reader))
                 if isinstance(msg, dict) and msg.get("id") == req_id:
                     if "error" in msg:
-                        raise PrinterError("printer said: %s" % msg["error"].get("message", msg["error"]))
+                        err = msg["error"]
+                        raise PrinterError("printer said: %s" % (err.get("message", err) if isinstance(err, dict) else err))
                     return msg.get("result")
             raise PrinterError("printer didn't answer %s" % method)
 

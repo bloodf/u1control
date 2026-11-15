@@ -25,7 +25,7 @@ import settings
 import spoolman as sm
 import u1
 import usage
-from files import GCODE_ROOT, FilesMixin, _safe_path  # noqa: F401  (_safe_path: used by tests and callers)
+from files import GCODE_ROOT, FilesMixin, _local_name, _new_file, _safe_path, download_folder  # noqa: F401  (_safe_path: used by tests and callers)
 from moonraker import Moonraker, PrinterError
 from stockview import StockMixin
 from usage import job_key, printer_ident  # noqa: F401  (job_key: used by tests)
@@ -37,9 +37,11 @@ CAMERA_RETRY = 2.0
 CAMERA_KEEPALIVE = 50.0
 FRAME_MIN_INTERVAL = 0.2    # ~5 fps cap
 FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
+SNAPSHOT_MAX_AGE = 10.0     # s: Save picture keeps only a camera frame this fresh
 URGENT = ("emergency_stop", "pause", "cancel")   # never wait behind the command worker
-DEDICATED = URGENT + ("download", "screen_touch", "stock", "usage", "usage_ack")  # own short-lived thread
-# ("stock" only reads files; "usage"/"usage_ack" only read or write the local ledger, never Spoolman)
+DEDICATED = URGENT + ("download", "screen_touch", "stock", "usage", "usage_ack", "snapshot")  # own short-lived thread
+# ("stock" only reads files; "usage"/"usage_ack" only read or write the local ledger, never Spoolman;
+# "snapshot" only writes the last camera picture to a local file)
 THUMB_QUEUE = 8             # thumbnails waiting at most; the page asks for a few at a time
 STOCK_CAMERA = "/server/files/camera/monitor.jpg"
 EXT_CAMERA = "/webcam/snapshot.jpg"
@@ -54,6 +56,7 @@ STALE = "the selected printer changed; nothing was sent to it"
 HOTEND_MAX = 320                  # °C: what cmd_temperature clamps to (the page shows and validates the same)
 BED_MAX = 110
 NO_U1 = "no U1 selected: choose a Snapmaker U1 printer with an address"
+FIRMWARE_RETRY = 30.0             # s between firmware checks while the Firmware Config API gave no clear answer
 
 
 class Target:
@@ -113,10 +116,13 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
 
     def _reset_printer_state(self):   # caller holds self.lock (or is __init__)
         self.firmware = {"kind": "unknown", "version": ""}
+        self.firmware_sure = False      # the kind came from a clear answer; else checked again every FIRMWARE_RETRY
+        self.firmware_retry_at = 0.0
         self.spoolman, self.spoolman_gen = None, None
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
         self.last_frame_at = 0.0
+        self.last_frame = None      # (JPEG bytes, time.monotonic()) of the selected printer's camera
         self.camera_keepalive_at = 0.0
         self.camera_retry_at = 0.0
         self.screen_at = 0.0
@@ -289,6 +295,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                     self._push_status()
                 except Exception as e:
                     next_status = time.monotonic() + STATUS_RETRY
+                    self._status_failed(gen)
                     if self._current(gen):
                         self.publish({"type": "offline", "error": str(e)})
             if screen and now >= self.screen_at:
@@ -310,7 +317,10 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         if client is None:
             raise PrinterError(NO_U1)
         with self._bound(gen, client, target):
-            if self.firmware["kind"] == "unknown":
+            with self.lock:
+                check = self.firmware["kind"] == "unknown" or (
+                    not self.firmware_sure and time.monotonic() >= self.firmware_retry_at)
+            if check:
                 self.cmd_connect()
             status = client.query(u1.STATUS_OBJECTS)
             if not self._current(gen):
@@ -325,10 +335,17 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 if gen != self.generation:
                     return
                 view["bindings"] = {str(k): v for k, v in self.bindings.items()}
+                view["firmware"] = dict(self.firmware)
                 self.last_view, self.last_state = view, view["state"]
             self._rfid_follow(view, gen)
             if self._current(gen):
                 self.publish({"type": "status", "data": view})
+
+    def _status_failed(self, gen):
+        """The printer stopped answering: check its firmware again once it is back (it may have been reflashed)."""
+        with self.lock:
+            if gen == self.generation:
+                self.firmware_sure, self.firmware_retry_at = False, 0.0
 
     def _rfid_follow(self, view, gen):
         """Publish once when a toolhead reads a different tag than before (not on the first status)."""
@@ -361,11 +378,27 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         data, _ = client.raw("GET", path + "?t=%d" % int(time.time() * 1000), timeout=4)
         if data[:2] != b"\xff\xd8":
             raise PrinterError("camera returned no image")
-        if not self._current(gen):
-            return   # a picture of the printer that is no longer selected
+        with self.lock:
+            if gen != self.generation:
+                return   # a picture of the printer that is no longer selected
+            self.last_frame = (data, time.monotonic())
         self.frame_ack.clear()
         self.last_frame_at = time.monotonic()
         self.publish({"type": "frame", "image": "data:image/jpeg;base64," + base64.b64encode(data).decode()})
+
+    def cmd_snapshot(self):
+        """Save the camera picture on screen (the last frame, at most SNAPSHOT_MAX_AGE s old) to the download
+        folder as '<printer> <date time>.jpg', never replacing a file. Returns the saved path."""
+        gen, _, target = self._ctx()
+        with self.lock:
+            frame = self.last_frame if gen == self.generation else None
+        if not frame or time.monotonic() - frame[1] > SNAPSHOT_MAX_AGE:
+            raise PrinterError("no recent camera picture: start the camera first")
+        name = _local_name("%s %s.jpg" % (target.name.replace("/", "_"), time.strftime("%Y-%m-%d %H-%M-%S")))
+        path, out = _new_file(download_folder(), name)
+        with out:
+            out.write(frame[0])
+        return path
 
     def _push_screen(self):
         """Extended Firmware remote screen: publish the touchscreen PNG when it changed."""
@@ -377,7 +410,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             data, _ = client.raw("GET", EXT_SCREEN + "?t=%d" % int(time.time() * 1000), timeout=4)
             if data[:8] != b"\x89PNG\r\n\x1a\n":
                 raise PrinterError("remote screen is off: turn on Remote Screen in Settings > Firmware")
-        except (PrinterError, OSError) as e:
+        except Exception as e:   # the screen has its own error and retry: it must never stop the monitor thread
             self.screen_at = time.monotonic() + SCREEN_RETRY
             self.screen_digest = None
             self.publish({"type": "screen_error", "error": str(e)})
@@ -507,11 +540,17 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def cmd_connect(self):
         gen, client, target = self._ctx()
         info = client.info()
-        firmware = u1.detect_firmware(info, ext.Extended(client).status())
+        status, conclusive = ext.Extended(client).probe()
+        firmware = u1.detect_firmware(info, status)
+        sure = conclusive or firmware["kind"] == "extended"
         with self.lock:
             if gen != self.generation:
                 raise PrinterError(STALE)
-            self.firmware = firmware
+            if sure or self.firmware["kind"] != "extended":   # no answer never turns Extended back into stock
+                self.firmware = firmware
+            self.firmware_sure = sure or self.firmware["kind"] == "extended"
+            self.firmware_retry_at = time.monotonic() + FIRMWARE_RETRY
+            firmware = dict(self.firmware)
         return {"address": client.address, "firmware": firmware, "hostname": info.get("hostname"),
                 "klipper_state": info.get("state"), "printer": target.name, "generation": gen,
                 "limits": {"hotend": HOTEND_MAX, "bed": BED_MAX}}
@@ -710,10 +749,23 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         return {"status": e.status(), "settings": e.settings()}
 
     def cmd_ext_set(self, setting_id, value, inputs=None):
-        return self._extended().set(setting_id, value, inputs)
+        e = self._extended()
+        if setting_id not in ext.PRINT_SAFE:
+            self._refuse_while_printing("changing %s restarts Klipper or reboots the printer, which" % setting_id)
+        return e.set(setting_id, value, inputs)
 
     def cmd_ext_action(self, action_id):
-        return self._extended().action(action_id)
+        e = self._extended()
+        if action_id in ext.PRINT_ENDING_ACTIONS:
+            self._refuse_while_printing(action_id)
+        return e.action(action_id)
+
+    def _refuse_while_printing(self, what):
+        """Only a print blocks it: a stuck machine state is what a restart is for."""
+        state = u1.summarize(self._client().query(u1.STATUS_OBJECTS))["state"]
+        if u1.is_busy(state):
+            raise PrinterError("the U1 is busy (%s); %s would end the print. Try again once it has finished."
+                               % (state, what))
 
 
 

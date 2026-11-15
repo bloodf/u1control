@@ -12,6 +12,13 @@ Snapmaker's open [u1-klipper](https://github.com/Snapmaker/u1-klipper) and
 - `GET /firmware-config/api/status` answers with JSON on the Extended Firmware when Advanced Mode is
   on. On stock firmware the web server returns its HTML page instead.
 
+Only a clear answer decides: JSON, the HTML page, or a 4xx. A timeout, a refused connection, a 5xx or a
+broken answer leaves the kind as it was (stock on a first connect) and the tab asks again every 30 s, and
+once more after the printer was offline, so a printer whose Firmware Config API was still starting, or
+that was reflashed, is shown right without selecting it again. An unclear answer never turns an Extended
+printer back into stock. Filament use of a print sent earlier is not booked while its printer's firmware
+can't be told: SpoolLink books it on the Extended Firmware, so guessing could book it twice.
+
 ## Printer objects read
 
 `print_stats`, `virtual_sdcard` (incl. `pl_env_valid` for power-loss recovery), `display_status`,
@@ -40,6 +47,20 @@ Firmware), `filament_detect` (RFID tags), `filament_feed left|right` (feeder sta
 Mapping, used heads and print options are refused by the firmware once a print runs, which is why
 they are sent before the upload and not written into the G-code.
 
+## Firmware settings during a print
+
+Changing an Extended Firmware setting runs the option's command on the printer. Most of them restart
+Klipper or reboot, which ends a running print, so while the U1 is printing or paused u1control refuses
+them (the page disables their Apply button and says why), together with Restart Klipper and Reboot.
+
+These stay available during a print, because their commands only restart nginx, Moonraker, SSH, the USB
+camera, the remote screen, VPN, cloud or metrics services, or the Firmware Config service itself:
+`web-frontend`, `firmware-config`, `remote-screen`, `ssh`, `camera-usb`, `camera-usb-resolution`,
+`camera-rtsp`, `vpn`, `cloud`, `object_processing`, `spoolman_tag_store`, `klipper-metrics`, and the
+Restart Moonraker action. Every other setting waits, including any setting a newer firmware release adds.
+The list (`extended.PRINT_SAFE`) comes from the option commands in the firmware's
+`firmware-config/functions/*.yaml` (main branch of 2026-11-07).
+
 ## Endpoints
 
 | Endpoint | Use |
@@ -54,7 +75,7 @@ they are sent before the upload and not written into the G-code.
 | `GET /screen/snapshot` | Extended Firmware Remote Screen: the touchscreen as PNG (Settings > Firmware > Remote Screen must be on) |
 | `POST /screen/touch?a=tap&x=&y=` | tap the touchscreen at a framebuffer pixel |
 | `GET /server/files/directory`, `/metadata`, `DELETE /server/files/...` | file manager (`gcodes` and `camera` roots) |
-| `POST /server/files/directory`, `POST /server/files/move` | new folder; move a file or folder (same root only) |
+| `POST /server/files/directory`, `POST /server/files/move` | new folder; move or rename a file or folder (same root only; the folder is listed first and a name it already has is refused) |
 | `GET /server/spoolman/status`, `POST /server/spoolman/proxy` | the printer's own Spoolman link |
 | `GET /server/gcode_store?count=` | console: the printer's replies logged since a command (u1-moonraker `data_store`) |
 | `/firmware-config/api/status`, `/settings`, `/settings/<id>/<value>`, `/action/<id>` | Extended Firmware settings: groups of settings, each option with its label and, when the firmware sets them, a confirmation text, required inputs or `hidden`. Only a log ending in `SUCCESS` counts as applied; a log that ends without `SUCCESS` or `ERROR` is shown as unknown and is not retried |

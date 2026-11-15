@@ -8,6 +8,7 @@ export interface Status {
   rfid?: (Tag | null)[]; options?: Record<string, boolean>; purifier?: { fitted?: boolean; mode?: string };
   feed?: { state?: string; detected?: boolean }[]; busy?: boolean; machine_state?: string; bindings?: Record<string, number>;
   light?: boolean | null; speed_factor?: number; power_loss?: boolean; reprint?: unknown; exceptions?: unknown[];
+  firmware?: { kind: string; version?: string };
 }
 export interface Info { address: string; firmware: { kind: string; version?: string }; printer: string; generation: number;
   limits?: { hotend: number; bed: number } }

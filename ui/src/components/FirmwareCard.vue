@@ -5,13 +5,13 @@ import Select from 'primevue/select';
 import Message from 'primevue/message';
 import Icon from './Icon.vue';
 import * as bridge from '../core/bridge';
-import { s, run, tracker, targetKnown } from '../app/store';
+import { s, run, tracker, targetKnown, printing } from '../app/store';
 import { ask, prompt } from '../core/dialog';
 import { t } from '../core/i18n';
 import { message } from '../core/tracker';
 
 interface Opt { value: string; label: string; confirm?: string; hidden?: boolean; inputs?: { name: string; label: string; placeholder?: string; regex?: string }[] }
-interface Item { id: string; label: string; description?: string; current?: string; hidden?: boolean; options: Opt[] }
+interface Item { id: string; label: string; description?: string; current?: string; hidden?: boolean; print_safe?: boolean; options: Opt[] }
 interface Group { id: string; label: string; items: Item[] }
 
 const state = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
@@ -41,6 +41,8 @@ async function load() {
 watch(() => [s.epoch, s.info?.firmware.kind], () => { groups.value = []; log.value = ''; void load(); }, { immediate: true });
 
 const visibleItems = (g: Group) => g.items.filter(x => !x.hidden);
+// Settings that restart Klipper or reboot (print_safe false, see extended.PRINT_SAFE) would end a running print.
+const waits = (x: Item) => printing.value && !x.print_safe;
 const options = (x: Item) => {
   const opts = x.options.filter(o => !o.hidden || o.value === x.current);
   const known = opts.some(o => o.value === x.current);
@@ -79,7 +81,8 @@ async function apply(x: Item) {
     args: { setting_id: x.id, value: v, inputs: Object.keys(vals).length ? vals : null } });
   if (r.ok) result(r.result, t('ok.extSet'));
 }
-const actions = [{ id: 'restart-klipper', label: 'ext.restartKlipper' }, { id: 'restart-moonraker', label: 'ext.restartMoonraker' }, { id: 'reboot-system', label: 'ext.reboot', danger: true }] as const;
+const actions = [{ id: 'restart-klipper', label: 'ext.restartKlipper', ends: true }, { id: 'restart-moonraker', label: 'ext.restartMoonraker' },
+  { id: 'reboot-system', label: 'ext.reboot', danger: true, ends: true }] as const;
 async function action(id: string, name: string, danger = false) {
   if (!await ask({ title: name, text: t('confirm.extAction.text', { name }), yes: name, no: t('common.goBack'), danger })) return;
   const r = await run({ key: `exta:${id}`, label: t('act.extAction'), cmd: 'ext_action', args: { action_id: id }, timeoutMs: 120000 });
@@ -98,18 +101,19 @@ async function action(id: string, name: string, danger = false) {
       <div><Button size="small" severity="secondary" outlined :label="t('common.retry')" @click="load" /></div></Message>
     <template v-else-if="state === 'ok'">
       <dl class="fw-kv"><template v-for="(v, k) in status" :key="k"><dt>{{ k }}</dt><dd>{{ show(v) }}</dd></template></dl>
+      <p v-if="printing" class="u1-why" data-test="ext-print-why">{{ t('ext.printWhy') }}</p>
       <template v-for="g in groups" :key="g.id">
         <h3 v-if="visibleItems(g).length" class="fw-g">{{ g.label }}</h3>
         <div v-for="x in visibleItems(g)" :key="x.id" class="fw-item">
           <div><label :id="`ext-l-${x.id}`">{{ x.label }}</label><div v-if="x.description" class="oui-meta">{{ x.description }}</div></div>
           <Select v-model="chosen[x.id]" :options="options(x)" option-label="label" option-value="value" option-disabled="disabled" :aria-labelledby="`ext-l-${x.id}`" class="fw-sel" />
           <Button severity="secondary" outlined :label="t('common.apply')" :aria-label="t('ext.applyLabel', { label: x.label })" :loading="tracker.isBusy(`ext:${x.id}`)"
-                  :data-focus-key="`ext:${x.id}`" @click="apply(x)" />
+                  :disabled="waits(x)" :data-focus-key="`ext:${x.id}`" @click="apply(x)" />
         </div>
       </template>
       <div class="u1-row fw-actions">
         <Button v-for="a in actions" :key="a.id" :severity="'danger' in a ? 'danger' : 'secondary'" outlined :label="t(a.label)" :loading="tracker.isBusy(`exta:${a.id}`)"
-                :data-focus-key="`exta:${a.id}`" @click="action(a.id, t(a.label), 'danger' in a)" />
+                :disabled="printing && 'ends' in a" :data-focus-key="`exta:${a.id}`" @click="action(a.id, t(a.label), 'danger' in a)" />
       </div>
       <pre v-if="log" class="oui-error-detail fw-log" :aria-label="t('ext.log')">{{ log }}</pre>
     </template>

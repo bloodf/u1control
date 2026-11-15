@@ -129,15 +129,19 @@ def rfid_tags(detect):
     infos = (detect or {}).get("info") or []
     tags = []
     for t in range(TOOLHEADS):
-        info = _at(infos, t) or {}
+        info = _at(infos, t)
+        info = info if isinstance(info, dict) else {}
         ftype = _none(info.get("MAIN_TYPE"))
         uid = info.get("CARD_UID")
-        uid = "".join("%02X" % (b & 0xFF) for b in uid) if isinstance(uid, list) else _none(uid)
+        uid = "".join("%02X" % (b & 0xFF) for b in uid if isinstance(b, int)) if isinstance(uid, list) else _none(uid)
         uid = "" if uid and not uid.strip("0") else uid  # all-zero = empty reader slot
         if not ftype and not uid:
             tags.append(None)
             continue
-        n = max(1, min(int(info.get("COLOR_NUMS") or 1), 5))
+        try:
+            n = max(1, min(int(info.get("COLOR_NUMS") or 1), 5))
+        except (TypeError, ValueError):   # a reader that wrote garbage must not break the whole status
+            n = 1
         tags.append({
             "vendor": _none(info.get("VENDOR")), "manufacturer": _none(info.get("MANUFACTURER")),
             "type": ftype, "sub_type": _none(info.get("SUB_TYPE")),
