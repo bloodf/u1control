@@ -55,7 +55,7 @@ const VIEWS = [['dash', Dashboard], ['files', FilesView], ['console', ConsoleVie
     </template>
     <template #status>
       <OuiStatus :state="state.state" data-test="conn-state">{{ state.label }}</OuiStatus>
-      <span v-if="s.info" class="oui-truncate" :class="{ 'u1-bar-stale': stale }">{{ s.info.printer }} · {{ s.info.address }} · <span data-test="firmware">{{ fwText }}</span></span>
+      <span v-if="s.info" class="oui-truncate" :title="`${s.info.printer} · ${s.info.address} · ${fwText}`" :class="{ 'u1-bar-stale': stale }">{{ s.info.printer }} · {{ s.info.address }} · <span data-test="firmware">{{ fwText }}</span></span>
     </template>
     <!-- Emergency stop: one press away on every tab, apart from every other control, with its own rule (a known
          printer, even one that is offline or late). It always asks first. -->

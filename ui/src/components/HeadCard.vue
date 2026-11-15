@@ -109,6 +109,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
     <!-- No Spoolman spool linked: there is no weight to show, so no amount line at all (not a dash that looks like a reading). -->
     <template v-if="!linked" #amount />
 
+    <!-- The nozzle heater stays on screen while the Edit form is open: its reading and Off must not disappear. -->
     <template v-if="!editing">
       <Select v-if="s.spools.length" :model-value="bound ?? 0" :options="groups" option-group-label="label" option-group-children="items" size="small"
               option-label="label" option-value="value" filter :filter-placeholder="t('pick.filter')" :aria-label="t('pick.label', { n })"
@@ -124,7 +125,9 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
             <span v-if="option.sp && option.sp.remaining != null && option.sp.remaining < 100" class="oui-chip" data-tone="warn">{{ t('stock.low') }}</span></span>
         </template>
       </Select>
-      <HeaterControl :id="String(i)" card />
+    </template>
+    <HeaterControl :id="String(i)" card />
+    <template v-if="!editing">
       <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feed.state || '—' }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
     </template>
     <form v-else :id="`hc-form-${i}`" class="hc-form" @submit.prevent="saveEdit">

@@ -63,7 +63,7 @@ async function setTemp() {
         <span class="u1-heat-temp"><strong>{{ temp }}<span class="u1-heat-unit">°C</span></strong>
           <span class="oui-meta"><template v-if="targetText">{{ targetText }}<template v-if="phase"> · <span class="u1-heat-phase">{{ t(`temps.phase.${phase}` as any) }}</span></template></template>
             <template v-else-if="phase === 'off'">{{ t('temps.heaterOff') }}</template></span></span>
-        <OuiSpark class="u1-heat-spark" :values="s.history[id] ?? []" :tone="tone" :target="reading.target || null" :width="card ? 64 : 88" :height="card ? 22 : 28"
+        <OuiSpark v-if="(s.history[id]?.length ?? 0) >= 2" class="u1-heat-spark" :values="s.history[id] ?? []" :tone="tone" :target="reading.target || null" :width="card ? 64 : 88" :height="card ? 22 : 28"
                   :label="t('temps.history', { heater: name })" />
       </div>
       <div class="u1-heat-set">

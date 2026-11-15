@@ -92,7 +92,7 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
 
       <OuiFormSection v-if="config" id="print-setup" :icon="printer" :title="t('ps.title')" :aria-label="t('ps.title')" data-test="print-setup">
         <div class="oui-stack u1-pad">
-          <OuiBanner v-if="pipe && !pipe.on" tone="warn" :title="t('ps.off', { preset: pipe.preset })" data-test="ps-off">
+          <OuiBanner v-if="pipe && !pipe.on" role="note" tone="warn" :title="t('ps.off', { preset: pipe.preset })" data-test="ps-off">
             {{ config.settings.auto_add_pipeline ? t('ps.offAuto') : t('ps.offManual') }}</OuiBanner>
           <p v-else-if="pipe" data-test="ps-on">{{ t('ps.on', { preset: pipe.preset }) }}</p>
           <p v-if="dialogRule" data-test="ps-rule">{{ dialogRule }}</p>

@@ -106,7 +106,7 @@ onBeforeUnmount(() => {
 
     <section v-if="warnings.length" class="oui-stack su-warn" aria-labelledby="su-w">
       <h2 id="su-w" class="oui-sr">{{ t('setup.warnings') }}</h2>
-      <div role="alert" class="u1-live"><OuiBanner v-for="w in warnings" :key="w.id" tone="warn" :title="warnText(w)" /></div>
+      <div role="alert" class="u1-live"><OuiBanner v-for="w in warnings" :key="w.id" role="none" tone="warn" :title="warnText(w)" /></div>
       <p v-if="ackReset" class="u1-note" data-tone="warn" role="status">{{ t('setup.ackReset') }}</p>
       <label class="su-ack" for="su-ack"><Checkbox v-model="acked" input-id="su-ack" binary data-test="ack" />{{ t('setup.ack') }}</label>
     </section>

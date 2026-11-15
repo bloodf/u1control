@@ -31,7 +31,6 @@ export const en = {
   'reason.notPaused': 'Available while a print is paused',
   'reason.noPrint': 'No print is running',
   'reason.pending': 'Waiting for the previous command',
-  'reason.controlsOff': 'Controls off: {reason}.',
 
   'common.dismiss': 'Dismiss',
   'common.goBack': 'Go back',
@@ -136,7 +135,6 @@ export const en = {
   'status.file': 'File',
   'status.noStatus': 'No status yet',
   'status.controls': 'Print controls',
-  'status.urgent': 'Urgent',
 
   'confirm.cancel.title': 'Cancel the print?',
   'confirm.cancel.text': 'Cancel the current print on {printer}? It can’t be resumed afterwards.',
@@ -268,7 +266,6 @@ export const en = {
 
   'stock.title': 'Stock (Spooler)',
   'stock.refresh': 'Refresh stock',
-  'stock.meta': 'Spooler {version} · {n} spools · read {age}',
   'stock.search': 'Search name, vendor, location',
   'stock.searchLabel': 'Search the stock',
   'stock.material': 'Material',
@@ -623,7 +620,6 @@ export const ptBR: Record<MessageKey, string> = {
   'reason.notPaused': 'Disponível com a impressão pausada',
   'reason.noPrint': 'Nenhuma impressão em andamento',
   'reason.pending': 'Aguardando o comando anterior',
-  'reason.controlsOff': 'Controles desligados: {reason}.',
 
   'common.dismiss': 'Dispensar',
   'common.goBack': 'Voltar',
@@ -728,7 +724,6 @@ export const ptBR: Record<MessageKey, string> = {
   'status.file': 'Arquivo',
   'status.noStatus': 'Ainda sem status',
   'status.controls': 'Controles da impressão',
-  'status.urgent': 'Urgente',
 
   'confirm.cancel.title': 'Cancelar a impressão?',
   'confirm.cancel.text': 'Cancelar a impressão atual em {printer}? Não será possível retomá-la depois.',
@@ -860,7 +855,6 @@ export const ptBR: Record<MessageKey, string> = {
 
   'stock.title': 'Estoque (Spooler)',
   'stock.refresh': 'Atualizar estoque',
-  'stock.meta': 'Spooler {version} · {n} bobinas · lido {age}',
   'stock.search': 'Buscar nome, fabricante, local',
   'stock.searchLabel': 'Buscar no estoque',
   'stock.material': 'Material',

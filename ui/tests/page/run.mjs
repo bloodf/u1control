@@ -1,7 +1,7 @@
 // Behaviour tests of the built U1 Control page (src/u1control/ui/app.html), in owned headless Chrome under a
 // host-like CSP, with a scripted OrcaSlicer bridge. Ported from the former fake-DOM harness (tests/ui_harness.js)
 // and extended for the review findings (U01-U12, B-01..B-12, X02/X04).
-//   node tests/page/run.mjs [name-filter]          PAGE=<page with icons> EXT_GROUPS=<json> are set by test_ui_page.py
+//   node tests/page/run.mjs [name-filter]          PAGE=<built page> EXT_GROUPS=<json> are set by test_ui_page.py
 import { readFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
@@ -14,7 +14,7 @@ import { launch, MOCK_HOST, HELPERS, preparePage } from './cdp.mjs';
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../..');
 
-async function pageWithIcons() {
+async function builtPage() {
   if (process.env.PAGE) return readFile(process.env.PAGE, 'utf8');
   return execFileSync('python3', ['-c', 'import sys; sys.path.insert(0, "scripts"); import build; sys.stdout.write(build.page_html("app.html"))'],
     { cwd: repo, encoding: 'utf8', maxBuffer: 64 << 20 });
@@ -457,12 +457,61 @@ test('U03: no target disables every physical command with a visible reason', `
   await until(() => last('hello'));
   await fail(last('hello'), 'Select a Snapmaker U1 printer', {no_target: true});
   assert(text(byTest('target-banner')).includes('No U1 selected'), 'banner says no U1 is selected');
-  // No printer: the Dashboard is the first-run state, with no print or stop controls to press at all.
-  for (const t of ['pause', 'resume', 'cancel', 'estop']) assert(!byTest(t) || byTest(t).disabled, t + ' not available');
+  // No printer: the Dashboard is the first-run state. There is nothing to pause, cancel or stop, so those controls are
+  // not on the page at all (the connecting state below keeps them, disabled, with the reason).
+  for (const t of ['pause', 'resume', 'cancel', 'estop']) eq(byTest(t), null, t + ' absent with no printer chosen');
   assert(q('#heads-why') === byTest('target-banner') && qa('#heads-why').length === 1, 'reason said once, where the controls would be');
   assert(btn('Open Settings'), 'next step offered');
   await tab('settings');
+  eq(qa('#heads-why').length, 1, 'on another tab the reason is still said once (one #heads-why)');
   assert(document.body.textContent.includes('Connect to a U1 to see its firmware'), 'settings explains too');
+`);
+
+test('E-stop: in the app bar and usable on every tab; while connecting it is shown, off, with the reason', `
+  await until(() => last('hello'));
+  assert(byTest('estop') && byTest('estop').disabled && byTest('pause').disabled, 'connecting: E-stop and Pause shown, off');
+  eq(byTest('estop').getAttribute('aria-describedby'), 'heads-why', 'connecting: E-stop points at the reason');
+  assert(text(q('#heads-why')).includes('Connecting'), 'the reason says it is connecting: ' + text(q('#heads-why')));
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  for (const name of ['dash', 'files', 'console', 'settings']) {
+    await tab(name);
+    const b = byTest('estop');
+    assert(b && b.closest('.oui-appbar') && !b.disabled, name + ': E-stop present, enabled and in the app bar');
+    const r = b.getBoundingClientRect();
+    assert(r.width > 0 && r.height > 0 && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('[data-test="estop"]') === b, name + ': E-stop visible and on top');
+  }
+  await click(byTest('estop'));
+  assert(btn('Stop now (E-stop)', dialogEl()), 'asks first, from the Settings tab too');
+  await yes();
+  eq(cmds('emergency_stop').length, 1, 'sent from the Settings tab');
+`);
+
+test('a toolhead being edited keeps its heater reading and Off', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: false, extruders: [0, 1, 2, 3].map(i => ({temp: i === 0 ? 210 : 20, target: i === 0 ? 215 : 0, active: i === 0}))})});
+  await click(q('[data-edit="0"]'));
+  assert(q('#hc-form-0'), 'edit form open');
+  assert(q('[data-heater-row="0"]') && text(q('[data-heater-row="0"]')).includes('210'), 'reading still shown while editing');
+  assert(q('[data-off="0"]') && !q('[data-off="0"]').disabled, 'Off still there and usable while editing');
+  await click(q('[data-off="0"]'));
+  assert(dialogOpen() && dialogText().includes('fail'), 'Off during a print still asks');
+  await yes();
+  eq(cmds('temperature').map(m => m.args), [{heater: '0', target: 0}], 'Off sent from the card being edited');
+  assert(q('#hc-form-0'), 'the edit form stays open');
+`);
+
+test('settings: Discard drops what was typed and shows the saved values', `
+  await connect();
+  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {}, automations: [],
+    settings: {mode: 'automagic', host: 'u1.saved', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}});
+  await tab('settings');
+  await type(q('#c-host'), 'typed.host');
+  assert(document.body.textContent.includes('Unsaved changes') && !byTest('discard').disabled, 'unsaved change shown, Discard on');
+  await click(byTest('discard'));
+  eq(q('#c-host').value, 'u1.saved', 'saved value back');
+  assert(!document.body.textContent.includes('Unsaved changes') && byTest('discard').disabled, 'nothing pending');
+  eq(last('save_settings'), undefined, 'nothing saved');
 `);
 
 test('U03: known target offline keeps E-stop on the urgent path; other commands off', `
@@ -752,7 +801,7 @@ const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');
 const filter = process.argv[2];
 const chosen = scenarios.filter(s => !filter || s.name.includes(filter));
-const page = await pageWithIcons();
+const page = await builtPage();
 const dir = await mkdtemp(join(tmpdir(), 'u1-page-'));
 const browser = await launch();
 let failed = 0;

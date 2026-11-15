@@ -29,7 +29,7 @@ async function powerDiscard() {
 </script>
 <template>
   <OuiBanner v-if="exceptions" tone="error" :title="t('exceptions.title')"><span class="oui-error-detail">{{ exceptions }}</span></OuiBanner>
-  <OuiBanner v-if="st?.power_loss" tone="warn" :icon="zap" :title="t('power.title')">
+  <OuiBanner v-if="st?.power_loss" role="note" tone="warn" :icon="zap" :title="t('power.title')">
     <template v-if="st.reprint">{{ t('power.options', { options: JSON.stringify(st.reprint) }) }}</template>
     <template #actions>
       <Button size="small" severity="secondary" :label="t('power.resume')" :disabled="!!controlsOff" :aria-describedby="controlsOff ? 'heads-why' : undefined" data-focus-key="pl-resume" @click="powerResume">
@@ -42,7 +42,7 @@ async function powerDiscard() {
 
   <!-- No printer chosen yet: one thing to do. Stock and unconfirmed filament use don't need a printer and stay. -->
   <template v-if="s.phase === 'noTarget'">
-    <OuiPanel id="heads-why" class="u1-first" flush role="status" data-test="target-banner">
+    <OuiPanel :id="s.tab === 'dash' ? 'heads-why' : undefined" class="u1-first" flush role="status" :data-test="s.tab === 'dash' ? 'target-banner' : undefined">
       <OuiEmpty :image="firstRunArt" :title="t('target.none.title')" :text="t('target.none.body')">
         <template #actions>
           <Button :label="t('common.openSettings')" @click="s.tab = 'settings'"><template #icon><OuiIcon :icon="settings" :size="14" /></template></Button>

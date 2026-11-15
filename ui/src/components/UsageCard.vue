@@ -36,11 +36,11 @@ async function ack(e: UsageEntry) {
 <template>
   <div v-if="show" class="oui-stack" data-test="usage-card">
     <div role="alert" class="u1-live uc-alerts">
-      <OuiBanner v-if="s.usageError" tone="error" :title="t('usage.loadError', { error: s.usageError })" />
-      <OuiBanner v-if="u?.save_error" tone="error" :title="t('usage.saveError', { error: u.save_error })" />
-      <OuiBanner v-if="u?.restore_notice" tone="warn" :title="t('usage.notice', { text: u.restore_notice })" />
+      <OuiBanner v-if="s.usageError" role="none" tone="error" :title="t('usage.loadError', { error: s.usageError })" />
+      <OuiBanner v-if="u?.save_error" role="none" tone="error" :title="t('usage.saveError', { error: u.save_error })" />
+      <OuiBanner v-if="u?.restore_notice" role="none" tone="warn" :title="t('usage.notice', { text: u.restore_notice })" />
     </div>
-    <OuiBanner v-if="list.length" tone="warn" :title="tn('usage.banner', list.length)">
+    <OuiBanner v-if="list.length" role="note" tone="warn" :title="tn('usage.banner', list.length)">
       {{ first }}
       <template #actions>
         <Button size="small" severity="secondary" :label="open ? t('usage.hide') : t('usage.review')" :aria-expanded="open" aria-controls="usage-list" data-focus-key="usage-review" data-test="usage-review" @click="open = !open">

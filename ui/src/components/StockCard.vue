@@ -7,7 +7,7 @@ import Checkbox from 'primevue/checkbox';
 import { OuiBanner, OuiEmpty, OuiIcon, OuiLevel, OuiPanel, OuiSpool, OuiStatus, OuiToolbar, materialTone } from '../../shared/src/components';
 import { boxes, link as linkIcon, refresh } from '../../shared/src/icons';
 import { spoolFraction } from '../core/spool-level';
-import { s, run, tracker, loadStock, loadSpools, busy, targetKnown, printerName, stockVisible } from '../app/store';
+import { s, run, tracker, loadStock, loadSpools, busy, controlsOff, targetKnown, printerName, stockVisible } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, tMaybe, fmt } from '../core/i18n';
 import { family, boundHeads } from '../core/logic';
@@ -45,9 +45,9 @@ const shown = computed(() => {
 });
 const bound = computed(() => boundHeads(s.bindings, s.stock?.bindings ?? {}));
 /** Why linking is off, and where that is said: once for the page (no printer, busy), or in this panel (other Spoolman). */
-const why = computed(() => (!targetKnown.value || !s.info ? t('stock.why.connect') : busy.value ? t('stock.why.busy')
+const why = computed(() => (!targetKnown.value || !s.info ? t('stock.why.connect') : controlsOff.value ? controlsOff.value : busy.value ? t('stock.why.busy')
   : s.stock?.same_spoolman === false ? t('stock.why.spoolman') : ''));
-const whyId = computed(() => (!why.value ? undefined : !targetKnown.value || !s.info || busy.value ? 'heads-why' : 'stock-why'));
+const whyId = computed(() => (!why.value ? undefined : !targetKnown.value || !s.info || controlsOff.value || busy.value ? 'heads-why' : 'stock-why'));
 const heads = [0, 1, 2, 3].map(h => ({ value: h, label: `T${h + 1}` }));
 function clear() { q.value = ''; mat.value = null; fit.value = false; }
 
@@ -80,7 +80,7 @@ async function link(r: Spool) {
 
     <div role="status" aria-live="polite" class="sc-notes">
       <OuiEmpty v-if="blocker" compact :state="blocker.state" :icon="boxes" tone="lime" :title="blocker.text" />
-      <OuiBanner v-if="otherSpoolman" id="stock-why" data-test="stock-why" tone="error" :title="t('stock.blocked', { reason: why })">{{ t('stock.otherSpoolman') }}</OuiBanner>
+      <OuiBanner v-if="otherSpoolman" id="stock-why" role="none" data-test="stock-why" tone="error" :title="t('stock.blocked', { reason: t('stock.why.spoolman') })">{{ t('stock.otherSpoolman') }}</OuiBanner>
     </div>
     <template v-if="usable">
       <OuiToolbar class="sc-bar" :summary="t('stock.count', { shown: shown.length, n: rows.length })" :label="t('stock.searchLabel')">

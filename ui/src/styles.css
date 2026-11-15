@@ -2,6 +2,9 @@
    tables and the printer drawing. Colours are the foundation's --oui-* roles only; nothing here defines a colour. */
 html, body, #app { min-height: 100%; }
 
+/* Narrow bar: the tabs wrap under Emergency stop. Keep a clear gap so a tab press never lands on it. */
+@container oui-appbar (max-width: 760px) { .oui-appbar-actions { padding-bottom: var(--oui-s3); } }
+
 /* Page-level messages, under the app bar on every tab. The live regions stay in the DOM while empty (what is added
    later is then announced); only filled ones take space. */
 .u1-top { padding: 0 var(--oui-s4); }
