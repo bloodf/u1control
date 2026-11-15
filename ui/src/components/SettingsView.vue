@@ -4,6 +4,7 @@ import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
+import Message from 'primevue/message';
 import Icon from './Icon.vue';
 import FirmwareCard from './FirmwareCard.vue';
 import SpoolerHint from './SpoolerHint.vue';
@@ -37,6 +38,10 @@ async function calibrate(kind: string, name: string) {
   if (!await ask({ title: t('cal.title'), text: t('confirm.cal.text', { name, printer: printerName.value }), yes: t('confirm.cal.yes'), no: t('common.goBack') })) return;
   await run({ key: `cal:${kind}`, label: t('act.calibrate'), cmd: 'calibrate', args: { kind }, okText: t('ok.calibrate'), timeoutMs: 60000 });
 }
+// When the toolhead choice (U1 print setup) runs and when its pop-up opens: a print sent without asking is easy to
+// mistake for a broken setup.
+const pipe = computed(() => config.value?.pipeline ?? null);
+const dialogRule = computed(() => tMaybe(`ps.dialog.${config.value?.settings.print_dialog}`, ''));
 const langOptions = computed(() => [
   { value: 'auto', label: t('lang.auto', { current: t(`lang.${autoLocale.value}`) }) },
   { value: 'en', label: t('lang.en') }, { value: 'pt-BR', label: t('lang.pt-BR') }]);
@@ -71,6 +76,14 @@ const langOptions = computed(() => [
           </template>
         </div>
       </template>
+    </section>
+
+    <section v-if="config" class="u1-card" aria-labelledby="ps-h" data-test="print-setup">
+      <h2 id="ps-h" class="sv-h"><Icon name="icon/print-setup" /> {{ t('ps.title') }}</h2>
+      <Message v-if="pipe && !pipe.on" severity="warn" data-test="ps-off">{{ t('ps.off', { preset: pipe.preset }) }}</Message>
+      <p v-else-if="pipe" class="oui-meta" data-test="ps-on">{{ t('ps.on', { preset: pipe.preset }) }}</p>
+      <p v-if="dialogRule" class="oui-meta" data-test="ps-rule">{{ dialogRule }}</p>
+      <p class="oui-meta">{{ t('ps.how') }}</p>
     </section>
 
     <section class="u1-card" aria-labelledby="sm-h">

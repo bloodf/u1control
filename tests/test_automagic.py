@@ -40,6 +40,17 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["purifier"]), ("never", False, "auto"))
         self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective(), eff)  # persisted
 
+    def test_camera_fps(self):
+        """Live camera rate: 5 fps by default, the same in both modes, only the offered rates are kept."""
+        st, d = self.store()
+        self.assertEqual(st.effective()["camera_fps"], 5)
+        for bad in (60, 0, True, 30.0, "30", None):
+            self.assertEqual(st.update({"camera_fps": bad})["camera_fps"], 5, bad)
+        self.assertEqual(st.update({"camera_fps": 30})["camera_fps"], 30)
+        self.assertEqual(st.update({"mode": "expert"})["camera_fps"], 30)
+        write(os.path.join(d, "settings.json"), json.dumps({"camera_fps": 60}))
+        self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["camera_fps"], 5)  # hand-edited
+
     def test_callable_backend(self):
         box = {}
         st = settings.Store(load=lambda: box.get("t", "{}"), save=lambda t: box.update(t=t))
@@ -99,6 +110,14 @@ class PipelineTests(PluginBase):
         self.assertIsNone(ns["ensure_pipeline"](page._config()))  # guard
         self.assertEqual(len(orca.process_calls), 1)
 
+    def test_config_says_whether_the_preset_runs_print_setup(self):
+        _, _, page = self.page({"slicing_pipeline_plugin": ["Other"], "name": "My process"})
+        self.assertEqual(page._config_message()["pipeline"], {"preset": "My process", "on": False})
+        _, _, page = self.page({"slicing_pipeline_plugin": 'Other;"U1 print setup"', "name": "My process"})
+        self.assertEqual(page._config_message()["pipeline"], {"preset": "My process", "on": True})
+        _, _, page = self.page({"printer_model": "Voron 2.4", "name": "Voron", "slicing_pipeline_plugin": ""})
+        self.assertIsNone(page._config_message()["pipeline"])   # not a U1: nothing to say
+
     def test_skips(self):
         orca, ns, page = self.page({"slicing_pipeline_plugin": '"U1 print setup"'})
         self.assertIsNone(ns["ensure_pipeline"](page._config()))
@@ -132,6 +151,17 @@ class PipelineTests(PluginBase):
         self.assertTrue(config["spooler"]["dismissed"])
         self.assertTrue(wait_for(lambda: any("U1 print setup added" in m.get("text", "") for m in page.posted)))
         ns["service"]().close()
+
+    def test_camera_fps_message_paces_frames(self):
+        _, ns, page = self.page({"slicing_pipeline_plugin": ""})
+        svc = ns["service"]()
+        self.addCleanup(svc.close)
+        self.assertAlmostEqual(svc.frame_interval, 0.2)
+        page.on_message({"type": "camera_fps", "value": 30})
+        self.assertAlmostEqual(svc.frame_interval, 1 / 30)
+        self.assertEqual(page._config_message()["settings"]["camera_fps"], 30)
+        page.on_message({"type": "camera_fps", "value": 120})   # not offered: the stored rate stays
+        self.assertAlmostEqual(svc.frame_interval, 1 / 30)
 
 
 class DialogFlowTests(PluginBase):

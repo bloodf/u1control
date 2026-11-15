@@ -35,7 +35,7 @@ STATUS_EVERY = 2.0
 STATUS_RETRY = 3.0
 CAMERA_RETRY = 2.0
 CAMERA_KEEPALIVE = 50.0
-FRAME_MIN_INTERVAL = 0.2    # ~5 fps cap
+FRAME_MIN_INTERVAL = 0.2    # ~5 fps cap unless the camera_fps setting asks for more (set_camera_fps)
 FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
 SNAPSHOT_MAX_AGE = 10.0     # s: Save picture keeps only a camera frame this fresh
 URGENT = ("emergency_stop", "pause", "cancel")   # never wait behind the command worker
@@ -122,6 +122,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
         self.last_frame_at = 0.0
+        self.frame_interval = FRAME_MIN_INTERVAL
         self.last_frame = None      # (JPEG bytes, time.monotonic()) of the selected printer's camera
         self.camera_keepalive_at = 0.0
         self.camera_retry_at = 0.0
@@ -170,6 +171,10 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 self.camera_on = bool(camera)
                 if not camera:
                     self.camera_keepalive_at = 0.0
+
+    def set_camera_fps(self, fps):
+        """Most camera pictures a second to ask for (settings.CAMERA_FPS)."""
+        self.frame_interval = 1.0 / fps
 
     def ack_frame(self):
         self.frame_ack.set()
@@ -310,7 +315,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                     if self._current(gen):
                         self.publish({"type": "camera_error", "error": str(e)})
             else:
-                time.sleep(0.05 if camera else 0.2)
+                time.sleep(min(0.05, self.frame_interval / 3) if camera else 0.2)
 
     def _push_status(self):
         gen, client, target = self._snapshot()
@@ -361,9 +366,9 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             self.publish({"type": "rfid", "heads": changed, "tags": tags})
 
     def _frame_due(self):
-        """~5 fps, and the page must have shown the previous frame (ack) unless FRAME_ACK_TIMEOUT passed."""
+        """At most camera_fps, and the page must have shown the previous frame (ack) unless FRAME_ACK_TIMEOUT passed."""
         waited = time.monotonic() - self.last_frame_at
-        return waited >= FRAME_MIN_INTERVAL and (self.frame_ack.is_set() or waited >= FRAME_ACK_TIMEOUT)
+        return waited >= self.frame_interval and (self.frame_ack.is_set() or waited >= FRAME_ACK_TIMEOUT)
 
     def _push_frame(self):
         gen, client, _ = self._ctx()

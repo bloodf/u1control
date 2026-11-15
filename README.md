@@ -111,6 +111,16 @@ file leaves OrcaSlicer, the way Snapmaker Orca does.
 - The top-cover mode follows Snapmaker's rule for the filaments in the print, or the mode you pick.
 - Nothing is sent while the U1 is printing, loading, calibrating or updating.
 
+In Automagic the pop-up only opens when a choice is needed: the first print, an empty toolhead or
+another material, two filaments for one toolhead, or no exact material match. Otherwise the file goes
+out with the toolheads u1control matched, without asking. To pick the toolheads every time, switch to
+Expert and set **Print setup pop-up** to **always**.
+
+Print setup runs when OrcaSlicer sends the print through the U1's print host (**Print** or **Send**).
+It does not run for **Export G-code**, for **Print** on the U1 Control Files page, or when OrcaSlicer's
+**Use printer agents instead of print hosts** preference is on. **Settings > Print setup** in the U1
+Control tab says whether your process preset runs it.
+
 On every U1 slice u1control also fixes the G-code. Each fix can be turned off in Expert mode.
 
 | Fix | Why |

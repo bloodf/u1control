@@ -38,9 +38,10 @@ const notes = computed(() => {
   const out: { sev: string; text: string }[] = [];
   if (s.stock!.same_spoolman === false) out.push({ sev: 'error', text: t('stock.otherSpoolman') });
   if (sk.value!.state === 'stale') out.push({ sev: 'warn', text: t('stock.stale', { age: fmt.ago(sk.value!.ts, s.now / 1000) }) });
-  if (s.stock!.same_spoolman == null) out.push({ sev: 'info', text: t('stock.viaPrinter') });
   return out;
 });
+/** Plain information, not a warning: a quiet line, not a bordered box. */
+const viaPrinter = computed(() => usable.value && s.stock!.same_spoolman == null);
 const rows = computed<Spool[]>(() => sk.value?.rows ?? []);
 const materials = computed(() => [...new Set(rows.value.map(r => r.material).filter(Boolean))].sort().map(m => ({ value: m, label: m })));
 const targetHead = computed(() => s.status?.heads[head.value]);
@@ -85,6 +86,7 @@ async function link(r: Spool) {
       <Message v-if="blocker" :severity="blocker.sev">{{ blocker.text }}</Message>
       <Message v-for="nt in notes" :key="nt.text" :severity="nt.sev">{{ nt.text }}</Message>
       <Message v-if="usable && why" severity="warn" data-test="stock-why">{{ t('stock.blocked', { reason: why }) }}</Message>
+      <p v-if="viaPrinter" class="oui-meta sc-note" data-test="stock-via">{{ t('stock.viaPrinter') }}</p>
     </div>
     <template v-if="usable">
       <div class="u1-row sc-filters">
@@ -130,9 +132,10 @@ async function link(r: Spool) {
 .sc-head h2 { margin: 0; display: flex; gap: 8px; align-items: center; }
 .sc-notes { display: grid; gap: 8px; margin: 8px 0; }
 .sc-notes:empty { display: none; }
+.sc-note { margin: 0; }
 .sc-filters { margin-bottom: 8px; }
 .sc-q { min-width: 240px; }
-.sc-wrap { max-height: 360px; overflow: auto; }
+.sc-wrap { max-height: 360px; overflow: auto; margin-bottom: 8px; }
 .sc-wrap thead th { position: sticky; top: 0; background: var(--oui-surface); z-index: 1; }
 .sc-nm { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
 .sc-chip { font-size: 12px; margin-left: 4px; }

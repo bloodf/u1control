@@ -55,7 +55,8 @@ threads the plugin starts:
 - **Urgent commands:** emergency stop, pause and cancel each get their own short-lived thread, so they
   never wait behind a long job like a bed mesh. Downloads and Save picture also get their own thread.
 - **Monitor:** polls status every 2 s, follows RFID and Spoolman changes, and fetches camera frames at
-  most about 5 per second. It only runs while the page holds a lease, which the page renews every 2 s.
+  most `camera_fps` per second (5 by default; see docs/settings.md), one at a time: the next is fetched
+  once the page has shown the last one (or after 2 s). It only runs while the page holds a lease, which the page renews every 2 s.
   The lease lapses after 6 s. Status and camera have separate errors and retries: a broken camera shows
   its own message and never delays status, RFID or Spoolman follow. While the firmware answer was unclear
   it checks the firmware again every 30 s (see docs/firmware.md). It keeps the last camera frame for
@@ -101,6 +102,7 @@ Page to plugin:
 | `lease` | `camera`, `screen`, `stock` | keep the monitor running; camera and remote screen on or off; `stock`: the Stock card is on screen, so Spooler keeps its list fresh |
 | `cmd` | `id`, `cmd`, `args`, `gen` | run `Service.cmd_<cmd>(**args)` for printer generation `gen`; `stock` and `stock_assign` (`head`, `spool_id`, `key`, `force`) are the Stock card's |
 | `frame_ack` | | the page has shown the last camera frame |
+| `camera_fps` | `value` | store the camera frame rate (5, 10, 15 or 30) and use it at once |
 | `save_settings` | `settings` | validate and store settings |
 | `sync_project` | `auto` | put filament profiles into the project |
 
@@ -114,7 +116,7 @@ Plugin to page:
 | `screen` | `image` (PNG data URL), sent only when the touchscreen changed |
 | `screen_error` | `error` (remote screen off or unreachable; retried every 5 s) |
 | `rfid` | `heads` (changed indices), `tags` |
-| `config` | settings, Automagic metadata, Spooler state, version |
+| `config` | settings, Automagic metadata, Spooler state, version, `pipeline` (`preset`, `on`: whether the selected U1 process preset runs U1 print setup; null without a U1 preset) |
 | `notice` | `text` |
 | `offline` | `error` |
 | `selection_changed` | |

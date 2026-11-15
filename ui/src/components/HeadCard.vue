@@ -7,7 +7,7 @@ import Icon from './Icon.vue';
 import SpoolFigure from './SpoolFigure.vue';
 import LevelBar from './LevelBar.vue';
 import { spoolFraction, spoolPaint } from '../core/spool-level';
-import { s, run, tracker, controlsOff, busy, loadSpools } from '../app/store';
+import { s, run, tracker, controlsOff, loadSpools, guidedWhy } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, fmt } from '../core/i18n';
 import { family } from '../core/logic';
@@ -22,7 +22,6 @@ const tag = computed<Tag | null>(() => s.status?.rfid?.[i] ?? null);
 const feed = computed(() => s.status?.feed?.[i] ?? {});
 const active = computed(() => !!s.status?.extruders[i]?.active);
 const tagged = computed(() => !!(head.value?.official || tag.value));
-const guidedWhy = computed(() => controlsOff.value || (busy.value ? t('reason.busy') : ''));
 const tagText = computed(() => {
   const g = tag.value;
   if (!g) return '';
@@ -116,18 +115,19 @@ const swatch = (sp: Spool | null) => !sp ? 'transparent'
       <p class="oui-meta hc-p">{{ t('heads.feeder', { state: feed.state || '—' }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
       <div class="u1-row hc-actions">
         <Button size="small" severity="secondary" outlined :label="t('heads.edit')" :aria-label="t('heads.editLabel', { n })" :disabled="!!guidedWhy"
-                :data-focus-key="`edit:${i}`" :data-edit="i" @click="startEdit" />
+                :aria-describedby="guidedWhy ? 'heads-why' : undefined" :data-focus-key="`edit:${i}`" :data-edit="i" @click="startEdit" />
         <Button size="small" severity="secondary" outlined :aria-label="t('heads.loadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`load:${i}`)"
+                :aria-describedby="guidedWhy ? 'heads-why' : undefined"
                 :loading="tracker.isBusy(`load:${i}`)" :data-focus-key="`load:${i}`" :data-load="i" @click="load">
           <Icon name="icon/load-filament" /><span>{{ t('heads.load') }}</span></Button>
         <Button size="small" severity="secondary" outlined :aria-label="t('heads.unloadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`unload:${i}`)"
+                :aria-describedby="guidedWhy ? 'heads-why' : undefined"
                 :loading="tracker.isBusy(`unload:${i}`)" :data-focus-key="`unload:${i}`" :data-unload="i" @click="unload">
           <Icon name="icon/unload-filament" /><span>{{ t('heads.unload') }}</span></Button>
         <Button size="small" severity="secondary" outlined :aria-label="t('heads.rfidLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`rfid:${i}`)"
                 :data-focus-key="`rfid:${i}`" :data-rfid="i" @click="rfid">
           <Icon name="icon/rfid-tag" /><span>{{ t('heads.rfid') }}</span></Button>
       </div>
-      <p v-if="guidedWhy" class="u1-why">{{ guidedWhy }}</p>
       <Select v-if="s.spools.length" :model-value="bound ?? 0" :options="groups" option-group-label="label" option-group-children="items"
               option-label="label" option-value="value" filter :filter-placeholder="t('pick.filter')" :aria-label="t('pick.label', { n })"
               :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" class="hc-pick" :data-focus-key="`pick:${i}`" :data-pick="i"
@@ -153,7 +153,7 @@ const swatch = (sp: Spool | null) => !sp ? 'transparent'
       </div>
       <p v-if="tagged" class="oui-meta">{{ t('edit.rfidNote') }}</p>
       <div class="u1-row">
-        <Button type="submit" :label="t('common.save')" :loading="tracker.isBusy(`edit:${i}`)" :disabled="!!guidedWhy" />
+        <Button type="submit" :label="t('common.save')" :loading="tracker.isBusy(`edit:${i}`)" :disabled="!!guidedWhy" :aria-describedby="guidedWhy ? 'heads-why' : undefined" />
         <Button severity="secondary" outlined :label="t('common.cancel')" @click="editing = false" />
       </div>
     </form>

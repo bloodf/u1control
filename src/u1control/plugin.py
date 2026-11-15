@@ -288,6 +288,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                     self.post_message({"type": "reply", "id": data.get("id"), "error": str(e), "no_target": True})
                     return
                 svc.touch(camera=False)
+                svc.set_camera_fps(self._config()["camera_fps"])
                 svc.submit(data.get("id"), "connect", {})
                 self.post_message(self._config_message())
                 self._auto_pipeline()
@@ -320,6 +321,8 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                         self.post_message({"type": "notice", "text": "Another preset update is running; try again in a moment."})
             elif kind == "ui_language":   # the page's language choice; nothing else is touched
                 self._settings().update({"ui_language": data.get("value")})
+            elif kind == "camera_fps":    # the camera card's frame rate; an invalid value keeps the stored one
+                svc.set_camera_fps(self._settings().update({"camera_fps": data.get("value")})["camera_fps"])
             elif kind == "save_settings":
                 changes = dict(data.get("settings") or {})
                 if changes.get("api_key") == "••••":
@@ -355,7 +358,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                        for k, label, hint, value, kind in settings.AUTOMATIONS if k != "mode"]
         return {"type": "config", "settings": cfg, "automations": automations, "mode": cfg["mode"],
                 "stored": {k: v for k, v in self._settings().raw().items() if k in settings.automagic_values()},
-                "spooler": spooler, "version": VERSION}
+                "spooler": spooler, "version": VERSION, "pipeline": pipeline_state()}
 
     @staticmethod
     def _background(job):
@@ -385,6 +388,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                     self.post_message({"type": "notice", "text": "U1 print setup added to %s; save the preset to keep it" % name})
             except Exception as e:
                 log("auto-add U1 print setup failed: %r" % e)
+            self.post_message(self._config_message())   # the Settings page says whether this preset runs it
         self._background(job)
 
     def on_lifecycle_event(self, event, ctx):
@@ -443,6 +447,21 @@ def ensure_pipeline(cfg):
     except Exception as e:
         log("notification failed: %r" % e)
     return name
+
+
+def pipeline_state():
+    """{"preset", "on"}: whether the selected U1 process preset runs "U1 print setup" (the toolhead choice);
+    None when no U1 printer preset is selected or OrcaSlicer can't tell."""
+    try:
+        bundle = orca.host.preset_bundle()
+        printer = bundle.current_printer_preset()
+        if not is_u1_name(printer.config_value("printer_model"), printer.name, printer.config_value("inherits")):
+            return None
+        return {"preset": bundle.current_process_preset().name,
+                "on": settings.PIPELINE_NAME in settings.parse_strings(bundle.full_config_value("slicing_pipeline_plugin"))}
+    except Exception as e:
+        log("reading the slicing pipeline failed: %r" % e)
+        return None
 
 
 class Cancelled(Exception):

@@ -61,6 +61,8 @@ export const controlsOff = computed(() => {
 /** E-stop stays usable for a known printer even when its status is offline or late (urgent path, no queue). */
 export const estopReason = computed(() => (targetKnown.value ? '' : s.phase === 'noTarget' ? t('reason.noTarget') : t('reason.waiting')));
 export const busy = computed(() => !!s.status?.busy);
+/** Why the guided toolhead commands (Edit, Load, Unload) are off, or ''. */
+export const guidedWhy = computed(() => controlsOff.value || (busy.value ? t('reason.busy') : ''));
 
 function reset(): void {
   s.epoch++;

@@ -131,7 +131,10 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   await connect();
   await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING', options: {bed_level: true, unload_when_done: true}})});
   for (const sel of ['[data-load="0"]', '[data-unload="0"]', '[data-edit="0"]']) assert(q(sel).disabled, sel + ' disabled while calibrating');
-  assert(text(q('.hc')).includes('busy'), 'the reason is visible, not only a tooltip');
+  assert(text(byTest('heads-why')).includes('busy'), 'the reason is visible, not only a tooltip');
+  eq(qa('#heads-why').length, 1, 'said once for the four toolheads, not under each card');
+  assert(!qa('.hc').some(c => text(c).includes('busy')), 'no copy of the reason inside a card');
+  for (const sel of ['[data-load="0"]', '[data-unload="3"]', '[data-edit="2"]']) eq(q(sel).getAttribute('aria-describedby'), 'heads-why', sel + ' points at the reason');
   assert(!q('[data-test="estop"]').disabled, 'E-stop stays available');
   await tab('settings');
   assert(q('[data-cal="bed_mesh"]').disabled && document.body.textContent.includes('Calibration runs when it is idle'), 'calibration blocked, says why');
@@ -383,6 +386,32 @@ test('stock: busy printer disables links with a visible reason; refresh keeps fo
   btn('Refresh stock').click();
   await reply(last('cmd', 'stock'), STOCK());
   eq(document.activeElement.dataset.stock, '11', 'keyboard focus survives a refresh');
+`);
+
+test('stock: many spools scroll inside the table; the reel never sets the row height; plain note is not a box', `
+  await connect();
+  await post({type: 'status', data: VIEW({busy: true, state: 'printing'})});
+  await until(() => last('cmd', 'stock'));
+  const many = Array.from({length: 55}, (_, k) => ({...ROWS[k % 2], id: 100 + k, remaining: 20 * k, initial: 1000}));
+  await reply(last('cmd', 'stock'), STOCK({same_spoolman: null, usage: 'printer', stock: {...STOCK().stock, rows: many}}));
+  eq(stockRows().length, 55, 'all spools listed');
+  // OrcaSlicer's WebKit did not resolve the reel images' height: 100% in a table cell and used their 160 px source
+  // height, which grew the reel to 40 x 160 and each row to ~177 px. Force that height: the box must not follow.
+  qa('.sc-wrap .sf img').forEach(i => { i.style.height = '160px'; });
+  await settle();
+  const figs = qa('.sc-wrap .sf').map(e => e.getBoundingClientRect());
+  assert(figs.every(r => Math.round(r.width) === 40 && Math.round(r.height) === 40), 'reel is a fixed 40 px square: ' + JSON.stringify(figs.slice(0, 2)));
+  const tall = qa('.sc-wrap tbody tr').map(r => r.getBoundingClientRect().height).filter(h => h > 80);
+  eq(tall.length, 0, 'no row taller than its text needs');
+  eq(getComputedStyle(q('.sc-wrap .sf img')).objectFit, 'contain', 'picture kept undistorted');
+  const wrap = q('.sc-wrap');
+  assert(wrap.scrollHeight > wrap.clientHeight + 100 && getComputedStyle(wrap).overflowY === 'auto', 'long list scrolls inside the table');
+  const after = q('[data-test="stock-card"] .sc-wrap + *');
+  assert(after && after.getBoundingClientRect().top >= wrap.getBoundingClientRect().bottom - 0.5, 'what follows the table starts below it');
+  const note = byTest('stock-via');
+  assert(note && text(note).includes('through the printer') && !note.closest('.p-message'), 'via-printer note is a plain line');
+  eq(getComputedStyle(note).borderTopStyle, 'none', 'no border around the note');
+  assert(byTest('stock-why').classList.contains('p-message-warn'), 'the busy warning keeps its box');
 `);
 
 // ------------------------------------------------------------------ new: review findings
@@ -668,6 +697,38 @@ test('camera: save the picture on screen', `
   eq(cmd.args, {}, 'asks the plugin to save its last picture');
   await reply(cmd, '/home/u/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
   await until(() => text(q('.notices [role=status]')).includes('Saved to'), 'says where it was saved');
+`);
+
+test('camera: frame rate choice starts at the stored rate, is sent to the plugin and says its limits', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [], settings: {mode: 'automagic', camera_fps: 10}});
+  eq(byTest('cam-fps'), null, 'no choice while the camera is off');
+  await click(byTest('camera'));
+  const sel = byTest('cam-fps');
+  assert(sel && text(sel).includes('10 fps'), 'shows the stored rate: ' + text(sel));
+  eq(sel.getAttribute('aria-describedby'), 'cam-fps-help', 'described by its help');
+  assert(text(q('#cam-fps-help')).includes('can be lower'), 'does not promise the rate: ' + text(q('#cam-fps-help')));
+  await pick(sel, '30 fps');
+  eq(last('camera_fps'), {type: 'camera_fps', value: 30}, 'choice sent to the plugin');
+  assert(text(byTest('cam-fps')).includes('30 fps'), 'choice kept on screen');
+`);
+
+test('settings: says whether the process preset runs the toolhead choice and when its pop-up opens', `
+  await connect();
+  const cfg = (pipeline, dialog) => post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [],
+    settings: {mode: 'automagic', print_dialog: dialog}, pipeline});
+  await tab('settings');
+  await cfg({preset: '0.20 Standard @U1', on: false}, 'auto');
+  assert(byTest('ps-off') && text(byTest('ps-off')).includes('0.20 Standard @U1') && text(byTest('ps-off')).includes('without choosing toolheads'), 'missing step is a warning: ' + text(byTest('ps-off')));
+  assert(byTest('ps-off').classList.contains('p-message-warn'), 'shown as a warning');
+  assert(text(byTest('ps-rule')).includes('only when a choice is needed') && text(byTest('ps-rule')).includes('always'), 'auto rule and how to always ask');
+  assert(text(byTest('print-setup')).includes('Use printer agents instead of print hosts'), 'names the OrcaSlicer option that skips it');
+  await cfg({preset: '0.20 Standard @U1', on: true}, 'always');
+  assert(!byTest('ps-off') && text(byTest('ps-on')).includes('runs for the process preset'), 'running: a plain line');
+  assert(text(byTest('ps-rule')).includes('every print'), 'always rule');
+  await cfg(null, 'never');
+  assert(!byTest('ps-off') && !byTest('ps-on'), 'no U1 preset: nothing claimed about it');
 `);
 
 // ------------------------------------------------------------------ runner

@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+- Stock (Spooler) on the Dashboard: in OrcaSlicer's web view each spool picture in the list grew to 40 × 160 px, squeezed out of shape, so a row was about 170 px tall, only two spools fitted and the last picture ran into the note under the list. The picture is now a fixed 40 px square (undistorted), rows keep their text height and the list scrolls inside its area.
+- Stock (Spooler): "U1 Control reaches Spoolman through the printer…" is a plain line instead of a bordered box that looked like a text field.
+- Toolheads: when the printer is busy, "The printer is busy (printing, loading or calibrating)" is shown once above the four toolheads instead of under each one. Edit, Load and Unload stay off and point to it for screen readers.
+- Camera: choose the live view's frame rate on the camera card (5, 10, 15 or 30 fps; 5 stays the default). It is the most U1 Control asks for: the printer decides how often its camera picture changes (the official firmware renews it at its own pace) and each picture passes through OrcaSlicer one at a time, so the rate you see can be lower. See docs/settings.md.
+- Settings: a new Print setup card says whether the selected process preset runs U1 print setup (the toolhead choice), when its pop-up opens in Automagic, how to be asked every time (Expert, Print setup pop-up: always), and which ways of sending skip it (Export G-code, Print on the Files page, OrcaSlicer's "Use printer agents instead of print hosts"). The README says the same.
+
 ## [0.7.0] - 2026-11-14
 
 - Files: rename a file or folder (**Rename** on each row). A name the folder already has, a name with `/ \ : * ? " < > |` or control characters, a hidden name, and a print file losing its `.gcode` / `.gco` / `.g` extension are refused.

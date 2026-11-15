@@ -4,7 +4,7 @@ import Button from 'primevue/button';
 import Icon from './Icon.vue';
 import HeadCard from './HeadCard.vue';
 import * as bridge from '../core/bridge';
-import { s, controlsOff } from '../app/store';
+import { s, controlsOff, guidedWhy } from '../app/store';
 import { t } from '../core/i18n';
 
 // One visible spool source per screen (X03): when Spooler's stock uses the same Spoolman, say so.
@@ -25,6 +25,8 @@ const source = computed(() => {
         <Icon name="icon/filament-spool" /><span>{{ t('heads.sync') }}</span></Button>
     </div>
     <p id="sync-help" class="oui-meta th-help">{{ t('heads.syncHelp') }}</p>
+    <!-- Edit, Load and Unload of every toolhead are off for the same reason: say it once, and point the buttons at it. -->
+    <p v-if="s.status && guidedWhy" id="heads-why" class="u1-why th-why" data-test="heads-why">{{ guidedWhy }}</p>
     <div v-if="s.status" class="th-grid">
       <HeadCard v-for="(h, i) in s.status.heads" :key="i" :index="i" />
     </div>
@@ -34,6 +36,7 @@ const source = computed(() => {
 <style scoped>
 .th-head h2 { margin: 0; display: flex; gap: 8px; align-items: center; }
 .th-help { margin: 4px 0 12px; }
+.th-why { margin: -4px 0 12px; }
 .th-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; --u1-t1: #FF997D; --u1-t2: #F4CF78; --u1-t3: #A99BFF; --u1-t4: #78CFD5; }
 @media (max-width: 1100px) { .th-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 520px) { .th-grid { grid-template-columns: minmax(0, 1fr); } }

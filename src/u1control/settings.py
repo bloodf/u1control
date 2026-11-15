@@ -41,8 +41,9 @@ AUTOMATIONS = [
     ("time_lapse_camera", "Print option: time-lapse", "Default for the print setup.", False, "bool"),
 ]
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
-EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto"}
+EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto", "camera_fps": 5}
 UI_LANGUAGES = ("auto", "en", "pt-BR")   # "auto": OrcaSlicer's language, then the system's
+CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
 
 
 def automagic_values():
@@ -98,6 +99,8 @@ class Store:
                 if key != "mode":
                     stored = d.get(key, default)
                     out[key] = stored if mode == EXPERT and _valid(kind, stored) else default
+            if out["camera_fps"] not in CAMERA_FPS:
+                out["camera_fps"] = EXTRA["camera_fps"]
             return {k: dict(v) if isinstance(v, dict) else v for k, v in out.items()}
 
     def raw(self):
@@ -115,6 +118,9 @@ class Store:
                         data[key] = value
                 elif key == "ui_language":
                     if value in UI_LANGUAGES:
+                        data[key] = value
+                elif key == "camera_fps":
+                    if type(value) is int and value in CAMERA_FPS:
                         data[key] = value
                 elif key in CONNECTION or key in EXTRA:
                     default = {**CONNECTION, **EXTRA}[key]

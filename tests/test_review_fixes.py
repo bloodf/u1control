@@ -188,6 +188,15 @@ class GenerationTests(unittest.TestCase):
         svc.last_frame_at = time.monotonic() - 2.5
         self.assertTrue(svc._frame_due())                # 2 s without an ack: carry on
 
+    def test_frame_pacing_follows_the_camera_fps_setting(self):
+        svc, _ = make_service(self, _Dummy())
+        svc.last_frame_at = time.monotonic() - 0.1
+        self.assertFalse(svc._frame_due())               # 5 fps by default: 0.1 s is too soon
+        svc.set_camera_fps(30)
+        self.assertTrue(svc._frame_due())                # 30 fps: due after 1/30 s
+        svc.last_frame_at = time.monotonic()
+        self.assertFalse(svc._frame_due())
+
 
 class _Dummy:
     host = "127.0.0.1:1"

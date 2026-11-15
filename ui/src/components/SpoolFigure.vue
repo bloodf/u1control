@@ -36,8 +36,10 @@ const wind = computed(() => (level.value < 8 ? src(`n${level.value}-fio`) : ''))
 </template>
 
 <style scoped>
-.sf { position: relative; display: block; flex: none; width: var(--sf-w, var(--sf-size)); aspect-ratio: 1; isolation: isolate; }
-.sf img { display: block; width: 100%; height: 100%; user-select: none; }
+/* A fixed square box, not aspect-ratio: in a table cell WebKit does not resolve the images' height: 100% against an
+   aspect-ratio box, so the 160 px source grew the box (and the row) to 40 x 160 in OrcaSlicer's web view. */
+.sf { position: relative; display: block; flex: none; width: var(--sf-size); height: var(--sf-size); isolation: isolate; }
+.sf img { display: block; width: 100%; height: 100%; object-fit: contain; user-select: none; }
 .sf-wind { position: absolute; inset: 0; background: var(--sf-paint);
   -webkit-mask: var(--sf-map) center / 100% 100% no-repeat; mask: var(--sf-map) center / 100% 100% no-repeat; }
 .sf-wind img { mix-blend-mode: hard-light; }

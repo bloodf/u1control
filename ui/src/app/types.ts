@@ -25,4 +25,6 @@ export interface UsageView { pending: { file: string; printer: string }[]; uncon
   acknowledged_total: number; save_error: string; restore_notice: string }
 export interface Automation { key: string; label: string; help: string; automagic: unknown; choices: string[] | null }
 export interface Config { settings: Record<string, any>; automations: Automation[]; mode: string; stored: Record<string, unknown>;
-  spooler: { installed?: boolean; url?: string; dismissed?: boolean }; version: string }
+  spooler: { installed?: boolean; url?: string; dismissed?: boolean }; version: string;
+  /** Whether the selected U1 process preset runs "U1 print setup"; null when no U1 is selected. */
+  pipeline?: { preset: string; on: boolean } | null }
