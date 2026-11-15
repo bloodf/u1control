@@ -730,15 +730,23 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         return {"status": e.status(), "settings": e.settings()}
 
     def cmd_ext_set(self, setting_id, value, inputs=None):
-        return self._extended().set(setting_id, value, inputs)
+        e = self._extended()
+        if setting_id not in ext.PRINT_SAFE:
+            self._refuse_while_printing("changing %s restarts Klipper or reboots the printer, which" % setting_id)
+        return e.set(setting_id, value, inputs)
 
     def cmd_ext_action(self, action_id):
         e = self._extended()
-        if action_id in ("restart-klipper", "reboot-system"):   # either one ends a running print
-            state = u1.summarize(self._client().query(u1.STATUS_OBJECTS))["state"]
-            if u1.is_busy(state):   # only a print blocks it: a stuck machine state is what a restart is for
-                raise PrinterError("the U1 is busy (%s); %s would end the print" % (state, action_id))
+        if action_id in ext.PRINT_ENDING_ACTIONS:
+            self._refuse_while_printing(action_id)
         return e.action(action_id)
+
+    def _refuse_while_printing(self, what):
+        """Only a print blocks it: a stuck machine state is what a restart is for."""
+        state = u1.summarize(self._client().query(u1.STATUS_OBJECTS))["state"]
+        if u1.is_busy(state):
+            raise PrinterError("the U1 is busy (%s); %s would end the print. Try again once it has finished."
+                               % (state, what))
 
 
 

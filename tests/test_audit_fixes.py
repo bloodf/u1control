@@ -25,6 +25,7 @@ import service as service_mod  # noqa: E402
 import spoolman as sm  # noqa: E402
 import u1  # noqa: E402
 import usage  # noqa: E402
+import extended as ext  # noqa: E402
 from moonraker import Moonraker, PrinterError  # noqa: E402
 from service import Service, Target  # noqa: E402
 from test_u1control import wait_for  # noqa: E402
@@ -296,6 +297,49 @@ class FirmwareRedetectTests(unittest.TestCase):
             svc._job_on_extended(job, Moonraker(fake.host))
         fake.ext_error = None
         self.assertTrue(svc._job_on_extended(job, Moonraker(fake.host)))
+
+
+class ExtendedSettingTests(unittest.TestCase):
+    def run_set(self, state, setting_id, value="true"):
+        fake = fakes.FakePrinter(extended=True, state=state)
+        self.addCleanup(fake.close)
+        pub, posted = [], []
+        svc = Service(pub.append, log=lambda m: None)
+        self.addCleanup(svc.close)
+        svc.set_target(Target(fake.host))
+        svc.firmware = {"kind": "extended", "version": ""}
+        real_raw = svc.client.raw
+        svc.client.raw = lambda method, path, *a, **k: (posted.append(path) if method == "POST" else None) or \
+            real_raw(method, path, *a, **k)
+        svc.submit(1, "ext_set", {"setting_id": setting_id, "value": value})
+        self.assertTrue(wait_for(lambda: any(m.get("id") == 1 for m in pub)))
+        return next(m for m in pub if m.get("id") == 1), posted
+
+    def test_settings_that_restart_klipper_or_reboot_wait_for_the_print(self):
+        for state in ("printing", "paused"):
+            for setting_id in ("spoolman", "camera-internal", "rfid", "a-setting-of-a-newer-release"):
+                with self.subTest(state=state, setting_id=setting_id):
+                    reply, posted = self.run_set(state, setting_id)
+                    self.assertIn("would end the print", reply.get("error", ""))
+                    self.assertEqual(posted, [])
+
+    def test_settings_that_leave_klipper_alone_apply_while_printing(self):
+        for setting_id in ("remote-screen", "ssh", "camera-usb"):
+            with self.subTest(setting_id=setting_id):
+                reply, posted = self.run_set("printing", setting_id)
+                self.assertTrue(reply["result"]["ok"], reply)
+                self.assertEqual(posted, ["/firmware-config/api/settings/%s/true" % setting_id])
+
+    def test_any_setting_applies_when_idle(self):
+        reply, posted = self.run_set("standby", "spoolman", "disabled")
+        self.assertEqual(posted, ["/firmware-config/api/settings/spoolman/disabled"])
+
+    def test_settings_say_whether_they_can_change_during_a_print(self):
+        items = {i["id"]: i for g in ext.normalize_settings(fakes.ext_settings()) for i in g["items"]}
+        self.assertTrue(items["remote-screen"]["print_safe"])
+        self.assertTrue(items["ssh"]["print_safe"])
+        self.assertFalse(items["spoolman"]["print_safe"])
+        self.assertFalse(items["debug-only"]["print_safe"])   # unknown: treated as one that restarts Klipper
 
 
 class CheckConnectionTests(unittest.TestCase):
