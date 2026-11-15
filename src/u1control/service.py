@@ -54,6 +54,7 @@ STALE = "the selected printer changed; nothing was sent to it"
 HOTEND_MAX = 320                  # °C: what cmd_temperature clamps to (the page shows and validates the same)
 BED_MAX = 110
 NO_U1 = "no U1 selected: choose a Snapmaker U1 printer with an address"
+FIRMWARE_RETRY = 30.0             # s between firmware checks while the Firmware Config API gave no clear answer
 
 
 class Target:
@@ -113,6 +114,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
 
     def _reset_printer_state(self):   # caller holds self.lock (or is __init__)
         self.firmware = {"kind": "unknown", "version": ""}
+        self.firmware_sure = False      # the kind came from a clear answer; else checked again every FIRMWARE_RETRY
+        self.firmware_retry_at = 0.0
         self.spoolman, self.spoolman_gen = None, None
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
@@ -289,6 +292,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                     self._push_status()
                 except Exception as e:
                     next_status = time.monotonic() + STATUS_RETRY
+                    self._status_failed(gen)
                     if self._current(gen):
                         self.publish({"type": "offline", "error": str(e)})
             if screen and now >= self.screen_at:
@@ -310,7 +314,10 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         if client is None:
             raise PrinterError(NO_U1)
         with self._bound(gen, client, target):
-            if self.firmware["kind"] == "unknown":
+            with self.lock:
+                check = self.firmware["kind"] == "unknown" or (
+                    not self.firmware_sure and time.monotonic() >= self.firmware_retry_at)
+            if check:
                 self.cmd_connect()
             status = client.query(u1.STATUS_OBJECTS)
             if not self._current(gen):
@@ -325,10 +332,17 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 if gen != self.generation:
                     return
                 view["bindings"] = {str(k): v for k, v in self.bindings.items()}
+                view["firmware"] = dict(self.firmware)
                 self.last_view, self.last_state = view, view["state"]
             self._rfid_follow(view, gen)
             if self._current(gen):
                 self.publish({"type": "status", "data": view})
+
+    def _status_failed(self, gen):
+        """The printer stopped answering: check its firmware again once it is back (it may have been reflashed)."""
+        with self.lock:
+            if gen == self.generation:
+                self.firmware_sure, self.firmware_retry_at = False, 0.0
 
     def _rfid_follow(self, view, gen):
         """Publish once when a toolhead reads a different tag than before (not on the first status)."""
@@ -507,11 +521,17 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def cmd_connect(self):
         gen, client, target = self._ctx()
         info = client.info()
-        firmware = u1.detect_firmware(info, ext.Extended(client).status())
+        status, conclusive = ext.Extended(client).probe()
+        firmware = u1.detect_firmware(info, status)
+        sure = conclusive or firmware["kind"] == "extended"
         with self.lock:
             if gen != self.generation:
                 raise PrinterError(STALE)
-            self.firmware = firmware
+            if sure or self.firmware["kind"] != "extended":   # no answer never turns Extended back into stock
+                self.firmware = firmware
+            self.firmware_sure = sure or self.firmware["kind"] == "extended"
+            self.firmware_retry_at = time.monotonic() + FIRMWARE_RETRY
+            firmware = dict(self.firmware)
         return {"address": client.address, "firmware": firmware, "hostname": info.get("hostname"),
                 "klipper_state": info.get("state"), "printer": target.name, "generation": gen,
                 "limits": {"hotend": HOTEND_MAX, "bed": BED_MAX}}

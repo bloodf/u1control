@@ -11,6 +11,7 @@ import struct
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from unittest import mock
 
@@ -23,6 +24,7 @@ import moonraker  # noqa: E402
 import service as service_mod  # noqa: E402
 import spoolman as sm  # noqa: E402
 import u1  # noqa: E402
+import usage  # noqa: E402
 from moonraker import Moonraker, PrinterError  # noqa: E402
 from service import Service, Target  # noqa: E402
 from test_u1control import wait_for  # noqa: E402
@@ -210,6 +212,90 @@ class ExtendedActionTests(unittest.TestCase):
             with self.subTest(state=state, action=action):
                 _, posted = self.run_action(state, action)
                 self.assertEqual(posted, ["/firmware-config/api/action/" + action])
+
+
+class FirmwareRedetectTests(unittest.TestCase):
+    def setUp(self):
+        patch = mock.patch.object(service_mod, "FIRMWARE_RETRY", 0.3)
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def service(self, fake):
+        pub = []
+        svc = Service(pub.append, log=lambda m: None)
+        self.addCleanup(svc.close)
+        svc.set_target(Target(fake.host))
+        return svc, pub
+
+    @staticmethod
+    def shown(pub):
+        return [m["data"]["firmware"]["kind"] for m in pub if m.get("type") == "status"][-1]
+
+    def test_slow_firmware_config_api_on_first_connect_is_corrected(self):
+        fake = fakes.FakePrinter(version="1.2.0", extended=True)   # Extended, but not in the version text
+        self.addCleanup(fake.close)
+        fake.ext_error = 503   # the API didn't answer properly yet
+        svc, pub = self.service(fake)
+        svc._push_status()
+        self.assertEqual((svc.firmware["kind"], self.shown(pub)), ("stock", "stock"))
+        fake.ext_error = None
+        svc._push_status()   # too soon: not asked again yet
+        self.assertEqual(svc.firmware["kind"], "stock")
+        time.sleep(0.35)
+        svc._push_status()
+        self.assertEqual((svc.firmware["kind"], self.shown(pub)), ("extended", "extended"))
+        probes = fake.ext_probes
+        time.sleep(0.35)
+        svc._push_status()
+        self.assertEqual(fake.ext_probes, probes)   # sure now: no more probes
+
+    def test_a_sure_stock_answer_is_not_asked_again(self):
+        fake = fakes.FakePrinter()
+        self.addCleanup(fake.close)
+        svc, pub = self.service(fake)
+        svc._push_status()
+        probes = fake.ext_probes
+        time.sleep(0.35)
+        svc._push_status()
+        self.assertEqual(fake.ext_probes, probes)
+        self.assertEqual(self.shown(pub), "stock")
+
+    def test_no_answer_never_turns_extended_back_into_stock(self):
+        fake = fakes.FakePrinter(version="1.2.0", extended=True)
+        self.addCleanup(fake.close)
+        svc, pub = self.service(fake)
+        svc._push_status()
+        self.assertEqual(svc.firmware["kind"], "extended")
+        fake.ext_error = 503
+        svc.cmd_connect()   # the page reconnects while the API is down
+        self.assertEqual(svc.firmware["kind"], "extended")
+        svc._status_failed(svc.generation)   # the printer went offline and came back
+        svc._push_status()
+        self.assertEqual((svc.firmware["kind"], self.shown(pub)), ("extended", "extended"))
+
+    def test_reconnect_after_offline_detects_a_reflashed_printer(self):
+        fake = fakes.FakePrinter(version="1.2.0", extended=True)
+        self.addCleanup(fake.close)
+        svc, pub = self.service(fake)
+        svc._push_status()
+        fake.extended = False   # flashed back to the official firmware while it was off
+        svc._push_status()
+        self.assertEqual(svc.firmware["kind"], "extended")   # sure, and nothing happened since
+        svc._status_failed(svc.generation)
+        svc._push_status()
+        self.assertEqual((svc.firmware["kind"], self.shown(pub)), ("stock", "stock"))
+
+    def test_usage_booking_waits_while_the_firmware_is_unknown(self):
+        fake = fakes.FakePrinter(version="1.2.0", extended=True)
+        self.addCleanup(fake.close)
+        fake.ext_error = 503
+        svc = Service(lambda m: None, log=lambda m: None)
+        self.addCleanup(svc.close)
+        job = usage.Job(usage.printer_ident(fake.host), "", "a.gcode", {0: 1.0})
+        with self.assertRaises(PrinterError):   # booking it now could book it twice (SpoolLink books too)
+            svc._job_on_extended(job, Moonraker(fake.host))
+        fake.ext_error = None
+        self.assertTrue(svc._job_on_extended(job, Moonraker(fake.host)))
 
 
 class CheckConnectionTests(unittest.TestCase):

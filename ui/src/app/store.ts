@@ -145,6 +145,9 @@ function onMessage(m: any): void {
     case 'status':
       s.status = m.data; s.statusAt = Date.now(); s.offline = '';
       if (m.data?.bindings) s.bindings = m.data.bindings;
+      // The plugin checks the firmware again when its first answer was unclear (or after the printer was away).
+      if (s.info && m.data?.firmware?.kind && (m.data.firmware.kind !== s.info.firmware.kind
+        || (m.data.firmware.version ?? '') !== (s.info.firmware.version ?? ''))) s.info = { ...s.info, firmware: m.data.firmware };
       if (s.phase === 'unreachable' && !helloInFlight) void hello();   // it answers again: fetch its generation
       break;
     case 'offline': s.offline = String(m.error ?? ''); break;

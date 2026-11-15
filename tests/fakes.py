@@ -75,6 +75,8 @@ class FakePrinter:
         self.screen = None   # PNG bytes served at /screen/snapshot (Extended Firmware remote screen)
         self.taps = []
         self.made, self.moved = [], []
+        self.ext_error = None   # HTTP status the Firmware Config API answers with instead (e.g. 503 while it starts)
+        self.ext_probes = 0     # GET /firmware-config/api/status requests
         handler = self._handler()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -141,6 +143,9 @@ class FakePrinter:
                 if u.path == "/server/spoolman/status":
                     return self._send(200, {"result": {"spoolman_connected": fake.spoolman, "spool_id": None}})
                 if u.path == "/firmware-config/api/status":
+                    fake.ext_probes += 1
+                    if fake.ext_error:
+                        return self._send(fake.ext_error, {"error": {"message": "unavailable"}})
                     if fake.extended:
                         return self._send(200, {"Version": fake.version, "Profile": "extended"})
                     return self._send(200, b"<html>fluidd</html>", "text/html")

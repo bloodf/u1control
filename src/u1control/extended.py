@@ -35,10 +35,25 @@ class Extended:
 
     def status(self):
         """Version info, or None when this isn't extended firmware / Advanced Mode is off."""
+        return self.probe()[0]
+
+    def probe(self):
+        """(status, conclusive). status: the API's version info, or None. conclusive: the printer really answered
+        (JSON, or the web UI's page / a 4xx that says there is no API here). A timeout, a refused connection, a 5xx
+        or a broken answer is not conclusive: the API may just be starting, so ask again later."""
         try:
-            return self._get("/status", timeout=3)
-        except (PrinterError, OSError, ValueError):
-            return None
+            data, headers = self.mr.raw("GET", API + "/status", timeout=3)
+        except PrinterError as e:
+            return None, e.status is not None and e.status < 500
+        except OSError:
+            return None, False
+        if "json" not in (headers.get("Content-Type") or ""):
+            return None, True   # stock nginx falls through to the web UI's index.html with 200
+        try:
+            status = json.loads(data.decode("utf-8"))
+        except ValueError:
+            return None, False
+        return (status, True) if isinstance(status, dict) else (None, False)
 
     def settings(self):
         """The firmware's settings as groups, see normalize_settings."""

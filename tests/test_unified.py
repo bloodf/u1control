@@ -302,7 +302,7 @@ class LedgerFileTests(unittest.TestCase):
             svc = Service(self.pub.append, log=self.logs.append, client_factory=__import__("test_corrections").MemClient,
                           ledger_path=self.path)
         svc.set_target(Target("printer-A", "key-A", spoolman_url="http://box:7912"))
-        svc.firmware = {"kind": "stock", "version": ""}
+        svc.firmware, svc.firmware_sure = {"kind": "stock", "version": ""}, True   # as cmd_connect leaves it
         svc.bindings = {0: 7, 1: 9}
         return svc
 

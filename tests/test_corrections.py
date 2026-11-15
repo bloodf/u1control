@@ -58,7 +58,9 @@ class MemClient:
         return self.status
 
     def raw(self, method, path, body=None, headers=None, timeout=None):
-        raise PrinterError("no firmware config")
+        err = PrinterError("no firmware config")
+        err.status = 404   # as a stock U1 answers: the Firmware Config API isn't there
+        raise err
 
     def request(self, method, path, params=None, json_body=None, timeout=None):
         raise PrinterError("not here")
@@ -258,7 +260,7 @@ class UsageLedgerTests(unittest.TestCase):
         self.addCleanup(patcher.stop)
         self.svc, self.pub = mem_service(self)
         self.svc.set_target(Target("printer-A"))
-        self.svc.firmware = {"kind": "stock", "version": ""}
+        self.svc.firmware, self.svc.firmware_sure = {"kind": "stock", "version": ""}, True   # as cmd_connect leaves it
         self.svc.bindings = {0: 7, 1: 9}
 
     def remember(self, name="part.gcode", heads=((0, 2.0), (1, 3.0)), **kw):

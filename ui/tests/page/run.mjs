@@ -567,6 +567,20 @@ test('B-11: theme follows the host colour while the page runs', `
   eq(getComputedStyle(document.body).backgroundColor, 'rgb(24, 28, 34)', 'dark palette background');
 `);
 
+// ------------------------------------------------------------------ 2026-11 audit: firmware, files, camera
+test('a late Extended answer in the status turns the Firmware card on', `
+  await connect('stock');
+  await until(() => last('cmd', 'spools'));
+  await reply(last('cmd', 'spools'), {spools: [], bindings: {}, via: 'direct'});
+  await tab('settings');
+  assert(text(q('#fw-h').parentElement).includes('Official Snapmaker firmware'), 'stock first: ' + text(q('#fw-h').parentElement));
+  await post({type: 'status', data: VIEW({firmware: {kind: 'stock', version: '1'}})});
+  eq(cmds('ext_settings').length, 0, 'stock: no firmware settings asked');
+  await post({type: 'status', data: VIEW({firmware: {kind: 'extended', version: '1.2.0'}})});
+  await until(() => last('cmd', 'ext_settings'), 'asked once the printer turned out Extended');
+  assert(text(document.body).includes('Extended firmware 1.2.0'), 'header follows');
+`);
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');
