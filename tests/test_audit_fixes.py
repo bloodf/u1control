@@ -182,6 +182,36 @@ class DownloadNameTests(unittest.TestCase):
         self.assertEqual(saved, os.path.join(home, "Downloads", "u1control", "D_t.mp4"))
 
 
+class ExtendedActionTests(unittest.TestCase):
+    def run_action(self, state, action):
+        fake = fakes.FakePrinter(extended=True, state=state)
+        self.addCleanup(fake.close)
+        pub, posted = [], []
+        svc = Service(pub.append, log=lambda m: None)
+        self.addCleanup(svc.close)
+        svc.set_target(Target(fake.host))
+        svc.firmware = {"kind": "extended", "version": ""}
+        real_raw = svc.client.raw
+        svc.client.raw = lambda method, path, *a, **k: (posted.append(path) if method == "POST" else None) or \
+            real_raw(method, path, *a, **k)
+        svc.submit(1, "ext_action", {"action_id": action})
+        self.assertTrue(wait_for(lambda: any(m.get("id") == 1 for m in pub)))
+        return next(m for m in pub if m.get("id") == 1), posted
+
+    def test_restart_and_reboot_refused_while_printing(self):
+        for action in ("restart-klipper", "reboot-system"):
+            with self.subTest(action=action):
+                reply, posted = self.run_action("printing", action)
+                self.assertIn("busy", reply.get("error", ""))
+                self.assertEqual(posted, [])
+
+    def test_moonraker_restart_and_idle_actions_still_go_through(self):
+        for state, action in (("printing", "restart-moonraker"), ("standby", "restart-klipper")):
+            with self.subTest(state=state, action=action):
+                _, posted = self.run_action(state, action)
+                self.assertEqual(posted, ["/firmware-config/api/action/" + action])
+
+
 class CheckConnectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

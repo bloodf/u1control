@@ -713,7 +713,12 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         return self._extended().set(setting_id, value, inputs)
 
     def cmd_ext_action(self, action_id):
-        return self._extended().action(action_id)
+        e = self._extended()
+        if action_id in ("restart-klipper", "reboot-system"):   # either one ends a running print
+            state = u1.summarize(self._client().query(u1.STATUS_OBJECTS))["state"]
+            if u1.is_busy(state):   # only a print blocks it: a stuck machine state is what a restart is for
+                raise PrinterError("the U1 is busy (%s); %s would end the print" % (state, action_id))
+        return e.action(action_id)
 
 
 
