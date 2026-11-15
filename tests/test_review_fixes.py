@@ -256,13 +256,13 @@ class CameraRateTests(unittest.TestCase):
 
     def test_waiting_for_the_ack_does_not_tick(self):
         self.svc._push_frame()                             # sent: the page must show it first
-        started = time.monotonic()
-        self.svc._idle(True)
-        self.assertGreaterEqual(time.monotonic() - started, 0.045)        # one wait on the ack, not a 11 ms tick
-        threading.Timer(0.01, self.svc.ack_frame).start()
-        started = time.monotonic()
-        self.svc._idle(True)
-        self.assertLess(time.monotonic() - started, 0.04)                 # wakes as soon as the page shows it
+        with mock.patch.object(self.svc.frame_ack, "wait") as wait:
+            self.svc._idle(True)
+        wait.assert_called_once_with(0.05)                 # one wait on the ack itself (it wakes when the page
+        self.svc.ack_frame()                               # shows the frame), not an 11 ms tick
+        with mock.patch.object(self.svc.frame_ack, "wait") as wait:
+            self.svc._idle(True)
+        wait.assert_not_called()                           # shown: only the pause until the next frame is due
 
 
 class _Dummy:
