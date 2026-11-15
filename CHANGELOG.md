@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+- A broken answer from the printer (not HTTP at all, or cut off) no longer stops the tab's monitor for good. It was not caught on the Remote Screen path, so status, camera and RFID follow stopped until OrcaSlicer restarted. It is now a normal printer error, and the Remote Screen keeps its own error and retry whatever goes wrong.
+- Emergency stop falls back to `M112` also when the printer's websocket answers with an error given as plain text.
+- An RFID tag with malformed fields (a colour count that is not a number, an odd UID) no longer fails every status poll and shows the printer offline; the bad field is ignored.
+- A Spoolman address that answers with something other than JSON (a proxy's login page, another service) is reported as a Spoolman error. It used to fail the status poll during automatic spool follow and show the printer offline.
+- Saving a printer file keeps it inside `~/Downloads/u1control` whatever the file is called on the printer: `\`, `:` and other characters Windows reads as folders or drives become `_`.
+- Restart Klipper and Reboot (Settings > Firmware) are refused while a print runs or is paused, since both end it. Restart Moonraker still works, and a printer stuck in another state can still be restarted.
+- Plugins > Run > Check U1 connection detects the Extended Firmware the same way the tab does, not from the version text alone.
+
 ## [0.6.0] - 2026-11-13
 
 - The page now runs on PrimeVue 5.0.5 and @primeuix/themes 3.1.1 (shared Orca UI foundation 3.0.2, shared with Spooler, Organizer and the Print Calculator). No visible change is intended: same palette, sizes, fonts, focus rings and reduced-motion behaviour. The dialog close button is a few pixels smaller.
