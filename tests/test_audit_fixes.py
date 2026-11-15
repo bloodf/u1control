@@ -116,6 +116,17 @@ class SpoolmanAnswerTests(unittest.TestCase):
         self.assertIn("spoolman unreachable", str(cm.exception))
 
 
+class RfidParseTests(unittest.TestCase):
+    def test_malformed_tag_fields_do_not_break_the_status(self):
+        info = [{"MAIN_TYPE": "PLA", "COLOR_NUMS": "x", "RGB_1": 0xFF0000, "CARD_UID": ["a", None]},
+                {"MAIN_TYPE": "PETG", "COLOR_NUMS": None, "CARD_UID": [1, 2, 3, 4]}]
+        tags = u1.rfid_tags({"info": info})
+        self.assertEqual(tags[0]["type"], "PLA")
+        self.assertEqual(tags[0]["colours"], ["#FF0000"])
+        self.assertEqual(tags[1]["uid"], "01020304")
+        u1.summarize({"filament_detect": {"info": info}})   # must not raise
+
+
 class _WsServer:
     """One websocket answer over a socketpair: reads the client's handshake and request, replies with `reply(id)`."""
 
