@@ -377,7 +377,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             data, _ = client.raw("GET", EXT_SCREEN + "?t=%d" % int(time.time() * 1000), timeout=4)
             if data[:8] != b"\x89PNG\r\n\x1a\n":
                 raise PrinterError("remote screen is off: turn on Remote Screen in Settings > Firmware")
-        except (PrinterError, OSError) as e:
+        except Exception as e:   # the screen has its own error and retry: it must never stop the monitor thread
             self.screen_at = time.monotonic() + SCREEN_RETRY
             self.screen_digest = None
             self.publish({"type": "screen_error", "error": str(e)})
