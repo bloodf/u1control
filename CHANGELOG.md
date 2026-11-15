@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-15
+
+- Screen readers: "U1 unreachable" and "doesn't answer" are announced at once again, as before 0.9.0; connecting, busy and the other reasons stay polite.
+- Screen readers: the late-status notice is announced once. Its age, which changes every second, is shown but no longer read out again and again; the state in the top bar still says it.
+- Tests: the stock Link buttons are off and point at the page's reason while the printer is offline or connecting.
+
 ## [0.9.0] - 2026-11-15
 
 - New look, shared with the other Orca plugins: a cobalt bar at the top with the printer's name, address, firmware and connection state, the four tabs (Dashboard, Files, Console, Settings) and **Emergency stop**, which stays in the bar on every tab and still asks first. Panels have coloured headers and icons, the text uses the Manrope font, and light and dark follow OrcaSlicer.

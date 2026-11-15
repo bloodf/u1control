@@ -20,7 +20,8 @@ export const en = {
   'target.offline.title': 'U1 unreachable',
   'target.offline.body': '{printer} doesn’t answer: {error}. Printer commands are off; the emergency stop still tries to reach it.',
   'target.connecting': 'Connecting to the U1…',
-  'target.stale': 'Last printer status {age}; values may be out of date.',
+  'target.staleTitle': 'No recent printer status; values may be out of date.',
+  'target.staleAge': 'Last status {age}.',
   'target.detail': 'Details: {error}',
 
   'reason.noTarget': 'No U1 selected',
@@ -609,7 +610,8 @@ export const ptBR: Record<MessageKey, string> = {
   'target.offline.title': 'U1 inalcançável',
   'target.offline.body': '{printer} não responde: {error}. Os comandos da impressora estão desligados; a parada de emergência continua tentando alcançá-la.',
   'target.connecting': 'Conectando à U1…',
-  'target.stale': 'Último status da impressora {age}; os valores podem estar desatualizados.',
+  'target.staleTitle': 'Sem status recente da impressora; os valores podem estar desatualizados.',
+  'target.staleAge': 'Último status {age}.',
   'target.detail': 'Detalhes: {error}',
 
   'reason.noTarget': 'Nenhuma U1 selecionada',

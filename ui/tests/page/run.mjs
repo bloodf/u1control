@@ -514,10 +514,58 @@ test('settings: Discard drops what was typed and shows the saved values', `
   eq(last('save_settings'), undefined, 'nothing saved');
 `);
 
+test('offline after a status: the reason is announced assertively; stock links off and point at it; connecting too', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), STOCK());
+  assert(stockRows().length === 2 && stockRows().every(b => !b.disabled), 'online and idle: links on');
+  await post({type: 'offline', error: 'timed out'});
+  assert(text(byTest('target-alert')).includes('doesn') && byTest('target-alert').getAttribute('aria-live') === 'assertive', 'offline: assertive reason: ' + text(byTest('target-alert')));
+  eq(qa('#heads-why').length, 1, 'said once');
+  for (const b of stockRows()) {
+    assert(b.disabled, 'offline: link ' + b.dataset.stock + ' off');
+    eq(b.getAttribute('aria-describedby'), 'heads-why', 'offline: link ' + b.dataset.stock + ' points at the reason');
+  }
+  await post({type: 'selection_changed'});
+  await until(() => byTest('estop') && byTest('estop').disabled, 'connecting again');
+  assert(text(q('#heads-why')).includes('Connecting'), 'connecting: the reason says so: ' + text(q('#heads-why')));
+  if (!stockRows().length) { await until(() => last('cmd', 'stock')); await reply(last('cmd', 'stock'), STOCK()); }
+  assert(stockRows().length, 'stock still listed while connecting');
+  for (const b of stockRows()) {
+    assert(b.disabled, 'connecting: link ' + b.dataset.stock + ' off');
+    eq(b.getAttribute('aria-describedby'), 'heads-why', 'connecting: link ' + b.dataset.stock + ' points at the reason');
+  }
+`);
+
+test('stale status: the banner is announced once; its ticking age is kept out of the live region', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  const real = Date.now;
+  Date.now = () => real() + 20000;   // the page's clock moves on; no wall-clock wait
+  try {
+    await until(() => byTest('stale'), 'stale banner');
+    const banner = byTest('stale');
+    eq(banner.closest('[aria-live]').getAttribute('aria-live'), 'polite', 'stale is a polite notice');
+    const age = q('.u1-stale-age', banner);
+    eq(age && age.getAttribute('aria-hidden'), 'true', 'the age is hidden from assistive tech');
+    assert(age && /ago|s\b|min/.test(text(age)), 'age shown, hidden from the announcement: ' + text(age));
+    const spoken = () => { const c = banner.cloneNode(true); c.querySelectorAll('[aria-hidden="true"]').forEach(e => e.remove()); return text(c); };
+    const first = spoken(), shownFirst = text(age);
+    Date.now = () => real() + 47000;
+    await until(() => text(age) !== shownFirst, 'age ticked');
+    eq(spoken(), first, 'what is announced does not change when the age ticks');
+    assert(first.includes('out of date'), 'says the values may be out of date: ' + first);
+  } finally { Date.now = real; }
+`);
+
 test('U03: known target offline keeps E-stop on the urgent path; other commands off', `
   await until(() => last('hello'));
   await fail(last('hello'), 'the U1 did not answer in 5 s');
-  assert(text(byTest('target-banner')).includes('U1 unreachable'), 'unreachable, not "no target"');
+  assert(text(byTest('target-alert')).includes('U1 unreachable'), 'unreachable, not "no target"');
+  eq(byTest('target-alert').getAttribute('aria-live'), 'assertive', 'unreachable is announced at once, as before 0.9.0');
+  eq(q('#heads-why').closest('[aria-live]'), byTest('target-alert'), 'the reason is in the assertive region');
+  eq(q('#heads-why').getAttribute('role'), 'none', 'the banner does not add a second live region');
   assert(byTest('pause').disabled && byTest('cancel').disabled, 'normal commands off');
   assert(!byTest('estop').disabled, 'E-stop available for the known target');
   await click(byTest('estop'));

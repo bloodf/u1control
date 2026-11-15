@@ -13,6 +13,7 @@ import { t, fmt } from '../core/i18n';
 // added, so additions are announced. Each banner inside drops its own role (role="none") so nothing is announced twice.
 // foundation-gap: OuiBanner (4.0.1) always sets role alert/status; 4.0.2 should add `live: false` (and use role="note"
 // for static banners itself). Until then the role is overridden here and on static banners (role="note").
+const offline = computed(() => s.phase === 'unreachable' || !!s.offline);
 const firstRun = computed(() => s.phase === 'noTarget' && s.tab === 'dash');   // the Dashboard says it itself, with the way out
 const TONE = { error: 'error', unknown: 'warn', success: 'success', info: 'info' } as const;
 const lasting = computed(() => tracker.notices.filter(n => n.kind === 'error' || n.kind === 'unknown'));
@@ -23,6 +24,14 @@ const split = (text: string) => { const i = text.indexOf(': '); return i < 0 ? [
 </script>
 <template>
   <div class="u1-top">
+    <!-- Why the controls are off. Offline and unreachable are announced at once (assertive), as before 0.9.0; the
+         other reasons politely. Both regions stay in the page so what appears in them is announced. -->
+    <div class="u1-live" aria-live="assertive" data-test="target-alert">
+      <OuiBanner v-if="offline" id="heads-why" role="none" data-test="heads-why" tone="error" :title="t('target.offline.title')">
+        {{ t('target.offline.body', { printer: printerName, error: s.offline || s.error }) }}
+        <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
+      </OuiBanner>
+    </div>
     <div class="u1-live" aria-live="polite" :data-test="firstRun ? undefined : 'target-banner'">
       <OuiBanner v-if="s.phase === 'noTarget' && !firstRun" id="heads-why" role="none" tone="warn" :title="t('target.none.title')">
         {{ t('target.none.body') }}
@@ -31,16 +40,15 @@ const split = (text: string) => { const i = text.indexOf(': '); return i < 0 ? [
           <Button size="small" severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
         </template>
       </OuiBanner>
-      <OuiBanner v-else-if="s.phase === 'unreachable' || s.offline" id="heads-why" role="none" data-test="heads-why" tone="error" :title="t('target.offline.title')">
-        {{ t('target.offline.body', { printer: printerName, error: s.offline || s.error }) }}
-        <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
-      </OuiBanner>
-      <OuiBanner v-else-if="s.phase === 'connecting'" id="heads-why" role="none" tone="neutral" :title="t('target.connecting')" />
-      <OuiBanner v-else-if="s.phase === 'connected' && !s.status" id="heads-why" role="none" tone="neutral" :title="t('reason.waiting')" />
-      <OuiBanner v-else-if="s.status && statusAge > STALE_STATUS_S" role="none" tone="warn" :title="t('target.stale', { age: fmt.ago(s.statusAt / 1000, s.now / 1000) })" />
-      <OuiBanner v-if="!controlsOff && busy" id="heads-why" role="none" data-test="heads-why" tone="info" :title="t('reason.busy') + '.'">{{ t('busy.body') }}</OuiBanner>
+      <template v-else-if="!offline">
+        <OuiBanner v-if="s.phase === 'connecting'" id="heads-why" role="none" tone="neutral" :title="t('target.connecting')" />
+        <OuiBanner v-else-if="s.phase === 'connected' && !s.status" id="heads-why" role="none" tone="neutral" :title="t('reason.waiting')" />
+        <!-- The age ticks every second: it is kept out of the announcement (the app bar's state says it too). -->
+        <OuiBanner v-else-if="s.status && statusAge > STALE_STATUS_S" role="none" tone="warn" :title="t('target.staleTitle')" data-test="stale">
+          <span class="u1-stale-age" aria-hidden="true">{{ t('target.staleAge', { age: fmt.ago(s.statusAt / 1000, s.now / 1000) }) }}</span></OuiBanner>
+        <OuiBanner v-if="!controlsOff && busy" id="heads-why" role="none" data-test="heads-why" tone="info" :title="t('reason.busy') + '.'">{{ t('busy.body') }}</OuiBanner>
+      </template>
     </div>
-
     <section class="notices" :aria-label="t('msg.region')">
       <!-- Errors and unknown outcomes stay until dismissed and are announced at once. -->
       <div role="alert" class="u1-live">
