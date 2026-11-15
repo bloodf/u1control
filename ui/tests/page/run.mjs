@@ -616,6 +616,46 @@ test('files: a newly selected printer starts at the top folder', `
   eq(last('cmd', 'files').args.path, 'gcodes', 'top folder of the new printer');
 `);
 
+test('files: rename asks for the new name and never sends an unchanged one', `
+  await connect();
+  await tab('files');
+  await until(() => last('cmd', 'files'));
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  await click(btn('Rename benchy.gcode'));
+  await until(dialogOpen);
+  eq(q('#dlg-input').value, 'benchy.gcode', 'starts from the current name');
+  await yes();
+  eq(cmds('rename'), [], 'same name: nothing sent');
+  await click(btn('Rename benchy.gcode'));
+  await until(() => document.activeElement === q('#dlg-input'));
+  await type(q('#dlg-input'), 'boat.gcode');
+  await yes();
+  eq(last('cmd', 'rename').args, {path: 'gcodes/benchy.gcode', name: 'boat.gcode'}, 'path and new name');
+  const listed = cmds('files').length;
+  await reply(last('cmd', 'rename'), {path: 'gcodes/boat.gcode'});
+  await until(() => cmds('files').length > listed, 'listed again after the rename');
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  await click(btn('Rename sub'));
+  await until(dialogOpen);
+  await no();
+  eq(cmds('rename').length, 1, 'cancel sends nothing');
+`);
+
+test('files: filter by name and show each file\'s filament', `
+  await connect();
+  await tab('files');
+  await until(() => last('cmd', 'files'));
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  assert(text(q('.u1-table')).includes('12 g'), 'filament weight shown: ' + text(q('.u1-table')));
+  await type(q('#files-filter'), 'BEN');
+  eq(qa('.fv-name').map(text), ['benchy.gcode'], 'case-insensitive match');
+  assert(!btn('Open folder sub'), 'folders filtered too');
+  await type(q('#files-filter'), 'zzz');
+  assert(text(q('.u1-table')).includes('No file or folder matches'), 'says nothing matches');
+  await type(q('#files-filter'), '');
+  eq(qa('.fv-name').length, 2, 'all back');
+`);
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');

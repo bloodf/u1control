@@ -11,6 +11,8 @@ GCODE_ROOT = "gcodes"
 FOLDER_NAME_RE = re.compile(r"^[\w .-]{1,64}$")
 THUMB_RE = re.compile(r"^[\w .()+-]+(/[\w .()+-]+)*\.(png|jpg|jpeg)$", re.I)
 FILE_ROOTS = ("gcodes", "camera")   # camera = U1 timelapse videos and snapshots
+GCODE_EXTS = (".gcode", ".gco", ".g")
+NAME_MAX = 200
 UNSAFE_NAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')   # separators, drive colons, Windows-reserved, control
 
 
@@ -91,6 +93,32 @@ class FilesMixin:
         if dest == path:
             return {"path": path}
         self._refuse_taken(folder, path.rsplit("/", 1)[-1])
+        self._client().move(path, dest)
+        return {"path": dest}
+
+    def cmd_rename(self, path, name):
+        """Rename a file or folder where it is. Refused: a name the folder already has (Moonraker's move would
+        replace it), separators or characters Windows can't keep, a hidden name, and a print file losing its G-code
+        extension (the printer only lists and prints those)."""
+        path = _safe_path(path)
+        if "/" not in path:
+            raise ValueError("refusing to rename a file root")
+        folder, old = path.rsplit("/", 1)
+        name = str(name or "").strip()
+        if not name or name.startswith(".") or len(name) > NAME_MAX or UNSAFE_NAME_RE.search(name):
+            raise ValueError("a name can't be empty, start with '.', be longer than %d characters or hold "
+                             "/ \\ : * ? \" < > | or control characters" % NAME_MAX)
+        if name == old:
+            return {"path": path}
+        files, dirs = self._names(folder)
+        if old not in files and old not in dirs:
+            raise ValueError("%s is no longer in %s; nothing was renamed" % (old, folder))
+        if name in files or name in dirs:
+            raise ValueError("%s already has something named %s; nothing was renamed" % (folder, name))
+        if old in files and folder.split("/")[0] == GCODE_ROOT and old.lower().endswith(GCODE_EXTS) \
+                and not name.lower().endswith(GCODE_EXTS):
+            raise ValueError("a print file keeps a G-code extension (.gcode, .gco or .g)")
+        dest = folder + "/" + name
         self._client().move(path, dest)
         return {"path": dest}
 

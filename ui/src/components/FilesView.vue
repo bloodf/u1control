@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
 import Message from 'primevue/message';
+import InputText from 'primevue/inputtext';
 import Icon from './Icon.vue';
 import Thumb from './Thumb.vue';
 import * as bridge from '../core/bridge';
@@ -13,7 +14,7 @@ import { t, fmt } from '../core/i18n';
 import { message } from '../core/tracker';
 import { moveTargets } from '../core/logic';
 
-interface Entry { name: string; size?: number; modified?: number; time?: number; thumb?: string }
+interface Entry { name: string; size?: number; modified?: number; time?: number; weight?: number | null; thumb?: string }
 const path = ref('gcodes');
 const state = ref<'idle' | 'loading' | 'ok' | 'error'>('idle');
 const error = ref('');
@@ -24,6 +25,10 @@ const gen = ref(0);
 const root = computed(() => path.value.split('/')[0]);
 const roots = computed(() => [{ value: 'gcodes', label: t('files.root.gcodes') }, { value: 'camera', label: t('files.root.camera') }]);
 const rootLabel = (r: string) => (r === 'gcodes' ? t('files.root.gcodes') : t('files.root.camera'));
+const filter = ref('');
+const match = (e: Entry) => e.name.toLowerCase().includes(filter.value.trim().toLowerCase());
+const shownDirs = computed(() => dirs.value.filter(match));
+const shownFiles = computed(() => files.value.filter(match));
 
 async function load() {
   if (!targetKnown.value || !s.info) { state.value = 'idle'; dirs.value = []; files.value = []; return; }
@@ -43,7 +48,7 @@ async function load() {
 }
 let shownEpoch = s.epoch;
 watch(() => [s.tab, s.epoch, s.phase], () => {
-  if (s.epoch !== shownEpoch) { shownEpoch = s.epoch; path.value = 'gcodes'; }   // another printer: its top folder
+  if (s.epoch !== shownEpoch) { shownEpoch = s.epoch; path.value = 'gcodes'; filter.value = ''; }   // another printer: its top folder
   if (s.tab === 'files') void load();
 }, { immediate: true });
 function open(name: string) { path.value = `${path.value}/${name}`; void load(); }
@@ -76,6 +81,13 @@ async function moveTo(name: string, folder: string) {
   const r = await run({ key: `mv:${name}`, label: t('act.move'), cmd: 'move', args: { path: `${path.value}/${name}`, folder }, okText: t('ok.move') });
   if (r.ok) void load();
 }
+async function rename(name: string) {
+  const n = ((await prompt({ title: t('files.rename'), text: t('files.renameTo', { name }), yes: t('files.rename'), no: t('common.goBack'),
+    input: { label: t('files.newName'), value: name } })) || '').trim();
+  if (!n || n === name) return;
+  const r = await run({ key: `ren:${name}`, label: t('act.rename'), cmd: 'rename', args: { path: `${path.value}/${name}`, name: n }, okText: t('ok.rename') });
+  if (r.ok) void load();
+}
 async function mkdir() {
   const n = ((await prompt({ title: t('files.newFolder'), text: t('files.newFolderIn', { path: path.value }), yes: t('files.create'), no: t('common.goBack'),
     input: { label: t('files.folderName'), value: '' } })) || '').trim();
@@ -98,7 +110,8 @@ function drop(dir: string | null) {
     <div class="u1-row fv-bar">
       <label id="fv-root-l" class="fv-sr-only">{{ t('files.root') }}</label>
       <Select :model-value="root" :options="roots" option-label="label" option-value="value" aria-labelledby="fv-root-l" @update:model-value="setRoot" />
-      <strong class="fv-path">{{ path }}</strong><span class="u1-spacer" /><span class="oui-meta">{{ disk }}</span>
+      <strong class="fv-path">{{ path }}</strong>
+      <InputText id="files-filter" v-model="filter" type="search" :placeholder="t('files.filter')" :aria-label="t('files.filter')" class="fv-q" /><span class="u1-spacer" /><span class="oui-meta">{{ disk }}</span>
       <Button severity="secondary" outlined :disabled="state !== 'ok'" @click="mkdir"><Icon name="icon/folder" /><span>{{ t('files.newFolder') }}</span></Button>
       <Button severity="secondary" outlined :disabled="!path.includes('/')" data-test="up" @click="up"
               @dragover="e => { if (dragName && path.includes('/')) e.preventDefault(); }" @drop.prevent="drop(null)">
@@ -112,29 +125,33 @@ function drop(dir: string | null) {
     <div v-else-if="state === 'ok'" class="oui-table-wrap">
       <table class="u1-table">
         <thead><tr><th scope="col"><span class="fv-sr-only">{{ t('files.col.thumb') }}</span></th><th scope="col">{{ t('files.col.name') }}</th>
-          <th scope="col">{{ t('files.col.size') }}</th><th scope="col">{{ t('files.col.modified') }}</th><th scope="col">{{ t('files.col.time') }}</th>
+          <th scope="col">{{ t('files.col.size') }}</th><th scope="col">{{ t('files.col.modified') }}</th><th scope="col">{{ t('files.col.time') }}</th><th scope="col">{{ t('files.col.weight') }}</th>
           <th scope="col">{{ t('files.col.actions') }}</th></tr></thead>
         <tbody>
-          <tr v-for="d in dirs" :key="'d:' + d.name" draggable="true" :class="{ drop: dropOn === d.name }"
+          <tr v-for="d in shownDirs" :key="'d:' + d.name" draggable="true" :class="{ drop: dropOn === d.name }"
               @dragstart="dragName = d.name" @dragover="e => { if (dragName && dragName !== d.name) { e.preventDefault(); dropOn = d.name; } }"
               @dragleave="dropOn = null" @drop.prevent="drop(d.name)">
             <td><Icon name="icon/folder" :size="24" /></td>
             <td><Button text :label="d.name" :aria-label="t('files.open', { name: d.name })" class="fv-open" @click="open(d.name)" /></td>
-            <td /><td /><td />
-            <td class="fv-acts"><Button size="small" severity="secondary" outlined @click="move(d.name)"><Icon name="icon/folder" /><span>{{ t('files.move') }}</span></Button>
+            <td /><td /><td /><td />
+            <td class="fv-acts"><Button size="small" severity="secondary" outlined :aria-label="t('files.renameLabel', { name: d.name })" @click="rename(d.name)"><span>{{ t('files.rename') }}</span></Button>
+              <Button size="small" severity="secondary" outlined @click="move(d.name)"><Icon name="icon/folder" /><span>{{ t('files.move') }}</span></Button>
               <Button size="small" severity="danger" outlined @click="del(d.name, true)"><Icon name="icon/delete" /><span>{{ t('files.delete') }}</span></Button></td>
           </tr>
-          <tr v-for="f in files" :key="'f:' + f.name" draggable="true" @dragstart="dragName = f.name">
+          <tr v-for="f in shownFiles" :key="'f:' + f.name" draggable="true" @dragstart="dragName = f.name">
             <td><Thumb v-if="root === 'gcodes'" :gen="gen" :path="`${path}/${f.name}`" :rel="f.thumb" /></td>
             <td class="fv-name">{{ f.name }}</td><td class="u1-num">{{ fmt.bytes(f.size) }}</td>
             <td>{{ f.modified ? fmt.dateTime(f.modified) : '' }}</td><td class="u1-num">{{ f.time ? fmt.duration(f.time) : '' }}</td>
+            <td class="u1-num">{{ f.weight ? fmt.grams(f.weight) : '' }}</td>
             <td class="fv-acts">
               <Button v-if="root === 'gcodes'" size="small" :disabled="!!s.status?.busy" @click="print(f.name)"><Icon name="icon/print-setup" /><span>{{ t('files.print') }}</span></Button>
               <Button v-else size="small" severity="secondary" outlined :loading="tracker.isBusy(`dl:${f.name}`)" @click="download(f.name)"><Icon name="icon/download" /><span>{{ t('files.save') }}</span></Button>
+              <Button size="small" severity="secondary" outlined :aria-label="t('files.renameLabel', { name: f.name })" @click="rename(f.name)"><span>{{ t('files.rename') }}</span></Button>
               <Button size="small" severity="secondary" outlined @click="move(f.name)"><Icon name="icon/folder" /><span>{{ t('files.move') }}</span></Button>
               <Button size="small" severity="danger" outlined @click="del(f.name, false)"><Icon name="icon/delete" /><span>{{ t('files.delete') }}</span></Button></td>
           </tr>
-          <tr v-if="!dirs.length && !files.length"><td colspan="6"><div class="fv-empty"><Icon name="spot/no-files" :size="96" /><span>{{ t('files.empty') }}</span></div></td></tr>
+          <tr v-if="(dirs.length || files.length) && !shownDirs.length && !shownFiles.length"><td colspan="7" class="oui-muted">{{ t('files.noMatch', { filter: filter.trim() }) }}</td></tr>
+          <tr v-if="!dirs.length && !files.length"><td colspan="7"><div class="fv-empty"><Icon name="spot/no-files" :size="96" /><span>{{ t('files.empty') }}</span></div></td></tr>
         </tbody>
       </table>
       <p class="oui-meta">{{ t('files.dragHint') }}</p>
@@ -147,6 +164,7 @@ function drop(dir: string | null) {
 .fv-bar { margin-bottom: 12px; }
 .fv-path, .fv-name { overflow-wrap: anywhere; }
 .fv-open { padding: 0; }
+.fv-q { width: 14rem; max-width: 100%; }
 .fv-acts { display: flex; flex-wrap: wrap; gap: 6px; }
 .fv-empty { display: grid; justify-items: center; gap: 8px; padding: 16px; color: var(--oui-muted); }
 tr.drop td { background: var(--oui-success-bg, rgba(0, 103, 91, .12)); }
