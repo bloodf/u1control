@@ -45,7 +45,8 @@ profiles.
 
 ![Files and folders](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-files-firmware.png){align=center}
 
-Browse, print and delete files, create folders and move files into them, and save time-lapses.
+Browse, print, rename and delete files, filter them by name, see each file's filament, create folders and
+move files into them, and save time-lapses.
 Calibration, print options and the Extended Firmware settings are under Settings.
 
 ## Automagic or Expert

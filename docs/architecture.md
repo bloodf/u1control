@@ -53,11 +53,13 @@ threads the plugin starts:
 - **Thumbnail worker:** one thread fetches file thumbnails, at most 8 waiting; the page asks only for
   rows on screen, 2 at a time, and drops the rest when you change folder. Commands never wait for it.
 - **Urgent commands:** emergency stop, pause and cancel each get their own short-lived thread, so they
-  never wait behind a long job like a bed mesh. Downloads also get their own thread.
+  never wait behind a long job like a bed mesh. Downloads and Save picture also get their own thread.
 - **Monitor:** polls status every 2 s, follows RFID and Spoolman changes, and fetches camera frames at
   most about 5 per second. It only runs while the page holds a lease, which the page renews every 2 s.
   The lease lapses after 6 s. Status and camera have separate errors and retries: a broken camera shows
-  its own message and never delays status, RFID or Spoolman follow.
+  its own message and never delays status, RFID or Spoolman follow. While the firmware answer was unclear
+  it checks the firmware again every 30 s (see docs/firmware.md). It keeps the last camera frame for
+  Save picture (`snapshot`), which only writes it to a local file.
 - **Job tracker:** follows every printer with a print u1control sent (`print_stats` every 5 s unless the
   monitor just looked), whether the page is open or not, and books its filament use when it finishes.
 - **Presence:** rewrites `<data folder>/u1control/presence.json` every 5 s from load to unload (see
@@ -107,7 +109,7 @@ Plugin to page:
 | type | fields |
 |---|---|
 | `reply` | `id`, `result` or `error` (`connect` also returns `limits`: the hotend/bed °C the plugin clamps to) |
-| `status` | `data` (see `u1.summarize`) |
+| `status` | `data` (see `u1.summarize`; also `bindings` and `firmware`, which the page follows when the plugin learns more) |
 | `frame` | `image` (JPEG data URL) |
 | `screen` | `image` (PNG data URL), sent only when the touchscreen changed |
 | `screen_error` | `error` (remote screen off or unreachable; retried every 5 s) |

@@ -2,6 +2,17 @@
 
 ## [Unreleased]
 
+- Files: rename a file or folder (**Rename** on each row). A name the folder already has, a name with `/ \ : * ? " < > |` or control characters, a hidden name, and a print file losing its `.gcode` / `.gco` / `.g` extension are refused.
+- Files: filter the list by name, and see each print file's filament in a new Filament column.
+- Camera: **Save picture** saves the camera picture on screen to `~/Downloads/u1control` as `<printer> <date time>.jpg`, never replacing a file. It sends nothing to the printer.
+- Moving a file into a folder that already has one with the same name is refused. Moonraker's move replaced the file there.
+- The firmware (official or Extended) is checked again while the printer's answer was unclear, and after the printer was offline. An Extended printer whose Firmware Config API was slow on the first connect no longer stays in official-firmware mode until it is selected again. An unclear answer never switches an Extended printer back.
+- Filament use of a print sent earlier waits while its printer's firmware can't be told, instead of guessing and possibly booking what SpoolLink also books.
+- While a print runs or is paused, firmware settings that restart Klipper or reboot the printer are refused and their Apply buttons are off, as are Restart Klipper and Reboot. Settings that leave Klipper alone (Remote Screen, SSH, USB camera, web UI, VPN and a few more; see docs/firmware.md) still apply.
+- The Files tab starts at the top folder of a newly selected printer instead of the previous printer's folder.
+- A file list or Move dialog with a malformed entry from the printer no longer fails as a whole; the entry is skipped.
+- The print setup no longer reads a `true` in the pop-up's answer as toolhead T2.
+
 - A broken answer from the printer (not HTTP at all, or cut off) no longer stops the tab's monitor for good. It was not caught on the Remote Screen path, so status, camera and RFID follow stopped until OrcaSlicer restarted. It is now a normal printer error, and the Remote Screen keeps its own error and retry whatever goes wrong.
 - Emergency stop falls back to `M112` also when the printer's websocket answers with an error given as plain text.
 - An RFID tag with malformed fields (a colour count that is not a number, an odd UID) no longer fails every status poll and shows the printer offline; the bad field is ignored.

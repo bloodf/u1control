@@ -110,7 +110,8 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
 
 - **Dashboard:** everything about the printer on one page.
   - Camera, status and progress, pause, resume, cancel and emergency stop, temperatures with each
-    head's filament, speed, chamber light and top cover.
+    head's filament, speed, chamber light and top cover. **Save picture** keeps the camera picture on
+    screen in `Downloads/u1control`.
   - The four toolheads: filament and colour, RFID tag details (Snapmaker tags, and with the Extended
     Firmware OpenRFID, OpenSpool, NTAG and external readers), edit, load, unload and read the tag again.
   - Spoolman: one spool per toolhead, picked from a list that shows each spool's colour, brand,
@@ -121,11 +122,15 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
   - With the Extended Firmware: the printer's touchscreen (Remote Screen), live, and tappable.
   - Resume or discard a print interrupted by a power cut, and see the printer's error list.
 - **Files:** browse, print and delete G-code files; browse, save and delete time-lapses. Create
-  folders, and move files and folders with **Move** or by dragging a row onto a folder.
+  folders, rename and move files and folders (**Move**, or drag a row onto a folder), and filter the
+  list by name. Each print file shows its estimated time and filament. Nothing is ever replaced: a
+  rename or move onto a name the folder already has is refused.
 - **Console:** send G-code and see the printer's replies; `M112` runs the E-stop.
 - **Settings:** Automagic or Expert, Spoolman, the printer's print options, bed mesh, input shaper
   and flow calibration, the Extended Firmware's settings (web UI, camera, RFID system, Spoolman, Remote
   Screen, SSH and more) with restart Klipper, restart Moonraker and reboot, Spooler, and the connection.
+  While a print runs, firmware settings that restart Klipper or reboot the printer, Restart Klipper and
+  Reboot wait until it ends ([which ones](docs/firmware.md#firmware-settings-during-a-print)).
 
 ### Firmware support
 
