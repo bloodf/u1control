@@ -198,6 +198,73 @@ class GenerationTests(unittest.TestCase):
         self.assertFalse(svc._frame_due())
 
 
+class _Camera:
+    """A U1 whose camera picture is `picture` (bytes); counts the GETs."""
+    picture = b"\xff\xd8one"
+
+    def __init__(self, host, key=""):
+        self.host = self.address = host
+        self.gets = 0
+
+    def ws_call(self, *a, **k):
+        return {}
+
+    def raw(self, method, path, **k):
+        self.gets += 1
+        return _Camera.picture, {}
+
+
+class CameraRateTests(unittest.TestCase):
+    """camera_fps is a ceiling: an unchanged picture is neither sent again nor asked for at that rate."""
+
+    def setUp(self):
+        _Camera.picture = b"\xff\xd8one"
+        self.pub = []
+        self.svc = Service(self.pub.append, log=lambda m: None, client_factory=_Camera)
+        self.addCleanup(self.svc.close)
+        self.svc.set_target(Target("cam-u1"))
+        self.svc.firmware = {"kind": "stock", "version": ""}
+        self.svc.set_camera_fps(30)
+
+    def frames(self):
+        return [m for m in self.pub if m.get("type") == "frame"]
+
+    def test_unchanged_picture_is_not_sent_again_and_needs_no_ack(self):
+        self.svc._push_frame()
+        self.assertEqual(len(self.frames()), 1)
+        self.svc.ack_frame()
+        for _ in range(5):
+            self.svc._push_frame()
+        self.assertEqual(len(self.frames()), 1)            # same bytes: nothing new for the page
+        self.assertTrue(self.svc.frame_ack.is_set())       # nothing to wait for
+        _Camera.picture = b"\xff\xd8two"
+        self.svc._push_frame()
+        self.assertEqual(len(self.frames()), 2)
+
+    def test_polling_slows_to_what_the_printer_renews_and_never_passes_the_ceiling(self):
+        self.svc._push_frame()
+        for _ in range(12):
+            self.svc._push_frame()
+        self.assertEqual(self.svc.frame_wait, service_mod.FRAME_SLOWEST)   # static picture: once a second
+        _Camera.picture = b"\xff\xd8two"
+        self.svc._push_frame()
+        self.assertEqual(self.svc.frame_wait, service_mod.FRAME_SLOWEST / 2)   # changing again: ask faster
+        for n in range(10):
+            _Camera.picture = b"\xff\xd8" + bytes([n])
+            self.svc._push_frame()
+        self.assertAlmostEqual(self.svc.frame_wait, 1 / 30)                # never faster than camera_fps
+
+    def test_waiting_for_the_ack_does_not_tick(self):
+        self.svc._push_frame()                             # sent: the page must show it first
+        started = time.monotonic()
+        self.svc._idle(True)
+        self.assertGreaterEqual(time.monotonic() - started, 0.045)        # one wait on the ack, not a 11 ms tick
+        threading.Timer(0.01, self.svc.ack_frame).start()
+        started = time.monotonic()
+        self.svc._idle(True)
+        self.assertLess(time.monotonic() - started, 0.04)                 # wakes as soon as the page shows it
+
+
 class _Dummy:
     host = "127.0.0.1:1"
 

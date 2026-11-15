@@ -125,12 +125,13 @@ const swatch = (sp: Spool | null) => !sp ? 'transparent'
                 :loading="tracker.isBusy(`unload:${i}`)" :data-focus-key="`unload:${i}`" :data-unload="i" @click="unload">
           <Icon name="icon/unload-filament" /><span>{{ t('heads.unload') }}</span></Button>
         <Button size="small" severity="secondary" outlined :aria-label="t('heads.rfidLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`rfid:${i}`)"
+                :aria-describedby="controlsOff ? 'heads-why' : undefined"
                 :data-focus-key="`rfid:${i}`" :data-rfid="i" @click="rfid">
           <Icon name="icon/rfid-tag" /><span>{{ t('heads.rfid') }}</span></Button>
       </div>
       <Select v-if="s.spools.length" :model-value="bound ?? 0" :options="groups" option-group-label="label" option-group-children="items"
               option-label="label" option-value="value" filter :filter-placeholder="t('pick.filter')" :aria-label="t('pick.label', { n })"
-              :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" class="hc-pick" :data-focus-key="`pick:${i}`" :data-pick="i"
+              :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" :pt="{ label: { 'aria-describedby': controlsOff ? 'heads-why' : undefined } }" class="hc-pick" :data-focus-key="`pick:${i}`" :data-pick="i"
               @update:model-value="choose">
         <template #value="{ value }">
           <span class="hc-opt"><span class="u1-sw" :style="{ background: swatch(s.spools.find(x => x.id === value) ?? null) }" />

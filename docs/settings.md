@@ -53,6 +53,12 @@ more often than that shows the same picture again. The Extended Firmware's `/web
 change faster. The rate you see also depends on the Wi-Fi and the computer, so 30 fps is often not
 reached.
 
+A picture that hasn't changed since the last one is not sent to the page again. After two unchanged
+pictures in a row U1 Control asks half as often, down to once a second, and asks twice as often again
+each time the picture changes, never faster than `camera_fps`. So the printer gets at most `camera_fps`
+requests a second, only while its picture really changes that fast, and about one a second while it
+stands still.
+
 ## Profile overrides
 
 `profile_overrides` picks an exact filament preset for a tag, ahead of the automatic choice. Keys are

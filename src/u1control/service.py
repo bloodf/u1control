@@ -36,6 +36,8 @@ STATUS_RETRY = 3.0
 CAMERA_RETRY = 2.0
 CAMERA_KEEPALIVE = 50.0
 FRAME_MIN_INTERVAL = 0.2    # ~5 fps cap unless the camera_fps setting asks for more (set_camera_fps)
+FRAME_SLOWEST = 1.0         # s: an unchanging camera picture is still fetched this often
+FRAME_SAME_BEFORE_SLOWING = 2   # unchanged pictures in a row before asking half as often
 FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
 SNAPSHOT_MAX_AGE = 10.0     # s: Save picture keeps only a camera frame this fresh
 URGENT = ("emergency_stop", "pause", "cancel")   # never wait behind the command worker
@@ -122,7 +124,9 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
         self.last_frame_at = 0.0
-        self.frame_interval = FRAME_MIN_INTERVAL
+        self.frame_interval = FRAME_MIN_INTERVAL   # the camera_fps ceiling
+        self.frame_wait = FRAME_MIN_INTERVAL       # what is asked now: between frame_interval and FRAME_SLOWEST
+        self.frame_same = 0                        # unchanged pictures in a row
         self.last_frame = None      # (JPEG bytes, time.monotonic()) of the selected printer's camera
         self.camera_keepalive_at = 0.0
         self.camera_retry_at = 0.0
@@ -168,13 +172,15 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                     self.screen_digest = None   # send the first frame even when unchanged
                 self.screen_on = bool(screen)
             if camera is not None:
+                if camera and not self.camera_on:   # a fresh start: full rate, and the first picture is always sent
+                    self.frame_wait, self.frame_same, self.last_frame = self.frame_interval, 0, None
                 self.camera_on = bool(camera)
                 if not camera:
                     self.camera_keepalive_at = 0.0
 
     def set_camera_fps(self, fps):
         """Most camera pictures a second to ask for (settings.CAMERA_FPS)."""
-        self.frame_interval = 1.0 / fps
+        self.frame_interval = self.frame_wait = 1.0 / fps
 
     def ack_frame(self):
         self.frame_ack.set()
@@ -315,7 +321,16 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                     if self._current(gen):
                         self.publish({"type": "camera_error", "error": str(e)})
             else:
-                time.sleep(min(0.05, self.frame_interval / 3) if camera else 0.2)
+                self._idle(camera)
+
+    def _idle(self, camera):
+        """Between monitor rounds: wake when the page shows the last frame or the next one is due, not on a fast tick."""
+        if not camera:
+            time.sleep(0.2)
+        elif not self.frame_ack.is_set():
+            self.frame_ack.wait(0.05)
+        else:
+            time.sleep(min(0.05, max(0.005, self.last_frame_at + self.frame_wait - time.monotonic())))
 
     def _push_status(self):
         gen, client, target = self._snapshot()
@@ -368,7 +383,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def _frame_due(self):
         """At most camera_fps, and the page must have shown the previous frame (ack) unless FRAME_ACK_TIMEOUT passed."""
         waited = time.monotonic() - self.last_frame_at
-        return waited >= self.frame_interval and (self.frame_ack.is_set() or waited >= FRAME_ACK_TIMEOUT)
+        return waited >= self.frame_wait and (self.frame_ack.is_set() or waited >= FRAME_ACK_TIMEOUT)
 
     def _push_frame(self):
         gen, client, _ = self._ctx()
@@ -386,9 +401,19 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         with self.lock:
             if gen != self.generation:
                 return   # a picture of the printer that is no longer selected
-            self.last_frame = (data, time.monotonic())
-        self.frame_ack.clear()
+            same = self.last_frame is not None and self.last_frame[0] == data
+            self.last_frame = (data, time.monotonic())   # still the picture on screen: Save picture may use it
         self.last_frame_at = time.monotonic()
+        if same:
+            # The printer hasn't renewed its picture (the official firmware does that at its own pace): don't send it
+            # to the page again, and ask less often until it changes; camera_fps stays the ceiling.
+            self.frame_same += 1
+            if self.frame_same >= FRAME_SAME_BEFORE_SLOWING:
+                self.frame_wait = min(self.frame_wait * 2, FRAME_SLOWEST)
+            return
+        self.frame_same = 0
+        self.frame_wait = max(self.frame_interval, self.frame_wait / 2)
+        self.frame_ack.clear()
         self.publish({"type": "frame", "image": "data:image/jpeg;base64," + base64.b64encode(data).decode()})
 
     def cmd_snapshot(self):

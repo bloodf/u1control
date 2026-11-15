@@ -56,7 +56,8 @@ threads the plugin starts:
   never wait behind a long job like a bed mesh. Downloads and Save picture also get their own thread.
 - **Monitor:** polls status every 2 s, follows RFID and Spoolman changes, and fetches camera frames at
   most `camera_fps` per second (5 by default; see docs/settings.md), one at a time: the next is fetched
-  once the page has shown the last one (or after 2 s). It only runs while the page holds a lease, which the page renews every 2 s.
+  once the page has shown the last one (or after 2 s). An unchanged picture is not sent again and slows
+  the fetching down to once a second until the picture changes (docs/settings.md). It only runs while the page holds a lease, which the page renews every 2 s.
   The lease lapses after 6 s. Status and camera have separate errors and retries: a broken camera shows
   its own message and never delays status, RFID or Spoolman follow. While the firmware answer was unclear
   it checks the firmware again every 30 s (see docs/firmware.md). It keeps the last camera frame for

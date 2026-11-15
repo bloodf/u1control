@@ -389,7 +389,8 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
             except Exception as e:
                 log("auto-add U1 print setup failed: %r" % e)
             self.post_message(self._config_message())   # the Settings page says whether this preset runs it
-        self._background(job)
+        if not self._background(job):   # another preset edit is running: still say which preset is selected now
+            self.post_message(self._config_message())
 
     def on_lifecycle_event(self, event, ctx):
         kind = getattr(ctx, "msg", "")

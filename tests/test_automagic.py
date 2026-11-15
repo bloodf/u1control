@@ -118,6 +118,17 @@ class PipelineTests(PluginBase):
         _, _, page = self.page({"printer_model": "Voron 2.4", "name": "Voron", "slicing_pipeline_plugin": ""})
         self.assertIsNone(page._config_message()["pipeline"])   # not a U1: nothing to say
 
+    def test_config_is_sent_even_when_another_preset_edit_holds_the_lock(self):
+        _, ns, page = self.page({"slicing_pipeline_plugin": 'Other;"U1 print setup"', "name": "Now selected"})
+        lock = ns["_presets_lock"]
+        self.assertTrue(lock.acquire(blocking=False))
+        try:
+            page._auto_pipeline()
+        finally:
+            lock.release()
+        configs = [m for m in getattr(page, "posted", []) if m["type"] == "config"]
+        self.assertEqual(configs[-1]["pipeline"], {"preset": "Now selected", "on": True})
+
     def test_skips(self):
         orca, ns, page = self.page({"slicing_pipeline_plugin": '"U1 print setup"'})
         self.assertIsNone(ns["ensure_pipeline"](page._config()))

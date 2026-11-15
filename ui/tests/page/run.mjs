@@ -135,11 +135,20 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   eq(qa('#heads-why').length, 1, 'said once for the four toolheads, not under each card');
   assert(!qa('.hc').some(c => text(c).includes('busy')), 'no copy of the reason inside a card');
   for (const sel of ['[data-load="0"]', '[data-unload="3"]', '[data-edit="2"]']) eq(q(sel).getAttribute('aria-describedby'), 'heads-why', sel + ' points at the reason');
+  assert(!q('[data-rfid="0"]').disabled && !q('[data-rfid="0"]').hasAttribute('aria-describedby'), 'busy alone leaves Read RFID on, with no reason attached');
   assert(!q('[data-test="estop"]').disabled, 'E-stop stays available');
   await tab('settings');
   assert(q('[data-cal="bed_mesh"]').disabled && document.body.textContent.includes('Calibration runs when it is idle'), 'calibration blocked, says why');
   assert(q('#pref-unload_when_done').disabled, 'unload_when_done is not sent from this page');
   assert(text(q('label[for="pref-unload_when_done"]')).includes('print setup pop-up'), 'says where to set it');
+  await tab('dash');
+  if (!q('.hc-pick')) { await until(() => last('cmd', 'spools'), 'spools asked'); await reply(last('cmd', 'spools'), {spools: [{id: 7, name: 'Black', vendor: 'G', material: 'PLA', colour: '#111', remaining: 500, initial: 1000}], bindings: {}, via: 'direct'}); }
+  await post({type: 'offline', error: 'timed out'});
+  assert(text(byTest('heads-why')).includes('doesn'), 'offline: the shared reason says so: ' + text(byTest('heads-why')));
+  for (const sel of ['[data-rfid="1"]', '.hc:nth-child(3) .hc-pick [role=combobox]']) {
+    assert(q(sel) && (q(sel).disabled || q(sel).getAttribute('aria-disabled') === 'true'), sel + ' off while offline');
+    eq(q(sel).getAttribute('aria-describedby'), 'heads-why', sel + ' points at the reason');
+  }
 `);
 
 test('thumbnails only for visible rows, two at a time, dropped on folder change', `
@@ -707,7 +716,7 @@ test('camera: frame rate choice starts at the stored rate, is sent to the plugin
   await click(byTest('camera'));
   const sel = byTest('cam-fps');
   assert(sel && text(sel).includes('10 fps'), 'shows the stored rate: ' + text(sel));
-  eq(sel.getAttribute('aria-describedby'), 'cam-fps-help', 'described by its help');
+  eq(q('[role=combobox]', sel).getAttribute('aria-describedby'), 'cam-fps-help', 'the combobox itself is described by its help');
   assert(text(q('#cam-fps-help')).includes('can be lower'), 'does not promise the rate: ' + text(q('#cam-fps-help')));
   await pick(sel, '30 fps');
   eq(last('camera_fps'), {type: 'camera_fps', value: 30}, 'choice sent to the plugin');
@@ -716,12 +725,15 @@ test('camera: frame rate choice starts at the stored rate, is sent to the plugin
 
 test('settings: says whether the process preset runs the toolhead choice and when its pop-up opens', `
   await connect();
-  const cfg = (pipeline, dialog) => post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [],
-    settings: {mode: 'automagic', print_dialog: dialog}, pipeline});
+  const cfg = (pipeline, dialog, auto = true) => post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [],
+    settings: {mode: 'automagic', print_dialog: dialog, auto_add_pipeline: auto}, pipeline});
   await tab('settings');
   await cfg({preset: '0.20 Standard @U1', on: false}, 'auto');
   assert(byTest('ps-off') && text(byTest('ps-off')).includes('0.20 Standard @U1') && text(byTest('ps-off')).includes('without choosing toolheads'), 'missing step is a warning: ' + text(byTest('ps-off')));
   assert(byTest('ps-off').classList.contains('p-message-warn'), 'shown as a warning');
+  assert(text(byTest('ps-off')).includes('once per OrcaSlicer session'), 'auto-add on: says when it is added');
+  await cfg({preset: '0.20 Standard @U1', on: false}, 'auto', false);
+  assert(text(byTest('ps-off')).includes('Adding it automatically is off') && !text(byTest('ps-off')).includes('U1 Control adds it'), 'auto-add off: no promise it is added: ' + text(byTest('ps-off')));
   assert(text(byTest('ps-rule')).includes('only when a choice is needed') && text(byTest('ps-rule')).includes('always'), 'auto rule and how to always ask');
   assert(text(byTest('print-setup')).includes('Use printer agents instead of print hosts'), 'names the OrcaSlicer option that skips it');
   await cfg({preset: '0.20 Standard @U1', on: true}, 'always');

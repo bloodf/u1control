@@ -35,7 +35,7 @@ const msg = computed(() => (s.camError ? t('cam.unavailable', { error: s.camErro
       <span v-if="!s.camOn" class="oui-meta">{{ t('cam.off') }} · {{ t('cam.offHint') }}</span>
       <span class="u1-spacer" />
       <Select v-if="s.camOn" :model-value="fps" :options="FPS" option-label="label" option-value="value" :aria-label="t('cam.fps')"
-              aria-describedby="cam-fps-help" data-test="cam-fps" @update:model-value="setFps" />
+              :pt="{ label: { 'aria-describedby': 'cam-fps-help' } }" data-test="cam-fps" @update:model-value="setFps" />
       <Button v-if="s.camOn && s.frame" severity="secondary" outlined :title="t('cam.saveHint')" :loading="tracker.isBusy('snapshot')"
               data-focus-key="cam-save" data-test="cam-save" @click="save"><Icon name="icon/download" /><span>{{ t('cam.save') }}</span></Button>
       <Button :severity="s.camOn ? 'secondary' : undefined" :outlined="s.camOn" :disabled="!targetKnown && !s.camOn"

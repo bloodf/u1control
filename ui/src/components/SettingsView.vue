@@ -80,7 +80,8 @@ const langOptions = computed(() => [
 
     <section v-if="config" class="u1-card" aria-labelledby="ps-h" data-test="print-setup">
       <h2 id="ps-h" class="sv-h"><Icon name="icon/print-setup" /> {{ t('ps.title') }}</h2>
-      <Message v-if="pipe && !pipe.on" severity="warn" data-test="ps-off">{{ t('ps.off', { preset: pipe.preset }) }}</Message>
+      <Message v-if="pipe && !pipe.on" severity="warn" data-test="ps-off">{{ t('ps.off', { preset: pipe.preset }) }}
+        {{ config.settings.auto_add_pipeline ? t('ps.offAuto') : t('ps.offManual') }}</Message>
       <p v-else-if="pipe" class="oui-meta" data-test="ps-on">{{ t('ps.on', { preset: pipe.preset }) }}</p>
       <p v-if="dialogRule" class="oui-meta" data-test="ps-rule">{{ dialogRule }}</p>
       <p class="oui-meta">{{ t('ps.how') }}</p>
