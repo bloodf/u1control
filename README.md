@@ -44,41 +44,41 @@ Complete your OrcaSlicer workflow: arrange, price, manage filament and print. Ea
 <table>
   <tr>
     <td width="33%" valign="top">
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54"><img src="docs/related-plugins/orca_organizer-icon.png" width="40" height="40" alt="Organizer"></a>
-      <h3><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54">Organizer</a></h3>
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54"><img src="docs/related-plugins/orca_organizer-preview.jpg" width="280" alt="Organizer: preview"></a>
+      <a href="https://cloud.orcaslicer.com/p/5bf381fd42d4"><img src="docs/related-plugins/orca_organizer-icon.png" width="40" height="40" alt="Organizer"></a>
+      <h3><a href="https://cloud.orcaslicer.com/p/5bf381fd42d4">Organizer</a></h3>
+      <a href="https://cloud.orcaslicer.com/p/5bf381fd42d4"><img src="docs/related-plugins/orca_organizer-preview.jpg" width="280" alt="Organizer: preview"></a>
       <p>Arrange objects by their real outline and fill a build plate with more copies.</p>
-      <p><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5bae3da1-7fcc-4cbd-ae25-53678e392d54">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/orca_organizer">Source on GitHub →</a></p>
+      <p><a href="https://cloud.orcaslicer.com/p/5bf381fd42d4">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/orca_organizer">Source on GitHub →</a></p>
     </td>
     <td width="33%" valign="top">
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5f807b01-bfb8-4ad4-a77d-e85e337e4c7f"><img src="docs/related-plugins/orca_print_calculator-icon.png" width="40" height="40" alt="Orca Print Calculator"></a>
-      <h3><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5f807b01-bfb8-4ad4-a77d-e85e337e4c7f">Orca Print Calculator</a></h3>
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5f807b01-bfb8-4ad4-a77d-e85e337e4c7f"><img src="docs/related-plugins/orca_print_calculator-preview.png" width="280" alt="Orca Print Calculator: preview"></a>
+      <a href="https://cloud.orcaslicer.com/p/521c07cf6de2"><img src="docs/related-plugins/orca_print_calculator-icon.png" width="40" height="40" alt="Orca Print Calculator"></a>
+      <h3><a href="https://cloud.orcaslicer.com/p/521c07cf6de2">Orca Print Calculator</a></h3>
+      <a href="https://cloud.orcaslicer.com/p/521c07cf6de2"><img src="docs/related-plugins/orca_print_calculator-preview.png" width="280" alt="Orca Print Calculator: preview"></a>
       <p>Price every build plate: Spoolman filament cost, energy, labor, fees and a suggested selling price.</p>
-      <p><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5f807b01-bfb8-4ad4-a77d-e85e337e4c7f">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/orca_print_calculator">Source on GitHub →</a></p>
+      <p><a href="https://cloud.orcaslicer.com/p/521c07cf6de2">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/orca_print_calculator">Source on GitHub →</a></p>
     </td>
     <td width="33%" valign="top">
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368"><img src="docs/related-plugins/spooler-icon.png" width="40" height="40" alt="Spooler"></a>
-      <h3><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368">Spooler</a></h3>
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368"><img src="docs/related-plugins/spooler-preview.png" width="280" alt="Spooler: preview"></a>
+      <a href="https://cloud.orcaslicer.com/p/50c35dcbd6f3"><img src="docs/related-plugins/spooler-icon.png" width="40" height="40" alt="Spooler"></a>
+      <h3><a href="https://cloud.orcaslicer.com/p/50c35dcbd6f3">Spooler</a></h3>
+      <a href="https://cloud.orcaslicer.com/p/50c35dcbd6f3"><img src="docs/related-plugins/spooler-preview.png" width="280" alt="Spooler: preview"></a>
       <p>Your Spoolman spools and filament presets in OrcaSlicer, with what is left on each spool.</p>
-      <p><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5c523246-d53c-44bc-a129-fe2470da6368">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/spooler">Source on GitHub →</a></p>
+      <p><a href="https://cloud.orcaslicer.com/p/50c35dcbd6f3">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/spooler">Source on GitHub →</a></p>
     </td>
   </tr>
   <tr>
     <td width="33%" valign="top">
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5d572581-28dc-4c72-a044-36a3d26f7982"><img src="docs/related-plugins/kobracontrol-icon.png" width="40" height="40" alt="Kobra Control"></a>
-      <h3><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5d572581-28dc-4c72-a044-36a3d26f7982">Kobra Control</a></h3>
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5d572581-28dc-4c72-a044-36a3d26f7982"><img src="docs/related-plugins/kobracontrol-preview.png" width="280" alt="Kobra Control: preview"></a>
+      <a href="https://cloud.orcaslicer.com/p/59c786285255"><img src="docs/related-plugins/kobracontrol-icon.png" width="40" height="40" alt="Kobra Control"></a>
+      <h3><a href="https://cloud.orcaslicer.com/p/59c786285255">Kobra Control</a></h3>
+      <a href="https://cloud.orcaslicer.com/p/59c786285255"><img src="docs/related-plugins/kobracontrol-preview.png" width="280" alt="Kobra Control: preview"></a>
       <p>The Anycubic Kobra X in OrcaSlicer: Print and Send, the Device tab, ACE slots and a dashboard.</p>
-      <p><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/5d572581-28dc-4c72-a044-36a3d26f7982">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/kobracontrol">Source on GitHub →</a></p>
+      <p><a href="https://cloud.orcaslicer.com/p/59c786285255">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/kobracontrol">Source on GitHub →</a></p>
     </td>
     <td width="33%" valign="top">
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/50673720-ff2d-494e-9f71-d7742770671b"><img src="docs/related-plugins/embedder-icon.png" width="40" height="40" alt="Embedder"></a>
-      <h3><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/50673720-ff2d-494e-9f71-d7742770671b">Embedder</a></h3>
-      <a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/50673720-ff2d-494e-9f71-d7742770671b"><img src="docs/related-plugins/embedder-preview.png" width="280" alt="Embedder: preview"></a>
+      <a href="https://cloud.orcaslicer.com/p/58222d4f9e52"><img src="docs/related-plugins/embedder-icon.png" width="40" height="40" alt="Embedder"></a>
+      <h3><a href="https://cloud.orcaslicer.com/p/58222d4f9e52">Embedder</a></h3>
+      <a href="https://cloud.orcaslicer.com/p/58222d4f9e52"><img src="docs/related-plugins/embedder-preview.png" width="280" alt="Embedder: preview"></a>
       <p>Cut magnet and NFC sticker pockets into a part, with a pause at the right layer to drop each insert in.</p>
-      <p><a href="https://cloud.orcaslicer.com/app/plugins/shared-plugins/50673720-ff2d-494e-9f71-d7742770671b">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/embedder">Source on GitHub →</a></p>
+      <p><a href="https://cloud.orcaslicer.com/p/58222d4f9e52">Install from Orca Cloud →</a><br><a href="https://github.com/bloodf/embedder">Source on GitHub →</a></p>
     </td>
     <td width="33%" valign="top"></td>
   </tr>
