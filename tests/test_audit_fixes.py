@@ -342,6 +342,58 @@ class ExtendedSettingTests(unittest.TestCase):
         self.assertFalse(items["debug-only"]["print_safe"])   # unknown: treated as one that restarts Klipper
 
 
+class FileListingTests(unittest.TestCase):
+    def service(self, fake):
+        pub = []
+        svc = Service(pub.append, log=lambda m: None)
+        self.addCleanup(svc.close)
+        svc.set_target(Target(fake.host))
+        return svc, pub
+
+    def test_malformed_entries_are_skipped(self):
+        fake = fakes.FakePrinter()
+        self.addCleanup(fake.close)
+        fake.listing = {"dirs": [{"dirname": None}, {"dirname": "ok"}, {}, "x"],
+                        "files": [{"filename": 5}, {"filename": "a.gcode", "modified": "x"}, {"filename": "b.gcode", "modified": 3}, None]}
+        svc, _ = self.service(fake)
+        listing = svc.cmd_files("gcodes")
+        self.assertEqual([d["name"] for d in listing["dirs"]], ["ok"])
+        self.assertEqual([f["name"] for f in listing["files"]], ["b.gcode", "a.gcode"])
+
+    def test_move_never_replaces_a_file_of_the_same_name(self):
+        fake = fakes.FakePrinter()
+        self.addCleanup(fake.close)
+        fake.listing = {"dirs": [{"dirname": "sub"}], "files": [{"filename": "a.gcode"}]}
+        svc, _ = self.service(fake)
+        with self.assertRaises(ValueError):
+            svc.cmd_move("gcodes/sub/a.gcode", "gcodes")
+        self.assertEqual(fake.moved, [])
+        self.assertEqual(svc.cmd_move("gcodes/sub/c.gcode", "gcodes"), {"path": "gcodes/c.gcode"})
+
+
+class PrintSetupAnswerTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import build
+        cls.artifact = str(build.build(out_dir=__import__("pathlib").Path(tempfile.mkdtemp())))
+
+    def test_true_is_not_toolhead_t2(self):
+        import test_u1control
+        fake = fakes.FakePrinter()
+        self.addCleanup(fake.close)
+        fd, path = tempfile.mkstemp(suffix=".gcode")
+        os.close(fd)
+        with open(path, "w") as f:
+            f.write(test_u1control.SAMPLE)
+        fakes.install_orca(answer={"map": {"0": True}, "prefs": {}, "purifier": "auto"})
+        ns = fakes.load_wheel(self.artifact)
+        ctx = type("Ctx", (), {"step": "post", "gcode_path": path, "host": "OctoPrint", "output_name": "part.gcode",
+                               "config_value": staticmethod(lambda k: {"print_host": fake.host}.get(k, ""))})()
+        result = ns["U1PrintSetup"]().execute(ctx)
+        self.assertEqual(result.status, "success", result.message)
+        self.assertIn("CONFIG_EXTRUDER=0 MAP_EXTRUDER=0", fake.scripts[-1])
+
+
 class CheckConnectionTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

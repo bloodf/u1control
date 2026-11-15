@@ -41,7 +41,11 @@ async function load() {
     error.value = message(e); state.value = 'error';
   }
 }
-watch(() => [s.tab, s.epoch, s.phase], () => { if (s.tab === 'files') void load(); }, { immediate: true });
+let shownEpoch = s.epoch;
+watch(() => [s.tab, s.epoch, s.phase], () => {
+  if (s.epoch !== shownEpoch) { shownEpoch = s.epoch; path.value = 'gcodes'; }   // another printer: its top folder
+  if (s.tab === 'files') void load();
+}, { immediate: true });
 function open(name: string) { path.value = `${path.value}/${name}`; void load(); }
 function up() { if (path.value.includes('/')) { path.value = path.value.split('/').slice(0, -1).join('/'); void load(); } }
 function setRoot(r: string) { path.value = r; void load(); }

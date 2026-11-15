@@ -615,7 +615,8 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
             raise Cancelled()
         chosen = {}
         for f, t in (answer.get("map") or {}).items():
-            if str(f).isdigit() and isinstance(t, int) and 0 <= t < u1.TOOLHEADS and int(f) in mapping:
+            if str(f).isdigit() and isinstance(t, int) and not isinstance(t, bool) and 0 <= t < u1.TOOLHEADS \
+                    and int(f) in mapping:
                 chosen[int(f)] = t
         final = {**mapping, **chosen}
         warned = u1.warning_ids(filaments, shown[-1], final)

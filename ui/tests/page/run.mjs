@@ -599,6 +599,23 @@ test('firmware settings that restart Klipper wait for the print; the others stay
   eq(byTest('ext-print-why'), null, 'no reason when idle');
 `, { needsGroups: true });
 
+const FILES = {path: 'gcodes', dirs: [{name: 'sub'}], disk: {free: 2e9},
+  files: [{name: 'benchy.gcode', size: 10, modified: 5, time: 60, weight: 12.3}, {name: 'clip.gcode', size: 5, modified: 4, time: 30}]};
+test('files: a newly selected printer starts at the top folder', `
+  await connect();
+  await tab('files');
+  await until(() => last('cmd', 'files'));
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  await click(btn('Open folder sub'));
+  eq(last('cmd', 'files').args.path, 'gcodes/sub', 'in the folder');
+  await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [], files: []});
+  const before = cmds('files').length;
+  await post({type: 'selection_changed'});
+  await connect('stock', 2);
+  await until(() => cmds('files').length > before, 'listed again');
+  eq(last('cmd', 'files').args.path, 'gcodes', 'top folder of the new printer');
+`);
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');
