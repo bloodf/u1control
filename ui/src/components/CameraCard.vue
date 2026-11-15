@@ -3,13 +3,17 @@ import { computed } from 'vue';
 import Button from 'primevue/button';
 import Icon from './Icon.vue';
 import * as bridge from '../core/bridge';
-import { s, lease, targetKnown, printerName } from '../app/store';
+import { s, lease, run, tracker, targetKnown, printerName } from '../app/store';
 import { t } from '../core/i18n';
 
 function toggle() {
   s.camOn = !s.camOn;
   if (!s.camOn) { s.frame = ''; s.camError = ''; }
   lease();
+}
+async function save() {
+  const r = await run({ key: 'snapshot', label: t('act.snapshot'), cmd: 'snapshot' });
+  if (r.ok) tracker.notify('success', t('ok.saved', { path: r.result }));
 }
 const msg = computed(() => (s.camError ? t('cam.unavailable', { error: s.camError }) : t('cam.starting')));
 </script>
@@ -20,6 +24,8 @@ const msg = computed(() => (s.camError ? t('cam.unavailable', { error: s.camErro
       <h2 id="cam-h" class="cam-h"><Icon name="icon/camera" /> {{ t('cam.title') }}</h2>
       <span v-if="!s.camOn" class="oui-meta">{{ t('cam.off') }} · {{ t('cam.offHint') }}</span>
       <span class="u1-spacer" />
+      <Button v-if="s.camOn && s.frame" severity="secondary" outlined :title="t('cam.saveHint')" :loading="tracker.isBusy('snapshot')"
+              data-focus-key="cam-save" data-test="cam-save" @click="save"><Icon name="icon/download" /><span>{{ t('cam.save') }}</span></Button>
       <Button :severity="s.camOn ? 'secondary' : undefined" :outlined="s.camOn" :disabled="!targetKnown && !s.camOn"
               data-focus-key="camera" data-test="camera" @click="toggle">
         <Icon name="icon/live-stream" /><span>{{ s.camOn ? t('cam.stop') : t('cam.start') }}</span></Button>

@@ -1,15 +1,22 @@
-"""Features of 0.7.0: rename in the file manager, and the file list's filament column."""
+"""Features of 0.7.0: rename in the file manager, saving the camera picture, and the file list's filament column."""
 
 import os
 import sys
+import tempfile
+import time
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [os.path.join(ROOT, "src", "u1control"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "scripts")]
 
 import fakes  # noqa: E402
+import service as service_mod  # noqa: E402
 from service import Service, Target  # noqa: E402
 from test_u1control import wait_for  # noqa: E402
+
+JPEG = b"\xff\xd8\xff\xe0" + b"frame" * 10
+
 
 def make(test, fake, **target):
     pub = []
@@ -65,6 +72,52 @@ class RenameTests(unittest.TestCase):
     def test_other_files_keep_any_extension(self):
         self.assertEqual(self.svc.cmd_rename("gcodes/clip.mp4", "clip-old.mp4"), {"path": "gcodes/clip-old.mp4"})
         self.assertEqual(self.svc.cmd_rename("gcodes/b.gcode", "b.GCO"), {"path": "gcodes/b.GCO"})
+
+
+class SnapshotTests(unittest.TestCase):
+    def setUp(self):
+        self.fake = fakes.FakePrinter()
+        self.addCleanup(self.fake.close)
+        self.fake.files["camera/monitor.jpg"] = JPEG
+        self.home = tempfile.mkdtemp()
+        patch = mock.patch.dict(os.environ, {"HOME": self.home, "USERPROFILE": self.home})
+        patch.start()
+        self.addCleanup(patch.stop)
+        self.svc, self.pub = make(self, self.fake, name="Bench U1")
+        self.svc.firmware = {"kind": "stock", "version": ""}
+        self.svc.client.ws_call = lambda *a, **k: None   # camera.start_monitor (websocket only)
+
+    def test_saves_the_last_picture(self):
+        self.svc._push_frame()
+        reply = call(self, self.svc, self.pub, "snapshot")
+        path = reply["result"]
+        self.assertEqual(os.path.dirname(path), os.path.join(self.home, "Downloads", "u1control"))
+        self.assertTrue(os.path.basename(path).startswith("Bench U1 ") and path.endswith(".jpg"), path)
+        with open(path, "rb") as f:
+            self.assertEqual(f.read(), JPEG)
+        again = call(self, self.svc, self.pub, "snapshot")["result"]
+        self.assertNotEqual(again, path)   # never overwrites
+        self.assertTrue(os.path.exists(path))
+
+    def test_without_a_picture_nothing_is_saved(self):
+        self.assertIn("camera", call(self, self.svc, self.pub, "snapshot").get("error", ""))
+        self.assertFalse(os.path.exists(os.path.join(self.home, "Downloads", "u1control")))
+
+    def test_an_old_picture_is_not_saved(self):
+        self.svc._push_frame()
+        with mock.patch.object(service_mod, "SNAPSHOT_MAX_AGE", 0.0):
+            time.sleep(0.01)
+            self.assertIn("error", call(self, self.svc, self.pub, "snapshot"))
+
+    def test_a_picture_of_the_previous_printer_is_not_saved(self):
+        self.svc._push_frame()
+        other = fakes.FakePrinter()
+        self.addCleanup(other.close)
+        self.svc.set_target(Target(other.host))
+        self.assertIn("error", call(self, self.svc, self.pub, "snapshot"))
+
+    def test_runs_beside_a_long_command(self):
+        self.assertIn("snapshot", service_mod.DEDICATED)
 
 
 class FileWeightTests(unittest.TestCase):

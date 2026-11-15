@@ -139,8 +139,7 @@ class FilesMixin:
         The data goes to '<name>.part', then gets a final name that no other file has (see _publish); an
         interrupted download keeps its .part file. Runs on its own thread (see DEDICATED). Returns the saved path."""
         path = _safe_path(path)
-        folder = os.path.join(os.path.expanduser("~"), "Downloads", "u1control")
-        os.makedirs(folder, exist_ok=True)
+        folder = download_folder()
         name = _local_name(path)
         part = []
 
@@ -159,6 +158,13 @@ class FilesMixin:
             return _publish(part[0], folder, name)
         except OSError as e:
             raise PrinterError("download kept at %s: couldn't give it its final name (%s)" % (part[0], e)) from e
+
+
+def download_folder():
+    """~/Downloads/u1control, created when missing: where saved printer files and camera pictures go."""
+    folder = os.path.join(os.path.expanduser("~"), "Downloads", "u1control")
+    os.makedirs(folder, exist_ok=True)
+    return folder
 
 
 def _entries(listing, kind, key):

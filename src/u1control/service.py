@@ -25,7 +25,7 @@ import settings
 import spoolman as sm
 import u1
 import usage
-from files import GCODE_ROOT, FilesMixin, _safe_path  # noqa: F401  (_safe_path: used by tests and callers)
+from files import GCODE_ROOT, FilesMixin, _local_name, _new_file, _safe_path, download_folder  # noqa: F401  (_safe_path: used by tests and callers)
 from moonraker import Moonraker, PrinterError
 from stockview import StockMixin
 from usage import job_key, printer_ident  # noqa: F401  (job_key: used by tests)
@@ -37,9 +37,11 @@ CAMERA_RETRY = 2.0
 CAMERA_KEEPALIVE = 50.0
 FRAME_MIN_INTERVAL = 0.2    # ~5 fps cap
 FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
+SNAPSHOT_MAX_AGE = 10.0     # s: Save picture keeps only a camera frame this fresh
 URGENT = ("emergency_stop", "pause", "cancel")   # never wait behind the command worker
-DEDICATED = URGENT + ("download", "screen_touch", "stock", "usage", "usage_ack")  # own short-lived thread
-# ("stock" only reads files; "usage"/"usage_ack" only read or write the local ledger, never Spoolman)
+DEDICATED = URGENT + ("download", "screen_touch", "stock", "usage", "usage_ack", "snapshot")  # own short-lived thread
+# ("stock" only reads files; "usage"/"usage_ack" only read or write the local ledger, never Spoolman;
+# "snapshot" only writes the last camera picture to a local file)
 THUMB_QUEUE = 8             # thumbnails waiting at most; the page asks for a few at a time
 STOCK_CAMERA = "/server/files/camera/monitor.jpg"
 EXT_CAMERA = "/webcam/snapshot.jpg"
@@ -120,6 +122,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
         self.last_frame_at = 0.0
+        self.last_frame = None      # (JPEG bytes, time.monotonic()) of the selected printer's camera
         self.camera_keepalive_at = 0.0
         self.camera_retry_at = 0.0
         self.screen_at = 0.0
@@ -375,11 +378,27 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         data, _ = client.raw("GET", path + "?t=%d" % int(time.time() * 1000), timeout=4)
         if data[:2] != b"\xff\xd8":
             raise PrinterError("camera returned no image")
-        if not self._current(gen):
-            return   # a picture of the printer that is no longer selected
+        with self.lock:
+            if gen != self.generation:
+                return   # a picture of the printer that is no longer selected
+            self.last_frame = (data, time.monotonic())
         self.frame_ack.clear()
         self.last_frame_at = time.monotonic()
         self.publish({"type": "frame", "image": "data:image/jpeg;base64," + base64.b64encode(data).decode()})
+
+    def cmd_snapshot(self):
+        """Save the camera picture on screen (the last frame, at most SNAPSHOT_MAX_AGE s old) to the download
+        folder as '<printer> <date time>.jpg', never replacing a file. Returns the saved path."""
+        gen, _, target = self._ctx()
+        with self.lock:
+            frame = self.last_frame if gen == self.generation else None
+        if not frame or time.monotonic() - frame[1] > SNAPSHOT_MAX_AGE:
+            raise PrinterError("no recent camera picture: start the camera first")
+        name = _local_name("%s %s.jpg" % (target.name.replace("/", "_"), time.strftime("%Y-%m-%d %H-%M-%S")))
+        path, out = _new_file(download_folder(), name)
+        with out:
+            out.write(frame[0])
+        return path
 
     def _push_screen(self):
         """Extended Firmware remote screen: publish the touchscreen PNG when it changed."""

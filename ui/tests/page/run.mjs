@@ -656,6 +656,20 @@ test('files: filter by name and show each file\'s filament', `
   eq(qa('.fv-name').length, 2, 'all back');
 `);
 
+test('camera: save the picture on screen', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  eq(byTest('cam-save'), null, 'no button while the camera is off');
+  await click(byTest('camera'));
+  eq(byTest('cam-save'), null, 'no button before the first picture');
+  await post({type: 'frame', image: 'data:image/jpeg;base64,/9j/'});
+  await click(byTest('cam-save'));
+  const cmd = last('cmd', 'snapshot');
+  eq(cmd.args, {}, 'asks the plugin to save its last picture');
+  await reply(cmd, '/home/u/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
+  await until(() => text(q('.notices [role=status]')).includes('Saved to'), 'says where it was saved');
+`);
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');
