@@ -85,6 +85,37 @@ class MonitorTests(unittest.TestCase):
                                  len([m for m in pub if m.get("type") == "status"]) > seen, timeout=6))
 
 
+class SpoolmanAnswerTests(unittest.TestCase):
+    @staticmethod
+    def opener(body):
+        class Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        class Opener:
+            def open(self, req, timeout=None):
+                return Resp(body)
+        return Opener()
+
+    def test_non_json_answer_is_a_spoolman_error(self):
+        smc = sm.Spoolman("http://spoolman.invalid", opener=self.opener(b"<html>proxy login</html>"))
+        with self.assertRaises(sm.SpoolmanError):
+            smc.spools()
+
+    def test_proxy_error_that_is_not_an_object(self):
+        class Mr:
+            def request(self, *a, **k):
+                return {"error": "spoolman unreachable", "response": None}
+        smc = sm.Spoolman("", Mr())
+        smc.via_moonraker = True
+        with self.assertRaises(sm.SpoolmanError) as cm:
+            smc.spools()
+        self.assertIn("spoolman unreachable", str(cm.exception))
+
+
 class _WsServer:
     """One websocket answer over a socketpair: reads the client's handshake and request, replies with `reply(id)`."""
 
