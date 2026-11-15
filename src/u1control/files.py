@@ -11,6 +11,7 @@ GCODE_ROOT = "gcodes"
 FOLDER_NAME_RE = re.compile(r"^[\w .-]{1,64}$")
 THUMB_RE = re.compile(r"^[\w .()+-]+(/[\w .()+-]+)*\.(png|jpg|jpeg)$", re.I)
 FILE_ROOTS = ("gcodes", "camera")   # camera = U1 timelapse videos and snapshots
+UNSAFE_NAME_RE = re.compile(r'[\\/:*?"<>|\x00-\x1f]')   # separators, drive colons, Windows-reserved, control
 
 
 class FilesMixin:
@@ -103,7 +104,7 @@ class FilesMixin:
         path = _safe_path(path)
         folder = os.path.join(os.path.expanduser("~"), "Downloads", "u1control")
         os.makedirs(folder, exist_ok=True)
-        name = os.path.basename(path)
+        name = _local_name(path)
         part = []
 
         def open_out():
@@ -121,6 +122,13 @@ class FilesMixin:
             return _publish(part[0], folder, name)
         except OSError as e:
             raise PrinterError("download kept at %s: couldn't give it its final name (%s)" % (part[0], e)) from e
+
+
+def _local_name(path):
+    """The printer file's name as saved here. The printer names its files (Linux allows '\\' and ':'); on
+    Windows those would point into another folder or drive, so they become '_'."""
+    name = UNSAFE_NAME_RE.sub("_", path.rsplit("/", 1)[-1]).strip()
+    return name if name.strip(".") else "download"
 
 
 def _candidates(name):

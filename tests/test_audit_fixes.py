@@ -159,5 +159,28 @@ class EmergencyStopTests(unittest.TestCase):
         self.assertEqual(sent, ["M112"])
 
 
+class DownloadNameTests(unittest.TestCase):
+    def test_printer_file_names_stay_inside_the_download_folder(self):
+        for given, want in (("camera/D:evil.mp4", "D_evil.mp4"), ("camera/a\\..\\..\\x.mp4", "a_.._.._x.mp4"),
+                            ("camera/t.mp4", "t.mp4"), ("camera/..", "download"), ("camera/a\x01b.mp4", "a_b.mp4")):
+            with self.subTest(given=given):
+                self.assertEqual(files._local_name(given), want)
+
+    def test_download_uses_the_safe_name(self):
+        fake = fakes.FakePrinter()
+        self.addCleanup(fake.close)
+        fake.files["camera/D:t.mp4"] = b"data"
+        home = tempfile.mkdtemp()
+        pub = []
+        with mock.patch.dict(os.environ, {"HOME": home, "USERPROFILE": home}):
+            svc = Service(pub.append, log=lambda m: None)
+            self.addCleanup(svc.close)
+            svc.set_target(Target(fake.host))
+            svc.submit(1, "download", {"path": "camera/D:t.mp4"})
+            self.assertTrue(wait_for(lambda: any(m.get("id") == 1 for m in pub)))
+        saved = next(m for m in pub if m.get("id") == 1)["result"]
+        self.assertEqual(saved, os.path.join(home, "Downloads", "u1control", "D_t.mp4"))
+
+
 if __name__ == "__main__":
     unittest.main()
