@@ -31,6 +31,14 @@ function fill(m: Config): void {
   Object.assign(form, { mode: m.mode, host: st.host || '', apiKey: st.api_key || '', name: st.printer_name || 'Snapmaker U1', spoolman: st.spoolman_url || '', draft: {} });
 }
 
+/** Drop what was typed and show the saved values again. */
+export function discard(): void {
+  const c = config.value;
+  if (!c || saving.value) return;
+  const st = c.settings;
+  Object.assign(form, { mode: c.mode, host: st.host || '', apiKey: st.api_key || '', name: st.printer_name || 'Snapmaker U1', spoolman: st.spoolman_url || '', draft: {} });
+}
+
 export async function save(): Promise<void> {
   const c = config.value;
   if (!c || saving.value) return;

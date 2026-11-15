@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue';
+import { computed, reactive, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
-import Message from 'primevue/message';
-import Icon from './Icon.vue';
+import { OuiBanner, OuiEmpty, OuiFormRow, OuiIcon, OuiKeyValue, OuiPanel } from '../../shared/src/components';
+import { external, refresh, wrench } from '../../shared/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, targetKnown, printing } from '../app/store';
 import { ask, prompt } from '../core/dialog';
@@ -88,44 +88,50 @@ async function action(id: string, name: string, danger = false) {
   const r = await run({ key: `exta:${id}`, label: t('act.extAction'), cmd: 'ext_action', args: { action_id: id }, timeoutMs: 120000 });
   if (r.ok) result(r.result, t('ok.extAction'));
 }
+const facts = computed(() => Object.entries(status.value).map(([label, v]) => ({ label, value: show(v) })));
 </script>
 <template>
-  <section class="u1-card" aria-labelledby="fw-h">
-    <h2 id="fw-h"><Icon name="icon/firmware" /> {{ t('ext.title') }}</h2>
-    <p v-if="!targetKnown || !s.info" class="oui-muted">{{ s.phase === 'connecting' ? t('ext.detecting') : t('ext.noTarget') }}</p>
-    <div v-else-if="s.info.firmware.kind !== 'extended'" class="fw-stock"><Icon name="spot/stock-firmware" :size="96" />
-      <p>{{ t('ext.stock') }} <a href="https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware">{{ t('ext.link') }}</a></p></div>
-    <p v-else-if="state === 'loading'" class="oui-muted" role="status">{{ t('ext.detecting') }}</p>
-    <Message v-else-if="state === 'error'" severity="error">
-      {{ t('ext.error', { error }) }} {{ t('ext.errorHelp') }}
-      <div><Button size="small" severity="secondary" outlined :label="t('common.retry')" @click="load" /></div></Message>
+  <!-- Built like a settings section (OuiFormSection), with its heading id kept for the section's label. -->
+  <OuiPanel id="firmware" class="oui-formsection" :icon="wrench" tone="violet" flush tabindex="-1" aria-labelledby="fw-h">
+    <template #title><span id="fw-h">{{ t('ext.title') }}</span></template>
+    <OuiEmpty v-if="!targetKnown || !s.info" compact :state="s.phase === 'connecting' ? 'loading' : 'offline'" :title="s.phase === 'connecting' ? t('ext.detecting') : t('ext.noTarget')" />
+    <OuiEmpty v-else-if="s.info.firmware.kind !== 'extended'" compact tone="violet" :icon="wrench" :title="t('ext.stock')">
+      <template #actions><a class="u1-inline" href="https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware"><OuiIcon :icon="external" :size="14" />{{ t('ext.link') }}</a></template>
+    </OuiEmpty>
+    <OuiEmpty v-else-if="state === 'loading'" compact state="loading" :title="t('ext.detecting')" role="status" />
+    <OuiEmpty v-else-if="state === 'error'" state="error" :title="t('ext.error', { error })" :text="t('ext.errorHelp')">
+      <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="load"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
+    </OuiEmpty>
     <template v-else-if="state === 'ok'">
-      <dl class="fw-kv"><template v-for="(v, k) in status" :key="k"><dt>{{ k }}</dt><dd>{{ show(v) }}</dd></template></dl>
-      <p v-if="printing" class="u1-why" data-test="ext-print-why">{{ t('ext.printWhy') }}</p>
-      <template v-for="g in groups" :key="g.id">
-        <h3 v-if="visibleItems(g).length" class="fw-g">{{ g.label }}</h3>
-        <div v-for="x in visibleItems(g)" :key="x.id" class="fw-item">
-          <div><label :id="`ext-l-${x.id}`">{{ x.label }}</label><div v-if="x.description" class="oui-meta">{{ x.description }}</div></div>
-          <Select v-model="chosen[x.id]" :options="options(x)" option-label="label" option-value="value" option-disabled="disabled" :aria-labelledby="`ext-l-${x.id}`" class="fw-sel" />
-          <Button severity="secondary" outlined :label="t('common.apply')" :aria-label="t('ext.applyLabel', { label: x.label })" :loading="tracker.isBusy(`ext:${x.id}`)"
-                  :disabled="waits(x)" :data-focus-key="`ext:${x.id}`" @click="apply(x)" />
-        </div>
-      </template>
-      <div class="u1-row fw-actions">
-        <Button v-for="a in actions" :key="a.id" :severity="'danger' in a ? 'danger' : 'secondary'" outlined :label="t(a.label)" :loading="tracker.isBusy(`exta:${a.id}`)"
-                :disabled="printing && 'ends' in a" :data-focus-key="`exta:${a.id}`" @click="action(a.id, t(a.label), 'danger' in a)" />
+      <div v-if="facts.length || printing" class="oui-stack u1-pad">
+        <OuiKeyValue v-if="facts.length" :items="facts" />
+        <!-- Said once for this panel; the Apply buttons and actions it turns off point here. -->
+        <OuiBanner v-if="printing" id="ext-print-why" tone="info" :title="t('ext.printWhy')" data-test="ext-print-why" />
       </div>
-      <pre v-if="log" class="oui-error-detail fw-log" :aria-label="t('ext.log')">{{ log }}</pre>
+      <div class="oui-formsection-rows fw-rows">
+        <template v-for="g in groups" :key="g.id">
+          <h3 v-if="visibleItems(g).length" class="oui-label fw-g">{{ g.label }}</h3>
+          <OuiFormRow v-for="x in visibleItems(g)" :id="`ext-l-${x.id}`" :key="x.id" class="fw-item" :label="x.label" :hint="x.description">
+            <Select v-model="chosen[x.id]" :options="options(x)" option-label="label" option-value="value" option-disabled="disabled" :aria-label="x.label" class="fw-sel" />
+            <Button severity="secondary" :label="t('common.apply')" :aria-label="t('ext.applyLabel', { label: x.label })" :loading="tracker.isBusy(`ext:${x.id}`)"
+                    :disabled="waits(x)" :aria-describedby="waits(x) ? 'ext-print-why' : undefined" :data-focus-key="`ext:${x.id}`" @click="apply(x)" />
+          </OuiFormRow>
+        </template>
+      </div>
+      <pre v-if="log" class="oui-error-detail oui-well fw-log" :aria-label="t('ext.log')" tabindex="0">{{ log }}</pre>
     </template>
-  </section>
+    <!-- Restarts and the reboot: apart from the settings, the reboot in red, and each asks first. -->
+    <template v-if="state === 'ok' && targetKnown && s.info?.firmware.kind === 'extended'" #footer>
+      <Button v-for="a in actions" :key="a.id" :severity="'danger' in a ? 'danger' : 'secondary'" :outlined="'danger' in a" size="small" :label="t(a.label)" :loading="tracker.isBusy(`exta:${a.id}`)"
+              :class="{ 'fw-danger': 'danger' in a }" :disabled="printing && 'ends' in a" :aria-describedby="printing && 'ends' in a ? 'ext-print-why' : undefined"
+              :data-focus-key="`exta:${a.id}`" @click="action(a.id, t(a.label), 'danger' in a)" />
+    </template>
+  </OuiPanel>
 </template>
-<style scoped>
-.fw-stock { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; } .fw-stock p { flex: 1 1 260px; margin: 0; }
-.fw-kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; } .fw-kv dt { color: var(--oui-muted); } .fw-kv dd { margin: 0; overflow-wrap: anywhere; }
-.fw-g { margin: 16px 0 8px; }
-.fw-item { display: grid; grid-template-columns: minmax(0, 1fr) minmax(160px, 240px) auto; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--oui-border); }
-.fw-sel { width: 100%; }
-.fw-actions { margin-top: 12px; }
-.fw-log { max-height: 240px; overflow: auto; border: 1px solid var(--oui-border); border-radius: 6px; padding: 8px; }
-@media (max-width: 640px) { .fw-item { grid-template-columns: minmax(0, 1fr); } }
+<style>
+.fw-g { padding: var(--oui-s3) var(--oui-s4) var(--oui-s1); }
+.fw-rows { border-top: 1px solid var(--oui-border); }
+.fw-rows:empty { display: none; }
+.fw-log { max-height: 240px; overflow: auto; margin: 0 var(--oui-s4) var(--oui-s4); padding: var(--oui-s2); }
+.fw-danger { margin-inline-start: auto; }
 </style>

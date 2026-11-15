@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import Button from 'primevue/button';
-import Icon from './Icon.vue';
+import { OuiEmpty, OuiIcon, OuiPanel } from '../../shared/src/components';
+import { check, toolhead } from '../../shared/src/icons';
 import HeadCard from './HeadCard.vue';
 import * as bridge from '../core/bridge';
-import { s, controlsOff, guidedWhy } from '../app/store';
+import { s, controlsOff } from '../app/store';
 import { t } from '../core/i18n';
 
 // One visible spool source per screen (X03): when Spooler's stock uses the same Spoolman, say so.
@@ -17,27 +18,18 @@ const source = computed(() => {
 });
 </script>
 <template>
-  <section class="u1-card" aria-labelledby="heads-h">
-    <div class="u1-row th-head">
-      <h2 id="heads-h"><Icon name="icon/toolheads-rfid" /> {{ t('heads.title') }}</h2>
-      <span class="oui-meta" data-test="spool-source">{{ source }}</span><span class="u1-spacer" />
-      <Button :disabled="!!controlsOff" data-focus-key="sync" :aria-describedby="'sync-help'" @click="bridge.post({ type: 'sync_project' })">
-        <Icon name="icon/filament-spool" /><span>{{ t('heads.sync') }}</span></Button>
-    </div>
-    <p id="sync-help" class="oui-meta th-help">{{ t('heads.syncHelp') }}</p>
-    <!-- Edit, Load and Unload of every toolhead are off for the same reason: say it once, and point the buttons at it. -->
-    <p v-if="s.status && guidedWhy" id="heads-why" class="u1-why th-why" data-test="heads-why">{{ guidedWhy }}</p>
-    <div v-if="s.status" class="th-grid">
+  <OuiPanel :icon="toolhead" tone="magenta" :flush="!s.status" aria-labelledby="heads-h">
+    <template #title><span id="heads-h">{{ t('heads.title') }}</span></template>
+    <template #meta><span data-test="spool-source" :title="source">{{ source }}</span></template>
+    <template #actions>
+      <Button size="small" :label="t('heads.sync')" :disabled="!!controlsOff" data-focus-key="sync" :aria-describedby="controlsOff ? 'heads-why' : 'sync-help'" @click="bridge.post({ type: 'sync_project' })">
+        <template #icon><OuiIcon :icon="check" :size="14" /></template></Button>
+    </template>
+    <!-- Why Edit, Load and Unload are off is said once for the page (#heads-why, under the app bar), not in each card. -->
+    <div v-if="s.status" class="oui-cards">
       <HeadCard v-for="(h, i) in s.status.heads" :key="i" :index="i" />
     </div>
-    <p v-else class="oui-muted">{{ t('heads.noStatus') }}</p>
-  </section>
+    <OuiEmpty v-else compact tone="magenta" :icon="toolhead" :title="t('heads.noStatus')" />
+    <template #footer><p id="sync-help" class="oui-meta">{{ t('heads.syncHelp') }}</p></template>
+  </OuiPanel>
 </template>
-<style scoped>
-.th-head h2 { margin: 0; display: flex; gap: 8px; align-items: center; }
-.th-help { margin: 4px 0 12px; }
-.th-why { margin: -4px 0 12px; }
-.th-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; --u1-t1: #FF997D; --u1-t2: #F4CF78; --u1-t3: #A99BFF; --u1-t4: #78CFD5; }
-@media (max-width: 1100px) { .th-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .th-grid { grid-template-columns: minmax(0, 1fr); } }
-</style>

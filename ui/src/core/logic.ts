@@ -10,6 +10,17 @@ export function parseTarget(raw: unknown, max: number): TargetInput {
   return value === 0 ? { kind: 'off' } : { kind: 'heat', value };
 }
 
+export type HeaterPhase = 'heating' | 'target' | 'cooling' | 'off';
+
+/** What a heater is doing, in words for its reading. Unknown reading or target is null, never a guess; within 2 °C is at target. */
+export function heaterPhase(temp: number | null | undefined, target: number | null | undefined): HeaterPhase | null {
+  if (typeof target !== 'number' || !Number.isFinite(target)) return null;
+  if (target <= 0) return 'off';
+  if (typeof temp !== 'number' || !Number.isFinite(temp)) return null;
+  const d = temp - target;
+  return Math.abs(d) <= 2 ? 'target' : d < 0 ? 'heating' : 'cooling';
+}
+
 export function parseSpeed(raw: unknown): number | null {
   if (raw === null || raw === undefined || raw === '') return null;
   const v = Number(raw);

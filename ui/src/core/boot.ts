@@ -1,5 +1,5 @@
-// The plugin fills two JSON blocks before serving the page: the boot payload (mode, version, host language,
-// setup data) and the sanitized icon map. During `vite dev` they are absent and the defaults apply.
+// The plugin fills one JSON block before serving the page: the boot payload (mode, version, host language,
+// setup data). During `vite dev` it is absent and the defaults apply.
 export interface Boot {
   mode: 'app' | 'setup';
   version: string;
@@ -15,4 +15,3 @@ function readJson<T>(id: string, fallback: T): T {
 }
 
 export const boot: Boot = { mode: 'app', version: 'dev', lang: null, ...readJson<Partial<Boot>>('u1-boot', {}) };
-export const icons: Record<string, string> = readJson('u1-icons', {});

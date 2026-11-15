@@ -2,12 +2,15 @@ import { computed, reactive } from 'vue';
 import * as bridge from '../core/bridge';
 import { Tracker, message, type RunOptions } from '../core/tracker';
 import { t } from '../core/i18n';
-import { cancelDialog } from '../core/dialog';
-import type { Config, Info, Spool, Status, StockView, UsageView } from './types';
+import { ask, cancelDialog } from '../core/dialog';
+import type { Config, Heater, Info, Spool, Status, StockView, UsageView } from './types';
 
 export type Phase = 'connecting' | 'connected' | 'noTarget' | 'unreachable';
 export const LIMITS = { hotend: 320, bed: 110 };
 export const STALE_STATUS_S = 10;
+/** Heater readings kept for the small charts: one every 5 s, ten minutes of them. Shown only, never acted on. */
+export const HISTORY_EVERY_MS = 5000;
+export const HISTORY_MAX = 120;
 
 export const s = reactive({
   phase: 'connecting' as Phase,
@@ -17,6 +20,8 @@ export const s = reactive({
   offline: '',
   status: null as Status | null,
   statusAt: 0,
+  history: {} as Record<string, (number | null)[]>,
+  historyAt: 0,
   now: Date.now(),
   limits: { ...LIMITS },
   spools: [] as Spool[],
@@ -50,6 +55,8 @@ bridge.setErrorSink(e => tracker.notify('error', t('msg.plugin', { error: messag
 export const printerName = computed(() => s.info?.printer || 'U1');
 export const targetKnown = computed(() => s.phase === 'connected' || s.phase === 'unreachable');
 export const statusAge = computed(() => (s.statusAt ? (s.now - s.statusAt) / 1000 : Infinity));
+/** Last known values of a printer the page no longer hears from: drawn grey, never as live. */
+export const stale = computed(() => !!s.status && (s.phase === 'unreachable' || !!s.offline || statusAge.value > STALE_STATUS_S));
 export const printing = computed(() => s.status?.state === 'printing' || s.status?.state === 'paused');
 /** Why printer commands are off, or '' when they can be used. Emergency stop has its own rule (estopReason). */
 export const controlsOff = computed(() => {
@@ -61,12 +68,18 @@ export const controlsOff = computed(() => {
 /** E-stop stays usable for a known printer even when its status is offline or late (urgent path, no queue). */
 export const estopReason = computed(() => (targetKnown.value ? '' : s.phase === 'noTarget' ? t('reason.noTarget') : t('reason.waiting')));
 export const busy = computed(() => !!s.status?.busy);
+/** Same question and urgent path from the app bar on every tab: one press away, never queued behind another command. */
+export async function estop(): Promise<void> {
+  if (!await ask({ title: t('confirm.estop.title'), text: t('confirm.estop.text', { printer: printerName.value }),
+    yes: t('confirm.estop.yes'), no: t('common.goBack'), danger: true })) return;
+  await run({ key: 'estop', label: t('act.estop'), cmd: 'emergency_stop', okText: t('ok.estop'), timeoutMs: 10000, allowRepeat: true });
+}
 /** Why the guided toolhead commands (Edit, Load, Unload) are off, or ''. */
 export const guidedWhy = computed(() => controlsOff.value || (busy.value ? t('reason.busy') : ''));
 
 function reset(): void {
   s.epoch++;
-  Object.assign(s, { info: null, error: '', offline: '', status: null, statusAt: 0, spools: [], bindings: {}, spoolsVia: '',
+  Object.assign(s, { info: null, error: '', offline: '', status: null, statusAt: 0, history: {}, historyAt: 0, spools: [], bindings: {}, spoolsVia: '',
     spoolsError: '', spoolsLoaded: false, frame: '', camError: '', screen: '', screenError: '', usageError: '' });
   if (s.stock) s.stock = { ...s.stock, bindings: {}, same_spoolman: null, usage: 'unknown' };
   cancelDialog();
@@ -142,10 +155,19 @@ export const stockVisible = computed(() => {
   return !!st && st.spooler.state !== 'absent';
 });
 
+function remember(d: Status): void {
+  const now = Date.now();
+  if (now - s.historyAt < HISTORY_EVERY_MS) return;
+  const add = (key: string, h: Heater | undefined) => [key, [...(s.history[key] ?? []), h?.temp ?? null].slice(-HISTORY_MAX)] as const;
+  s.history = Object.fromEntries([...(d.extruders ?? []).map((e, i) => add(String(i), e)), add('bed', d.bed)]);
+  s.historyAt = now;
+}
+
 function onMessage(m: any): void {
   switch (m.type) {
     case 'status':
       s.status = m.data; s.statusAt = Date.now(); s.offline = '';
+      if (m.data) remember(m.data);
       if (m.data?.bindings) s.bindings = m.data.bindings;
       // The plugin checks the firmware again when its first answer was unclear (or after the printer was away).
       if (s.info && m.data?.firmware?.kind && (m.data.firmware.kind !== s.info.firmware.kind

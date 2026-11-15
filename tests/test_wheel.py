@@ -18,8 +18,8 @@ import build  # noqa: E402
 PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"]
 DIST_INFO = "u1control-%s.dist-info/" % PROJECT["version"]
 EXPECTED = {"u1control/%s.py" % n for n in ("__init__", "_assets") + build.MODULES} | {
-    DIST_INFO + n for n in ("METADATA", "WHEEL", "RECORD", "top_level.txt", "licenses/LICENSE", "licenses/PrimeUIX.txt",
-                            "licenses/PrimeVue.txt", "licenses/Vue.txt")}
+    DIST_INFO + n for n in ("METADATA", "WHEEL", "RECORD", "top_level.txt", "licenses/LICENSE", "licenses/Lucide.txt",
+                            "licenses/Manrope.txt", "licenses/PrimeUIX.txt", "licenses/PrimeVue.txt", "licenses/Vue.txt")}
 # (?<![.\w]): a JS method call such as RegExp .exec( in the embedded page is not Python exec().
 FORBIDDEN = re.compile(r"(?<![.\w])exec\(|(?<![.\w])eval\(|__import__|importlib")
 DYNAMIC_BUILTINS = {"exec", "eval", "compile", "__import__"}
@@ -66,10 +66,10 @@ class WheelTests(unittest.TestCase):
         self.assertEqual(self.read(DIST_INFO + "top_level.txt").strip(), "u1control")
 
     def test_licenses_travel_with_the_wheel(self):
-        """Our LICENSE and the notices of the bundled Vue, PrimeVue and PrimeUIX, byte for byte."""
+        """Our LICENSE and the notices of the bundled Vue, PrimeVue, PrimeUIX, Lucide icons and Manrope font, byte for byte."""
         self.assertEqual(self.zip.read(DIST_INFO + "licenses/LICENSE"), (ROOT / "LICENSE").read_bytes())
         shared = sorted((ROOT / "ui" / "shared" / "licenses").glob("*.txt"))
-        self.assertEqual({f.name for f in shared}, {"PrimeUIX.txt", "PrimeVue.txt", "Vue.txt"})
+        self.assertEqual({f.name for f in shared}, {"Lucide.txt", "Manrope.txt", "PrimeUIX.txt", "PrimeVue.txt", "Vue.txt"})
         for f in shared:
             self.assertEqual(self.zip.read(DIST_INFO + "licenses/" + f.name), f.read_bytes())
 

@@ -37,7 +37,7 @@ async function pick(root, label) {
   assert(opt, 'option ' + label + ' in ' + qa('.p-select-overlay [role=option]').map(text).join('|'));
   await mouse(opt); await until(() => !q('.p-select-overlay'), 'overlay closed'); await settle();
 }
-const alerts = () => qa('[role=alert] .p-message').map(text).join(' | ');
+const alerts = () => qa('[role=alert] .oui-banner').map(text).join(' | ');
 const ROWS = [{id: 7, filament_id: 70, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', colours: [], remaining: 500, low: false, use_first: false, location: 'Shelf A'},
   {id: 11, filament_id: 110, name: 'White', vendor: 'Acme', material: 'PETG', colour: '#FAFAFA', colours: [], remaining: 40, low: true, use_first: true, location: ''}];
 const SP = state => ({state, text: state === 'active' ? 'Spooler is running' : 'Spooler was unloaded or disabled.', detail: '', version: '0.21.0', origin: 'http://box:7912'});
@@ -140,7 +140,7 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   await tab('settings');
   assert(q('[data-cal="bed_mesh"]').disabled && document.body.textContent.includes('Calibration runs when it is idle'), 'calibration blocked, says why');
   assert(q('#pref-unload_when_done').disabled, 'unload_when_done is not sent from this page');
-  assert(text(q('label[for="pref-unload_when_done"]')).includes('print setup pop-up'), 'says where to set it');
+  assert(text(q('#pref-unload_when_done').closest('.oui-formrow')).includes('print setup pop-up'), 'says where to set it');
   await tab('dash');
   if (!q('.hc-pick')) { await until(() => last('cmd', 'spools'), 'spools asked'); await reply(last('cmd', 'spools'), {spools: [{id: 7, name: 'Black', vendor: 'G', material: 'PLA', colour: '#111', remaining: 500, initial: 1000}], bindings: {}, via: 'direct'}); }
   await post({type: 'offline', error: 'timed out'});
@@ -180,7 +180,7 @@ test('extended settings render the release format and an unfinished log is not A
   await tab('settings');
   await until(() => last('cmd', 'ext_settings'), 'firmware settings asked');
   await reply(last('cmd', 'ext_settings'), {status: {Version: 'x'}, settings: GROUPS});
-  const body = text(q('#fw-h').parentElement);
+  const body = text(q('#fw-h').closest('section'));
   assert(body.includes('SSH Access') && body.includes('Remote Access') && body.includes('Remote Screen'), 'items and group labels shown: ' + body);
   assert(!body.includes('Debug only'), 'hidden setting left out');
   const sel = q('#ext-l-spoolman').closest('.fw-item').querySelector('.p-select');
@@ -217,7 +217,7 @@ test('settings draft survives mode switch; Saved needs the plugin answer', `
   await click(q('[data-mode="automagic"]'));
   await click(q('[data-mode="expert"]'));
   assert(q('#auto-rfid_auto_sync').checked, 'draft kept across Automagic/Expert');
-  await click(byTest('save-top'));
+  await click(byTest('save'));
   const save = last('save_settings');
   eq([save.settings.mode, save.settings.rfid_auto_sync], ['expert', true], 'draft sent');
   assert(!document.body.textContent.includes('Settings saved'), 'no Saved before the answer');
@@ -366,19 +366,19 @@ test('stock: other Spoolman, stale and stopped states, each with its own severit
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), STOCK({same_spoolman: false}));
   assert(stockRows().every(b => b.disabled), 'no link from another Spoolman');
-  assert(q('.sc-notes .p-message-error') && text(q('.sc-notes .p-message-error')).includes('different Spoolman'), 'blocking reason as an error');
+  assert(q('.sc-notes .oui-banner[data-tone="danger"]') && text(q('.sc-notes .oui-banner[data-tone="danger"]')).includes('different Spoolman'), 'blocking reason as an error');
   assert(text(byTest('stock-why')).includes('Linking unavailable'), 'visible reason (U06)');
   await click(btn('Refresh stock'));
   eq(last('cmd', 'stock').args, {refresh: true}, 'Refresh asks Spooler for a new list');
   await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, state: 'stale', ts: Date.now() / 1000 - 600}}));
-  assert(q('.sc-notes .p-message-warn') && text(q('.sc-notes .p-message-warn')).includes('out of date') && stockRows().length === 2, 'stale list stays, marked as a warning');
-  assert(!q('.sc-notes .p-message-error'), 'stale is not shown as an error (U09)');
+  assert(byTest('stock-stale') && byTest('stock-stale').dataset.tone === 'warn' && text(byTest('stock-stale')).includes('out of date') && stockRows().length === 2, 'stale list stays, marked as a warning');
+  assert(!q('[data-test="stock-card"] [data-tone="danger"], [data-test="stock-card"] [data-state="error"]'), 'stale is not shown as an error (U09)');
   await click(btn('Refresh stock'));
   await reply(last('cmd', 'stock'), STOCK({spooler: SP('stopped'), stock: {state: 'unavailable', rows: [], key: '', text: 'x'}}));
   assert(byTest('stock-card') && !stockRows().length && text(byTest('stock-card')).includes('unloaded'), 'stopped Spooler explained');
   await click(btn('Refresh stock'));
   await fail(last('cmd', 'stock'), 'the selected printer changed; nothing was sent to it');
-  assert(q('.sc-notes .p-message-error'), 'errors are shown, not swallowed');
+  assert(q('.sc-notes .oui-empty[data-state="error"]') && text(q('.sc-notes')).includes('printer changed'), 'errors are shown, not swallowed');
 `);
 
 test('stock: busy printer disables links with a visible reason; refresh keeps focus', `
@@ -387,7 +387,7 @@ test('stock: busy printer disables links with a visible reason; refresh keeps fo
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), STOCK());
   assert(stockRows().every(b => b.disabled), 'busy printer: no link');
-  assert(text(byTest('stock-why')).includes('busy'), 'reason visible (U06/B-06)');
+  assert(text(q('#heads-why')).includes('busy') && stockRows().every(b => b.getAttribute('aria-describedby') === 'heads-why'), 'reason visible once for the page, and the links point at it (U06/B-06)');
   await post({type: 'status', data: VIEW()});
   const b = q('[data-stock="11"]');
   assert(!b.disabled && !byTest('stock-why'), 'idle again: link allowed');
@@ -406,21 +406,21 @@ test('stock: many spools scroll inside the table; the reel never sets the row he
   eq(stockRows().length, 55, 'all spools listed');
   // OrcaSlicer's WebKit did not resolve the reel images' height: 100% in a table cell and used their 160 px source
   // height, which grew the reel to 40 x 160 and each row to ~177 px. Force that height: the box must not follow.
-  qa('.sc-wrap .sf img').forEach(i => { i.style.height = '160px'; });
+  // The reel is now a vector (OuiSpool, width/height attributes), with no picture whose source height could leak.
   await settle();
-  const figs = qa('.sc-wrap .sf').map(e => e.getBoundingClientRect());
+  const figs = qa('.sc-wrap .oui-spool').map(e => e.getBoundingClientRect());
   assert(figs.every(r => Math.round(r.width) === 40 && Math.round(r.height) === 40), 'reel is a fixed 40 px square: ' + JSON.stringify(figs.slice(0, 2)));
   const tall = qa('.sc-wrap tbody tr').map(r => r.getBoundingClientRect().height).filter(h => h > 80);
   eq(tall.length, 0, 'no row taller than its text needs');
-  eq(getComputedStyle(q('.sc-wrap .sf img')).objectFit, 'contain', 'picture kept undistorted');
+  eq(q('.sc-wrap .oui-spool').getAttribute('viewBox'), '0 0 48 48', 'reel drawn from its square viewBox, undistorted');
   const wrap = q('.sc-wrap');
   assert(wrap.scrollHeight > wrap.clientHeight + 100 && getComputedStyle(wrap).overflowY === 'auto', 'long list scrolls inside the table');
-  const after = q('[data-test="stock-card"] .sc-wrap + *');
+  const after = q('[data-test="stock-card"] .oui-panel-foot');
   assert(after && after.getBoundingClientRect().top >= wrap.getBoundingClientRect().bottom - 0.5, 'what follows the table starts below it');
   const note = byTest('stock-via');
-  assert(note && text(note).includes('through the printer') && !note.closest('.p-message'), 'via-printer note is a plain line');
+  assert(note && text(note).includes('through the printer') && !note.closest('.oui-banner'), 'via-printer note is a plain line');
   eq(getComputedStyle(note).borderTopStyle, 'none', 'no border around the note');
-  assert(byTest('stock-why').classList.contains('p-message-warn'), 'the busy warning keeps its box');
+  assert(q('#heads-why').classList.contains('oui-banner'), 'the busy reason keeps its box');
 `);
 
 // ------------------------------------------------------------------ new: review findings
@@ -436,7 +436,7 @@ test('U01/U12: destructive dialogs name both answers; E-stop apart from Cancel',
   assert(btn('Stop now (E-stop)', dialogEl()) && btn('Go back', dialogEl()), 'E-stop dialog labels');
   assert(!dialogText().includes('Klipper will halt'), 'plain language (U10)');
   await no();
-  assert(byTest('estop').closest('.st-urgent') && !byTest('cancel').closest('.st-urgent'), 'E-stop in its own group');
+  assert(byTest('estop').closest('.oui-appbar') && !byTest('cancel').closest('.oui-appbar'), 'E-stop in its own group, in the app bar, away from Cancel');
 `);
 
 test('U02: Off while printing confirms; declining keeps heating', `
@@ -457,8 +457,9 @@ test('U03: no target disables every physical command with a visible reason', `
   await until(() => last('hello'));
   await fail(last('hello'), 'Select a Snapmaker U1 printer', {no_target: true});
   assert(text(byTest('target-banner')).includes('No U1 selected'), 'banner says no U1 is selected');
-  for (const t of ['pause', 'resume', 'cancel', 'estop']) assert(byTest(t).disabled, t + ' disabled');
-  assert(text(byTest('controls-why')).includes('No U1 selected'), 'reason next to the controls');
+  // No printer: the Dashboard is the first-run state, with no print or stop controls to press at all.
+  for (const t of ['pause', 'resume', 'cancel', 'estop']) assert(!byTest(t) || byTest(t).disabled, t + ' not available');
+  assert(q('#heads-why') === byTest('target-banner') && qa('#heads-why').length === 1, 'reason said once, where the controls would be');
   assert(btn('Open Settings'), 'next step offered');
   await tab('settings');
   assert(document.body.textContent.includes('Connect to a U1 to see its firmware'), 'settings explains too');
@@ -497,7 +498,7 @@ test('B-04/B-05: one command per action, visible waiting, unknown after timeout,
   await reply(cmds('pause')[0], true);
   assert(!alerts().includes('no answer after'), 'late answer replaces the unknown notice');
   assert(document.body.textContent.includes('answered late'), 'late answer reported');
-  const dismiss = qa('[role=alert] .p-message').find(m => text(m).includes('Emergency stop failed')).querySelector('button');
+  const dismiss = qa('[role=alert] .oui-banner').find(m => text(m).includes('Emergency stop failed')).querySelector('button');
   await click(dismiss);
   assert(!alerts().includes('Emergency stop failed'), 'dismissed by the user');
 `, { slow: true });
@@ -528,6 +529,8 @@ test('U05: unconfirmed use listed with identity; marking checked is local and ne
   await reply(last('cmd', 'usage'), {pending: [], unconfirmed: [entry], acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: '2 unreadable unconfirmed entries were skipped'});
   const card = byTest('usage-card');
   assert(card, 'card shown');
+  assert(text(card).includes('1 filament use') || text(card).includes('benchy.gcode'), 'the banner names the use before Review: ' + text(card));
+  await click(byTest('usage-review'));   // the list and "I checked it in Spoolman" are behind Review
   const t = text(card);
   for (const s of ['1 unconfirmed use', 'benchy.gcode', 'T2', '12.5', '#7', 'time unknown', 'Spoolman timeout', 'never sends them again', 'unreadable'])
     assert(t.includes(s), 'shows ' + s + ': ' + t);
@@ -549,6 +552,7 @@ test('U05: a failed acknowledgement keeps the entry and says why', `
   await until(() => last('cmd', 'usage'));
   const entry = {id: 'abc', at: 1794300000, spool: null, grams: 3, head: 0, file: 'a.gcode', error: 'restart', printer: 'u1:80'};
   await reply(last('cmd', 'usage'), {pending: [], unconfirmed: [entry], acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: ''});
+  await click(byTest('usage-review'));
   await click(btn('Mark the use on T1 of a.gcode as checked')); await yes();
   await fail(last('cmd', 'usage_ack'), "can't save the print ledger (disk full)");
   assert(alerts().includes('disk full') && byTest('usage-card') && text(byTest('usage-card')).includes('a.gcode'), 'entry kept, error shown');
@@ -602,7 +606,7 @@ test('B-11: theme follows the host colour while the page runs', `
   await until(() => !root.classList.contains('orca-dark'), 'light', 4000);
   root.style.setProperty('--orca-bg', '#151515');
   await until(() => root.classList.contains('orca-dark'), 'dark after the host changed', 4000);
-  eq(getComputedStyle(document.body).backgroundColor, 'rgb(24, 28, 34)', 'dark palette background');
+  eq(getComputedStyle(document.body).backgroundColor, 'rgb(17, 24, 42)', 'dark palette background (cobalt-tinted 4.0 palette)');
 `);
 
 // ------------------------------------------------------------------ 2026-11 audit: firmware, files, camera
@@ -611,7 +615,7 @@ test('a late Extended answer in the status turns the Firmware card on', `
   await until(() => last('cmd', 'spools'));
   await reply(last('cmd', 'spools'), {spools: [], bindings: {}, via: 'direct'});
   await tab('settings');
-  assert(text(q('#fw-h').parentElement).includes('Official Snapmaker firmware'), 'stock first: ' + text(q('#fw-h').parentElement));
+  assert(text(q('#fw-h').closest('section')).includes('Official Snapmaker firmware'), 'stock first: ' + text(q('#fw-h').closest('section')));
   await post({type: 'status', data: VIEW({firmware: {kind: 'stock', version: '1'}})});
   eq(cmds('ext_settings').length, 0, 'stock: no firmware settings asked');
   await post({type: 'status', data: VIEW({firmware: {kind: 'extended', version: '1.2.0'}})});
@@ -730,7 +734,7 @@ test('settings: says whether the process preset runs the toolhead choice and whe
   await tab('settings');
   await cfg({preset: '0.20 Standard @U1', on: false}, 'auto');
   assert(byTest('ps-off') && text(byTest('ps-off')).includes('0.20 Standard @U1') && text(byTest('ps-off')).includes('without choosing toolheads'), 'missing step is a warning: ' + text(byTest('ps-off')));
-  assert(byTest('ps-off').classList.contains('p-message-warn'), 'shown as a warning');
+  assert(byTest('ps-off').classList.contains('oui-banner') && byTest('ps-off').dataset.tone === 'warn', 'shown as a warning');
   assert(text(byTest('ps-off')).includes('once per OrcaSlicer session'), 'auto-add on: says when it is added');
   await cfg({preset: '0.20 Standard @U1', on: false}, 'auto', false);
   assert(text(byTest('ps-off')).includes('Adding it automatically is off') && !text(byTest('ps-off')).includes('U1 Control adds it'), 'auto-add off: no promise it is added: ' + text(byTest('ps-off')));

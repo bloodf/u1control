@@ -11,7 +11,6 @@ import ast
 import argparse
 import base64
 import hashlib
-import json
 import re
 import tomllib
 import zipfile
@@ -21,33 +20,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "u1control"
 MODULES = ("moonraker", "u1", "gcode", "extended", "spoolman", "settings", "spooler_bridge", "peers", "usage", "files", "stockview", "service")  # dependency order
 ASSETS = {"APP_HTML": "app.html", "ICON_SVG": "icon.svg"}   # app.html: the compiled Vue page (ui/, npm run build)
-ICON_DIRS = {"icon": "icons", "toolhead": "toolheads"}   # ui/<dir>/<name>.svg -> key "<prefix>/<name>"; spot-*.svg -> "spot/*"
-PLACEHOLDER = "__ICONS__"
-
-def clean_svg(text, name):
-    """Strip prolog/comments/ids, mark decorative, and refuse anything scriptable."""
-    text = re.sub(r"<\?xml.*?\?>|<!--.*?-->|\s+id=\"[^\"]*\"", "", text, flags=re.S)
-    text = re.sub(r">\s+<", "><", text.replace('role="img"', 'aria-hidden="true"')).strip()
-    if re.search(r"<script|\bon\w+\s*=|javascript:", text, flags=re.I):
-        raise SystemExit("%s: scriptable content in svg" % name)
-    return text
-
-
-def all_icons():
-    ui = SRC / "ui"
-    files = {"%s/%s" % (k, f.stem): f for k, d in ICON_DIRS.items() for f in sorted((ui / d).glob("*.svg"))}
-    files.update({"spot/" + f.stem[5:]: f for f in sorted(ui.glob("spot-*.svg"))})
-    return {k: clean_svg(f.read_text("utf-8"), k) for k, f in files.items()}
-
-
 def page_html(name):
-    """ui/<name> with the icon map injected; only icons the page references (plus all toolhead badges) are inlined."""
-    html = (SRC / "ui" / name).read_text("utf-8")
-    if PLACEHOLDER not in html:
-        return html
-    used = {k: v for k, v in all_icons().items() if k.startswith("toolhead/") or k in html}
-    blob = json.dumps(used, separators=(",", ":")).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
-    return html.replace(PLACEHOLDER, blob)
+    """ui/<name> as shipped: the compiled page draws its icons from the shared foundation (no icon map to inject)."""
+    return (SRC / "ui" / name).read_text("utf-8")
 
 
 def relative_imports(source):
@@ -93,7 +68,7 @@ def dist_info(project, files):
         di + "top_level.txt": "u1control\n",
     }
     meta = {k: v.encode("utf-8") for k, v in meta.items()}
-    # the Vue page bundles Vue, PrimeVue and PrimeUIX (MIT): their notices travel with the wheel, next to our LICENSE
+    # the Vue page bundles Vue, PrimeVue, PrimeUIX, Lucide icons (MIT, ISC) and the Manrope font (OFL): their notices travel with the wheel, next to our LICENSE
     meta[di + "licenses/LICENSE"] = (ROOT / "LICENSE").read_bytes()
     for lic in sorted((ROOT / "ui" / "shared" / "licenses").glob("*.txt")):
         meta[di + "licenses/" + lic.name] = lic.read_bytes()

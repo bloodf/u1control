@@ -1,4 +1,4 @@
-"""Built wheel ships the compiled Vue page and its icons, sanitized, with no unresolved placeholders."""
+"""Built wheel ships the compiled Vue page (icons from the shared foundation) and the tab icon, with no unresolved placeholders."""
 
 import hashlib
 import json
@@ -24,20 +24,12 @@ class UiAssets(unittest.TestCase):
         with zipfile.ZipFile(cls.artifact) as z:
             cls.text = z.read("u1control/_assets.py").decode("utf-8")
 
-    def page_icons(self):
+    def test_page_ships_as_built(self):
+        """Icons come from the shared foundation, compiled into the page: nothing is injected at build time."""
         html = build.page_html("app.html")
-        match = re.search(r'<script type="application/json" id="u1-icons">(\{.*?\})</script>', html, re.S)
-        self.assertIsNotNone(match)
-        return html, json.loads(match.group(1))
-
-    def test_every_referenced_icon_is_inlined(self):
-        source = (UI / "app.html").read_text("utf-8")
-        html, icons = self.page_icons()
-        used = set(re.findall(r"\b(?:icon|spot)/[a-z0-9-]+", source))
-        self.assertTrue(used)
-        self.assertEqual(used - set(icons), set())
-        self.assertTrue({"toolhead/t%d" % n for n in range(1, 5)} <= set(icons))
+        self.assertEqual(html, (UI / "app.html").read_text("utf-8"))
         self.assertNotIn("__ICONS__", html)
+        self.assertNotIn('id="u1-icons"', html)
         self.assertIn(repr(html), self.text)   # the wheel carries exactly this page
         self.assertNotIn("SETUP_HTML", self.text)   # one page serves the tab and the print setup window
 
@@ -48,38 +40,26 @@ class UiAssets(unittest.TestCase):
         self.assertEqual(hashlib.sha256(data).hexdigest(), info["sha256"])
         html = data.decode("utf-8")
         self.assertEqual(html.count("__BOOT__"), 1)
-        self.assertEqual(html.count("__ICONS__"), 1)
+        self.assertEqual(html.count("__ICONS__"), 0)
         self.assertNotRegex(html, r"<script[^>]+src=|<link[^>]+href=\"https?:|@import\s*(?:url\(|['\"])|url\(https?:")
         self.assertNotRegex(html, r"\bnew Function\b|\beval\(")
         self.assertIn("__VUE_OPTIONS_API__", (ROOT / "ui" / "vite.config.ts").read_text("utf-8"))
         self.assertFalse((UI / "setup.html").exists(), "the legacy setup page was replaced by the Vue page")
 
-    def test_app_uses_expected_icons(self):
-        names = set(re.findall(r"\bicon/([a-z0-9-]+)", (UI / "app.html").read_text("utf-8")))
-        for n in ("dashboard", "toolheads-rfid", "files", "firmware", "terminal", "settings", "pause", "resume",
-                  "cancel", "emergency-stop", "chamber-light", "load-filament", "unload-filament", "rfid-tag",
-                  "calibration", "delete", "download", "print-setup"):
-            self.assertIn(n, names)
-        spots = set(re.findall(r"\bspot/([a-z0-9-]+)", (UI / "app.html").read_text("utf-8")))
-        self.assertEqual(spots, {"camera-off", "no-files", "not-connected", "printer-busy", "stock-firmware", "spooler-suggestion"})
+    def test_no_local_icon_files_left(self):
+        """The old per-plugin SVG icons, spot pictures and toolhead badges were replaced by the foundation's set."""
+        self.assertFalse((UI / "icons").exists())
+        self.assertFalse((UI / "toolheads").exists())
+        self.assertEqual(sorted(p.name for p in UI.glob("spot-*.svg")), [])
+        self.assertNotRegex((UI / "app.html").read_text("utf-8"), r"\b(?:icon|spot|toolhead)/(?:emergency-stop|toolheads-rfid|camera-off|t1)\b")
 
     def test_no_unresolved_placeholders(self):
         self.assertIsNone(re.search(r"APP_HTML = '[^\n]*__ICONS__", self.text))
         self.assertNotIn("__ICONS__", build.page_html("app.html"))
         self.assertIn("__BOOT__", build.page_html("app.html"))   # filled per page by plugin.page_html
 
-    def test_inlined_svgs_are_clean(self):
-        icons = build.all_icons()
-        self.assertGreaterEqual(len(icons), 37 + 4 + 6)
-        for key, svg in icons.items():
-            self.assertTrue(svg.startswith("<svg"), key)
-            self.assertNotRegex(svg, r"(?i)<script|\bon\w+\s*=|<\?xml|<!--", key)
-
-    def test_build_rejects_scripted_svg(self):
-        with self.assertRaises(SystemExit):
-            build.clean_svg('<svg onload="x()"></svg>', "bad")
-        with self.assertRaises(SystemExit):
-            build.clean_svg("<svg><script>1</script></svg>", "bad")
+    def test_tab_icon_is_not_scriptable(self):
+        self.assertNotRegex((UI / "icon.svg").read_text("utf-8"), r"(?i)<script|\bon\w+\s*=|javascript:")
 
     def test_tab_icon_is_monochrome_fefefe(self):
         svg = (UI / "icon.svg").read_text("utf-8")

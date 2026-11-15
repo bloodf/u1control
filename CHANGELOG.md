@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-15
+
+- New look, shared with the other Orca plugins: a cobalt bar at the top with the printer's name, address, firmware and connection state, the four tabs (Dashboard, Files, Console, Settings) and **Emergency stop**, which stays in the bar on every tab and still asks first. Panels have coloured headers and icons, the text uses the Manrope font, and light and dark follow OrcaSlicer.
+- Dashboard: the print is the panel at the top left, with a drawing of the U1, the file, the percentage, the layer and elapsed, left and finish times. Pause, Resume and Cancel print sit under it; Cancel is red, at the far end and still asks.
+- Toolheads: each toolhead is a card with its filament colour across the top, the spool drawn with what is left of the linked Spoolman spool, and its own nozzle temperature with Set and Off (these used to be in the status card). Load, Unload, Edit and Read RFID are at the bottom of each card. Bed, speed, top cover and chamber light are in a Bed and chamber panel.
+- Why controls are off (no printer, offline, connecting, busy) is said once under the bar, on every tab, instead of next to each control.
+- No printer chosen yet: the Dashboard shows the U1 with Open Settings and Try again, and the stock list stays below.
+- Unconfirmed filament use is one warning line with **Review**; the list and "I checked it in Spoolman" open from there.
+- The camera is one line while it is off; the frame rate choice is unchanged. Stock, Files, Console, the firmware card and Settings use the same panels; Settings has an index of its sections and one Save bar at the bottom.
+- Every confirmation, every control that waits for the print to end and every message is unchanged. The page is smaller: the spool pictures are now drawn instead of embedded.
+- The wheel also carries the licences of the Lucide icons (ISC) and the Manrope font (SIL OFL 1.1).
+
 ## [0.8.0] - 2026-11-15
 
 - Stock (Spooler) on the Dashboard: in OrcaSlicer's web view each spool picture in the list grew to 40 × 160 px, squeezed out of shape, so a row was about 170 px tall, only two spools fitted and the last picture ran into the note under the list. The picture is now a fixed 40 px square (undistorted), rows keep their text height and the list scrolls inside its area.

@@ -2,9 +2,9 @@
 import { computed, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
-import Message from 'primevue/message';
 import InputText from 'primevue/inputtext';
-import Icon from './Icon.vue';
+import { OuiEmpty, OuiIcon, OuiPanel, OuiToolbar } from '../../shared/src/components';
+import { download as downloadIcon, edit, files as filesIcon, folder, move as moveIcon, plus, printer, refresh, trash, undo } from '../../shared/src/icons';
 import Thumb from './Thumb.vue';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, targetKnown, printerName } from '../app/store';
@@ -105,67 +105,74 @@ function drop(dir: string | null) {
 }
 </script>
 <template>
-  <section class="u1-card" aria-labelledby="files-h">
-    <h2 id="files-h" class="fv-sr"><Icon name="icon/files" /> {{ t('nav.files') }}</h2>
-    <div class="u1-row fv-bar">
-      <label id="fv-root-l" class="fv-sr-only">{{ t('files.root') }}</label>
-      <Select :model-value="root" :options="roots" option-label="label" option-value="value" aria-labelledby="fv-root-l" @update:model-value="setRoot" />
-      <strong class="fv-path">{{ path }}</strong>
-      <InputText id="files-filter" v-model="filter" type="search" :placeholder="t('files.filter')" :aria-label="t('files.filter')" class="fv-q" /><span class="u1-spacer" /><span class="oui-meta">{{ disk }}</span>
-      <Button severity="secondary" outlined :disabled="state !== 'ok'" @click="mkdir"><Icon name="icon/folder" /><span>{{ t('files.newFolder') }}</span></Button>
-      <Button severity="secondary" outlined :disabled="!path.includes('/')" data-test="up" @click="up"
-              @dragover="e => { if (dragName && path.includes('/')) e.preventDefault(); }" @drop.prevent="drop(null)">
-        <Icon name="icon/folder" /><span>{{ t('files.up') }}</span></Button>
-      <Button severity="secondary" outlined :label="t('common.refresh')" :loading="state === 'loading'" :disabled="!targetKnown" @click="load" />
-    </div>
-    <p v-if="!targetKnown" class="oui-muted">{{ t('files.noTarget') }}</p>
-    <p v-else-if="state === 'loading' && !dirs.length && !files.length" class="oui-muted" role="status">{{ t('files.loading') }}</p>
-    <Message v-else-if="state === 'error'" severity="error">{{ t('files.error', { error }) }}
-      <div><Button size="small" severity="secondary" outlined :label="t('common.retry')" @click="load" /></div></Message>
+  <OuiPanel :icon="filesIcon" flush aria-labelledby="files-h">
+    <template #title><span id="files-h">{{ t('nav.files') }}</span></template>
+    <template #meta>{{ disk }}</template>
+    <template #actions>
+      <Button severity="secondary" size="small" :label="t('files.newFolder')" :disabled="state !== 'ok'" @click="mkdir"><template #icon><OuiIcon :icon="plus" :size="14" /></template></Button>
+      <Button severity="secondary" size="small" :label="t('files.up')" :disabled="!path.includes('/')" data-test="up" @click="up"
+              @dragover="e => { if (dragName && path.includes('/')) e.preventDefault(); }" @drop.prevent="drop(null)"><template #icon><OuiIcon :icon="undo" :size="14" /></template></Button>
+      <Button severity="secondary" size="small" :label="t('common.refresh')" :loading="state === 'loading'" :disabled="!targetKnown" @click="load"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
+    </template>
+    <OuiToolbar class="fv-bar" :label="t('files.root')">
+      <Select :model-value="root" :options="roots" option-label="label" option-value="value" size="small" :aria-label="t('files.root')" @update:model-value="setRoot" />
+      <strong class="fv-path oui-mono">{{ path }}</strong>
+      <template #end><InputText id="files-filter" v-model="filter" type="search" size="small" :placeholder="t('files.filter')" :aria-label="t('files.filter')" class="fv-q" /></template>
+    </OuiToolbar>
+    <OuiEmpty v-if="!targetKnown" state="offline" :title="t('files.noTarget')" />
+    <OuiEmpty v-else-if="state === 'loading' && !dirs.length && !files.length" state="loading" :title="t('files.loading')" role="status" />
+    <OuiEmpty v-else-if="state === 'error'" state="error" :title="t('files.error', { error })">
+      <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="load"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
+    </OuiEmpty>
+    <OuiEmpty v-else-if="state === 'ok' && !dirs.length && !files.length" :icon="folder" :title="t('files.empty')" />
     <div v-else-if="state === 'ok'" class="oui-table-wrap">
-      <table class="u1-table">
-        <thead><tr><th scope="col"><span class="fv-sr-only">{{ t('files.col.thumb') }}</span></th><th scope="col">{{ t('files.col.name') }}</th>
-          <th scope="col">{{ t('files.col.size') }}</th><th scope="col">{{ t('files.col.modified') }}</th><th scope="col">{{ t('files.col.time') }}</th><th scope="col">{{ t('files.col.weight') }}</th>
-          <th scope="col">{{ t('files.col.actions') }}</th></tr></thead>
+      <table class="u1-table fv-table">
+        <thead><tr><th scope="col" class="fv-thumb"><span class="oui-sr">{{ t('files.col.thumb') }}</span></th><th scope="col">{{ t('files.col.name') }}</th>
+          <th scope="col" class="oui-num">{{ t('files.col.size') }}</th><th scope="col">{{ t('files.col.modified') }}</th><th scope="col" class="oui-num">{{ t('files.col.time') }}</th>
+          <th scope="col" class="oui-num">{{ t('files.col.weight') }}</th><th scope="col" class="oui-end"><span class="oui-sr">{{ t('files.col.actions') }}</span></th></tr></thead>
         <tbody>
           <tr v-for="d in shownDirs" :key="'d:' + d.name" draggable="true" :class="{ drop: dropOn === d.name }"
               @dragstart="dragName = d.name" @dragover="e => { if (dragName && dragName !== d.name) { e.preventDefault(); dropOn = d.name; } }"
               @dragleave="dropOn = null" @drop.prevent="drop(d.name)">
-            <td><Icon name="icon/folder" :size="24" /></td>
-            <td><Button text :label="d.name" :aria-label="t('files.open', { name: d.name })" class="fv-open" @click="open(d.name)" /></td>
+            <td class="fv-thumb"><OuiIcon :icon="folder" :size="20" tile soft /></td>
+            <td><Button text severity="secondary" :label="d.name" :aria-label="t('files.open', { name: d.name })" class="fv-open" @click="open(d.name)" /></td>
             <td /><td /><td /><td />
-            <td class="fv-acts"><Button size="small" severity="secondary" outlined :aria-label="t('files.renameLabel', { name: d.name })" @click="rename(d.name)"><span>{{ t('files.rename') }}</span></Button>
-              <Button size="small" severity="secondary" outlined @click="move(d.name)"><Icon name="icon/folder" /><span>{{ t('files.move') }}</span></Button>
-              <Button size="small" severity="danger" outlined @click="del(d.name, true)"><Icon name="icon/delete" /><span>{{ t('files.delete') }}</span></Button></td>
+            <td class="oui-end"><div class="fv-acts">
+              <Button size="small" severity="secondary" text :aria-label="t('files.renameLabel', { name: d.name })" :title="t('files.rename')" @click="rename(d.name)"><template #icon><OuiIcon :icon="edit" :size="14" /></template></Button>
+              <Button size="small" severity="secondary" text :aria-label="t('files.moveLabel', { name: d.name })" :title="t('files.move')" @click="move(d.name)"><template #icon><OuiIcon :icon="moveIcon" :size="14" /></template></Button>
+              <Button size="small" severity="danger" text class="fv-del" :aria-label="t('files.deleteLabel', { name: d.name })" :title="t('files.delete')" @click="del(d.name, true)"><template #icon><OuiIcon :icon="trash" :size="14" /></template></Button>
+            </div></td>
           </tr>
           <tr v-for="f in shownFiles" :key="'f:' + f.name" draggable="true" @dragstart="dragName = f.name">
-            <td><Thumb v-if="root === 'gcodes'" :gen="gen" :path="`${path}/${f.name}`" :rel="f.thumb" /></td>
-            <td class="fv-name">{{ f.name }}</td><td class="u1-num">{{ fmt.bytes(f.size) }}</td>
-            <td>{{ f.modified ? fmt.dateTime(f.modified) : '' }}</td><td class="u1-num">{{ f.time ? fmt.duration(f.time) : '' }}</td>
-            <td class="u1-num">{{ f.weight ? fmt.grams(f.weight) : '' }}</td>
-            <td class="fv-acts">
-              <Button v-if="root === 'gcodes'" size="small" :disabled="!!s.status?.busy" @click="print(f.name)"><Icon name="icon/print-setup" /><span>{{ t('files.print') }}</span></Button>
-              <Button v-else size="small" severity="secondary" outlined :loading="tracker.isBusy(`dl:${f.name}`)" @click="download(f.name)"><Icon name="icon/download" /><span>{{ t('files.save') }}</span></Button>
-              <Button size="small" severity="secondary" outlined :aria-label="t('files.renameLabel', { name: f.name })" @click="rename(f.name)"><span>{{ t('files.rename') }}</span></Button>
-              <Button size="small" severity="secondary" outlined @click="move(f.name)"><Icon name="icon/folder" /><span>{{ t('files.move') }}</span></Button>
-              <Button size="small" severity="danger" outlined @click="del(f.name, false)"><Icon name="icon/delete" /><span>{{ t('files.delete') }}</span></Button></td>
+            <td class="fv-thumb"><Thumb v-if="root === 'gcodes'" :gen="gen" :path="`${path}/${f.name}`" :rel="f.thumb" /></td>
+            <td class="fv-name oui-strong">{{ f.name }}</td><td class="oui-num">{{ fmt.bytes(f.size) }}</td>
+            <td>{{ f.modified ? fmt.dateTime(f.modified) : '' }}</td><td class="oui-num">{{ f.time ? fmt.duration(f.time) : '' }}</td>
+            <td class="oui-num">{{ f.weight ? fmt.grams(f.weight) : '' }}</td>
+            <td class="oui-end"><div class="fv-acts">
+              <Button v-if="root === 'gcodes'" size="small" severity="secondary" :label="t('files.print')" :aria-label="t('files.printLabel', { name: f.name })" :disabled="!!s.status?.busy"
+                      :aria-describedby="s.status?.busy ? 'heads-why' : undefined" @click="print(f.name)"><template #icon><OuiIcon :icon="printer" :size="14" /></template></Button>
+              <Button v-else size="small" severity="secondary" :label="t('files.save')" :aria-label="t('files.saveLabel', { name: f.name })" :loading="tracker.isBusy(`dl:${f.name}`)" @click="download(f.name)">
+                <template #icon><OuiIcon :icon="downloadIcon" :size="14" /></template></Button>
+              <Button size="small" severity="secondary" text :aria-label="t('files.renameLabel', { name: f.name })" :title="t('files.rename')" @click="rename(f.name)"><template #icon><OuiIcon :icon="edit" :size="14" /></template></Button>
+              <Button size="small" severity="secondary" text :aria-label="t('files.moveLabel', { name: f.name })" :title="t('files.move')" @click="move(f.name)"><template #icon><OuiIcon :icon="moveIcon" :size="14" /></template></Button>
+              <Button size="small" severity="danger" text class="fv-del" :aria-label="t('files.deleteLabel', { name: f.name })" :title="t('files.delete')" @click="del(f.name, false)"><template #icon><OuiIcon :icon="trash" :size="14" /></template></Button>
+            </div></td>
           </tr>
-          <tr v-if="(dirs.length || files.length) && !shownDirs.length && !shownFiles.length"><td colspan="7" class="oui-muted">{{ t('files.noMatch', { filter: filter.trim() }) }}</td></tr>
-          <tr v-if="!dirs.length && !files.length"><td colspan="7"><div class="fv-empty"><Icon name="spot/no-files" :size="96" /><span>{{ t('files.empty') }}</span></div></td></tr>
+          <tr v-if="!shownDirs.length && !shownFiles.length"><td colspan="7" class="oui-muted">{{ t('files.noMatch', { filter: filter.trim() }) }}</td></tr>
         </tbody>
       </table>
-      <p class="oui-meta">{{ t('files.dragHint') }}</p>
     </div>
-  </section>
+    <template v-if="state === 'ok' && (dirs.length || files.length)" #footer><p class="oui-meta">{{ t('files.dragHint') }}</p></template>
+  </OuiPanel>
 </template>
-<style scoped>
-.fv-sr { margin: 0 0 12px; }
-.fv-sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.fv-bar { margin-bottom: 12px; }
+<style>
+.fv-bar { border-bottom: 1px solid var(--oui-border); }
 .fv-path, .fv-name { overflow-wrap: anywhere; }
-.fv-open { padding: 0; }
-.fv-q { width: 14rem; max-width: 100%; }
-.fv-acts { display: flex; flex-wrap: wrap; gap: 6px; }
-.fv-empty { display: grid; justify-items: center; gap: 8px; padding: 16px; color: var(--oui-muted); }
-tr.drop td { background: var(--oui-success-bg, rgba(0, 103, 91, .12)); }
+.fv-q { width: 220px; max-width: 100%; }
+.fv-thumb { width: 64px; }
+.fv-open.p-button { padding-inline: 0; font-weight: 600; }
+/* Delete is the destructive one: red, last, and a gap away from the actions used all the time. It always asks first. */
+.fv-acts { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--oui-s1); white-space: nowrap; }
+.fv-del { margin-inline-start: var(--oui-s3); }
+.fv-table tr.drop > td { background: var(--oui-success-bg); }
 </style>

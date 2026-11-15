@@ -1,21 +1,17 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue';
-import Tabs from 'primevue/tabs';
-import TabList from 'primevue/tablist';
-import Tab from 'primevue/tab';
-import TabPanels from 'primevue/tabpanels';
-import TabPanel from 'primevue/tabpanel';
-import Icon from './components/Icon.vue';
+import Button from 'primevue/button';
+import { OuiAppBar, OuiIcon, OuiStatus, type OuiState } from '../shared/src/components';
+import { dashboard, files, power, settings, terminal } from '../shared/src/icons';
 import ConfirmDialog from './components/ConfirmDialog.vue';
-import NoticeArea from './components/NoticeArea.vue';
-import TargetBanner from './components/TargetBanner.vue';
+import PageMessages from './components/PageMessages.vue';
 import Dashboard from './components/Dashboard.vue';
 import FilesView from './components/FilesView.vue';
 import ConsoleView from './components/ConsoleView.vue';
 import SettingsView from './components/SettingsView.vue';
-import { s, start, lease } from './app/store';
+import { s, start, lease, estop, estopReason, controlsOff, busy, stale, statusAge, STALE_STATUS_S } from './app/store';
 import { installSettings } from './app/settings';
-import { t } from './core/i18n';
+import { t, tMaybe, fmt } from './core/i18n';
 
 const stop = start();
 const stopSettings = installSettings();
@@ -30,70 +26,53 @@ const fwText = computed(() => {
   return s.info.firmware.kind === 'extended' ? t('fw.extended', { version: v })
     : s.info.firmware.kind === 'stock' ? t('fw.stock', { version: v }) : t('fw.unknown');
 });
-const sections = [
-  { value: 'dash', icon: 'icon/dashboard', label: 'nav.dash' },
-  { value: 'files', icon: 'icon/files', label: 'nav.files' },
-  { value: 'console', icon: 'icon/terminal', label: 'nav.console' },
-  { value: 'settings', icon: 'icon/settings', label: 'nav.settings' },
-] as const;
+// The page's one connection state. What the printer is doing is only said while the page still hears from it.
+const state = computed<{ state: OuiState; label: string }>(() => {
+  if (s.phase === 'noTarget') return { state: 'idle', label: t('bar.none') };
+  if (s.phase === 'unreachable' || s.offline) return { state: 'offline', label: t('status.state.offline') };
+  if (s.phase === 'connecting' || !s.status) return { state: 'connecting', label: t('fw.connecting') };
+  if (statusAge.value > STALE_STATUS_S) return { state: 'stale', label: t('bar.lastKnown', { age: fmt.ago(s.statusAt / 1000, s.now / 1000) }) };
+  const name = s.status.state;
+  const label = tMaybe(`status.state.${name}`, name);
+  if (name === 'error') return { state: 'error', label };
+  if (name === 'printing') return { state: 'busy', label };
+  if (name === 'paused') return { state: 'pending', label };
+  return busy.value ? { state: 'busy', label: t('bar.busy') } : { state: 'ok', label };
+});
+const tabs = computed(() => [
+  { value: 'dash', icon: dashboard, label: t('nav.dash') },
+  { value: 'files', icon: files, label: t('nav.files') },
+  { value: 'console', icon: terminal, label: t('nav.console') },
+  { value: 'settings', icon: settings, label: t('nav.settings') },
+]);
+const VIEWS = [['dash', Dashboard], ['files', FilesView], ['console', ConsoleView]] as const;
 </script>
 
 <template>
-  <Tabs v-model:value="s.tab" class="u1-shell">
-    <header class="oui-header u1-head">
-      <span class="u1-brand">
-        <svg viewBox="0 0 256 256" aria-hidden="true" width="24" height="24"><path fill="currentColor" d="M40 96H72V160A32 32 0 0 0 104 192H152A32 32 0 0 0 184 160V96H216V160A64 64 0 0 1 152 224H104A64 64 0 0 1 40 160Z"/><rect x="40" y="40" width="32" height="64" rx="8" fill="#FF997D"/><rect x="88" y="40" width="32" height="64" rx="8" fill="#F4CF78"/><rect x="136" y="40" width="32" height="64" rx="8" fill="#A99BFF"/><rect x="184" y="40" width="32" height="64" rx="8" fill="#78CFD5"/></svg>
-        <h1>{{ t('app.brand') }}</h1>
-      </span>
-      <span class="u1-pill" :class="{ ext: s.info?.firmware.kind === 'extended' }" data-test="firmware">{{ fwText }}</span>
-      <span v-if="s.info" class="oui-meta u1-addr">{{ s.info.printer }} · {{ s.info.address }}</span>
-      <TabList class="u1-nav" :aria-label="t('nav.label')">
-        <Tab v-for="sec in sections" :key="sec.value" :value="sec.value" :data-tab="sec.value">
-          <Icon :name="sec.icon" /> <span>{{ t(sec.label) }}</span>
-        </Tab>
-      </TabList>
-    </header>
-    <main class="u1-main">
-      <TargetBanner />
-      <NoticeArea />
-      <TabPanels class="u1-panels">
-        <TabPanel value="dash"><Dashboard /></TabPanel>
-        <TabPanel value="files"><FilesView /></TabPanel>
-        <TabPanel value="console"><ConsoleView /></TabPanel>
-        <TabPanel value="settings"><SettingsView /></TabPanel>
-      </TabPanels>
-    </main>
-    <ConfirmDialog />
-  </Tabs>
+  <OuiAppBar v-model="s.tab" :name="t('app.brand')" :tabs="tabs" :tabs-label="t('nav.label')">
+    <template #mark>
+      <svg viewBox="0 0 256 256" fill="currentColor"><path d="M40 96H72V160A32 32 0 0 0 104 192H152A32 32 0 0 0 184 160V96H216V160A64 64 0 0 1 152 224H104A64 64 0 0 1 40 160Z" /><rect x="40" y="40" width="32" height="64" rx="8" /><rect x="88" y="40" width="32" height="64" rx="8" /><rect x="136" y="40" width="32" height="64" rx="8" /><rect x="184" y="40" width="32" height="64" rx="8" /></svg>
+    </template>
+    <template #status>
+      <OuiStatus :state="state.state" data-test="conn-state">{{ state.label }}</OuiStatus>
+      <span v-if="s.info" class="oui-truncate" :class="{ 'u1-bar-stale': stale }">{{ s.info.printer }} · {{ s.info.address }} · <span data-test="firmware">{{ fwText }}</span></span>
+    </template>
+    <!-- Emergency stop: one press away on every tab, apart from every other control, with its own rule (a known
+         printer, even one that is offline or late). It always asks first. -->
+    <template v-if="s.phase !== 'noTarget'" #actions>
+      <Button severity="danger" size="small" :label="t('act.estop')" :disabled="!!estopReason" :aria-describedby="estopReason && controlsOff ? 'heads-why' : undefined"
+              data-focus-key="estop" data-test="estop" @click="estop"><template #icon><OuiIcon :icon="power" :size="14" /></template></Button>
+    </template>
+  </OuiAppBar>
+
+  <PageMessages />
+  <main v-for="[name, view] in VIEWS" v-show="s.tab === name" :key="name" class="oui-page" role="tabpanel" :aria-labelledby="'oui-tab-' + name">
+    <component :is="view" />
+  </main>
+  <main v-show="s.tab === 'settings'" role="tabpanel" aria-labelledby="oui-tab-settings"><SettingsView /></main>
+  <ConfirmDialog />
 </template>
 
 <style>
-html, body, #app { min-height: 100%; }
-body { background: var(--oui-background); }
-.u1-shell { display: flex; flex-direction: column; min-height: 100vh; background: var(--oui-background); }
-.u1-head { position: sticky; top: 0; z-index: 5; }
-.u1-brand { display: inline-flex; align-items: center; gap: 8px; }
-.u1-brand h1 { margin: 0; font-size: 20px; }
-.u1-pill { white-space: nowrap; padding: 2px 10px; border-radius: 999px; border: 1px solid var(--oui-border); font-size: 12px; }
-.u1-pill.ext { border-color: var(--p-primary-color); color: var(--p-primary-color); }
-.u1-addr { overflow-wrap: anywhere; }
-.u1-nav { margin-left: auto; min-width: 0; }
-.u1-nav .p-tab { display: inline-flex; gap: 6px; align-items: center; }
-.u1-main { flex: 1; padding: 16px; display: flex; flex-direction: column; min-width: 0; }
-.u1-main > * { margin-bottom: 16px; }
-.u1-main > :empty { margin-bottom: 0; }   /* live regions stay in the DOM, without leaving a gap */
-.u1-panels.p-tabpanels { padding: 0; background: transparent; }
-.u1-card { padding: 16px; background: var(--oui-surface); border: 1px solid var(--oui-border); border-radius: 12px; min-width: 0; }
-.u1-card > h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }
-.u1-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.u1-spacer { flex: 1; }
-.u1-sw { display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--oui-control-border, var(--oui-border)); }
-.u1-why { color: var(--oui-muted); font-size: 12px; }
-.u1-table { width: 100%; border-collapse: collapse; }
-.u1-table th, .u1-table td { padding: 8px; border-bottom: 1px solid var(--oui-border); text-align: left; vertical-align: middle; }
-.u1-table th { color: var(--oui-muted); font-size: 12px; font-weight: 600; }
-.u1-warn { color: var(--oui-warning); }
-.u1-err { color: var(--oui-danger); }
-.u1-num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-@media (max-width: 720px) { .u1-main { padding: 12px; } .u1-nav { margin-left: 0; width: 100%; overflow-x: auto; } }
+.u1-bar-stale { opacity: .75; }
 </style>

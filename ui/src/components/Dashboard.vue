@@ -1,17 +1,20 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import Button from 'primevue/button';
-import Icon from './Icon.vue';
-import StatusCard from './StatusCard.vue';
+import { OuiBanner, OuiEmpty, OuiIcon, OuiPanel } from '../../shared/src/components';
+import { play, refresh, settings, trash, zap } from '../../shared/src/icons';
+import JobCard from './JobCard.vue';
+import BedCard from './BedCard.vue';
 import CameraCard from './CameraCard.vue';
 import ScreenCard from './ScreenCard.vue';
 import ToolheadsCard from './ToolheadsCard.vue';
 import StockCard from './StockCard.vue';
 import UsageCard from './UsageCard.vue';
 import SpoolerHint from './SpoolerHint.vue';
-import { s, run, controlsOff } from '../app/store';
+import { s, run, hello, controlsOff } from '../app/store';
 import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
+import firstRunArt from '../assets/u1-toolheads.webp';
 
 const st = computed(() => s.status);
 const exceptions = computed(() => (st.value?.exceptions ?? []).map(x => JSON.stringify(x)).join('\n'));
@@ -25,37 +28,48 @@ async function powerDiscard() {
 }
 </script>
 <template>
-  <div class="db">
-    <section v-if="st?.power_loss" class="u1-card db-warn" aria-labelledby="pl-h">
-      <h2 id="pl-h"><Icon name="icon/power-loss-resume" /> {{ t('power.title') }}</h2>
-      <p v-if="st.reprint" class="oui-meta">{{ t('power.options', { options: JSON.stringify(st.reprint) }) }}</p>
-      <div class="u1-row">
-        <Button :disabled="!!controlsOff" data-focus-key="pl-resume" @click="powerResume"><Icon name="icon/resume" /><span>{{ t('power.resume') }}</span></Button>
-        <Button severity="danger" outlined :disabled="!!controlsOff" data-focus-key="pl-discard" @click="powerDiscard"><Icon name="icon/delete" /><span>{{ t('power.discard') }}</span></Button>
-      </div>
-    </section>
-    <section v-if="exceptions" class="u1-card db-err" aria-labelledby="ex-h" role="alert">
-      <h2 id="ex-h" class="u1-err"><Icon name="icon/error" /> {{ t('exceptions.title') }}</h2>
-      <pre class="oui-error-detail">{{ exceptions }}</pre>
-    </section>
-    <UsageCard />
-    <div class="db-grid">
-      <StatusCard />
-      <div class="db-side">
-        <CameraCard />
-        <ScreenCard v-if="s.info?.firmware.kind === 'extended'" />
-      </div>
-    </div>
+  <OuiBanner v-if="exceptions" tone="error" :title="t('exceptions.title')"><span class="oui-error-detail">{{ exceptions }}</span></OuiBanner>
+  <OuiBanner v-if="st?.power_loss" tone="warn" :icon="zap" :title="t('power.title')">
+    <template v-if="st.reprint">{{ t('power.options', { options: JSON.stringify(st.reprint) }) }}</template>
+    <template #actions>
+      <Button size="small" severity="secondary" :label="t('power.resume')" :disabled="!!controlsOff" :aria-describedby="controlsOff ? 'heads-why' : undefined" data-focus-key="pl-resume" @click="powerResume">
+        <template #icon><OuiIcon :icon="play" :size="14" /></template></Button>
+      <Button size="small" severity="danger" outlined :label="t('power.discard')" :disabled="!!controlsOff" :aria-describedby="controlsOff ? 'heads-why' : undefined" data-focus-key="pl-discard" @click="powerDiscard">
+        <template #icon><OuiIcon :icon="trash" :size="14" /></template></Button>
+    </template>
+  </OuiBanner>
+  <UsageCard />
+
+  <!-- No printer chosen yet: one thing to do. Stock and unconfirmed filament use don't need a printer and stay. -->
+  <template v-if="s.phase === 'noTarget'">
+    <OuiPanel id="heads-why" class="u1-first" flush role="status" data-test="target-banner">
+      <OuiEmpty :image="firstRunArt" :title="t('target.none.title')" :text="t('target.none.body')">
+        <template #actions>
+          <Button :label="t('common.openSettings')" @click="s.tab = 'settings'"><template #icon><OuiIcon :icon="settings" :size="14" /></template></Button>
+          <Button severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
+        </template>
+      </OuiEmpty>
+      <template #footer><p class="oui-meta">{{ t('target.detail', { error: s.error }) }}</p></template>
+    </OuiPanel>
     <SpoolerHint where="dash" />
-    <ToolheadsCard />
     <StockCard />
+  </template>
+  <div v-else class="u1-grid">
+    <div class="oui-stack">
+      <JobCard />
+      <BedCard />
+      <CameraCard />
+      <ScreenCard v-if="s.info?.firmware.kind === 'extended'" />
+    </div>
+    <div class="oui-stack">
+      <SpoolerHint where="dash" />
+      <ToolheadsCard />
+      <StockCard />
+    </div>
   </div>
 </template>
-<style scoped>
-.db { display: grid; gap: 16px; }
-.db-grid { display: grid; grid-template-columns: minmax(0, 1.5fr) minmax(280px, 1fr); gap: 16px; align-items: start; }
-.db-side { display: grid; gap: 16px; min-width: 0; }
-.db-warn { border-color: var(--oui-warning); }
-.db-err { border-color: var(--oui-danger); }
-@media (max-width: 900px) { .db-grid { grid-template-columns: minmax(0, 1fr); } }
+<style>
+.u1-first { justify-self: center; width: min(100%, 560px); margin-top: var(--oui-s8); }
+.u1-first .oui-empty { padding-block: var(--oui-s8); }
+.u1-first .oui-empty-image { width: 176px; height: 176px; }
 </style>

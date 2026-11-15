@@ -1,17 +1,20 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
-import Icon from './Icon.vue';
+import { OuiEmpty, OuiIcon, OuiPanel } from '../../shared/src/components';
+import { camera, cameraOff, download } from '../../shared/src/icons';
 import * as bridge from '../core/bridge';
 import { s, lease, run, tracker, targetKnown, printerName } from '../app/store';
 import { t } from '../core/i18n';
 import { config } from '../app/settings';
 
-function toggle() {
+async function toggle() {
   s.camOn = !s.camOn;
   if (!s.camOn) { s.frame = ''; s.camError = ''; }
   lease();
+  await nextTick();   // Start and Stop are different buttons: keep the keyboard on the one that replaced the other
+  if (document.activeElement === document.body) document.querySelector<HTMLElement>('[data-focus-key="camera"]')?.focus();
 }
 async function save() {
   const r = await run({ key: 'snapshot', label: t('act.snapshot'), cmd: 'snapshot' });
@@ -25,36 +28,34 @@ function setFps(n: number) {
   fpsChoice.value = n;
   bridge.post({ type: 'camera_fps', value: n });
 }
-const msg = computed(() => (s.camError ? t('cam.unavailable', { error: s.camError }) : t('cam.starting')));
 </script>
 <template>
-  <!-- Off: a compact strip so status and controls stay above the fold (U08). -->
-  <section class="u1-card cam-card" :class="{ compact: !s.camOn }" aria-labelledby="cam-h">
-    <div class="u1-row">
-      <h2 id="cam-h" class="cam-h"><Icon name="icon/camera" /> {{ t('cam.title') }}</h2>
-      <span v-if="!s.camOn" class="oui-meta">{{ t('cam.off') }} · {{ t('cam.offHint') }}</span>
-      <span class="u1-spacer" />
-      <Select v-if="s.camOn" :model-value="fps" :options="FPS" option-label="label" option-value="value" :aria-label="t('cam.fps')"
+  <!-- Off: one row, so the printer's state stays above the fold (U08). -->
+  <OuiPanel :icon="camera" tone="sky" flush aria-labelledby="cam-h">
+    <template #title><span id="cam-h">{{ t('cam.title') }}</span></template>
+    <template v-if="s.camOn" #actions>
+      <Select :model-value="fps" :options="FPS" option-label="label" option-value="value" size="small" :aria-label="t('cam.fps')"
               :pt="{ label: { 'aria-describedby': 'cam-fps-help' } }" data-test="cam-fps" @update:model-value="setFps" />
-      <Button v-if="s.camOn && s.frame" severity="secondary" outlined :title="t('cam.saveHint')" :loading="tracker.isBusy('snapshot')"
-              data-focus-key="cam-save" data-test="cam-save" @click="save"><Icon name="icon/download" /><span>{{ t('cam.save') }}</span></Button>
-      <Button :severity="s.camOn ? 'secondary' : undefined" :outlined="s.camOn" :disabled="!targetKnown && !s.camOn"
-              data-focus-key="camera" data-test="camera" @click="toggle">
-        <Icon name="icon/live-stream" /><span>{{ s.camOn ? t('cam.stop') : t('cam.start') }}</span></Button>
-    </div>
-    <p v-if="!targetKnown && !s.camOn" class="u1-why">{{ t('cam.noTarget') }}</p>
-    <div v-if="s.camOn" class="cam-view">
-      <img v-if="s.frame" :src="s.frame" :alt="t('cam.alt', { printer: printerName })" @load="bridge.post({ type: 'frame_ack' })">
-      <div v-else class="cam-empty" role="status"><Icon :name="s.camError ? 'spot/camera-off' : 'spot/not-connected'" :size="96" /><span>{{ msg }}</span></div>
-    </div>
-    <p v-if="s.camOn" id="cam-fps-help" class="oui-meta cam-help">{{ t('cam.fpsHelp') }}</p>
-  </section>
+      <Button v-if="s.frame" severity="secondary" size="small" :label="t('cam.save')" :title="t('cam.saveHint')" :loading="tracker.isBusy('snapshot')"
+              data-focus-key="cam-save" data-test="cam-save" @click="save"><template #icon><OuiIcon :icon="download" :size="14" /></template></Button>
+      <Button severity="secondary" size="small" :label="t('cam.stop')" data-focus-key="camera" data-test="camera" @click="toggle"><template #icon><OuiIcon :icon="cameraOff" :size="14" /></template></Button>
+    </template>
+    <OuiEmpty v-if="!s.camOn" compact tone="sky" :icon="cameraOff" :title="t('cam.off')" :text="targetKnown ? t('cam.offHint') : t('cam.noTarget')">
+      <template #actions><Button severity="secondary" :label="t('cam.start')" :disabled="!targetKnown" data-focus-key="camera" data-test="camera" @click="toggle">
+        <template #icon><OuiIcon :icon="camera" :size="14" /></template></Button></template>
+    </OuiEmpty>
+    <template v-else>
+      <div class="u1-view">
+        <img v-if="s.frame" :src="s.frame" :alt="t('cam.alt', { printer: printerName })" @load="bridge.post({ type: 'frame_ack' })">
+        <div v-else class="oui-on-band u1-view-wait" role="status"><OuiEmpty :state="s.camError ? 'error' : 'loading'" :title="s.camError ? t('cam.unavailable', { error: s.camError }) : t('cam.starting')" /></div>
+      </div>
+      <p id="cam-fps-help" class="oui-meta u1-pad">{{ t('cam.fpsHelp') }}</p>
+    </template>
+  </OuiPanel>
 </template>
-<style scoped>
-.cam-h { margin: 0; display: flex; align-items: center; gap: 8px; }
-.cam-card.compact { padding-block: 10px; }
-.cam-view { margin-top: 12px; position: relative; background: #000; border-radius: 6px; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; overflow: hidden; }
-.cam-view img { width: 100%; height: 100%; object-fit: contain; }
-.cam-help { margin: 8px 0 0; }
-.cam-empty { display: grid; justify-items: center; gap: 8px; color: #d5dbe3; padding: 16px; text-align: center; }
+<style>
+/* The picture area: always black behind the picture, whatever the theme (it is a camera frame, not a surface). */
+.u1-view { position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; aspect-ratio: 16 / 9; background: #000; }
+.u1-view img { width: 100%; height: 100%; object-fit: contain; }
+.u1-view .u1-view-wait { background: none; }
 </style>

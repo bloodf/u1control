@@ -3,16 +3,17 @@ import { computed, reactive, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import Icon from './Icon.vue';
-import SpoolFigure from './SpoolFigure.vue';
-import LevelBar from './LevelBar.vue';
-import { spoolFraction, spoolPaint } from '../core/spool-level';
+import { OuiIcon, OuiSlot, OuiStatus, OuiSwatch } from '../../shared/src/components';
+import { download, edit as editIcon, rfid as rfidIcon, upload } from '../../shared/src/icons';
+import HeaterControl from './HeaterControl.vue';
 import { s, run, tracker, controlsOff, loadSpools, guidedWhy } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, fmt } from '../core/i18n';
 import { family } from '../core/logic';
 import type { Spool, Tag } from '../app/types';
 
+// One toolhead as an object card: its filament's colour across the top, the spool, what is left of the linked
+// Spoolman spool, its nozzle heater, and Load / Unload / Edit / Read RFID.
 const props = defineProps<{ index: number }>();
 const i = props.index, n = i + 1;
 const TYPES = ['PLA', 'PLA+', 'PLA-CF', 'PETG', 'PETG-CF', 'PCTG', 'ABS', 'ASA', 'TPU', 'PA', 'PA-CF', 'PC', 'PVA', 'HIPS'];
@@ -29,6 +30,8 @@ const tagText = computed(() => {
   return [[g.vendor || g.manufacturer, g.type, g.sub_type].filter(Boolean).join(' '), temp,
     g.bed_temp ? t('heads.tagBed', { temp: g.bed_temp }) : '', g.sku ? `SKU ${g.sku}` : ''].filter(Boolean).join(' · ');
 });
+const why = computed(() => (guidedWhy.value ? 'heads-why' : undefined));
+const offWhy = computed(() => (controlsOff.value ? 'heads-why' : undefined));
 
 async function load() {
   if (!await ask({ title: t('act.load', { n }), text: t('confirm.load.text', { n }), yes: t('confirm.load.yes', { n }), no: t('common.goBack') })) return;
@@ -49,6 +52,7 @@ function startEdit() {
   editing.value = true;
 }
 async function saveEdit() {
+  if (guidedWhy.value) return;
   if (tagged.value && !await ask({ title: t('edit.title', { n }),
     text: t('confirm.overwrite.text', { n, kind: head.value?.official ? t('edit.official') : t('edit.tagged') }),
     yes: t('confirm.overwrite.yes'), no: t('common.goBack'), danger: true })) return;
@@ -61,9 +65,7 @@ async function saveEdit() {
 const bound = computed(() => s.bindings[String(i)] ?? null);
 // The linked Spoolman spool, when there is one: its colour(s) and how much is left draw the spool and the bar.
 const linked = computed(() => (bound.value != null ? s.spools.find(x => x.id === bound.value) ?? null : null));
-const fraction = computed(() => (linked.value ? spoolFraction(linked.value.remaining, linked.value.initial) : null));
-const paint = computed(() => (linked.value ? spoolPaint(linked.value.colour, linked.value.colours) : '') || head.value?.colour || '');
-const pct = computed(() => (fraction.value === null ? null : Math.round(fraction.value * 100)));
+const colours = computed(() => (linked.value?.colours && linked.value.colours.length > 1 ? linked.value.colours : null));
 const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material, grams: fmt.grams(sp.remaining) });
 const groups = computed(() => {
   const fam = head.value?.type ? family(head.value.type) : '';
@@ -90,92 +92,76 @@ async function choose(id: number | null) {
   const r = await run({ key: `bind:${i}`, label: t('act.bind', { n }), cmd: 'bind_spool', args: { head: i, spool_id: id, force }, okText: t('ok.bind', { n, id }), timeoutMs: 60000 });
   if (r.ok) s.bindings = r.result.bindings; else void loadSpools(true);
 }
-const swatch = (sp: Spool | null) => !sp ? 'transparent'
-  : sp.colours && sp.colours.length > 1 ? `linear-gradient(90deg,${sp.colours.join(',')})` : sp.colour || 'transparent';
+const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 </script>
 
 <template>
-  <article v-if="head" class="hc" :class="{ active }" :style="{ '--tc': `var(--u1-t${n})` }" :aria-labelledby="`hc-${i}`">
+  <OuiSlot v-if="head" class="hc" :label="`T${n}`" :tool="(n as 1 | 2 | 3 | 4)" :name="head.loaded ? [head.type, head.sub_type].filter(Boolean).join(' ') || t('common.unknown') : null"
+           :material="head.loaded ? head.vendor || head.type : null" :color="linked?.colour || head.colour || null" :colors="colours"
+           :remaining="linked?.remaining" :initial="linked?.initial" :low="!!linked?.low" :active="active" :empty-label="t('heads.noFilament')" :aria-label="`T${n}`">
+    <template #state>
+      <OuiStatus v-if="!head.loaded" state="idle">{{ t('heads.empty') }}</OuiStatus>
+      <OuiStatus v-else-if="active && s.status?.state === 'printing'" state="busy">{{ t('status.state.printing') }}</OuiStatus>
+      <OuiStatus v-else-if="linked?.low" state="warn">{{ t('heads.low') }}</OuiStatus>
+      <OuiStatus v-else-if="active" state="ok">{{ t('heads.activeChip') }}</OuiStatus>
+    </template>
+    <template #meta>{{ head.vendor }}<span v-if="tag" class="oui-chip hc-tag" :title="tag.official ? t('heads.tagOfficial', { uid: tag.uid || '' }) : t('heads.tagThird', { uid: tag.uid || '' })">{{ t('heads.tag') }}</span></template>
+    <!-- No Spoolman spool linked: there is no weight to show, so no amount line at all (not a dash that looks like a reading). -->
+    <template v-if="!linked" #amount />
+
     <template v-if="!editing">
-      <div class="hc-top">
-        <Icon :name="`toolhead/t${n}`" :size="32" />
-        <SpoolFigure class="hc-spool" :paint="paint" :fraction="!head.loaded ? 0 : fraction === null ? 1 : fraction" :size="60" />
-        <div class="hc-name">
-          <strong :id="`hc-${i}`">T{{ n }}<span v-if="active" class="oui-meta"> · {{ t('heads.active') }}</span></strong>
-          <div>{{ head.loaded ? head.type : t('heads.empty') }} <span class="oui-muted">{{ head.vendor }} {{ head.sub_type }}</span>
-            <span v-if="tag" class="u1-pill hc-tag" :title="tag.official ? t('heads.tagOfficial', { uid: tag.uid || '' }) : t('heads.tagThird', { uid: tag.uid || '' })">{{ t('heads.tag') }}</span></div>
-        </div>
-      </div>
-      <template v-if="head.loaded && linked">
-        <div class="hc-left u1-num"><strong :class="{ 'u1-warn': linked.low }">{{ fmt.grams(linked.remaining) }}</strong>
-          <span v-if="linked.initial" class="oui-muted">/ {{ fmt.grams(linked.initial) }}</span><span v-if="pct !== null" class="oui-muted">· {{ pct }}%</span></div>
-        <LevelBar :pct="pct" :paint="paint || '#888'" :level="linked.low ? 'low' : ''" />
-      </template>
-      <p v-if="tag" class="oui-meta hc-p">{{ t('heads.tagDetail', { text: tagText }) }}</p>
-      <p class="oui-meta hc-p">{{ t('heads.feeder', { state: feed.state || '—' }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
-      <div class="u1-row hc-actions">
-        <Button size="small" severity="secondary" outlined :label="t('heads.edit')" :aria-label="t('heads.editLabel', { n })" :disabled="!!guidedWhy"
-                :aria-describedby="guidedWhy ? 'heads-why' : undefined" :data-focus-key="`edit:${i}`" :data-edit="i" @click="startEdit" />
-        <Button size="small" severity="secondary" outlined :aria-label="t('heads.loadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`load:${i}`)"
-                :aria-describedby="guidedWhy ? 'heads-why' : undefined"
-                :loading="tracker.isBusy(`load:${i}`)" :data-focus-key="`load:${i}`" :data-load="i" @click="load">
-          <Icon name="icon/load-filament" /><span>{{ t('heads.load') }}</span></Button>
-        <Button size="small" severity="secondary" outlined :aria-label="t('heads.unloadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`unload:${i}`)"
-                :aria-describedby="guidedWhy ? 'heads-why' : undefined"
-                :loading="tracker.isBusy(`unload:${i}`)" :data-focus-key="`unload:${i}`" :data-unload="i" @click="unload">
-          <Icon name="icon/unload-filament" /><span>{{ t('heads.unload') }}</span></Button>
-        <Button size="small" severity="secondary" outlined :aria-label="t('heads.rfidLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`rfid:${i}`)"
-                :aria-describedby="controlsOff ? 'heads-why' : undefined"
-                :data-focus-key="`rfid:${i}`" :data-rfid="i" @click="rfid">
-          <Icon name="icon/rfid-tag" /><span>{{ t('heads.rfid') }}</span></Button>
-      </div>
-      <Select v-if="s.spools.length" :model-value="bound ?? 0" :options="groups" option-group-label="label" option-group-children="items"
+      <Select v-if="s.spools.length" :model-value="bound ?? 0" :options="groups" option-group-label="label" option-group-children="items" size="small"
               option-label="label" option-value="value" filter :filter-placeholder="t('pick.filter')" :aria-label="t('pick.label', { n })"
-              :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" :pt="{ label: { 'aria-describedby': controlsOff ? 'heads-why' : undefined } }" class="hc-pick" :data-focus-key="`pick:${i}`" :data-pick="i"
+              :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" :pt="{ label: { 'aria-describedby': offWhy } }" class="hc-pick" :data-focus-key="`pick:${i}`" :data-pick="i"
               @update:model-value="choose">
         <template #value="{ value }">
-          <span class="hc-opt"><span class="u1-sw" :style="{ background: swatch(s.spools.find(x => x.id === value) ?? null) }" />
-            <span class="hc-opt-t">{{ value ? label(s.spools.find(x => x.id === value) ?? { id: value, vendor: '', name: '', material: '' } as Spool) : t('pick.choose') }}</span></span>
+          <span class="hc-opt"><OuiSwatch v-if="value" :color="spoolOf(value)?.colour" :colors="spoolOf(value)?.colours" />
+            <span class="oui-truncate">{{ value ? label(spoolOf(value) ?? { id: value, vendor: '', name: '', material: '' } as Spool) : t('pick.choose') }}</span></span>
         </template>
         <template #option="{ option }">
-          <span class="hc-opt"><span class="u1-sw" :style="{ background: swatch(option.sp) }" />
-            <span class="hc-opt-t">{{ option.label }}</span>
-            <span v-if="option.sp && option.sp.remaining != null && option.sp.remaining < 100" class="u1-warn">·</span></span>
+          <span class="hc-opt"><OuiSwatch v-if="option.sp" :color="option.sp.colour" :colors="option.sp.colours" />
+            <span class="oui-truncate">{{ option.label }}</span>
+            <span v-if="option.sp && option.sp.remaining != null && option.sp.remaining < 100" class="oui-chip" data-tone="warn">{{ t('stock.low') }}</span></span>
         </template>
       </Select>
+      <HeaterControl :id="String(i)" card />
+      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feed.state || '—' }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
     </template>
-    <form v-else class="hc-form" @submit.prevent="saveEdit">
-      <strong :id="`hc-${i}`">{{ t('edit.title', { n }) }}</strong>
+    <form v-else :id="`hc-form-${i}`" class="hc-form" @submit.prevent="saveEdit">
+      <p class="oui-strong">{{ t('edit.title', { n }) }}</p>
       <div class="hc-grid">
-        <label :for="`e${i}-v`">{{ t('edit.vendor') }}</label><InputText :id="`e${i}-v`" v-model="form.vendor" />
-        <label :id="`e${i}-tl`">{{ t('edit.type') }}</label><Select v-model="form.type" :options="TYPES" :aria-labelledby="`e${i}-tl`" />
-        <label :for="`e${i}-s`">{{ t('edit.subtype') }}</label><InputText :id="`e${i}-s`" v-model="form.sub" />
+        <label :for="`e${i}-v`">{{ t('edit.vendor') }}</label><InputText :id="`e${i}-v`" v-model="form.vendor" size="small" />
+        <label :id="`e${i}-tl`">{{ t('edit.type') }}</label><Select v-model="form.type" :options="TYPES" :aria-labelledby="`e${i}-tl`" size="small" />
+        <label :for="`e${i}-s`">{{ t('edit.subtype') }}</label><InputText :id="`e${i}-s`" v-model="form.sub" size="small" />
         <label :for="`e${i}-c`">{{ t('edit.colour') }}</label><input :id="`e${i}-c`" v-model="form.colour" type="color" class="hc-colour">
       </div>
       <p v-if="tagged" class="oui-meta">{{ t('edit.rfidNote') }}</p>
-      <div class="u1-row">
-        <Button type="submit" :label="t('common.save')" :loading="tracker.isBusy(`edit:${i}`)" :disabled="!!guidedWhy" :aria-describedby="guidedWhy ? 'heads-why' : undefined" />
-        <Button severity="secondary" outlined :label="t('common.cancel')" @click="editing = false" />
+      <div class="oui-row">
+        <Button type="submit" size="small" :label="t('common.save')" :loading="tracker.isBusy(`edit:${i}`)" :disabled="!!guidedWhy" :aria-describedby="why" />
+        <Button severity="secondary" size="small" :label="t('common.cancel')" @click="editing = false" />
       </div>
     </form>
-  </article>
+
+    <template v-if="!editing" #actions>
+      <Button size="small" severity="secondary" :label="t('heads.load')" :aria-label="t('heads.loadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`load:${i}`)" :aria-describedby="why"
+              :loading="tracker.isBusy(`load:${i}`)" :data-focus-key="`load:${i}`" :data-load="i" @click="load"><template #icon><OuiIcon :icon="download" :size="14" /></template></Button>
+      <Button size="small" severity="secondary" :label="t('heads.unload')" :aria-label="t('heads.unloadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`unload:${i}`)" :aria-describedby="why"
+              :loading="tracker.isBusy(`unload:${i}`)" :data-focus-key="`unload:${i}`" :data-unload="i" @click="unload"><template #icon><OuiIcon :icon="upload" :size="14" /></template></Button>
+      <span class="oui-spacer" />
+      <Button size="small" severity="secondary" text :aria-label="t('heads.editLabel', { n })" :title="t('heads.editLabel', { n })" :disabled="!!guidedWhy" :aria-describedby="why"
+              :data-focus-key="`edit:${i}`" :data-edit="i" @click="startEdit"><template #icon><OuiIcon :icon="editIcon" :size="14" /></template></Button>
+      <Button size="small" severity="secondary" text :aria-label="t('heads.rfidLabel', { n })" :title="t('heads.rfidLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`rfid:${i}`)" :aria-describedby="offWhy"
+              :data-focus-key="`rfid:${i}`" :data-rfid="i" @click="rfid"><template #icon><OuiIcon :icon="rfidIcon" :size="14" /></template></Button>
+    </template>
+  </OuiSlot>
 </template>
 
-<style scoped>
-.hc { min-width: 0; border: 1px solid var(--oui-border); border-top: 4px solid var(--tc); border-radius: 12px; padding: 12px; background: var(--oui-surface); display: grid; gap: 6px; align-content: start; }
-.hc.active { border-color: var(--p-primary-color); border-top-color: var(--tc); }
-.hc-top { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.hc-spool { margin: -4px 0; }
-.hc-left { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; }
-.hc-left strong { font-size: 18px; }
-.hc-name { min-width: 0; overflow-wrap: anywhere; }
-.hc-tag { margin-left: 4px; }
-.hc-p { margin: 0; }
-.hc-actions :deep(.p-button) { gap: 4px; }
+<style>
+.hc-tag { margin-inline-start: var(--oui-s2); }
 .hc-pick { width: 100%; min-width: 0; }
 .hc-opt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
-.hc-opt-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.hc-form { display: grid; gap: 8px; }
-.hc-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; }
-.hc-colour { width: 44px; height: 32px; padding: 0; border: 1px solid var(--oui-control-border, var(--oui-border)); border-radius: 6px; background: none; }
+.hc-form { display: grid; gap: var(--oui-s2); padding-top: var(--oui-s2); border-top: 1px solid var(--oui-border); }
+.hc-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--oui-s2); align-items: center; }
+.hc-grid > label { font-size: var(--oui-text-sm); font-weight: 600; color: var(--oui-muted); }
+.hc-colour { width: 44px; height: var(--oui-control-sm); padding: 0; border: 1px solid var(--oui-control-border); border-radius: var(--oui-radius); background: none; }
 </style>

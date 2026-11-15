@@ -5,9 +5,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 
 const html = await readFile(new URL('../dist/index.html', import.meta.url), 'utf8');
-for (const marker of ['__BOOT__', '__ICONS__']) {
-  if (html.split(marker).length !== 2) throw new Error(`built page must contain ${marker} exactly once`);
-}
+if (html.split('__BOOT__').length !== 2) throw new Error('built page must contain __BOOT__ exactly once');
 // "@import" alone also matches PrimeVue 5's CSS sanitizer regex; only a real @import url(...)/"..." counts.
 if (/<script[^>]+src=|<link[^>]+href="http|@import\s*(?:url\(|['"])|url\(http/i.test(html)) throw new Error('built page references an external resource');
 if (/\bnew Function\b|\beval\(/.test(html)) throw new Error('built page uses eval / new Function');

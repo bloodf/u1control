@@ -2,7 +2,8 @@
 import { nextTick, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
-import Icon from './Icon.vue';
+import { OuiIcon, OuiPanel } from '../../shared/src/components';
+import { terminal } from '../../shared/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, targetKnown, printerName } from '../app/store';
 import { ask } from '../core/dialog';
@@ -48,25 +49,26 @@ async function send() {
 }
 </script>
 <template>
-  <section class="u1-card" aria-labelledby="console-h">
-    <h2 id="console-h"><Icon name="icon/terminal" /> {{ t('console.title') }}</h2>
-    <form class="u1-row" @submit.prevent="send">
-      <InputText id="console-cmd" v-model="cmd" class="cv-in" aria-labelledby="console-h" :placeholder="t('console.placeholder')" :disabled="!targetKnown" />
-      <Button type="submit" :disabled="!targetKnown || !cmd.trim()" :loading="sending"><Icon name="icon/terminal" /><span>{{ t('console.send') }}</span></Button>
-      <Button severity="secondary" outlined :label="t('console.clear')" :disabled="!lines.length" @click="lines = []" />
-    </form>
-    <p class="oui-meta">{{ targetKnown ? t('console.help') : t('console.noTarget') }}</p>
-    <div ref="box" class="cv-log" role="log" aria-live="polite" :aria-label="t('console.log')" tabindex="0">
-      <p v-if="!lines.length" class="oui-muted">{{ t('console.empty') }}</p>
-      <div v-for="l in lines" :key="l.id" :class="['cv-line', l.kind]">{{ l.text }}</div>
+  <OuiPanel :icon="terminal" aria-labelledby="console-h">
+    <template #title><span id="console-h">{{ t('console.title') }}</span></template>
+    <div class="oui-stack">
+      <form class="oui-row" @submit.prevent="send">
+        <InputText id="console-cmd" v-model="cmd" class="cv-in oui-mono" aria-labelledby="console-h" aria-describedby="console-help" :placeholder="t('console.placeholder')" :disabled="!targetKnown" />
+        <Button type="submit" :label="t('console.send')" :disabled="!targetKnown || !cmd.trim()" :loading="sending"><template #icon><OuiIcon :icon="terminal" :size="14" /></template></Button>
+        <Button severity="secondary" text :label="t('console.clear')" :disabled="!lines.length" @click="lines = []" />
+      </form>
+      <p id="console-help" class="oui-meta">{{ targetKnown ? t('console.help') : t('console.noTarget') }}</p>
+      <div ref="box" class="cv-log oui-well" role="log" aria-live="polite" :aria-label="t('console.log')" tabindex="0">
+        <p v-if="!lines.length" class="oui-muted">{{ t('console.empty') }}</p>
+        <div v-for="l in lines" :key="l.id" :class="['cv-line', l.kind]">{{ l.text }}</div>
+      </div>
     </div>
-  </section>
+  </OuiPanel>
 </template>
-<style scoped>
+<style>
 .cv-in { flex: 1 1 280px; min-width: 0; }
-.cv-log { max-height: 320px; overflow: auto; border: 1px solid var(--oui-border); border-radius: 6px; padding: 8px; font: 12px ui-monospace, Menlo, Consolas, monospace; }
-.cv-log p { margin: 0; }
+.cv-log { min-height: 160px; max-height: 420px; overflow: auto; padding: var(--oui-s3); font-family: var(--oui-mono); font-size: var(--oui-text-sm); line-height: 1.5; box-shadow: inset 0 0 0 1px var(--oui-border); }
 .cv-line { white-space: pre-wrap; overflow-wrap: anywhere; }
-.cv-line.in { font-weight: 600; }
+.cv-line.in { font-weight: 700; }
 .cv-line.err { color: var(--oui-danger); }
 </style>

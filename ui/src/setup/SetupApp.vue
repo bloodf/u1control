@@ -3,8 +3,9 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import Button from 'primevue/button';
 import Checkbox from 'primevue/checkbox';
 import Select from 'primevue/select';
-import Message from 'primevue/message';
-import Icon from '../components/Icon.vue';
+import ToggleSwitch from 'primevue/toggleswitch';
+import { OuiAppBar, OuiBanner, OuiFormRow, OuiIcon, OuiPanel, OuiStatus, OuiSwatch, OuiThumb } from '../../shared/src/components';
+import { clipboard, printer, toolhead, upload, wind } from '../../shared/src/icons';
 import * as bridge from '../core/bridge';
 import { boot } from '../core/boot';
 import { t, tn, tMaybe } from '../core/i18n';
@@ -71,79 +72,82 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="su">
-    <header class="su-job">
-      <img v-if="D.job.thumbnail" :src="'data:image/png;base64,' + D.job.thumbnail" :alt="t('setup.thumb')" class="su-thumb">
-      <div><p class="oui-meta su-kicker">{{ t('setup.title') }}</p><h1>{{ D.job.name || t('setup.title') }}</h1><p class="oui-meta">{{ meta }}</p></div>
+  <OuiAppBar :name="t('setup.title')">
+    <template #mark>
+      <svg viewBox="0 0 256 256" fill="currentColor"><path d="M40 96H72V160A32 32 0 0 0 104 192H152A32 32 0 0 0 184 160V96H216V160A64 64 0 0 1 152 224H104A64 64 0 0 1 40 160Z" /><rect x="40" y="40" width="32" height="64" rx="8" /><rect x="88" y="40" width="32" height="64" rx="8" /><rect x="136" y="40" width="32" height="64" rx="8" /><rect x="184" y="40" width="32" height="64" rx="8" /></svg>
+    </template>
+  </OuiAppBar>
+  <main class="oui-page su">
+    <!-- The page's hero: the print that is about to be sent. -->
+    <header class="oui-hero oui-on-band su-job">
+      <OuiThumb :src="D.job.thumbnail ? 'data:image/png;base64,' + D.job.thumbnail : null" :alt="t('setup.thumb')" :size="72" :icon="printer" />
+      <div class="su-job-id"><h1 class="su-job-name">{{ D.job.name || t('setup.title') }}</h1><p class="su-job-meta oui-num">{{ meta }}</p></div>
     </header>
-    <section aria-labelledby="su-map">
-      <h2 id="su-map">{{ t('setup.mapping') }}</h2>
-      <p class="oui-meta">{{ t('setup.live') }}</p>
-      <div v-for="f in D.filaments" :key="f.index" class="su-row" role="group" :aria-labelledby="`su-f-${f.index}`">
-        <span :id="`su-f-${f.index}`" class="su-fil"><span class="u1-sw" :style="{ background: f.colour || '#ccc' }" />
-          {{ t('setup.filament', { n: f.index + 1, type: f.type }) }}<span v-if="f.weight" class="oui-muted"> · {{ t('setup.grams', { g: f.weight }) }}</span></span>
-        <div class="su-heads">
-          <Button v-for="h in heads" :key="h.index" :severity="map[f.index] === h.index ? undefined : 'secondary'" :outlined="map[f.index] !== h.index"
-                  :aria-pressed="map[f.index] === h.index" :data-f="f.index" :data-t="h.index" class="su-head"
-                  :aria-label="t('setup.headBtn', { f: f.index + 1, n: h.index + 1, type: h.loaded ? h.type : t('setup.empty') })"
-                  :title="[h.vendor, h.sub_type].filter(Boolean).join(' ')" @click="pick(f.index, h.index)">
-            <Icon :name="`toolhead/t${h.index + 1}`" :size="20" /><span class="u1-sw" :style="{ background: h.colour || 'transparent' }" />
-            <span>T{{ h.index + 1 }} <em v-if="!h.loaded" class="su-empty">{{ t('setup.empty') }}</em><template v-else>{{ h.type }}</template></span>
-          </Button>
+
+    <OuiPanel :icon="toolhead" tone="magenta" flush aria-labelledby="su-map">
+      <template #title><span id="su-map">{{ t('setup.mapping') }}</span></template>
+      <template #meta>{{ t('setup.live') }}</template>
+      <div class="su-rows">
+        <div v-for="f in D.filaments" :key="f.index" class="su-row" role="group" :aria-labelledby="`su-f-${f.index}`">
+          <span :id="`su-f-${f.index}`" class="su-fil"><OuiSwatch :color="f.colour" :size="16" />
+            <span class="oui-strong">{{ t('setup.filament', { n: f.index + 1, type: f.type }) }}</span><span v-if="f.weight" class="oui-muted oui-num">{{ t('setup.grams', { g: f.weight }) }}</span></span>
+          <div class="su-heads">
+            <Button v-for="h in heads" :key="h.index" :severity="map[f.index] === h.index ? undefined : 'secondary'"
+                    :aria-pressed="map[f.index] === h.index" :data-f="f.index" :data-t="h.index" class="su-head"
+                    :aria-label="t('setup.headBtn', { f: f.index + 1, n: h.index + 1, type: h.loaded ? h.type : t('setup.empty') })"
+                    :title="[h.vendor, h.sub_type].filter(Boolean).join(' ')" @click="pick(f.index, h.index)">
+              <span class="u1-tool" :data-tool="h.index + 1">T{{ h.index + 1 }}</span><OuiSwatch :color="h.loaded ? h.colour : null" :size="14" />
+              <span class="oui-strong"><em v-if="!h.loaded" class="su-empty">{{ t('setup.empty') }}</em><template v-else>{{ h.type }}</template></span>
+            </Button>
+          </div>
         </div>
       </div>
+    </OuiPanel>
+
+    <section v-if="warnings.length" class="oui-stack su-warn" aria-labelledby="su-w">
+      <h2 id="su-w" class="oui-sr">{{ t('setup.warnings') }}</h2>
+      <div role="alert" class="u1-live"><OuiBanner v-for="w in warnings" :key="w.id" tone="warn" :title="warnText(w)" /></div>
+      <p v-if="ackReset" class="u1-note" data-tone="warn" role="status">{{ t('setup.ackReset') }}</p>
+      <label class="su-ack" for="su-ack"><Checkbox v-model="acked" input-id="su-ack" binary data-test="ack" />{{ t('setup.ack') }}</label>
     </section>
-    <section v-if="warnings.length" aria-labelledby="su-w" class="su-warn">
-      <h2 id="su-w" class="u1-warn"><Icon name="icon/warning" /> {{ t('setup.warnings') }}</h2>
-      <div role="alert"><Message v-for="w in warnings" :key="w.id" severity="warn">{{ warnText(w) }}</Message></div>
-      <p v-if="ackReset" class="u1-warn" role="status">{{ t('setup.ackReset') }}</p>
-      <span class="u1-row"><Checkbox v-model="acked" input-id="su-ack" binary data-test="ack" /><label for="su-ack">{{ t('setup.ack') }}</label></span>
-    </section>
-    <section aria-labelledby="su-o">
-      <h2 id="su-o">{{ t('setup.options') }}</h2>
-      <div class="su-opts">
-        <span v-for="(v, k) in prefs" :key="k" class="u1-row"><Checkbox v-model="prefs[k]" :input-id="`su-p-${k}`" binary /><label :for="`su-p-${k}`">{{ prefLabel(String(k)) }}</label></span>
+
+    <OuiPanel :icon="clipboard" tone="cobalt" flush aria-labelledby="su-o">
+      <template #title><span id="su-o">{{ t('setup.options') }}</span></template>
+      <div class="su-rows">
+        <OuiFormRow v-for="(v, k) in prefs" :key="k" :label="prefLabel(String(k))" :for="`su-p-${k}`"><ToggleSwitch v-model="prefs[k]" :input-id="`su-p-${k}`" /></OuiFormRow>
+        <OuiFormRow :label="t('setup.coverMode')" :hint="t('setup.autoPicks', { mode: t(`purifier.${D.auto_purifier}` as any) })">
+          <Select v-model="purifier" :options="purOptions" option-label="label" option-value="value" :aria-label="t('setup.coverMode')" />
+        </OuiFormRow>
       </div>
-    </section>
-    <section aria-labelledby="su-c">
-      <h2 id="su-c">{{ t('setup.cover') }}</h2>
-      <div class="u1-row"><label id="su-pur-l">{{ t('setup.coverMode') }}</label>
-        <Select v-model="purifier" :options="purOptions" option-label="label" option-value="value" aria-labelledby="su-pur-l" />
-        <span class="oui-meta">{{ t('setup.autoPicks', { mode: t(`purifier.${D.auto_purifier}` as any) }) }}</span></div>
-    </section>
-    <footer ref="footer" class="su-bar">
-      <span v-if="!canSend && !sent" class="u1-why" id="su-why">{{ t('setup.needAck') }}</span>
-      <span v-if="sent" role="status">{{ t('setup.sending') }}</span>
-      <span class="u1-spacer" />
-      <Button severity="secondary" outlined :label="t('setup.dontSend')" data-test="cancel" @click="cancel" />
+    </OuiPanel>
+  </main>
+  <footer ref="footer" class="su-bar">
+    <div class="su-bar-in">
+      <span v-if="!canSend && !sent" id="su-why" class="u1-note" data-tone="warn">{{ t('setup.needAck') }}</span>
+      <OuiStatus v-if="sent" state="busy" role="status">{{ t('setup.sending') }}</OuiStatus>
+      <span class="oui-spacer" />
+      <Button severity="secondary" :label="t('setup.dontSend')" data-test="cancel" @click="cancel" />
       <Button :severity="warnings.length ? 'warn' : undefined" :disabled="!canSend" aria-describedby="su-why" data-test="send"
-              :label="warnings.length ? tn('setup.sendWarn', warnings.length) : t('setup.send')" @click="send" />
-    </footer>
-  </div>
+              :label="warnings.length ? tn('setup.sendWarn', warnings.length) : t('setup.send')" @click="send"><template #icon><OuiIcon :icon="upload" :size="14" /></template></Button>
+    </div>
+  </footer>
 </template>
 
 <style>
 html { scroll-padding-bottom: calc(var(--u1-setup-footer-height, 0px) + 16px); }
-body { background: var(--oui-background); }
-.su { padding: 16px; display: grid; gap: 16px; max-width: 900px; margin: 0 auto; }
-.su h2 { display: flex; gap: 6px; align-items: center; margin: 0 0 8px; }
-.su-job { display: flex; gap: 12px; align-items: center; }
-.su-job h1 { margin: 0; overflow-wrap: anywhere; }
-.su-kicker { margin: 0; }
-.su-thumb { width: 72px; height: 72px; object-fit: contain; border: 1px solid var(--oui-border); border-radius: 6px; }
-.su-row { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--oui-border); }
-.su-fil { display: inline-flex; gap: 6px; align-items: center; overflow-wrap: anywhere; }
+.su { max-width: 900px; margin: 0 auto; }
+.su-job { display: flex; grid-template-columns: none; align-items: center; gap: var(--oui-s4); }
+.su-job-id { display: grid; gap: 2px; min-width: 0; }
+.su-job-name { font-size: var(--oui-text-xl); line-height: 1.2; font-weight: 700; overflow-wrap: anywhere; }
+.su-job-meta { font-size: var(--oui-text-sm); }
+.su-rows > * + * { border-top: 1px solid var(--oui-border); }
+.su-row { display: grid; grid-template-columns: minmax(160px, 220px) minmax(0, 1fr); gap: var(--oui-s2) var(--oui-s4); align-items: center; padding: var(--oui-s2) var(--oui-s4); }
+.su-fil { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; overflow-wrap: anywhere; }
 .su-heads { display: flex; flex-wrap: wrap; gap: 6px; }
-.su-head { gap: 6px; }
+.su-head.p-button { gap: 6px; padding-inline: 8px 12px; }
 .su-empty { font-style: normal; text-decoration: underline dotted; }
-.su-warn { border: 1px solid var(--oui-warning); border-radius: 12px; padding: 12px; display: grid; gap: 8px; }
-.su-warn [role=alert] { display: grid; gap: 6px; }
-.su-opts { display: flex; flex-wrap: wrap; gap: 8px 20px; }
-.su-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; position: sticky; bottom: 0; background: var(--oui-background); padding: 12px 0; border-top: 1px solid var(--oui-border); }
-.u1-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
-.u1-spacer { flex: 1; }
-.u1-sw { display: inline-block; flex: none; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--oui-border); }
-.u1-why { color: var(--oui-muted); font-size: 12px; }
-.u1-warn { color: var(--oui-warning); }
-@media (max-width: 560px) { .su-row { grid-template-columns: minmax(0, 1fr); } }
+.su-ack { display: inline-flex; align-items: center; gap: var(--oui-s2); font-weight: 600; }
+.su-bar { position: sticky; bottom: 0; z-index: 5; background: var(--oui-surface); border-top: 1px solid var(--oui-border); box-shadow: 0 -6px 16px rgb(0 0 0 / .12); }
+.su-bar-in { display: flex; flex-wrap: wrap; gap: var(--oui-s2); align-items: center; max-width: 900px; margin: 0 auto; padding: var(--oui-s2) var(--oui-s4); }
+@container oui-page (max-width: 560px) { .su-row { grid-template-columns: minmax(0, 1fr); } }
 </style>

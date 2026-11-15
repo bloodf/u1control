@@ -1,14 +1,12 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import Button from 'primevue/button';
-import SpoolFigure from './SpoolFigure.vue';
-import LevelBar from './LevelBar.vue';
-import { spoolFraction, spoolPaint } from '../core/spool-level';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
-import Message from 'primevue/message';
-import Icon from './Icon.vue';
+import { OuiBanner, OuiEmpty, OuiIcon, OuiLevel, OuiPanel, OuiSpool, OuiStatus, OuiToolbar, materialTone } from '../../shared/src/components';
+import { boxes, link as linkIcon, refresh } from '../../shared/src/icons';
+import { spoolFraction } from '../core/spool-level';
 import { s, run, tracker, loadStock, loadSpools, busy, targetKnown, printerName, stockVisible } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, tMaybe, fmt } from '../core/i18n';
@@ -23,23 +21,17 @@ const sp = computed(() => s.stock?.spooler);
 const sk = computed(() => s.stock?.stock);
 const usable = computed(() => !s.stockError && sp.value?.state === 'active' && sk.value && !['unavailable', 'missing', 'error', 'mismatch'].includes(sk.value.state));
 /** Why the list isn't shown: peer state or list state, with its own severity (U09). */
-const blocker = computed(() => {
-  if (s.stockError) return { sev: 'error', text: t('stock.failed', { error: s.stockError }) };
-  if (!s.stock) return { sev: 'secondary', text: t('stock.loading') };
-  if (sp.value!.state !== 'active') return { sev: 'warn', text: tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text) + (sp.value!.detail ? ` (${sp.value!.detail})` : '') };
+const blocker = computed<{ state: 'error' | 'loading' | 'offline' | 'empty'; text: string } | null>(() => {
+  if (s.stockError) return { state: 'error', text: t('stock.failed', { error: s.stockError }) };
+  if (!s.stock) return { state: 'loading', text: t('stock.loading') };
+  if (sp.value!.state !== 'active') return { state: 'offline', text: tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text) + (sp.value!.detail ? ` (${sp.value!.detail})` : '') };
   const k = sk.value!;
   if (usable.value) return null;
   const text = k.code ? tMaybe(`stock.code.${k.code}`, k.text, { detail: k.detail ?? '' }) : k.text;
-  return { sev: k.state === 'error' ? 'error' : k.state === 'missing' ? 'secondary' : 'warn', text };
+  return { state: k.state === 'error' ? 'error' : k.state === 'missing' ? 'empty' : 'offline', text };
 });
-/** Separate notes, blocking first (U09). */
-const notes = computed(() => {
-  if (!usable.value) return [];
-  const out: { sev: string; text: string }[] = [];
-  if (s.stock!.same_spoolman === false) out.push({ sev: 'error', text: t('stock.otherSpoolman') });
-  if (sk.value!.state === 'stale') out.push({ sev: 'warn', text: t('stock.stale', { age: fmt.ago(sk.value!.ts, s.now / 1000) }) });
-  return out;
-});
+const otherSpoolman = computed(() => !!usable.value && s.stock!.same_spoolman === false);
+const isStale = computed(() => !!usable.value && sk.value!.state === 'stale');
 /** Plain information, not a warning: a quiet line, not a bordered box. */
 const viaPrinter = computed(() => usable.value && s.stock!.same_spoolman == null);
 const rows = computed<Spool[]>(() => sk.value?.rows ?? []);
@@ -51,11 +43,11 @@ const shown = computed(() => {
   return rows.value.filter(r => (!mat.value || r.material === mat.value) && (!fam || family(r.material) === fam)
     && (!needle || [r.name, r.vendor, r.material, r.location, '#' + r.id].join(' ').toLowerCase().includes(needle)));
 });
-const filtered = computed(() => !!(q.value.trim() || mat.value || fit.value));
 const bound = computed(() => boundHeads(s.bindings, s.stock?.bindings ?? {}));
-/** Visible reason when linking is off (U06/B-06): disabled buttons can't show a tooltip by keyboard. */
+/** Why linking is off, and where that is said: once for the page (no printer, busy), or in this panel (other Spoolman). */
 const why = computed(() => (!targetKnown.value || !s.info ? t('stock.why.connect') : busy.value ? t('stock.why.busy')
   : s.stock?.same_spoolman === false ? t('stock.why.spoolman') : ''));
+const whyId = computed(() => (!why.value ? undefined : !targetKnown.value || !s.info || busy.value ? 'heads-why' : 'stock-why'));
 const heads = [0, 1, 2, 3].map(h => ({ value: h, label: `T${h + 1}` }));
 function clear() { q.value = ''; mat.value = null; fit.value = false; }
 
@@ -75,76 +67,81 @@ async function link(r: Spool) {
 </script>
 
 <template>
-  <section v-if="stockVisible" class="u1-card" aria-labelledby="stock-h" data-test="stock-card">
-    <div class="u1-row sc-head">
-      <h2 id="stock-h"><Icon name="icon/filament-spool" /> {{ t('stock.title') }}</h2>
-      <span v-if="usable" class="oui-meta" id="stock-meta">{{ t('stock.meta', { version: sp?.version, n: rows.length, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</span>
-      <span class="u1-spacer" />
-      <Button severity="secondary" outlined :label="t('stock.refresh')" :loading="s.stockLoading" data-focus-key="stock-refresh" @click="loadStock(true)" />
-    </div>
+  <OuiPanel v-if="stockVisible" :icon="boxes" tone="lime" flush aria-labelledby="stock-h" data-test="stock-card">
+    <template #title><span id="stock-h">{{ t('stock.title') }}</span></template>
+    <template v-if="usable" #meta>
+      <OuiStatus v-if="isStale" id="stock-meta" state="stale">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</OuiStatus>
+      <span v-else id="stock-meta">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</span>
+    </template>
+    <template #actions>
+      <Button severity="secondary" size="small" :label="t('common.refresh')" :aria-label="t('stock.refresh')" :loading="s.stockLoading" data-focus-key="stock-refresh" @click="loadStock(true)">
+        <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
+    </template>
+
     <div role="status" aria-live="polite" class="sc-notes">
-      <Message v-if="blocker" :severity="blocker.sev">{{ blocker.text }}</Message>
-      <Message v-for="nt in notes" :key="nt.text" :severity="nt.sev">{{ nt.text }}</Message>
-      <Message v-if="usable && why" severity="warn" data-test="stock-why">{{ t('stock.blocked', { reason: why }) }}</Message>
-      <p v-if="viaPrinter" class="oui-meta sc-note" data-test="stock-via">{{ t('stock.viaPrinter') }}</p>
+      <OuiEmpty v-if="blocker" compact :state="blocker.state" :icon="boxes" tone="lime" :title="blocker.text" />
+      <OuiBanner v-if="otherSpoolman" id="stock-why" data-test="stock-why" tone="error" :title="t('stock.blocked', { reason: why })">{{ t('stock.otherSpoolman') }}</OuiBanner>
     </div>
     <template v-if="usable">
-      <div class="u1-row sc-filters">
-        <InputText v-model="q" type="search" :placeholder="t('stock.search')" :aria-label="t('stock.searchLabel')" class="sc-q" />
-        <Select v-model="mat" :options="materials" option-label="label" option-value="value" show-clear :placeholder="t('stock.allMaterials')" :aria-label="t('stock.material')" />
-        <span class="u1-row"><Checkbox v-model="fit" input-id="stock-fit" binary /><label for="stock-fit">{{ t('stock.sameMaterial') }}</label></span>
-        <span class="u1-spacer" />
-        <label id="stock-head-l">{{ t('stock.linkTo') }}</label>
-        <Select v-model="head" :options="heads" option-label="label" option-value="value" aria-labelledby="stock-head-l" data-test="stock-head" />
-      </div>
-      <div class="sc-wrap">
-        <table class="u1-table">
-          <thead><tr><th scope="col">{{ t('stock.col.spool') }}</th><th scope="col">{{ t('stock.col.material') }}</th><th scope="col">{{ t('stock.col.left') }}</th>
-            <th scope="col" class="sc-loc">{{ t('stock.col.location') }}</th><th scope="col">{{ t('stock.col.action') }}</th></tr></thead>
+      <OuiToolbar class="sc-bar" :summary="t('stock.count', { shown: shown.length, n: rows.length })" :label="t('stock.searchLabel')">
+        <InputText v-model="q" type="search" size="small" :placeholder="t('stock.search')" :aria-label="t('stock.searchLabel')" />
+        <Select v-model="mat" :options="materials" option-label="label" option-value="value" show-clear size="small" :placeholder="t('stock.allMaterials')" :aria-label="t('stock.material')" />
+        <label class="u1-inline" for="stock-fit"><Checkbox v-model="fit" input-id="stock-fit" binary />{{ t('stock.sameMaterial') }}</label>
+        <template #end>
+          <span class="u1-inline"><span id="stock-head-l">{{ t('stock.linkTo') }}</span>
+            <Select v-model="head" :options="heads" option-label="label" option-value="value" size="small" aria-labelledby="stock-head-l" data-test="stock-head" /></span>
+        </template>
+      </OuiToolbar>
+      <div class="sc-wrap u1-scroll">
+        <table class="u1-table sc-table">
+          <thead><tr><th scope="col">{{ t('stock.col.spool') }}</th><th scope="col" class="sc-mat">{{ t('stock.col.material') }}</th>
+            <th scope="col" class="sc-loc">{{ t('stock.col.location') }}</th><th scope="col" class="sc-left oui-num">{{ t('stock.col.left') }}</th>
+            <th scope="col" class="sc-act oui-end"><span class="oui-sr">{{ t('stock.col.action') }}</span></th></tr></thead>
           <tbody>
             <tr v-for="r in shown" :key="r.id">
-              <td><span class="sc-nm"><SpoolFigure :paint="spoolPaint(r.colour, r.colours)" :fraction="spoolFraction(r.remaining, r.initial) ?? 1" :size="40" />
-                <span><strong>{{ r.vendor }} {{ r.name }}</strong> <span class="oui-muted">#{{ r.id }}</span>
-                  <span v-if="r.use_first" class="u1-pill sc-chip">{{ t('stock.useFirst') }}</span>
-                  <span v-if="bound[r.id]" class="u1-pill sc-chip on">{{ t('stock.on', { n: bound[r.id].slice(1) }) }}</span></span></span></td>
-              <td>{{ r.material }}</td>
-              <td class="u1-num sc-left" :class="{ 'u1-warn': r.low }">{{ fmt.grams(r.remaining) }}<template v-if="r.low"> · {{ t('stock.low') }}</template>
-                <LevelBar v-if="spoolFraction(r.remaining, r.initial) !== null" class="sc-bar" :pct="Math.round(spoolFraction(r.remaining, r.initial)! * 100)"
-                          :paint="spoolPaint(r.colour, r.colours) || '#888'" :level="r.low ? 'low' : ''" /></td>
-              <td class="sc-loc oui-muted">{{ r.location }}</td>
-              <td><Button size="small" severity="secondary" outlined :disabled="!!why || tracker.isBusy(`bind:${head}`)" :data-focus-key="`stock:${r.id}`" :data-stock="r.id"
-                          :aria-label="t('stock.linkLabel', { id: r.id, name: `${r.vendor} ${r.name}`, n: head + 1 })" @click="link(r)">
-                <Icon name="icon/link" /><span>{{ t('stock.linkBtn', { n: head + 1 }) }}</span></Button></td>
+              <td><div class="sc-nm"><OuiSpool :color="r.colour" :colors="r.colours" :fraction="spoolFraction(r.remaining, r.initial)" :size="40" />
+                <div class="sc-id"><p class="oui-truncate" :title="`${r.vendor} ${r.name}`"><span class="oui-strong">{{ r.name }}</span> <span class="oui-muted oui-num">#{{ r.id }}</span></p>
+                  <p class="oui-meta sc-meta"><span v-if="bound[r.id]" class="oui-chip" data-tone="accent" data-solid>{{ t('stock.on', { n: bound[r.id].slice(1) }) }}</span>
+                    <span v-if="r.use_first" class="oui-chip">{{ t('stock.useFirst') }}</span><span class="oui-truncate">{{ r.vendor }}</span></p></div></div></td>
+              <td class="sc-mat"><span class="oui-chip" :data-tone="materialTone(r.material)">{{ r.material }}</span></td>
+              <td class="sc-loc" :class="{ 'oui-muted': !r.location }">{{ r.location || '—' }}</td>
+              <td class="sc-left oui-num"><div class="sc-amount"><span :class="{ 'u1-low': r.low }">{{ r.remaining == null ? '—' : fmt.grams(r.remaining) }}<template v-if="r.low"> · {{ t('stock.low') }}</template></span>
+                <OuiLevel :fraction="spoolFraction(r.remaining, r.initial)" :tone="r.low ? 'low' : 'normal'" /></div></td>
+              <td class="sc-act oui-end"><Button size="small" severity="secondary" text :label="t('stock.linkBtn', { n: head + 1 })" :disabled="!!why || tracker.isBusy(`bind:${head}`)" :aria-describedby="whyId"
+                          :data-focus-key="`stock:${r.id}`" :data-stock="r.id" :aria-label="t('stock.linkLabel', { id: r.id, name: `${r.vendor} ${r.name}`, n: head + 1 })" @click="link(r)">
+                <template #icon><OuiIcon :icon="linkIcon" :size="14" /></template></Button></td>
             </tr>
             <tr v-if="!shown.length"><td colspan="5" class="oui-muted">
-              <template v-if="rows.length">{{ t('stock.noMatch') }} <Button text size="small" :label="t('stock.clearFilters')" @click="clear" /></template>
+              <template v-if="rows.length">{{ t('stock.noMatch') }} <Button text size="small" severity="secondary" :label="t('stock.clearFilters')" @click="clear" /></template>
               <template v-else>{{ t('stock.empty') }}</template></td></tr>
           </tbody>
         </table>
       </div>
-      <p v-if="s.stock?.usage && s.stock.usage !== 'unknown'" class="oui-meta">{{ tMaybe(`stock.usage.${s.stock.usage}`, '') }}</p>
     </template>
-    <details class="sc-tabs"><summary>{{ t('stock.tabs.summary') }}</summary><p>{{ t('stock.tabs.body') }}</p></details>
-  </section>
+    <template #footer>
+      <div class="sc-foot">
+        <p v-if="isStale" class="u1-note" data-tone="warn" data-test="stock-stale">{{ t('stock.stale', { age: fmt.ago(sk?.ts, s.now / 1000) }) }}</p>
+        <p v-if="viaPrinter" class="oui-meta" data-test="stock-via">{{ t('stock.viaPrinter') }}</p>
+        <p v-if="usable && s.stock?.usage && s.stock.usage !== 'unknown'" class="oui-meta">{{ tMaybe(`stock.usage.${s.stock.usage}`, '') }}</p>
+        <details class="sc-tabs"><summary>{{ t('stock.tabs.summary') }}</summary><p class="oui-meta">{{ t('stock.tabs.body') }}</p></details>
+      </div>
+    </template>
+  </OuiPanel>
 </template>
 
-<style scoped>
-.sc-head h2 { margin: 0; display: flex; gap: 8px; align-items: center; }
-.sc-notes { display: grid; gap: 8px; margin: 8px 0; }
+<style>
 .sc-notes:empty { display: none; }
-.sc-note { margin: 0; }
-.sc-filters { margin-bottom: 8px; }
-.sc-q { min-width: 240px; }
-.sc-wrap { max-height: 360px; overflow: auto; margin-bottom: 8px; }
-.sc-wrap thead th { position: sticky; top: 0; background: var(--oui-surface); z-index: 1; }
-.sc-nm { display: flex; align-items: center; gap: 8px; min-width: 0; overflow-wrap: anywhere; }
-.sc-chip { font-size: 12px; margin-left: 4px; }
-.sc-chip.on { border-color: var(--p-primary-color); color: var(--p-primary-color); }
-.sc-tabs { margin-top: 12px; }
-.sc-tabs summary { cursor: pointer; color: var(--p-primary-color); }
-.sc-tabs p { margin: 8px 0 0; }
-@media (max-width: 640px) { .sc-loc { display: none; } .sc-q { flex: 1 1 100%; min-width: 0; } }
-
-.sc-left { min-width: 96px; }
-.sc-bar { margin-top: 4px; height: 6px; }
+.sc-notes > .oui-banner { margin: var(--oui-s3) var(--oui-s3) 0; }
+.sc-bar { border-bottom: 1px solid var(--oui-border); }
+.sc-wrap { max-height: 420px; }
+/* Fixed layout: a long spool name is cut, never widens the table. */
+.sc-table { table-layout: fixed; min-width: 560px; }
+.sc-mat { width: 92px; } .sc-loc { width: 120px; } .sc-left { width: 124px; } .sc-act { width: 132px; }
+.sc-nm { display: flex; align-items: center; gap: var(--oui-s3); min-width: 0; }
+.sc-id { display: grid; gap: 1px; min-width: 0; }
+.sc-meta { display: flex; align-items: center; gap: var(--oui-s1); min-width: 0; }
+.sc-amount { display: grid; gap: 4px; }
+.sc-foot { display: grid; gap: var(--oui-s1); min-width: 0; }
+.sc-tabs summary { cursor: pointer; font-size: var(--oui-text-sm); font-weight: 600; color: var(--oui-primary); }
+.sc-tabs p { margin-top: var(--oui-s1); max-width: 96ch; }
 </style>

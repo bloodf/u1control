@@ -1,7 +1,7 @@
 // Pure rules of the page (node --test runs this TypeScript directly).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTarget, parseSpeed, setupWarnings, warningKey, moveTargets, boundHeads, family } from '../../src/core/logic.ts';
+import { parseTarget, parseSpeed, heaterPhase, setupWarnings, warningKey, moveTargets, boundHeads, family } from '../../src/core/logic.ts';
 import { normalizeLocale, resolveLocale, interpolate } from '../../src/core/i18n-core.ts';
 
 test('a blank target is never 0; 0 typed is Off; out of range refused (U02/B-09)', () => {
@@ -14,6 +14,17 @@ test('a blank target is never 0; 0 typed is Off; out of range refused (U02/B-09)
   assert.deepEqual(parseTarget(-1, 320), { kind: 'invalid' });
   assert.deepEqual(parseTarget('abc', 320), { kind: 'invalid' });
   assert.equal(parseSpeed(''), null); assert.equal(parseSpeed(5), null); assert.equal(parseSpeed(120), 120);
+});
+
+test('heater phase: an unknown reading or target is never given a phase; target 0 is off', () => {
+  assert.equal(heaterPhase(219.6, 220), 'target');
+  assert.equal(heaterPhase(131, 240), 'heating');
+  assert.equal(heaterPhase(250, 220), 'cooling');
+  assert.equal(heaterPhase(60, 0), 'off');
+  assert.equal(heaterPhase(null, 0), 'off');
+  assert.equal(heaterPhase(null, 220), null);
+  assert.equal(heaterPhase(25, null), null);
+  assert.equal(heaterPhase(25, undefined), null);
 });
 
 test('setup warnings: ids, order and the empty-before-material rule', () => {

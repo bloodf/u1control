@@ -1,0 +1,56 @@
+/* U1 Control's own layout on top of the shared foundation (ui/shared): the page grid, rows inside a panel, the plain
+   tables and the printer drawing. Colours are the foundation's --oui-* roles only; nothing here defines a colour. */
+html, body, #app { min-height: 100%; }
+
+/* Page-level messages, under the app bar on every tab. The live regions stay in the DOM while empty (what is added
+   later is then announced); only filled ones take space. */
+.u1-top { padding: 0 var(--oui-s4); }
+/* Each banner keeps its own 12 px above it: the live regions hold Vue's list anchors, so they are never :empty. */
+.u1-top .oui-banner { margin-top: var(--oui-s3); }
+.u1-live { display: grid; gap: var(--oui-s2); min-width: 0; }
+.u1-top .u1-live { gap: 0; }
+
+/* Dashboard: the machine on the left, what is loaded and in stock on the right; one column when narrow. */
+.u1-grid { display: grid; gap: var(--oui-s3); grid-template-columns: minmax(0, 1fr); align-items: start; }
+@container oui-page (min-width: 1100px) { .u1-grid { grid-template-columns: minmax(360px, 4fr) minmax(0, 8fr); } }
+
+/* Rows of one panel, separated by hairlines. */
+.u1-rows { display: grid; margin-block: calc(-1 * var(--oui-s2)); }
+.u1-rows > * + * { border-top: 1px solid var(--oui-border); }
+.u1-rows > * { padding-block: var(--oui-s1); }
+.u1-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--oui-s1) var(--oui-s2); min-height: 44px; }
+.u1-line-label { display: flex; align-items: center; gap: var(--oui-s2); margin-inline-end: auto; font-weight: 600; }
+.u1-inline { display: inline-flex; align-items: center; gap: var(--oui-s2); font-size: var(--oui-text-sm); color: var(--oui-muted); white-space: nowrap; }
+.u1-note { font-size: var(--oui-text-sm); color: var(--oui-muted); }
+.u1-note[data-tone] { color: var(--oui-tone); }
+.u1-pad { padding: var(--oui-s3) var(--oui-s4); }
+.u1-low { color: var(--oui-warning); font-weight: 600; }
+
+/* Toolhead identity: the same fixed colours as the toolhead cards' badges. Always carries its label. */
+.u1-tool { display: inline-grid; place-items: center; flex: none; min-width: 26px; height: 20px; padding: 0 6px; border-radius: var(--oui-radius-sm);
+  font-size: var(--oui-text-sm); font-weight: 700; color: var(--oui-on-tool); box-shadow: 0 0 0 1px color-mix(in srgb, var(--oui-text) 30%, transparent); }
+.u1-tool[data-tool='1'] { background: var(--oui-tool1); }
+.u1-tool[data-tool='2'] { background: var(--oui-tool2); }
+.u1-tool[data-tool='3'] { background: var(--oui-tool3); }
+.u1-tool[data-tool='4'] { background: var(--oui-tool4); }
+
+/* Lists of files, spools and prints. Plain tables (rows are dragged, keep keyboard focus across refreshes and can be
+   500 long) drawn with the same measures as the foundation's small data table. */
+.u1-table { width: 100%; border-collapse: collapse; }
+.u1-table th { position: sticky; top: 0; z-index: 1; padding: 6px 12px; text-align: start; white-space: nowrap; font-size: var(--oui-text-xs); font-weight: 600;
+  letter-spacing: .05em; text-transform: uppercase; color: var(--oui-muted); background: var(--oui-raised); box-shadow: inset 0 -1px 0 var(--oui-border); }
+.u1-table td { padding: 5px 12px; vertical-align: middle; border-bottom: 1px solid var(--oui-border); }
+.u1-table tbody tr:last-child > td { border-bottom-width: 0; }
+.u1-table tbody tr:hover > td { background: var(--oui-raised); }
+.u1-table :is(th, td).oui-num, .u1-table :is(th, td).oui-end { text-align: end; }
+.u1-scroll { overflow: auto; }
+
+/* The printer, drawn (DESIGN.md, Imagery): flat shapes on the palette, 1.5 px outlines, no text. */
+.art-printer { flex: none; display: block; }
+.art-body { fill: var(--oui-raised); stroke: var(--oui-control-border); stroke-width: 1.5; }
+.art-well { fill: var(--oui-inset); }
+.art-line { fill: none; stroke: var(--oui-control-border); stroke-width: 1.5; stroke-linecap: round; }
+.art-tool { stroke: none; }
+.art-print { fill: var(--oui-primary); }
+.art-bed { fill: var(--oui-control-border); }
+.art-printer[data-stale] :is(.art-print, .art-tool) { fill: var(--oui-control-border) !important; }
