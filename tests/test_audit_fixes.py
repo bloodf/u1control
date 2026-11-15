@@ -182,5 +182,21 @@ class DownloadNameTests(unittest.TestCase):
         self.assertEqual(saved, os.path.join(home, "Downloads", "u1control", "D_t.mp4"))
 
 
+class CheckConnectionTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        import build
+        cls.artifact = str(build.build(out_dir=__import__("pathlib").Path(tempfile.mkdtemp())))
+
+    def test_extended_firmware_without_paxx12_in_the_version(self):
+        fake = fakes.FakePrinter(version="1.2.0", extended=True)   # found through the Firmware Config API only
+        self.addCleanup(fake.close)
+        fakes.install_orca(preset={"print_host": fake.host})
+        ns = fakes.load_wheel(self.artifact)
+        result = ns["CheckConnection"]().execute()
+        self.assertEqual(result.status, "success", result.message)
+        self.assertIn("extended firmware", result.message)
+
+
 if __name__ == "__main__":
     unittest.main()

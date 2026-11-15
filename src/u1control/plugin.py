@@ -10,6 +10,7 @@ import time
 
 import orca
 
+import extended as ext
 import gcode
 import peers
 import settings
@@ -664,11 +665,11 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
     def execute(self):
         try:
             client = _selected_u1()
-            info = run_off_thread(client.info)
+            info, ext_status = run_off_thread(lambda: (client.info(), ext.Extended(client).status()))
             heads = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS))["heads"])
         except Exception as e:
             return orca.ExecutionResult.skipped("Couldn't reach the U1: %s" % e)
-        fw = u1.detect_firmware(info)
+        fw = u1.detect_firmware(info, ext_status)   # as the tab does: the version alone misses some Extended builds
         loaded = ", ".join("T%d %s" % (h["index"] + 1, ("%s %s" % (h["type"], h["colour"] or "")).strip()
                                        if h["loaded"] else "empty") for h in heads)
         return orca.ExecutionResult.success("U1 at %s (%s firmware %s). %s" % (client.address, fw["kind"],
