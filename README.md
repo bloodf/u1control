@@ -134,18 +134,25 @@ Then **Print** in OrcaSlicer opens its own print dialog:
 
 - The four toolheads are the four slots, each with its filament and colour. Pick a slot for each
   filament; a filament you leave unpicked gets the toolhead u1control matches by material and colour.
-- **Auto Bed Leveling**, **Flow Dynamics Calibration** and **Timelapse** are sent to the U1 as its bed
-  leveling, flow calibration and time-lapse options. Auto-refill, tangle detection, unload when done and
+- **Auto Bed Leveling**, **Flow Dynamics Calibration** and **Timelapse** start ticked in OrcaSlicer's
+  dialog, so U1 Control's own print options decide what is used: an option runs only when its box is ticked
+  **and** it is on in U1 Control (by default bed leveling and flow calibration are on, time-lapse is off).
+  Unticking a box turns that option off for this print. Auto-refill, tangle detection, unload when done and
   light off when done come from the U1 Control settings (the options you last chose), or the printer's own.
 - u1control applies the same G-code fixes as above, then uploads the file, sends the toolhead map and
   options, and starts the print.
 - A busy U1 (printing, loading, calibrating, updating), an empty toolhead or another material in a picked
-  slot stops the print before anything is sent, with the reason in OrcaSlicer's dialog.
+  slot stops the print before anything is sent, with the reason in OrcaSlicer's dialog. Both are checked
+  again after the upload; if something changed, the file stays on the U1 and the print isn't started.
 
-**Send** uploads the fixed G-code without starting it. The Device tab shows status, temperatures, the
+**Send** uploads the fixed G-code without starting it, and refuses the name of the file the U1 is printing. The Device tab shows status, temperatures, the
 toolheads and the light, with pause, resume, stop and the light switch.
 
 The print-host path (U1 print setup) keeps working as before; use one or the other.
+
+When the plugin loads, OrcaSlicer asks once to let u1control read the sliced job from its temp folder:
+`<temp>/orcaslicer_<user id>` on macOS and Linux. On Windows OrcaSlicer writes the job straight into
+`%TEMP%`, so the grant covers your whole `%TEMP%` folder (read only). Without it, the agent can't send.
 
 <details>
 <summary>Em português: usar o u1control como agente de impressora</summary>
@@ -155,8 +162,10 @@ The print-host path (U1 print setup) keeps working as before; use one or the oth
    U1. Salve o perfil.
 
 A janela **Imprimir** do próprio OrcaSlicer passa a mostrar as quatro cabeças como quatro slots, com
-filamento e cor. As opções **Auto Bed Leveling**, **Flow Dynamics Calibration** e **Timelapse** vão para
-a U1 como nivelamento da mesa, calibração de fluxo e time-lapse; reabastecimento automático, detecção de
+filamento e cor. As caixas **Auto Bed Leveling**, **Flow Dynamics Calibration** e **Timelapse** já vêm
+marcadas, então as opções de impressão do U1 Control decidem: uma opção só roda com a caixa marcada **e**
+ligada no U1 Control (por padrão nivelamento e calibração de fluxo ligados, time-lapse desligado); desmarcar
+a caixa a desliga naquela impressão. Reabastecimento automático, detecção de
 emaranhado, descarregar ao terminar e apagar a luz ao terminar vêm dos ajustes do U1 Control. O u1control
 aplica as mesmas correções de G-code, envia o arquivo, o mapa das cabeças e as opções, e inicia a
 impressão. Uma U1 ocupada, uma cabeça vazia ou outro material no slot escolhido impedem o envio, com o

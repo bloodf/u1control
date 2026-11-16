@@ -209,9 +209,12 @@ def job_mapping(ams_mapping, filaments, heads):
 
 
 def job_prefs(offered, bed_leveling, flow_cali, timelapse):
-    """The dialog's three boxes over the prefs u1control offers (the extended ones come from its settings)."""
-    return {**offered, "bed_level": bool(bed_leveling), "flow_calibrate": bool(flow_cali),
-            "time_lapse_camera": bool(timelapse)}
+    """The print options for a job from the dialog. OrcaSlicer's dialog starts every box ticked (SM:3205-3238
+    load_option_vals), so a box alone would override U1 Control's settings on every plain print. Each of the three
+    is on only when its box is ticked AND U1 Control's own setting (offered) is on: the setting is the default,
+    unticking the box turns it off for this print. The extended options come from offered unchanged."""
+    boxes = {"bed_level": bed_leveling, "flow_calibrate": flow_cali, "time_lapse_camera": timelapse}
+    return {**offered, **{k: bool(v) and bool(offered.get(k)) for k, v in boxes.items()}}
 
 
 def upload_name(name, source):
@@ -222,6 +225,18 @@ def upload_name(name, source):
             name = name[:-len(ext)]
     name = re.sub(r'[\x00-\x1f\x7f"#;*/\\]', "_", name).lstrip(". ")
     return (name or "print")[:240] + ".gcode"
+
+
+def sweep_jobs(work_dir):
+    """Remove job-*.gcode work files left by an earlier session (OrcaSlicer closed mid-job). Returns the count."""
+    try:
+        names = os.listdir(work_dir)
+    except OSError:
+        return 0
+    stale = [n for n in names if re.fullmatch(r"job-[0-9a-f]+\.gcode", n)]
+    for n in stale:
+        _remove(os.path.join(work_dir, n))
+    return len(stale)
 
 
 def plate_gcode(path, plate_index, out):
@@ -296,11 +311,22 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
         raise
 
 
+HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")   # as plugin._still_valid
+
+
+def _busy_reason(view):
+    return "the U1 is busy (%s); wait for it to finish first" % (view["machine_state"] or view["state"]).lower()
+
+
 def send_job(client, path, name, plate_index, options, version, work_dir, progress=None, cancelled=None):
-    """Send (upload only, no print starts): the G-code fixes, then the upload. Returns the printer file name."""
+    """Send (upload only, no print starts): the G-code fixes, then the upload. Returns the printer file name.
+    Refuses a name the U1 is printing now: the upload would replace the running print's file."""
+    filename = upload_name(name, path)
+    view = u1.summarize(client.query(u1.STATUS_OBJECTS))
+    if u1.is_busy(view["state"]) and view["filename"].lstrip("/") == filename:
+        raise JobError("the U1 is printing %s now; send it under another name or wait" % filename)
     tmp, _, _ = prepare_gcode(path, plate_index, options, None, None, version, work_dir)
     try:
-        filename = upload_name(name, path)
         client.upload(tmp, filename, progress=progress, cancelled=cancelled)
         return filename
     finally:
@@ -315,8 +341,7 @@ def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs
     "filaments", "script"}. Raises JobError, Cancelled or moonraker.PrinterError."""
     view = u1.summarize(client.query(u1.STATUS_OBJECTS))
     if u1.machine_busy(view):
-        raise JobError("the U1 is busy (%s); wait for it to finish first"
-                       % (view["machine_state"] or view["state"]).lower())
+        raise JobError(_busy_reason(view))
     tmp, mapping, filaments = prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir)
     try:
         prefs = job_prefs(offered_prefs(view), task.get("bed_leveling"), task.get("flow_cali"), task.get("timelapse"))
@@ -327,9 +352,18 @@ def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs
         client.upload(tmp, filename, progress=progress, cancelled=cancelled)
         if cancelled and cancelled():
             raise Cancelled()
+        after = u1.summarize(client.query(u1.STATUS_OBJECTS))   # the upload can take a while: check again
+        if u1.machine_busy(after):
+            raise JobError(_busy_reason(after) + "; the file is on the U1, nothing was started")
+        for t in sorted(set(mapping.values())):
+            if any(view["heads"][t].get(k) != after["heads"][t].get(k) for k in HEAD_FACTS):
+                raise JobError("T%d changed during the upload; the file is on the U1, nothing was started. "
+                               "Print again." % (t + 1))
         if stage:
             stage("start")
         client.gcode(script)
+        if cancelled and cancelled():
+            raise Cancelled()
         client.print_start(filename)
         return {"filename": filename, "mapping": mapping, "filaments": filaments, "script": script}
     finally:

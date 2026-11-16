@@ -2,6 +2,7 @@
 
 import json
 import os
+import queue
 import re
 import sys
 import tempfile
@@ -660,9 +661,20 @@ STAGE_CREATE, STAGE_UPLOAD, STAGE_SENDING, STAGE_FINISHED, STAGE_ERROR = 0, 1, 3
 AGENT_POLL = 2.0         # s between status queries while OrcaSlicer is connected to the U1
 
 
+DEVICE_GCODE_TIMEOUT = 600   # s: a Device tab G-code line may run long (homing, heating), as the console's cmd_gcode
+
+
 def host_of(address):
     """'http://192.168.1.5:7125/x' -> '192.168.1.5:7125' (scheme and path stripped; Moonraker keeps the port)."""
     return clean(address).split("://", 1)[-1].split("/", 1)[0]
+
+
+def base_url(host, port="", use_ssl=False):
+    """MRA normalize_base_url: http(s)://host[:port]. A port already in the host wins."""
+    host = host_of(host)
+    has_port = host.rsplit("]", 1)[-1].count(":") == 1
+    port = clean(str(port or ""))
+    return "%s://%s%s" % ("https" if use_ssl else "http", host, ":" + port if port and not has_port else "")
 
 
 def slicer_temp_root():
@@ -696,8 +708,11 @@ class U1Agent(pa.PrinterAgentBase):
         self.view = None
         self.firmware = ""
         self._filament_ids = {}
+        self.base = ""
         self._wake = threading.Event()
         self._stop = threading.Event()
+        self._commands = queue.Queue()   # Device tab commands, run in order by one worker (_command_worker)
+        self._worker = None
 
     def get_name(self):
         return AGENT_NAME
@@ -772,20 +787,38 @@ class U1Agent(pa.PrinterAgentBase):
             return ERR_INVALID_HANDLE
         self.disconnect_printer()
         self.dev_id, self.host, self.api_key = params.dev_id, host, clean(getattr(params, "password", ""))
-        self.client = Moonraker(host, self.api_key, timeout=5)
+        self.base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
+        self.firmware = ""   # another printer, or the same one updated meanwhile
+        self.client = Moonraker(self.base, self.api_key, timeout=5)
         self._filament_ids = self._generic_ids()
-        self._stop = threading.Event()
-        threading.Thread(target=self._poll, args=(self._stop, self.client), name="u1control-agent", daemon=True).start()
+        with self._lock:
+            self._stop = threading.Event()
+            stop = self._stop
+        threading.Thread(target=self._poll, args=(stop, self.client), name="u1control-agent", daemon=True).start()
         return OK
 
     def disconnect_printer(self):
-        self._stop.set()
+        with self._lock:
+            self._stop.set()
+            self.view, self.client = None, None
         self._wake.set()
-        self.view, self.client = None, None
         return OK
+
+    def on_load(self):
+        try:
+            removed = agent.sweep_jobs(self._work_dir())
+        except Exception as e:   # no storage folder yet: nothing of ours to sweep
+            log("agent: work files not checked (%s)" % e)
+            return
+        if removed:
+            log("agent: removed %d work file(s) left by an earlier session" % removed)
 
     def on_unload(self):
         self.disconnect_printer()
+        with self._lock:
+            if self._worker is not None and self._worker.is_alive():
+                self._commands.put(None)
+            self._worker = None
 
     def _generic_ids(self):
         """{"Generic <family> @System": filament_id} from the loaded system presets (UI thread, no I/O)."""
@@ -810,9 +843,10 @@ class U1Agent(pa.PrinterAgentBase):
                 if not self.firmware:
                     self.firmware = str((client.info() or {}).get("software_version") or "")
                 view = u1.summarize(client.query(u1.STATUS_OBJECTS))
-                if stop.is_set():
-                    return
-                self.view = view
+                with self._lock:   # a disconnect or reconnect meanwhile: this answer is about the old printer
+                    if stop.is_set():
+                        return
+                    self.view = view
                 if not connected:
                     connected = True   # MRA perform_connection_async: ConnectStatusOk, then printer_connected
                     self._emit("local_connect", 0, self.dev_id, "0")
@@ -822,6 +856,9 @@ class U1Agent(pa.PrinterAgentBase):
                 if connected:
                     log("agent: the U1 stopped answering (%s)" % e)
                 connected = False
+                with self._lock:
+                    if not stop.is_set():
+                        self.view = None   # Device tab commands answer "not connected" instead of queueing
             self._wake.wait(AGENT_POLL)
             self._wake.clear()
 
@@ -850,9 +887,20 @@ class U1Agent(pa.PrinterAgentBase):
         client = self.client
         if client is None or self.view is None:
             return ERR_CONNECT
-        threading.Thread(target=self._run_command, args=(client, command), name="u1control-device",
-                         daemon=True).start()
+        with self._lock:
+            if self._worker is None or not self._worker.is_alive():
+                self._worker = threading.Thread(target=self._command_worker, name="u1control-device", daemon=True)
+                self._worker.start()
+        self._commands.put((client, command))
         return OK
+
+    def _command_worker(self):
+        """One thread runs the Device tab's commands in the order they came."""
+        while True:
+            item = self._commands.get()
+            if item is None:
+                return
+            self._run_command(*item)
 
     def _run_command(self, client, command):
         kind, ok = command["kind"], False
@@ -866,7 +914,7 @@ class U1Agent(pa.PrinterAgentBase):
             elif kind == "set_light":
                 client.gcode(agent.LIGHT_ON if command["on"] else agent.LIGHT_OFF)
             elif kind == "gcode":
-                client.gcode(command["script"])
+                client.gcode(command["script"], timeout=DEVICE_GCODE_TIMEOUT)
             ok = True
         except Exception as e:
             log("agent: Device tab %s failed: %s" % (kind, e))
@@ -880,7 +928,7 @@ class U1Agent(pa.PrinterAgentBase):
         key = self.api_key or clean(getattr(params, "password", ""))
         if not host:
             raise PrinterError(NO_ADDRESS)
-        return host, key, Moonraker(host, key, timeout=10)
+        return host, key, Moonraker(self.base if self.host else base_url(host), key, timeout=10)
 
     @staticmethod
     def _job_path(params):

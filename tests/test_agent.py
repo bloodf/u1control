@@ -104,10 +104,14 @@ class JobPartsTests(unittest.TestCase):
             with self.subTest(trays=trays):
                 self.assertEqual(agent.job_mapping(trays, self.FILS, heads()), auto)
 
-    def test_prefs_take_the_dialog_boxes(self):
+    def test_an_option_is_on_only_when_its_box_and_the_setting_are(self):
+        # OrcaSlicer's dialog starts every box ticked: the setting decides, the box can only turn it off
         prefs = agent.job_prefs({"bed_level": False, "flow_calibrate": True, "time_lapse_camera": False,
-                                 "auto_refill": True}, 1, 0, True)
-        self.assertEqual(prefs, {"bed_level": True, "flow_calibrate": False, "time_lapse_camera": True, "auto_refill": True})
+                                 "auto_refill": True}, 1, 1, 1)
+        self.assertEqual(prefs, {"bed_level": False, "flow_calibrate": True, "time_lapse_camera": False, "auto_refill": True})
+        on = {"bed_level": True, "flow_calibrate": True, "time_lapse_camera": True}
+        self.assertEqual(agent.job_prefs(on, 1, 0, False),                    # unticked: off, setting or not
+                         {"bed_level": True, "flow_calibrate": False, "time_lapse_camera": False})
 
     def test_upload_name(self):
         self.assertEqual(agent.upload_name("Part #1; v2.3mf", "/x/y.gcode"), "Part _1_ v2.gcode")
@@ -168,7 +172,7 @@ class FakeJobTests(unittest.TestCase):
         self.assertIn("SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=0 MAP_EXTRUDER=3", script)   # the dialog's pick, not
         self.assertIn("SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=1 MAP_EXTRUDER=1", script)   # the colour match (T1)
         self.assertIn("SET_PRINT_USED_EXTRUDERS EXTRUDERS=1,3", script)
-        self.assertIn("BED_LEVEL=1 FLOW_CALIBRATE=0 TIME_LAPSE_CAMERA=1 AUTO_REPLENISH_FILAMENT=1", script)
+        self.assertIn("BED_LEVEL=0 FLOW_CALIBRATE=0 TIME_LAPSE_CAMERA=0 AUTO_REPLENISH_FILAMENT=1", script)
         sent = self.fake.uploads["My part.gcode"].decode()
         self.assertIn("; u1control", sent)                                   # G-code fixes applied
         self.assertIn("BED_MESH_CALIBRATE PROBE_COUNT=11,11", sent)
@@ -201,6 +205,42 @@ class FakeJobTests(unittest.TestCase):
         self.assertEqual(self.fake.started, [])
         self.assertEqual(self.fake.scripts, [])
 
+    def test_busy_or_toolhead_change_during_the_upload_starts_nothing(self):
+        real = self.client.upload
+        for change, why in ((lambda: setattr(self.fake, "state", "printing"), "busy"),
+                            (lambda: self.fake.task["filament_type"].__setitem__(3, "PETG"), "T4 changed")):
+            with self.subTest(why=why):
+                self.fake.state, self.fake.task, self.fake.order[:] = "standby", fakes.task_config(), []
+
+                def upload(*a, **kw):
+                    real(*a, **kw)
+                    change()
+                self.client.upload = upload
+                with self.assertRaisesRegex(agent.JobError, why):
+                    self.run_job()
+                self.assertEqual([k for k, _ in self.fake.order], ["upload"])   # no options, no start
+                self.assertEqual(os.listdir(self.work), [])
+
+    def test_cancel_after_the_options_starts_nothing(self):
+        with self.assertRaises(agent.Cancelled):
+            self.run_job(cancelled=lambda: bool(self.fake.scripts))
+        self.assertEqual([k for k, _ in self.fake.order], ["upload", "gcode"])
+        self.assertEqual(self.fake.started, [])
+
+    def test_send_refuses_the_name_being_printed(self):
+        self.fake.state = "printing"                                 # FakePrinter prints a.gcode
+        with self.assertRaisesRegex(agent.JobError, "printing a.gcode"):
+            agent.send_job(self.client, self.path, "a", 1, OPTIONS, "0.10.0", self.work)
+        self.assertEqual(self.fake.order, [])
+        self.assertEqual(agent.send_job(self.client, self.path, "b", 1, OPTIONS, "0.10.0", self.work), "b.gcode")
+
+    def test_sweep_removes_only_stale_job_files(self):
+        for name in ("job-0a1b.gcode", "job-ff.gcode", "keep.gcode", "job-x.txt"):
+            open(os.path.join(self.work, name), "w").close()
+        self.assertEqual(agent.sweep_jobs(self.work), 2)
+        self.assertEqual(sorted(os.listdir(self.work)), ["job-x.txt", "keep.gcode"])
+        self.assertEqual(agent.sweep_jobs(os.path.join(self.work, "missing")), 0)
+
     def test_send_uploads_fixed_gcode_only(self):
         name = agent.send_job(self.client, self.path, "", 1, OPTIONS, "0.10.0", self.work)
         self.assertEqual(name, os.path.basename(self.path))
@@ -223,7 +263,7 @@ class PluginAgentTests(unittest.TestCase):
         self.ns = fakes.load_wheel(self.artifact)
         self.ns["U1Control"]().register_capabilities()
         self.agent = self.ns["U1Agent"]()
-        self.addCleanup(self.agent.disconnect_printer)
+        self.addCleanup(self.agent.on_unload)
         fd, self.path = tempfile.mkstemp(suffix=".gcode")
         with os.fdopen(fd, "w", newline="") as f:
             f.write(SAMPLE)
@@ -243,6 +283,23 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(info.id, "u1control")
         reads = self.orca.permission_requests[0]["fs_read"]
         self.assertTrue(reads and all(r.endswith("/*") for r in reads))
+
+    def test_default_settings_with_every_box_ticked(self):
+        """OrcaSlicer's dialog starts every box ticked: U1 Control's defaults decide, time-lapse stays off."""
+        p = self.params(task_bed_leveling=True, task_flow_cali=True, task_record_timelapse=True)
+        self.assertEqual(self.agent.start_local_print(p, self.update, None), 0)
+        self.assertIn("BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=0", self.fake.scripts[-1])
+
+    def test_unticked_box_wins_over_the_setting(self):
+        self.ns["get_store"](self.agent).update({"prefs": {"bed_level": True, "flow_calibrate": True,
+                                                           "time_lapse_camera": True}})
+        p = self.params(task_bed_leveling=False, task_flow_cali=True, task_record_timelapse=False)
+        self.assertEqual(self.agent.start_local_print(p, self.update, None), 0)
+        self.assertIn("BED_LEVEL=0 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=0", self.fake.scripts[-1])
+        p = self.params(task_bed_leveling=True, task_flow_cali=True, task_record_timelapse=True)
+        self.fake.order[:] = []
+        self.assertEqual(self.agent.start_local_print(p, self.update, None), 0)
+        self.assertIn("BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=1", self.fake.scripts[-1])   # both on
 
     def test_print_from_the_dialog(self):
         p = self.params(task_bed_leveling=True, task_flow_cali=True, task_record_timelapse=False)
@@ -293,6 +350,78 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual((reply["sequence_id"], reply["result"]), ("9", "success"))
         self.assertEqual(self.agent.send_message_to_printer("u1", json.dumps({"print": {"command": "calibration"}}), 0, 0),
                          agent.UNSUPPORTED)
+
+    def connect(self, **kw):
+        conn = self.orca.printer_agent.PrinterConnectionParams(**{"dev_id": "u1", "host": self.fake.host, **kw})
+        self.assertEqual(self.agent.connect_printer(conn), 0)
+        self.assertTrue(wait_for(lambda: self.agent.view is not None))
+
+    def test_device_commands_run_in_order_on_one_worker(self):
+        self.connect()
+        lines = ["M117 %d" % i for i in range(8)]
+        workers = set()
+        for i, line in enumerate(lines):
+            msg = json.dumps({"print": {"command": "gcode_line", "param": line, "sequence_id": str(i)}})
+            self.assertEqual(self.agent.send_message_to_printer("u1", msg, 0, 0), 0)
+            workers.add(self.agent._worker)
+        self.assertTrue(wait_for(lambda: len(self.fake.scripts) >= len(lines)))
+        self.assertEqual(self.fake.scripts, lines)                    # in the order sent
+        worker, = workers                                             # one worker for all of them
+        self.agent.on_unload()
+        worker.join(5)
+        self.assertFalse(worker.is_alive())
+
+    def test_device_gcode_waits_like_the_console(self):
+        seen = []
+        client = type("C", (), {"gcode": lambda self, script, timeout=30: seen.append(timeout)})()
+        self.agent._run_command(client, {"kind": "gcode", "script": "G28", "seq": "1"})
+        self.assertEqual(seen, [600])
+
+    def test_port_and_ssl_as_orcaslicer_gives_them(self):
+        base_url = self.ns["base_url"]
+        self.assertEqual(base_url("10.0.0.5", "7125", False), "http://10.0.0.5:7125")
+        self.assertEqual(base_url("10.0.0.5", "", True), "https://10.0.0.5")
+        self.assertEqual(base_url("http://10.0.0.5:80/", "7125"), "http://10.0.0.5:80")   # a port in the host wins
+        host, port = self.fake.host.split(":")
+        self.connect(host=host, port=port)
+        self.assertEqual(self.agent.base, "http://" + self.fake.host)
+        self.assertEqual(self.agent.client.candidates, ["http://" + self.fake.host])
+
+    def test_poll_resets_firmware_and_drops_a_stale_view(self):
+        self.agent.firmware = "old printer"
+        self.connect()
+        self.assertTrue(wait_for(lambda: self.agent.firmware == self.fake.version))
+        self.fake.close()                                             # the U1 stops answering
+        self.assertTrue(wait_for(lambda: self.agent.view is None, timeout=15))
+
+    def test_poll_answer_after_disconnect_is_dropped(self):
+        import threading
+        stop = threading.Event()
+
+        class Late:   # answers only after the agent was disconnected
+            def info(self):
+                return {}
+
+            def query(self, objects):
+                stop.set()
+                return fakes.FakePrinter.status(self_fake)
+        self_fake = self.fake
+        self.agent._poll(stop, Late())
+        self.assertIsNone(self.agent.view)
+
+    def test_stale_work_files_are_swept_on_load(self):
+        work = os.path.join(self.ns["_storage"](), "jobs")
+        os.makedirs(work, exist_ok=True)
+        open(os.path.join(work, "job-abc123.gcode"), "w").close()
+        self.agent.on_load()
+        self.assertEqual(os.listdir(work), [])
+
+    def test_send_refuses_the_running_file(self):
+        self.fake.state = "printing"
+        code = self.agent.start_send_gcode_to_sdcard(self.params(project_name="a"), self.update, None, None)
+        self.assertEqual(code, self.ns["ERR_SG_UPLOAD"])
+        self.assertIn("printing a.gcode", self.updates[-1][2])
+        self.assertEqual(self.fake.uploads, {})
 
     def test_commands_need_a_connection(self):
         pause = json.dumps({"print": {"command": "pause"}})
