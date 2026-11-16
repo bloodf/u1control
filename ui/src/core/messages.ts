@@ -48,7 +48,7 @@ export const en = {
   'common.unknown': 'unknown',
   'common.none': '—',
   'common.ok': 'OK',
-  'common.stop': '.',
+  'common.period': '.',
   'common.paren': '{a} ({b})',
 
   'msg.region': 'Messages',
@@ -662,7 +662,7 @@ export const ptBR: Record<MessageKey, string> = {
   'common.unknown': 'desconhecido',
   'common.none': '—',
   'common.ok': 'OK',
-  'common.stop': '.',
+  'common.period': '.',
   'common.paren': '{a} ({b})',
 
   'msg.region': 'Mensagens',

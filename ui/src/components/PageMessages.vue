@@ -46,7 +46,7 @@ const split = (text: string) => { const m = /: |：/.exec(text); return m ? [tex
         <!-- The age ticks every second: it is kept out of the announcement (the app bar's state says it too). -->
         <OuiBanner v-else-if="s.status && statusAge > STALE_STATUS_S" role="none" tone="warn" :title="t('target.staleTitle')" data-test="stale">
           <span class="u1-stale-age" aria-hidden="true">{{ t('target.staleAge', { age: fmt.ago(s.statusAt / 1000, s.now / 1000) }) }}</span></OuiBanner>
-        <OuiBanner v-if="!controlsOff && busy" id="heads-why" role="none" data-test="heads-why" tone="info" :title="t('reason.busy') + t('common.stop')">{{ t('busy.body') }}</OuiBanner>
+        <OuiBanner v-if="!controlsOff && busy" id="heads-why" role="none" data-test="heads-why" tone="info" :title="t('reason.busy') + t('common.period')">{{ t('busy.body') }}</OuiBanner>
       </template>
     </div>
     <section class="notices" :aria-label="t('msg.region')">

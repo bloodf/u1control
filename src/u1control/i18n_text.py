@@ -18,8 +18,8 @@ MESSAGES = {
     "File uploaded": _m("Arquivo enviado", "Archivo subido", "Datei hochgeladen", "文件已上传"),
     "Print started": _m("Impressão iniciada", "Impresión iniciada", "Druck gestartet", "打印已开始"),
     "Snapmaker U1 over Moonraker, by u1control": _m(
-        "Snapmaker U1 via Moonraker, pelo u1control", "Snapmaker U1 por Moonraker, con u1control",
-        "Snapmaker U1 über Moonraker, mit u1control", "通过 Moonraker 连接 Snapmaker U1（u1control）"),
+        "Snapmaker U1 via Moonraker, pelo u1control", "Snapmaker U1 mediante Moonraker, con u1control",
+        "Snapmaker U1 über Moonraker, von u1control", "通过 Moonraker 连接 Snapmaker U1（u1control）"),
     "no G-code for plate %s in %s": _m(
         "não há G-code da placa %s em %s", "no hay G-Code de la cama %s en %s",
         "kein G-Code für Platte %s in %s", "找不到第 %s 盘的 G-code（文件 %s）"),
@@ -58,13 +58,13 @@ MESSAGES = {
         "未设置 U1 地址：请把打印机预设的主机设为 U1 的 IP"),
 
     # ------------------------------------------------------------ U1 print setup (slicing pipeline)
-    "U1 print setup": _m("Preparar impressão na U1", "Preparar impresión en la U1", "U1-Druckvorbereitung", "U1 打印准备"),
+    "U1 print setup": _m("Preparar impressão na U1", "Preparación de impresión de la U1", "U1-Druckvorbereitung", "U1 打印准备"),
     "U1 print setup: cancelled, nothing was sent.": _m(
         "Preparo da impressão na U1: cancelado, nada foi enviado.",
-        "Preparación de impresión en la U1: cancelada, no se envió nada.",
+        "Preparación de impresión de la U1: cancelada, no se envió nada.",
         "U1-Druckvorbereitung: abgebrochen, es wurde nichts gesendet.",
         "U1 打印准备：已取消，未发送任何内容。"),
-    "U1 print setup: %s": _m("Preparo da impressão na U1: %s", "Preparación de impresión en la U1: %s",
+    "U1 print setup: %s": _m("Preparo da impressão na U1: %s", "Preparación de impresión de la U1: %s",
                              "U1-Druckvorbereitung: %s", "U1 打印准备：%s"),
     "U1 print setup added to %s; save the preset to keep it": _m(
         "“U1 print setup” adicionado a %s; salve o perfil para manter",
@@ -77,7 +77,10 @@ MESSAGES = {
     "U1 G-code prepared (top cover: %s)": _m(
         "G-code da U1 preparado (tampa superior: %s)", "G-Code de la U1 preparado (cubierta superior: %s)",
         "U1-G-Code vorbereitet (obere Abdeckung: %s)", "U1 G-code 已准备好（顶盖：%s）"),
-    "left as sliced": _m("como fatiado", "como se laminó", "wie gesliced", "保持切片时的设置"),
+    "left as sliced": _m("como fatiado", "como se laminó", "wie beim Slicen festgelegt", "保持切片时的设置"),
+    "keep warm": _m("manter aquecido", "mantener caliente", "warm halten", "保温"),
+    "weak cooling": _m("resfriamento fraco", "enfriamiento suave", "schwache Kühlung", "弱冷却"),
+    "strong cooling": _m("resfriamento forte", "enfriamiento fuerte", "starke Kühlung", "强冷却"),
     "sent to %s: %s": _m("enviado para %s: %s", "enviado a %s: %s", "an %s gesendet: %s", "已发送到 %s：%s"),
     "no U1 address set: click the Wi-Fi icon next to the printer and enter its IP": _m(
         "nenhum endereço da U1: clique no ícone de Wi-Fi ao lado da impressora e informe o IP",
@@ -90,7 +93,7 @@ MESSAGES = {
         "%s. Stellen Sie das Fenster der Druckvorbereitung auf automatisch oder immer, um die Werkzeugköpfe zu wählen.",
         "%s。请把打印准备窗口设为自动或总是，以便选择工具头。"),
     "print setup timed out; nothing was sent": _m(
-        "o preparo da impressão expirou; nada foi enviado", "la preparación de la impresión caducó; no se envió nada",
+        "o preparo da impressão expirou; nada foi enviado", "se agotó el tiempo de la preparación de la impresión; no se envió nada",
         "Zeitüberschreitung bei der Druckvorbereitung; es wurde nichts gesendet", "打印准备已超时；未发送任何内容"),
     "the print setup window didn't open (OrcaSlicer was busy); nothing was sent": _m(
         "a janela de preparo da impressão não abriu (o OrcaSlicer estava ocupado); nada foi enviado",
@@ -129,9 +132,9 @@ MESSAGES = {
                                         "der U1 hat nicht innerhalb von %d s geantwortet", "U1 在 %d 秒内没有应答"),
     "Select a Snapmaker U1 printer, or set \"host\" in U1 Control's plugin config.": _m(
         "Selecione uma impressora Snapmaker U1 ou defina \"host\" na configuração do plugin U1 Control.",
-        "Seleccione una impresora Snapmaker U1 o defina \"host\" en la configuración del plugin U1 Control.",
-        "Wählen Sie einen Snapmaker-U1-Drucker oder legen Sie \"host\" in der Plugin-Konfiguration von U1 Control fest.",
-        "请选择一台 Snapmaker U1 打印机，或在 U1 Control 的插件配置中设置 \"host\"。"),
+        "Seleccione una impresora Snapmaker U1 o defina «host» en la configuración del plugin U1 Control.",
+        "Wählen Sie einen Snapmaker-U1-Drucker oder legen Sie „host“ in der Plugin-Konfiguration von U1 Control fest.",
+        "请选择一台 Snapmaker U1 打印机，或在 U1 Control 的插件配置中设置“host”。"),
     "The selected U1 has no address: click the Wi-Fi icon next to the printer and enter its IP.": _m(
         "A U1 selecionada não tem endereço: clique no ícone de Wi-Fi ao lado da impressora e informe o IP.",
         "La U1 seleccionada no tiene dirección: haga clic en el icono de Wi-Fi junto a la impresora e introduzca su IP.",
@@ -153,7 +156,7 @@ MESSAGES = {
         "Hay otra actualización de perfil en curso; inténtelo de nuevo en un momento.",
         "Eine andere Profiländerung läuft noch; versuchen Sie es gleich noch einmal.",
         "另一项预设更新正在进行；请稍后再试。"),
-    "Project filaments %s": _m("Filamentos do projeto %s", "Filamentos del proyecto %s", "Projektfilamente %s", "项目耗材丝 %s"),
+    "Project filaments %s": _m("Filamentos do projeto %s", "Filamentos del proyecto %s", "Projektfilamente %s", "项目耗材丝：%s"),
     "unchanged": _m("sem alterações", "sin cambios", "unverändert", "未更改"),
     ". Problems: %s": _m(". Problemas: %s", ". Problemas: %s", ". Probleme: %s", "。问题：%s"),
     "filament %d: %s": _m("filamento %d: %s", "filamento %d: %s", "Filament %d: %s", "耗材丝 %d：%s"),
@@ -166,24 +169,26 @@ MESSAGES = {
         "请选择您的 Snapmaker U1 打印机并设置其 IP（打印机旁的 Wi-Fi 图标）。"),
     "Couldn't reach the U1: %s": _m("Não foi possível alcançar a U1: %s", "No se pudo conectar con la U1: %s",
                                     "Der U1 ist nicht erreichbar: %s", "无法连接 U1：%s"),
-    "U1 at %s (%s firmware %s). %s": _m("U1 em %s (firmware %s %s). %s", "U1 en %s (firmware %s %s). %s",
-                                        "U1 unter %s (%s-Firmware %s). %s", "U1 位于 %s（%s 固件 %s）。%s"),
+    "U1 at %s (official firmware %s)": _m("U1 em %s (firmware oficial %s)", "U1 en %s (firmware oficial %s)",
+                                          "U1 unter %s (offizielle Firmware %s)", "U1 位于 %s（官方固件 %s）"),
+    "U1 at %s (Extended Firmware %s)": _m("U1 em %s (Extended Firmware %s)", "U1 en %s (Extended Firmware %s)",
+                                          "U1 unter %s (Extended Firmware %s)", "U1 位于 %s（Extended Firmware %s）"),
     "empty": _m("vazia", "vacío", "leer", "空"),
     "Select a Snapmaker U1 printer first.": _m(
         "Selecione primeiro uma impressora Snapmaker U1.", "Seleccione primero una impresora Snapmaker U1.",
         "Wählen Sie zuerst einen Snapmaker-U1-Drucker.", "请先选择一台 Snapmaker U1 打印机。"),
     "\"%s\" already matches Snapmaker Orca.": _m(
-        "\"%s\" já corresponde ao Snapmaker Orca.", "\"%s\" ya coincide con Snapmaker Orca.",
-        "\"%s\" entspricht bereits Snapmaker Orca.", "\"%s\" 已与 Snapmaker Orca 一致。"),
+        "\"%s\" já corresponde ao Snapmaker Orca.", "«%s» ya coincide con Snapmaker Orca.",
+        "„%s“ entspricht bereits Snapmaker Orca.", "“%s”已与 Snapmaker Orca 一致。"),
     "Change the process preset \"%s\" to Snapmaker Orca's U1 values?\n\n%s\n\n"
     "The preset stays unsaved until you save it.": _m(
         "Alterar o perfil de processo \"%s\" para os valores do Snapmaker Orca para a U1?\n\n%s\n\n"
         "O perfil fica sem salvar até você salvá-lo.",
-        "¿Cambiar el perfil de proceso \"%s\" a los valores de Snapmaker Orca para la U1?\n\n%s\n\n"
+        "¿Cambiar el perfil de proceso «%s» a los valores de Snapmaker Orca para la U1?\n\n%s\n\n"
         "El perfil queda sin guardar hasta que lo guarde.",
-        "Das Prozessprofil \"%s\" auf die U1-Werte von Snapmaker Orca umstellen?\n\n%s\n\n"
+        "Das Prozessprofil „%s“ auf die U1-Werte von Snapmaker Orca umstellen?\n\n%s\n\n"
         "Das Profil bleibt ungespeichert, bis Sie es speichern.",
-        "把工艺预设 \"%s\" 改为 Snapmaker Orca 的 U1 数值？\n\n%s\n\n在您保存之前，预设保持未保存状态。"),
+        "把工艺预设“%s”改为 Snapmaker Orca 的 U1 数值？\n\n%s\n\n在您保存之前，预设保持未保存状态。"),
     "No changes made.": _m("Nada foi alterado.", "No se hicieron cambios.", "Es wurde nichts geändert.", "未做任何更改。"),
     "Updated %d setting(s); save the preset to keep them.": _m(
         "%d ajuste(s) atualizado(s); salve o perfil para manter.",
@@ -206,11 +211,11 @@ MESSAGES = {
     "unknown command %s": _m("comando desconhecido %s", "comando desconocido %s", "unbekannter Befehl %s", "未知命令 %s"),
     "%s failed: %s": _m("%s falhou: %s", "%s falló: %s", "%s fehlgeschlagen: %s", "%s 失败：%s"),
     "camera returned no image": _m("a câmera não devolveu imagem", "la cámara no devolvió ninguna imagen",
-                                   "die Kamera hat kein Bild geliefert", "相机没有返回图像"),
+                                   "die Kamera hat kein Bild geliefert", "摄像头没有返回图像"),
     "no recent camera picture: start the camera first": _m(
         "não há imagem recente da câmera: inicie a câmera primeiro",
         "no hay imagen reciente de la cámara: inicie primero la cámara",
-        "kein aktuelles Kamerabild: Starten Sie zuerst die Kamera", "没有最近的相机画面：请先启动相机"),
+        "kein aktuelles Kamerabild: Starten Sie zuerst die Kamera", "没有最近的摄像头画面：请先启动摄像头"),
     "remote screen is off: turn on Remote Screen in Settings > Firmware": _m(
         "a tela remota está desligada: ligue Remote Screen em Ajustes > Firmware",
         "la pantalla remota está apagada: active Remote Screen en Ajustes > Firmware",
@@ -260,7 +265,7 @@ MESSAGES = {
         "Entladen nach dem Druck wird für jeden Druck je Werkzeugkopf im Fenster der U1-Druckvorbereitung gewählt",
         "“完成后退料”需在 U1 打印准备窗口中按每次打印、每个工具头选择"),
     "nothing to change": _m("nada a alterar", "nada que cambiar", "nichts zu ändern", "没有可更改的内容"),
-    "touch outside the screen": _m("toque fora da tela", "toque fuera de la pantalla",
+    "touch outside the screen": _m("toque fora da tela", "el toque está fuera de la pantalla",
                                    "Berührung außerhalb des Bildschirms", "点击位置超出屏幕"),
     "the U1 is busy (%s)": _m("a U1 está ocupada (%s)", "la U1 está ocupada (%s)", "der U1 ist beschäftigt (%s)", "U1 正忙（%s）"),
     "unknown calibration": _m("calibração desconhecida", "calibración desconocida", "unbekannte Kalibrierung", "未知的校准"),
@@ -315,7 +320,7 @@ MESSAGES = {
         "WebSocket-Aufrufe benötigen unverschlüsseltes http", "WebSocket 调用需要使用普通 http"),
     "printer refused the websocket": _m("a impressora recusou o websocket", "la impresora rechazó el websocket",
                                         "der Drucker hat den WebSocket abgelehnt", "打印机拒绝了 WebSocket 连接"),
-    "bad websocket handshake": _m("handshake de websocket inválido", "handshake de websocket no válido",
+    "bad websocket handshake": _m("handshake de websocket inválido", "negociación de websocket no válida",
                                   "fehlerhafter WebSocket-Handshake", "WebSocket 握手无效"),
     "websocket closed": _m("websocket fechado", "websocket cerrado", "WebSocket geschlossen", "WebSocket 已关闭"),
     "websocket message too large": _m("mensagem de websocket grande demais", "mensaje de websocket demasiado grande",
@@ -526,7 +531,7 @@ MESSAGES = {
         "o registro de impressões %s é %s e não pôde ser posto de lado (%s); não foi usado",
         "el registro de impresiones %s es %s y no se pudo apartar (%s); no se usó",
         "das Druckprotokoll %s ist %s und konnte nicht beiseitegelegt werden (%s); es wurde nicht verwendet",
-        "打印记录 %s %s，且无法移到一旁（%s）；未使用"),
+        "打印记录 %s %s，且无法移走（%s）；未使用该文件"),
     "the print ledger was %s; it was kept as %s and not used. Check Spoolman for prints that finished meanwhile.": _m(
         "o registro de impressões era %s; foi guardado como %s e não foi usado. Confira no Spoolman as impressões "
         "que terminaram nesse meio-tempo.",
@@ -540,8 +545,8 @@ MESSAGES = {
         "OrcaSlicer wurde geschlossen, während dies eingetragen wurde", "记录此项时 OrcaSlicer 已关闭"),
     "can't save the print ledger (%s); pending prints won't survive a restart": _m(
         "não consegue salvar o registro de impressões (%s); as impressões pendentes não sobrevivem a um reinício",
-        "no puede guardar el registro de impresiones (%s); las impresiones pendientes no sobrevivirán a un reinicio",
-        "kann das Druckprotokoll nicht speichern (%s); ausstehende Drucke überstehen keinen Neustart",
+        "no se puede guardar el registro de impresiones (%s); las impresiones pendientes no sobrevivirán a un reinicio",
+        "das Druckprotokoll kann nicht gespeichert werden (%s); ausstehende Drucke überstehen keinen Neustart",
         "无法保存打印记录（%s）；待处理的打印在重启后会丢失"),
     "That unconfirmed entry is no longer listed; nothing was changed.": _m(
         "Esse lançamento não confirmado não está mais na lista; nada foi alterado.",
@@ -555,7 +560,7 @@ MESSAGES = {
     "printing before OrcaSlicer closed; how it ended wasn't seen": _m(
         "estava imprimindo antes de o OrcaSlicer fechar; não se viu como terminou",
         "se estaba imprimiendo antes de cerrarse OrcaSlicer; no se vio cómo terminó",
-        "druckte, bevor OrcaSlicer geschlossen wurde; das Ende wurde nicht beobachtet",
+        "wurde noch gedruckt, als OrcaSlicer geschlossen wurde; das Ende wurde nicht beobachtet",
         "OrcaSlicer 关闭前正在打印；未看到其结果"),
     "finished without being seen printing": _m(
         "terminou sem ter sido vista imprimindo", "terminó sin que se la viera imprimiendo",
@@ -566,7 +571,7 @@ MESSAGES = {
         "filamento não foi lançado. Confira o Spoolman.",
         "%s se estaba imprimiendo antes de cerrarse OrcaSlicer y u1control no vio cómo terminó, así que su uso de "
         "filamento no se registró. Compruebe Spoolman.",
-        "%s wurde gedruckt, bevor OrcaSlicer geschlossen wurde, und u1control hat das Ende nicht beobachtet; der "
+        "%s wurde noch gedruckt, als OrcaSlicer geschlossen wurde, und u1control hat das Ende nicht beobachtet; der "
         "Filamentverbrauch wurde daher nicht eingetragen. Prüfen Sie Spoolman.",
         "OrcaSlicer 关闭前 %s 正在打印，u1control 未看到其结果，因此未记录它的耗材丝用量。请检查 Spoolman。"),
     "%s finished, but u1control never saw it printing, so its filament use was not recorded. Check Spoolman.": _m(

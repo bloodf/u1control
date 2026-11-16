@@ -1,7 +1,7 @@
 // Pure rules of the page (node --test runs this TypeScript directly).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTarget, parseSpeed, heaterPhase, setupWarnings, warningKey, moveTargets, boundHeads, family } from '../../src/core/logic.ts';
+import { parseTarget, parseSpeed, heaterPhase, setupWarnings, warningKey, moveTargets, boundHeads, family, overEnglish } from '../../src/core/logic.ts';
 import { normalizeLocale, resolveLocale, interpolate } from '../../src/core/i18n-core.ts';
 
 test('a blank target is never 0; 0 typed is Off; out of range refused (U02/B-09)', () => {
@@ -55,4 +55,12 @@ test('locale: explicit choice, then host (pt_BR), then browser, then English', (
   assert.equal(resolveLocale('auto', null, ['de-DE', 'pt-PT']), 'de');
   assert.equal(resolveLocale('auto', 'fr_FR', ['fr']), 'en');
   assert.equal(interpolate('T{n} {x}', { n: 2 }), 'T2 {x}');
+});
+
+test('PrimeVue labels: a language over English keeps English for any aria label it lacks', () => {
+  const english = { accept: 'Yes', aria: { close: 'Close', star: 'Star' } };
+  const merged = overEnglish(english, { accept: 'Ja', aria: { close: 'Schließen' } });
+  assert.deepEqual(merged, { accept: 'Ja', aria: { close: 'Schließen', star: 'Star' } });
+  assert.deepEqual(overEnglish(english, undefined), english);
+  assert.equal(english.aria.close, 'Close', 'English itself untouched');
 });

@@ -741,7 +741,7 @@ test('i18n: host language zh_CN gives zh-CN, including safety dialogs and errors
   await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
   assert(text(byTest('state')).startsWith('打印中'), 'state translated: ' + text(byTest('state')));
   await click(byTest('cancel'));
-  assert(btn('取消打印', dialogEl()) && btn('继续打印', dialogEl()), 'cancel dialog in zh-CN');
+  assert(btn('取消打印', dialogEl()) && btn('不取消', dialogEl()), 'cancel dialog in zh-CN');
   await no();
   await click(byTest('estop'));
   assert(btn('立即停止（紧急停止）', dialogEl()) && btn('返回', dialogEl()), 'E-stop dialog in zh-CN');
@@ -1074,6 +1074,25 @@ test('settings: says whether the process preset runs the toolhead choice and whe
   await cfg(null, 'never');
   assert(!byTest('ps-off') && !byTest('ps-on'), 'no U1 preset: nothing claimed about it');
 `);
+
+// PrimeVue's InputNumber reads only the locale's decimal sign; '.' typed or pasted must not turn 2.5 into 25.
+for (const [lang, shown] of [['de_DE', '2,5'], ['es_ES', '2,5'], ['pt_BR', '2,5'], ['en', '2.5']]) {
+  test(`decimal input: "2.5" typed or pasted is 2.5 in ${lang}`, `
+    await connect();
+    await post({type: 'status', data: VIEW()});
+    const field = q('#temp-0');
+    await type(field, '2.5');
+    eq(field.value, '${shown}', 'typed');
+    await type(field, '');
+    field.focus();
+    const data = new DataTransfer();
+    data.setData('text/plain', '2.5');
+    field.dispatchEvent(new ClipboardEvent('paste', {clipboardData: data, bubbles: true, cancelable: true}));
+    await settle();
+    eq(field.value, '${shown}', 'pasted');
+    if ('${shown}' === '2,5') { await type(field, '2,5'); eq(field.value, '2,5', 'the locale sign still works'); }
+  `, { lang });
+}
 
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);

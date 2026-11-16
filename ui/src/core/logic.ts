@@ -60,3 +60,8 @@ export function boundHeads(live: Record<string, number>, fromStock: Record<strin
   const src = Object.keys(live).length ? live : fromStock;
   return Object.fromEntries(Object.entries(src).map(([h, sid]) => [sid, `T${Number(h) + 1}`]));
 }
+
+/** A page language's PrimeVue labels over English. `aria` is merged too, so a label the language lacks stays English. */
+export function overEnglish<T extends { aria?: object }>(english: T, own: Partial<T> | undefined): T {
+  return { ...english, ...own, aria: { ...english.aria, ...own?.aria } };
+}

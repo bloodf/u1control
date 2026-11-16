@@ -4,6 +4,17 @@ html, body, #app { min-height: 100%; }
 
 /* Narrow bar: the tabs wrap under Emergency stop. Keep a clear gap so a tab press never lands on it. */
 @container oui-appbar (max-width: 760px) { .oui-appbar-actions { padding-bottom: var(--oui-s3); } }
+/* Phone-narrow bar with a long Emergency stop label (es, de): the state chip and printer name take their own line
+   instead of being cut, and the tabs drop their icons so the longest label (German "Einstellungen") still fits. */
+@container oui-appbar (max-width: 480px) {
+  .oui-appbar .oui-appbar-status { order: 4; flex: 1 0 100%; padding-bottom: var(--oui-s2); }
+  .oui-appbar .oui-appbar-actions { padding-bottom: 0; }
+  .oui-appbar-tab { padding: 0 10px; }
+  .oui-appbar-tab > .oui-icon { display: none; }
+}
+
+/* A long panel title (Spanish) next to its icon wraps instead of widening a narrow page. */
+.oui-panel-head > .oui-panel-title { flex-shrink: 1; min-width: 0; }
 
 /* Longer labels (German, Spanish) on a narrow tab: a panel's buttons wrap under each other instead of pushing the page wider. */
 .oui-panel-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }

@@ -6,15 +6,20 @@ import ast
 import os
 import re
 import sys
+import types
 import unittest
+from unittest import mock
 from pathlib import Path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SRC = os.path.join(ROOT, "src", "u1control")
 sys.path[:0] = [SRC, os.path.join(ROOT, "tests")]
 
-import fakes  # noqa: E402,F401  (fake orca module)
+import fakes  # noqa: E402  (fake orca module)
 import i18n  # noqa: E402
+
+fakes.install_orca()
+import plugin  # noqa: E402
 import service  # noqa: E402
 from i18n_text import MESSAGES  # noqa: E402
 
@@ -86,6 +91,31 @@ class Messages(unittest.TestCase):
         self.addCleanup(svc.close)
         svc.submit(1, "connect", {}, gen=12345)
         self.assertEqual(pub[-1]["error"], MESSAGES[service.STALE]["es"])
+
+    def test_top_cover_mode_is_named_in_the_language_in_use(self):
+        i18n.use("de")
+        self.assertEqual([plugin._cover_text(m) for m in ("strong", "weak", "keep-warm", "off")],
+                         ["starke Kühlung", "schwache Kühlung", "warm halten", "wie beim Slicen festgelegt"])
+        i18n.use("en")
+        self.assertEqual(plugin._cover_text("keep-warm"), "keep warm")
+
+    def check_connection(self, kind):
+        client = types.SimpleNamespace(address="10.0.0.9", info=None, query=None)
+        answers = iter([({}, {}), [{"index": 0, "loaded": False}]])
+        with mock.patch.object(plugin, "use_language"), mock.patch.object(plugin, "_selected_u1", return_value=client), \
+                mock.patch.object(plugin, "run_off_thread", side_effect=lambda fn: next(answers)), \
+                mock.patch.object(plugin.u1, "detect_firmware", return_value={"kind": kind, "version": "1.2.3"}):
+            return plugin.CheckConnection().execute().message
+
+    def test_firmware_is_named_whole_never_stock(self):
+        i18n.use("es")
+        self.assertEqual(self.check_connection("stock"), "U1 en 10.0.0.9 (firmware oficial 1.2.3). T1 vacío")
+        self.assertEqual(self.check_connection("extended"), "U1 en 10.0.0.9 (Extended Firmware 1.2.3). T1 vacío")
+        i18n.use("en")
+        self.assertEqual(self.check_connection("stock"), "U1 at 10.0.0.9 (official firmware 1.2.3). T1 empty")
+        for langs in MESSAGES.values():
+            for text in langs.values():
+                self.assertNotIn("stock", text.lower().replace("stock-", ""))
 
 
 if __name__ == "__main__":

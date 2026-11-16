@@ -8,11 +8,13 @@ import { OuiIcon, OuiPanel } from '../../shared/src/components';
 import { bed, light, speed as speedIcon, wind } from '../../shared/src/icons';
 import HeaterControl from './HeaterControl.vue';
 import { s, run, tracker, controlsOff } from '../app/store';
-import { t } from '../core/i18n';
+import { locale, t } from '../core/i18n';
+import { acceptDot } from '../core/decimal-input';
 import { parseSpeed } from '../core/logic';
 
 // What belongs to the machine as a whole: the bed heater, print speed, the top cover and the chamber light.
 // The four nozzle heaters are in their toolhead cards.
+const dot = computed(() => acceptDot(locale.value));
 const st = computed(() => s.status);
 const why = computed(() => (controlsOff.value ? 'heads-why' : undefined));
 const asNumber = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
@@ -41,7 +43,7 @@ async function setLight(on: boolean) {
       <div class="u1-line">
         <label for="speed" class="u1-line-label"><OuiIcon :icon="speedIcon" :size="14" tile tone="cobalt" />{{ t('speed.label') }}</label>
         <span id="speed-why" class="u1-note" data-tone="danger" role="status">{{ speedDraft != null && speedValue == null ? t('speed.invalid') : '' }}</span>
-        <InputNumber :model-value="speedDraft" input-id="speed" :min="10" :max="300" :step="5" suffix=" %" :placeholder="`${speedNow} %`" :use-grouping="false" size="small"
+        <InputNumber v-bind="dot" :locale="locale" :max-fraction-digits="1" :model-value="speedDraft" input-id="speed" :min="10" :max="300" :step="5" suffix=" %" :placeholder="`${speedNow} %`" :use-grouping="false" size="small"
                      :input-style="{ width: '72px' }" :invalid="speedDraft != null && speedValue == null" :disabled="!!controlsOff"
                      :pt="{ pcInputText: { root: { 'aria-describedby': why ?? 'speed-why' } } }"
                      @input="e => (speedDraft = asNumber(e.value))" @update:model-value="v => (speedDraft = v)" @keydown.enter="setSpeed" />

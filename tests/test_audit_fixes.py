@@ -404,7 +404,7 @@ class CheckConnectionTests(unittest.TestCase):
         ns = fakes.load_wheel(self.artifact)
         result = ns["CheckConnection"]().execute()
         self.assertEqual(result.status, "success", result.message)
-        self.assertIn("extended firmware", result.message)
+        self.assertIn("Extended Firmware", result.message)
 
 
 if __name__ == "__main__":

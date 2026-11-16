@@ -478,8 +478,11 @@ class Cancelled(Exception):
     pass
 
 
+COVER_TEXT = {"off": "left as sliced", "keep-warm": "keep warm", "weak": "weak cooling", "strong": "strong cooling"}
+
+
 def _cover_text(mode):
-    return tr("left as sliced") if mode == "off" else mode
+    return tr(COVER_TEXT[mode]) if mode in COVER_TEXT else mode
 
 
 class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
@@ -1147,8 +1150,8 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
         fw = u1.detect_firmware(info, ext_status)   # as the tab does: the version alone misses some Extended builds
         loaded = ", ".join("T%d %s" % (h["index"] + 1, ("%s %s" % (h["type"], h["colour"] or "")).strip()
                                        if h["loaded"] else tr("empty")) for h in heads)
-        return orca.ExecutionResult.success(tr("U1 at %s (%s firmware %s). %s") % (client.address, fw["kind"],
-                                                                               fw["version"], loaded))
+        about = tr("U1 at %s (Extended Firmware %s)") if fw["kind"] == "extended" else tr("U1 at %s (official firmware %s)")
+        return orca.ExecutionResult.success("%s. %s" % (about % (client.address, fw["version"]), loaded))
 
 
 SUB_TYPE_WORDS = {"matte", "silk", "snapspeed", "hf", "cf", "gf", "basic", "pro", "lite", "tough", "galaxy",

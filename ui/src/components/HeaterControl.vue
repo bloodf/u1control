@@ -6,7 +6,8 @@ import { OuiIcon, OuiSpark, type OuiTone } from '../../shared/src/components';
 import { bed as bedIcon, nozzle } from '../../shared/src/icons';
 import { s, run, tracker, controlsOff, printing, printerName, stale } from '../app/store';
 import { ask } from '../core/dialog';
-import { t, fmt } from '../core/i18n';
+import { locale, t, fmt } from '../core/i18n';
+import { acceptDot } from '../core/decimal-input';
 import { heaterPhase, parseTarget } from '../core/logic';
 
 // One heater: what it reads, what it is set to, and the field to change it. `id` is the printer's key ("0".."3", "bed").
@@ -16,6 +17,7 @@ import { heaterPhase, parseTarget } from '../core/logic';
 // foundation-gap: OuiSetpoint (4.0.1) owns its draft, has no v-model, no confirm hook before `set`/`off`, no
 // refusal message for an out-of-range value and no id/aria-describedby on its field, so these rules can't run
 // inside it. 4.0.2 should add v-model, a `before-set` guard (async, may cancel) and `inputId`/`describedby`.
+const dot = computed(() => acceptDot(locale.value));
 const props = defineProps<{ id: string; card?: boolean }>();
 const isBed = props.id === 'bed';
 const name = computed(() => (isBed ? t('temps.heater.bed') : t('temps.heater.head', { n: Number(props.id) + 1 })));
@@ -67,7 +69,7 @@ async function setTemp() {
                   :label="t('temps.history', { heater: name })" />
       </div>
       <div class="u1-heat-set">
-        <InputNumber :model-value="draft" :input-id="'temp-' + id" :min="0" :max="max" :use-grouping="false" :allow-empty="true" size="small"
+        <InputNumber v-bind="dot" :locale="locale" :max-fraction-digits="1" :model-value="draft" :input-id="'temp-' + id" :min="0" :max="max" :use-grouping="false" :allow-empty="true" size="small"
                      :input-style="{ width: '72px' }" :placeholder="`0–${max}`" :aria-label="t('temps.target', { heater: name })"
                      :pt="{ pcInputText: { root: { 'aria-describedby': controlsOff ? 'heads-why' : 'temp-why-' + id } } }" :invalid="invalid" :disabled="!!controlsOff"
                      @input="e => (draft = asNumber(e.value))" @update:model-value="v => (draft = v)" @keydown.enter="setTemp" />

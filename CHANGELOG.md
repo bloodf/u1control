@@ -10,6 +10,9 @@
 - Numbers, temperatures, sizes, dates and durations are written the way each language writes them (for example 1.234,5 g and 16.11.26 in German, 1 小时 5 分钟 in Chinese).
 - Text that comes from the printer, Spoolman or the system (Klipper errors, file names, vendor names) is shown as it came, never translated.
 - On a narrow tab, a panel's buttons now wrap under each other when their labels are long, instead of making the page scroll sideways.
+- On a phone-narrow tab, the connection state and printer name get their own line under the bar and the tabs drop their icons, so a long Emergency stop label (Spanish, German) no longer cuts them.
+- Temperature and speed fields take a decimal point as well as the language's own decimal sign: typing or pasting 2.5 in German, Spanish or Portuguese used to give 25. The value sent is still rounded to a whole number.
+- Plugins > Run > Check U1 connection says "official firmware" or "Extended Firmware" in every language, and the top cover mode in the "U1 G-code prepared" notice is translated.
 
 ## [0.11.0] - 2026-11-16
 
