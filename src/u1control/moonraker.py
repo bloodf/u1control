@@ -181,6 +181,8 @@ class Moonraker:
                         progress(sent, size)
             yield tail
 
+        if cancelled and cancelled():
+            raise UploadCancelled()
         if not self.base:
             self.info()   # pick the working port first: a streamed body can't be replayed on the next one
         headers = {"Content-Type": "multipart/form-data; boundary=" + boundary,

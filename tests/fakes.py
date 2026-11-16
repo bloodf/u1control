@@ -190,6 +190,8 @@ class FakePrinter:
                     fake.order.append(("gcode", body.get("script")))
                     return self._send(200, {"result": "ok"})
                 if u.path == "/server/files/upload":
+                    if len(fake.last_body) != int(self.headers.get("Content-Length") or 0):
+                        return self._send(400, {"error": {"message": "upload cut off"}})   # as Moonraker: no file
                     name, data = fake.parse_upload(self.headers.get("Content-Type", ""), fake.last_body)
                     fake.uploads[name] = data
                     fake.order.append(("upload", name))

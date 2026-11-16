@@ -154,7 +154,10 @@ class FakeJobTests(unittest.TestCase):
         self.assertEqual(seen[-1], (len(SAMPLE), len(SAMPLE)))
         with self.assertRaises(UploadCancelled):
             self.client.upload(self.path, "y.gcode", cancelled=lambda: True)
-        self.assertNotIn("y.gcode", self.fake.uploads)
+        asked = []
+        with self.assertRaises(UploadCancelled):   # stopped mid-way: the printer gets a cut-off body, keeps no file
+            self.client.upload(self.path, "z.gcode", cancelled=lambda: asked.append(1) or len(asked) > 1)
+        self.assertEqual(list(self.fake.uploads), ["x.gcode"])
 
     def test_print_maps_fixes_uploads_then_sets_options_then_starts(self):
         job = self.run_job()
