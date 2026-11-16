@@ -77,6 +77,10 @@ SCREENS = {
 # Listing sizes by the kind of image (the name of the source file says which).
 SIZES = {"tile": (512, 512), "square": (900, 900), "social": (1280, 640)}
 LANDSCAPE = (1600, 900)
+# Layout width in CSS px of the app page inside a marketing image: wide enough for the whole header line
+# ("Snapmaker U1 · 192.168.1.50 · Extended firmware 2.0.0"), narrow enough to keep the two-row header.
+CSS_WIDTHS = {"en": 740, "pt-BR": 760}      # wide squares: room for the whole firmware line in the header
+CSS_WIDTH_SOCIAL = 760                      # the small square: wide layout too, so the header line fits and no button wraps
 USES = {"tile": "store tile and plugin table icon", "square": "Orca Cloud square image", "social": "GitHub social preview",
         "hero": "README hero", "main": "Orca Cloud main image", "feature": "Orca Cloud gallery and README feature grid"}
 # README screenshots: name, screen, CSS viewport. Exported at 1.25x.
@@ -177,7 +181,7 @@ def app_data(fakes, mods, scenario):
            "rfid_auto_sync": True, "prefs": {}, "printed_before": True}
     automations = [{"key": k, "label": label, "help": hint, "automagic": value, "choices": None if kind == "bool" else list(kind)}
                    for k, label, hint, value, kind in st.AUTOMATIONS if k != "mode"]
-    fw = {"kind": "extended", "version": "2.0.0-paxx12-24"}
+    fw = {"kind": "extended", "version": "2.0.0"}
     return {
         "frame": scenario.get("frame"),
         "hello": {"address": "192.168.1.50", "firmware": fw, "hostname": "u1", "klipper_state": "ready", "printer": "Snapmaker U1", "generation": 1},
@@ -229,6 +233,12 @@ def setup_data(fakes, mods):
 
 STUB = """<script>
 const DATA = %s;
+// One demo clock for every image: 17:36 UTC, so "Finishes" reads 19:34 (7:34 PM) in all of them.
+const RealDate = Date, NOW = RealDate.UTC(2026, 10, 16, 17, 36, 0);
+window.Date = class extends RealDate {
+  constructor(...a) { a.length ? super(...a) : super(NOW); }
+  static now() { return NOW; }
+};
 window.addEventListener('error', e => { document.documentElement.dataset.renderError = e.message; });
 window.addEventListener('unhandledrejection', e => { document.documentElement.dataset.renderError = String(e.reason); });
 let handler = null;
@@ -251,7 +261,27 @@ def font_css():
     return face("Outfit", "Outfit.ttf", "100 900") + face("JetBrains Mono", "JetBrainsMono.ttf", "100 800")
 
 
-def make_page(html, theme, stub_data, section=None, scroll=None, js=None):
+# Ends the page at a clean edge: the first row or card that would be cut by the bottom of the image (at `H`
+# CSS px) is hidden with everything below it, under a block in the page colour.
+CLEAN_CUT = """(H=>{
+  let el = document.querySelector("main"), cut = H;
+  for (;;) {
+    const kids = [...el.children].filter(k => k.offsetHeight > 0), rect = k => k.getBoundingClientRect();
+    const s = kids.find(k => rect(k).top < H && rect(k).bottom > H);
+    if (!s) { cut = Math.max(0, ...kids.map(k => rect(k).bottom).filter(b => b <= H)); break; }
+    if (rect(s).height <= 90 || !s.children.length) {
+      const i = kids.indexOf(s), prev = i ? rect(kids[i - 1]).bottom : rect(s).top;
+      cut = (prev + rect(s).top) / 2; break;
+    }
+    el = s;
+  }
+  const d = document.createElement("div");
+  d.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:99;top:" + Math.min(cut, H) + "px;background:" + getComputedStyle(document.body).backgroundColor;
+  document.body.append(d);
+})(%d);"""
+
+
+def make_page(html, theme, stub_data, section=None, scroll=None, js=None, cut=None):
     root = ":root{%s}" % ";".join("%s:%s" % kv for kv in THEMES[theme].items())
     head = "<style>%s%s</style>%s" % (font_css(), root, STUB % json.dumps(stub_data).replace("</", "<\\/"))
     steps = []
@@ -261,6 +291,8 @@ def make_page(html, theme, stub_data, section=None, scroll=None, js=None):
         steps.append('setTimeout(()=>{const e=document.querySelector("%s");e.closest("section").scrollIntoView({block:"start"});},900);' % scroll)
     if js:   # extra page script, run after the scroll (e.g. open the spool picker)
         steps.append("setTimeout(()=>{%s},1300);" % js)
+    if cut:
+        steps.append("setTimeout(()=>{%s},1600);" % (CLEAN_CUT % cut))
     steps.append("setTimeout(()=>{if(!document.querySelector('#app .p-button'))throw Error('Vue did not mount');document.documentElement.dataset.renderReady='true';},1800);")
     html = html.replace("<head>", "<head>" + head, 1)
     return html.replace("</body>", "<script>%s</script></body>" % "".join(steps), 1)
@@ -270,7 +302,7 @@ def chrome(url, out, w, h, scale, validate=False):
     # The shared test launcher supplies --use-mock-keychain --password-store=basic.
     subprocess.run(["node", str(ROOT / "scripts/render_page.mjs"), url, str(out), str(w), str(h),
                     str(scale), str(validate).lower(), str(OUT)],
-                   env={**os.environ, "CHROME": CHROME}, check=True, timeout=120)
+                   env={**os.environ, "CHROME": CHROME, "TZ": "UTC"}, check=True, timeout=120)
 
 
 # ------------------------------------------------------------------ screenshots
@@ -284,7 +316,7 @@ def camera_frame():
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
-def shoot(env, screen, theme, lang, size, css_width=None):
+def shoot(env, screen, theme, lang, size, css_width=None, clean=False):
     """One screen of the plugin as an image of exactly `size` pixels, laid out `css_width` CSS pixels wide."""
     from PIL import Image, ImageOps
     s = SCREENS[screen]
@@ -294,7 +326,8 @@ def shoot(env, screen, theme, lang, size, css_width=None):
         page = make_page(env["ns"]["page_html"]("setup", data, language=lang), theme, {"cmds": {}})
     else:
         data = app_data(env["fakes"], env["mods"], {**s, "frame": env["frame"]})
-        page = make_page(env["ns"]["page_html"]("app", language=lang), theme, data, s["section"], None, s.get("js"))
+        page = make_page(env["ns"]["page_html"]("app", language=lang), theme, data, s["section"], None, s.get("js"),
+                         round(size[1] / zoom) if clean else None)
     env["n"] += 1
     html_path, shot = env["tmp"] / ("page%d.html" % env["n"]), env["tmp"] / ("shot%d.png" % env["n"])
     html_path.write_text(page, encoding="utf-8")
@@ -371,6 +404,12 @@ def save(im, rel):
             "sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "date": time.strftime("%Y-%m-%d")}
 
 
+def css_width_for(rel, screen, lang):
+    if screen not in ("dash", "camera"):   # the setup window, toolheads and files keep their own layout widths
+        return None
+    return CSS_WIDTH_SOCIAL if rel.startswith("social/") else CSS_WIDTHS[lang]
+
+
 def export_artwork(env, src):
     from PIL import Image
     rel, size, use, screen, theme, lang = artwork(src)
@@ -379,7 +418,8 @@ def export_artwork(env, src):
     op = "resized %dx%d to %dx%d (Lanczos)" % (native.size + size)
     if screen:
         box, radius = find_square(art)
-        paste_rounded(art, shoot(env, screen, theme, lang, (box[2] - box[0], box[3] - box[1])), box, radius)
+        paste_rounded(art, shoot(env, screen, theme, lang, (box[2] - box[0], box[3] - box[1]),
+                                 css_width_for(rel, screen, lang), clean=screen == "dash"), box, radius)
         op += "; mock screenshot '%s' (%s, %s) pasted inside the square at x=%d y=%d, %dx%d, corner radius %d" % (
             screen, theme, lang, box[0], box[1], box[2] - box[0], box[3] - box[1], radius)
     return {**save(art, rel), "source": "assets/marketing/source/" + src.name, "operation": op, "use": use}

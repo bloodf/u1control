@@ -1,11 +1,6 @@
 # Orca Cloud description
 
-The text of the [U1 Control listing](https://cloud.orcaslicer.com/p/55b8c347d443). Paste the English block into
-the English description and the Portuguese block into the Portuguese one. Each block stays under Orca Cloud's
-4000 characters. The images it embeds are served from `main`, so they show once this file's commit is merged.
-The listing's own images (tile, main, gallery) are in [release.md](release.md#orca-cloud-listing).
-
-Keep the plugin list in step with the README's "More plugins by bloodf" table.
+The text of the [U1 Control listing](https://cloud.orcaslicer.com/p/55b8c347d443). Paste the English block into the English description and the Portuguese block into the Portuguese one. Each block stays under Orca Cloud's 4000 characters. The images it embeds are served from `main`, so they show once this file's commit is merged. The listing's own images (tile, main, gallery) are in [release.md](release.md#orca-cloud-listing). Keep the plugin list in step with the README's "More plugins by bloodf" table.
 
 ## English
 

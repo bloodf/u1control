@@ -1,7 +1,7 @@
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/u1control-hero-dark-en.png">
-    <img alt="U1 Control: Run the Snapmaker U1 from OrcaSlicer: toolheads, camera, files." src="assets/readme/u1control-hero-light-en.png" width="100%">
+    <img alt="U1 Control: run the Snapmaker U1 from OrcaSlicer: toolheads, camera, files" src="assets/readme/u1control-hero-light-en.png" width="100%">
   </picture>
 </p>
 
@@ -21,14 +21,7 @@
 
 ## ✨ What it does
 
-U1 Control is an OrcaSlicer 2.5 plugin for the Snapmaker U1. It adds a printer tab with the camera, the four
-toolheads, RFID tags, Spoolman spools, a file manager and the firmware settings. When you press **Print**, it
-matches every filament to a toolhead and fixes the U1 G-code, the way Snapmaker Orca does. It works with the
-stock Snapmaker firmware and with the
-[U1 Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware), stays on your
-local network and needs no extra Python packages.
-
-U1 Control is an independent project. It is not made or supported by Snapmaker.
+U1 Control is an OrcaSlicer 2.5 plugin for the Snapmaker U1. It adds a printer tab with the camera, the four toolheads, RFID tags, Spoolman spools, a file manager and the firmware settings. When you press **Print**, it matches every filament to a toolhead and fixes the U1 G-code, the way Snapmaker Orca does. It works with the stock Snapmaker firmware and with the [U1 Extended Firmware](https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware), stays on your local network and needs no extra Python packages.
 
 <p align="center">
   <picture>
@@ -39,8 +32,7 @@ U1 Control is an independent project. It is not made or supported by Snapmaker.
 
 ## 📦 Install
 
-Open [U1 Control on Orca Cloud](https://cloud.orcaslicer.com/p/55b8c347d443) and subscribe, then tick
-**Activate** under **File > Plugins** in OrcaSlicer.
+Open [U1 Control on Orca Cloud](https://cloud.orcaslicer.com/p/55b8c347d443) and subscribe, then tick **Activate** under **File > Plugins** in OrcaSlicer.
 
 From a file:
 
@@ -48,7 +40,7 @@ From a file:
 2. In OrcaSlicer, open **File > Plugins > Install local plugin** and pick the file.
 3. Tick **Activate** and allow the background thread when OrcaSlicer asks.
 
-| Requirement | |
+| Requirement | Detail |
 |---|---|
 | OrcaSlicer | 2.5.0 or newer |
 | Printer | Snapmaker U1 on the same network as the computer |
@@ -81,20 +73,20 @@ From a file:
   </tr>
 </table>
 
-| | Feature | What you get |
-|---|---|---|
-| | Time-lapses | The Files page lists every video the U1 recorded, newest first, with its cover picture, the print name, date and size. **Save** copies a video to `Downloads/u1control`; **Delete** asks first, then removes the video and its covers from the printer. Both work while it prints. |
-| | Print options | Auto bed leveling, flow calibration and time-lapse, sent with the commands Snapmaker Orca uses. Auto-refill, tangle detection, unload when done and light off when done when the firmware offers them. |
-| | G-code fixes | Seven fixes on every U1 slice: top-cover line, chamber wait, whole-bed 11×11 mesh, part fan off while probing, tool-change lift in print-by-object, real layer count and file colours. Each one can be turned off in Expert mode. |
-| | Printer agent | U1 Control can be the U1's printer agent, so OrcaSlicer's own Print dialog and Device tab work with the U1. |
-| | RFID | Snapmaker tags on both firmwares. OpenRFID, OpenSpool, NTAG and external readers with the Extended Firmware. |
-| | Spoolman | A spool list with colour, brand, material and grams left. Filament use is recorded once per print: by U1 Control on the stock firmware, by the printer on the Extended Firmware ([what is covered](docs/spooler-contract.md#filament-use)). |
-| | Remote Screen | With the Extended Firmware, the printer's touchscreen is on the Dashboard, live, and you can tap it. |
-| | Power-loss recovery | Resume or discard a print interrupted by a power cut, and see the printer's error list. |
-| | Console | Send G-code and read the printer's replies. `M112` runs the emergency stop. |
-| | Settings | Bed mesh, input shaper and flow calibration, the Extended Firmware's settings, restart Klipper, restart Moonraker and reboot. |
-| | Plugins > Run | **Check U1 connection**, **Sync U1 toolheads to project filaments** and **Apply Snapmaker Orca U1 process tuning**. |
-| | Spooler | With [Spooler](https://github.com/bloodf/spooler) installed, each toolhead gets Spooler's filament profile and the Dashboard lists Spooler's stock. |
+| Feature | What you get |
+|---|---|
+| Time-lapses | The Files page lists every video the U1 recorded, newest first, with its cover picture, the print name, date and size. **Save** copies a video to `Downloads/u1control`; **Delete** asks first, then removes the video and its covers from the printer. Both work while it prints. |
+| Print options | Auto bed levelling, flow calibration and time-lapse, sent with the commands Snapmaker Orca uses. Auto-refill, tangle detection, unload when done and light off when done when the firmware offers them. |
+| G-code fixes | Seven fixes on every U1 slice: top-cover line, chamber wait, whole-bed 11×11 mesh, part fan off while probing, tool-change lift in print-by-object, real layer count and file colours. Each one can be turned off in Expert mode. |
+| Printer agent | U1 Control can be the U1's printer agent, so OrcaSlicer's own Print dialog and Device tab work with the U1. |
+| RFID | Snapmaker tags on both firmwares. OpenRFID, OpenSpool, NTAG and external readers with the Extended Firmware. |
+| Spoolman | A spool list with colour, brand, material and grams left. Filament use is recorded once per print: by U1 Control on the stock firmware, by the printer on the Extended Firmware ([what is covered](docs/spooler-contract.md#filament-use)). |
+| Remote Screen | With the Extended Firmware, the printer's touchscreen is on the Dashboard, live, and you can tap it. |
+| Power-loss recovery | Resume or discard a print interrupted by a power cut, and see the printer's error list. |
+| Console | Send G-code and read the printer's replies. `M112` runs the emergency stop. |
+| Settings | Bed mesh, input shaper and flow calibration, the Extended Firmware's settings, restart Klipper, restart Moonraker and reboot. |
+| Plugins > Run | **Check U1 connection**, **Sync U1 toolheads to project filaments** and **Apply Snapmaker Orca U1 process tuning**. |
+| Spooler | With [Spooler](https://github.com/bloodf/spooler) installed, each toolhead gets Spooler's filament profile and the Dashboard lists Spooler's stock. |
 
 Most of it works on the stock firmware:
 
@@ -115,16 +107,11 @@ Every detail is in [docs/features.md](docs/features.md), and every setting in [d
 <a id="-how-to-use"></a>
 ## 🛠️ How to use
 
-1. In OrcaSlicer, select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the
-   printer name).
-2. Open the **U1 Control** tab next to Prepare, Preview and Device. The **Dashboard** shows the print, the bed
-   and the four toolheads. **Start camera** turns the picture on.
-3. In Automagic mode the plugin adds **U1 print setup** to your U1 process preset. Save the preset to keep it.
-   In Expert mode, add it yourself under **Process > Others > Slicing Pipeline Plugin**.
-4. Slice and press **Print**. When a choice is needed, the **U1 print setup** window opens: check
-   **Filament → toolhead** and **Print options**, then press **Send to U1**.
-5. Follow the print on the **Dashboard**, where **Pause**, **Resume**, **Cancel print** and **Emergency stop**
-   are. **Files** lists what is on the printer.
+1. In OrcaSlicer, select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name).
+2. Open the **U1 Control** tab next to Prepare, Preview and Device. The **Dashboard** shows the print, the bed and the four toolheads. **Start camera** turns the picture on.
+3. In Automagic mode the plugin adds **U1 print setup** to your U1 process preset. Save the preset to keep it. In Expert mode, add it yourself under **Process > Others > Slicing Pipeline Plugin**.
+4. Slice and press **Print**. When a choice is needed, the **U1 print setup** window opens: check **Filament → toolhead** and **Print options**, then press **Send to U1**.
+5. Follow the print on the **Dashboard**, where **Pause**, **Resume**, **Cancel print** and **Emergency stop** are. **Files** lists what is on the printer.
 
 <p align="center">
   <picture>
@@ -133,139 +120,98 @@ Every detail is in [docs/features.md](docs/features.md), and every setting in [d
   </picture>
 </p>
 
-Automagic is the default mode: everything that can run by itself does, and the window opens only for the first
-print, an empty toolhead, another material, two filaments for one toolhead, or no exact material match. Expert
-turns each step into a setting, and your Expert choices are kept while Automagic is on.
+Automagic is the default mode: everything that can run by itself does, and the window opens only for the first print, an empty toolhead, another material, two filaments for one toolhead, or no exact material match. Expert turns each step into a setting, and your Expert choices are kept while Automagic is on.
 
-To use OrcaSlicer's own Print dialog instead, turn on **Use printer agents instead of print hosts** in
-**Preferences**, then set **Printer Agent** to `u1control` in your U1 printer preset.
-[The steps and what each box does](docs/features.md#printer-agent).
+To use OrcaSlicer's own Print dialog instead, turn on **Use printer agents instead of print hosts** in **Preferences**, then set **Printer Agent** to `u1control` in your U1 printer preset. [The steps and what each box does](docs/features.md#printer-agent).
 
 ## 🔒 Privacy and safety
 
-U1 Control talks only to your printer and, if you set one up, to your Spoolman server, on your local network.
-It has no cloud service and sends nothing to the internet.
+U1 Control talks only to your printer and, if you set one up, to your Spoolman server, on your local network. It has no cloud service and sends nothing to the internet.
 
-| | |
+| Action | Detail |
 |---|---|
 | Reads | The printer's status, files and camera through Moonraker. The G-code OrcaSlicer is exporting. Spooler's `profiles.json`, `keep_slots.json` and settings file, which it never writes. |
 | Sends | Commands, files and print options to the printer over plain HTTP on your network, the way OrcaSlicer does. Spool links and filament use to Spoolman. |
 | Stores | Its settings in the plugin's own folder. An API key, if you enter one, stays there and in memory; it is never sent to the page or written to logs. Saved pictures and time-lapses go to `Downloads/u1control`. |
 | Never | Starts a print while the U1 is printing, loading, calibrating or updating. Replaces a file: a rename or move onto an existing name is refused, and a download never overwrites. Overwrites an RFID spool without your confirmation. |
 
-Deleting files, loading or unloading filament, calibration, emergency stop and Extended Firmware changes all
-ask first. While a print runs, the firmware settings that restart Klipper or reboot the printer wait until it
-ends. Use the plugin on a network you trust: the connection to the printer is not encrypted.
+Deleting files, loading or unloading filament, calibration, emergency stop and Extended Firmware changes all ask first. While a print runs, the firmware settings that restart Klipper or reboot the printer wait until it ends. Use the plugin on a network you trust: the connection to the printer is not encrypted.
 
-Every automated test runs against a fake printer. See
-[what the tests cover](docs/release.md#what-the-tests-cover-and-what-they-do-not) and
-[SECURITY.md](SECURITY.md) to report a vulnerability.
+Every automated test runs against a fake printer. See [what the tests cover](docs/release.md#what-the-tests-cover-and-what-they-do-not) and [SECURITY.md](SECURITY.md) to report a vulnerability.
 
 ## ❓ FAQ
 
 <details>
 <summary>Do I need the Extended Firmware?</summary>
 
-No. Print setup, the camera, toolheads, Snapmaker RFID tags, Spoolman, files, time-lapses and power-loss resume
-work on the stock firmware. The Extended Firmware adds OpenRFID, OpenSpool and NTAG tags, the firmware settings
-and the Remote Screen. U1 Control finds out which firmware the printer runs by itself.
+No. Print setup, the camera, toolheads, Snapmaker RFID tags, Spoolman, files, time-lapses and power-loss resume work on the stock firmware. The Extended Firmware adds OpenRFID, OpenSpool and NTAG tags, the firmware settings and the Remote Screen. U1 Control finds out which firmware the printer runs by itself.
 </details>
 
 <details>
 <summary>The U1 print setup window did not open. Is that a problem?</summary>
 
-No. In Automagic the window opens only when a choice is needed. Otherwise the file goes out with the toolheads
-U1 Control matched. To see the window for every print, switch to Expert and set **Print setup pop-up** to
-**always**.
+No. In Automagic the window opens only when a choice is needed. Otherwise the file goes out with the toolheads U1 Control matched. To see the window for every print, switch to Expert and set **Print setup pop-up** to **always**.
 </details>
 
 <details>
 <summary>Why did print setup not run for my print?</summary>
 
-It runs when OrcaSlicer sends the print through the U1's print host (**Print** or **Send**). It does not run for
-**Export G-code**, for **Print** on the Files page, or when **Use printer agents instead of print hosts** is on.
-**Settings > Print setup** in the U1 Control tab says whether your process preset runs it.
+It runs when OrcaSlicer sends the print through the U1's print host (**Print** or **Send**). It does not run for **Export G-code**, for **Print** on the Files page, or when **Use printer agents instead of print hosts** is on. **Settings > Print setup** in the U1 Control tab says whether your process preset runs it.
 </details>
 
 <details>
 <summary>Why does OrcaSlicer ask to let u1control read a temp folder?</summary>
 
-The printer agent reads the sliced job from there: `<temp>/orcaslicer_<user id>` on macOS and Linux. On Windows
-OrcaSlicer writes the job straight into `%TEMP%`, so the grant covers your whole `%TEMP%` folder, read only.
-Without it the agent can't send. The print-host path does not need it.
+The printer agent reads the sliced job from there: `<temp>/orcaslicer_<user id>` on macOS and Linux. On Windows OrcaSlicer writes the job straight into `%TEMP%`, so the grant covers your whole `%TEMP%` folder, read only. Without it the agent can't send. The print-host path does not need it.
 </details>
 
 <details>
 <summary>Is the printer agent tested on a real U1?</summary>
 
-Not all of it. Still to be confirmed on a real printer: that OrcaSlicer's dialog shows Flow Dynamics Calibration
-and Timelapse for this agent, that its slot numbers arrive as toolheads 1 to 4, and that flow calibration and
-time-lapse set this way take effect. The [changelog](CHANGELOG.md) has the details.
+Not all of it. Still to be confirmed on a real printer: that OrcaSlicer's dialog shows Flow Dynamics Calibration and Timelapse for this agent, that its slot numbers arrive as toolheads 1 to 4, and that flow calibration and time-lapse set this way take effect. The [changelog](CHANGELOG.md) has the details.
 </details>
 
 <details>
 <summary>I use Spooler too. Is filament use recorded twice?</summary>
 
-No. The two plugins agree on which spool is in which toolhead and record filament use once. U1 Control steps
-aside while Spooler's "Keep Slots Synced" runs. OrcaSlicer can't hide a plugin's tab, so Spooler's own tab stays
-unless you turn its page off in the Plugins dialog. See [docs/spooler-contract.md](docs/spooler-contract.md).
+No. The two plugins agree on which spool is in which toolhead and record filament use once. U1 Control steps aside while Spooler's "Keep Slots Synced" runs. OrcaSlicer can't hide a plugin's tab, so Spooler's own tab stays unless you turn its page off in the Plugins dialog. See [docs/spooler-contract.md](docs/spooler-contract.md).
 </details>
 
 <details>
 <summary>Can a spool use my own tuned filament preset?</summary>
 
-For an RFID tag, yes: in Expert mode `profile_overrides` picks an exact filament preset by tag UID, SKU, or
-brand and material ([how](docs/settings.md#profile-overrides)). Picking a preset per Spoolman spool is requested
-in [issue #11](https://github.com/bloodf/u1control/issues/11).
+For an RFID tag, yes: in Expert mode `profile_overrides` picks an exact filament preset by tag UID, SKU, or brand and material ([how](docs/settings.md#profile-overrides)). Picking a preset per Spoolman spool is requested in [issue #11](https://github.com/bloodf/u1control/issues/11).
 </details>
 
 <details>
 <summary>Is U1 Control made by Snapmaker?</summary>
 
-No. It is an independent project built from Snapmaker's public sources and the U1 Extended Firmware.
-[Credits](docs/credits.md).
+No. It is an independent project, not made or supported by Snapmaker, built from Snapmaker's public sources and the U1 Extended Firmware. [Credits](docs/credits.md).
 </details>
 
 ## 🌍 Languages
 
-English and Brazilian Portuguese. The page follows OrcaSlicer's language, or the one you pick under
-**Settings > Language**. A Polish translation is proposed in
-[issue #20](https://github.com/bloodf/u1control/issues/20).
+English and Brazilian Portuguese. The page follows OrcaSlicer's language, or the one you pick under **Settings > Language**. A Polish translation is proposed in [issue #20](https://github.com/bloodf/u1control/issues/20).
 
 ## 🧩 More plugins by bloodf
 
 | | Plugin | What it does | |
-|---|---|---|---|
-| <img src="https://raw.githubusercontent.com/bloodf/orca_organizer/main/assets/orca-cloud/orca_organizer-tile.png" width="40" height="40" alt="Organizer icon"> | 🧩 [Organizer](https://github.com/bloodf/orca_organizer) | Arrange parts by their real outline and fill a plate with more copies. | [Install](https://cloud.orcaslicer.com/p/5bf381fd42d4) |
-| <img src="https://raw.githubusercontent.com/bloodf/embedder/main/assets/orca-cloud/embedder-tile.png" width="40" height="40" alt="Embedder icon"> | 🧲 [Embedder](https://github.com/bloodf/embedder) | Magnet and NFC pockets, with the pause at the right layer. | [Install](https://cloud.orcaslicer.com/p/58222d4f9e52) |
-| <img src="https://raw.githubusercontent.com/bloodf/orca_print_calculator/main/assets/orca-cloud/orca_print_calculator-tile.png" width="40" height="40" alt="Print Calculator icon"> | 💰 [Print Calculator](https://github.com/bloodf/orca_print_calculator) | Price every plate: filament, energy, labour, fees and margin. | [Install](https://cloud.orcaslicer.com/p/521c07cf6de2) |
-| <img src="https://raw.githubusercontent.com/bloodf/spooler/main/assets/orca-cloud/spooler-tile.png" width="40" height="40" alt="Spooler icon"> | 🧵 [Spooler](https://github.com/bloodf/spooler) | Your Spoolman stock inside OrcaSlicer, with what is left on each spool. | [Install](https://cloud.orcaslicer.com/p/50c35dcbd6f3) |
-| <img src="https://raw.githubusercontent.com/bloodf/kobracontrol/main/assets/orca-cloud/kobracontrol-tile.png" width="40" height="40" alt="Kobra Control icon"> | 🟣 [Kobra Control](https://github.com/bloodf/kobracontrol) | Run the Anycubic Kobra X from OrcaSlicer over your LAN. | [Install](https://cloud.orcaslicer.com/p/59c786285255) |
-| <img src="assets/orca-cloud/u1control-tile.png" width="40" height="40" alt="U1 Control icon"> | 🔵 **U1 Control** · you are here | Run the Snapmaker U1 from OrcaSlicer: toolheads, camera, files. | |
+|:-:|---|---|---|
+| <img src="https://raw.githubusercontent.com/bloodf/orca_organizer/main/assets/orca-cloud/orca_organizer-tile.png" alt="Organizer icon" width="40"> | 🧩 [Organizer](https://github.com/bloodf/orca_organizer) | Arrange parts by their real outline and fill a plate with more copies. | [Install](https://cloud.orcaslicer.com/p/5bf381fd42d4) |
+| <img src="https://raw.githubusercontent.com/bloodf/embedder/main/assets/orca-cloud/embedder-tile.png" alt="Embedder icon" width="40"> | 🧲 [Embedder](https://github.com/bloodf/embedder) | Magnet and NFC pockets, with the pause at the right layer. | [Install](https://cloud.orcaslicer.com/p/58222d4f9e52) |
+| <img src="https://raw.githubusercontent.com/bloodf/orca_print_calculator/main/assets/orca-cloud/orca_print_calculator-tile.png" alt="Print Calculator icon" width="40"> | 💰 [Print Calculator](https://github.com/bloodf/orca_print_calculator) | Price every plate: filament, energy, labour, fees and margin. | [Install](https://cloud.orcaslicer.com/p/521c07cf6de2) |
+| <img src="https://raw.githubusercontent.com/bloodf/spooler/main/assets/orca-cloud/spooler-tile.png" alt="Spooler icon" width="40"> | 🧵 [Spooler](https://github.com/bloodf/spooler) | Your Spoolman stock inside OrcaSlicer, with what is left on each spool. | [Install](https://cloud.orcaslicer.com/p/50c35dcbd6f3) |
+| <img src="https://raw.githubusercontent.com/bloodf/kobracontrol/main/assets/orca-cloud/kobracontrol-tile.png" alt="Kobra Control icon" width="40"> | 🟣 [Kobra Control](https://github.com/bloodf/kobracontrol) | Run the Anycubic Kobra X from OrcaSlicer over your LAN. | [Install](https://cloud.orcaslicer.com/p/59c786285255) |
+| <img src="assets/orca-cloud/u1control-tile.png" alt="U1 Control icon" width="40"> | 🔵 **U1 Control** · you are here | Run the Snapmaker U1 from OrcaSlicer: toolheads, camera, files. | |
 
 Each plugin works on its own; installed together they share data where it helps.
 
 ## 🤝 Contributing
 
-Bug reports, printer logs and pull requests are welcome: start with [CONTRIBUTING.md](CONTRIBUTING.md). Questions
-and ideas go to [Discussions](https://github.com/bloodf/u1control/discussions), bugs to
-[Issues](https://github.com/bloodf/u1control/issues).
-
-| Document | What is in it |
-|---|---|
-| [Features](docs/features.md) | Print setup, printer agent, G-code fixes and the tab, in detail |
-| [Settings](docs/settings.md) | Every setting and its Automagic value |
-| [Architecture](docs/architecture.md) | Modules, threads and the page protocol |
-| [Firmware](docs/firmware.md) | The printer commands and endpoints the plugin uses |
-| [Spooler contract](docs/spooler-contract.md) | How U1 Control and Spooler share work |
-| [Definitions](docs/definitions.md) | The terms used in the code and the UI |
-| [Releasing](docs/release.md) | Tags, the GitHub release, Orca Cloud publishing and the listing images |
-| [Credits](docs/credits.md) | The sources this plugin is built from |
-
-The [Code of conduct](CODE_OF_CONDUCT.md) applies to everyone taking part.
+Bug reports, printer logs and pull requests are welcome: start with [CONTRIBUTING.md](CONTRIBUTING.md). Questions and ideas go to [Discussions](https://github.com/bloodf/u1control/discussions), bugs to [Issues](https://github.com/bloodf/u1control/issues). The details are in [Features](docs/features.md), [Settings](docs/settings.md), [Architecture](docs/architecture.md), [Firmware](docs/firmware.md), [Spooler contract](docs/spooler-contract.md), [Definitions](docs/definitions.md), [Releasing](docs/release.md) and [Credits](docs/credits.md). The [Code of conduct](CODE_OF_CONDUCT.md) applies to everyone taking part.
 
 ## 📄 License
 
-[GPL-3.0-only](LICENSE).
+GPL-3.0-only. See [LICENSE](LICENSE).
 
 <p align="center"><sub>by bloodf</sub></p>
