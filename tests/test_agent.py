@@ -408,6 +408,40 @@ class PluginAgentTests(unittest.TestCase):
         self.agent._worker.join(5)
         self.assertEqual(self.fake.scripts, ["M109 S220"])              # only what was already running
 
+    def test_connect_switches_printer_in_one_locked_step(self):
+        """Every state a reader can see under the lock is all old printer or all new: id, host, key, client, stop."""
+        import threading
+        self.connect()
+        old_stop = self.agent._stop
+        seen, agent_ = [], self.agent
+
+        class Recording:
+            def __init__(self):
+                self.lock = threading.Lock()
+
+            def snap(self):
+                seen.append((agent_.dev_id, agent_.host, agent_.api_key, agent_._stop is old_stop))
+
+            def __enter__(self):
+                self.lock.acquire()
+                self.snap()
+
+            def __exit__(self, *exc):
+                self.snap()
+                self.lock.release()
+        self.agent._lock = Recording()
+        conn = self.orca.printer_agent.PrinterConnectionParams(dev_id="u1-b", host="127.0.0.1:1", password="k2")
+        self.assertEqual(self.agent.connect_printer(conn), 0)
+        self.agent.disconnect_printer()
+        old = ("u1", self.fake.host, "")   # what connect() set: dev_id "u1", no key
+        for dev_id, host, key, same_stop in seen:
+            state = (dev_id, host, key)
+            self.assertIn(state, (old, ("u1-b", "127.0.0.1:1", "k2")), seen)
+            if state == old:
+                continue
+            self.assertFalse(same_stop, "new printer seen with the old printer's stop event: %r" % (seen,))
+        self.assertIn(("u1-b", "127.0.0.1:1", "k2", False), seen)
+
     def test_device_gcode_waits_like_the_console(self):
         seen = []
         client = type("C", (), {"gcode": lambda self, script, timeout=30: seen.append(timeout)})()

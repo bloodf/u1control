@@ -791,15 +791,17 @@ class U1Agent(pa.PrinterAgentBase):
         if not host or not getattr(params, "dev_id", ""):
             return ERR_INVALID_HANDLE
         self.disconnect_printer()
-        self.dev_id, self.host, self.api_key = params.dev_id, host, clean(getattr(params, "password", ""))
-        self.base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
-        self.firmware = ""   # another printer, or the same one updated meanwhile
-        self.client = Moonraker(self.base, self.api_key, timeout=5)
+        key = clean(getattr(params, "password", ""))
+        base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
+        client = Moonraker(base, key, timeout=5)
         self._filament_ids = self._generic_ids()
-        with self._lock:
+        with self._lock:   # one step: a reader under the lock never sees the new printer with the old one's id
+            self.dev_id, self.host, self.api_key, self.base = params.dev_id, host, key, base
+            self.firmware = ""   # another printer, or the same one updated meanwhile
+            self.client = client
             self._stop = threading.Event()
             stop = self._stop
-        threading.Thread(target=self._poll, args=(stop, self.client), name="u1control-agent", daemon=True).start()
+        threading.Thread(target=self._poll, args=(stop, client), name="u1control-agent", daemon=True).start()
         return OK
 
     def disconnect_printer(self):

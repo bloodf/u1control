@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-16
+
+- Printer agent: connecting to another U1 now switches the printer's id, address, key and status thread in one step. Before, for a moment while switching, the agent could pair the new printer's id with the old connection.
+
 ## [0.10.0] - 2026-11-16
 
 - u1control is now also a printer agent, so OrcaSlicer's own Print dialog and Device tab work with the U1. To switch: in OrcaSlicer's **Preferences** turn on **Use printer agents instead of print hosts**, then in your U1 printer preset set **Printer Agent** to `u1control` and the host to the U1's IP, and save the preset. The print-host way (U1 print setup) keeps working as before.
