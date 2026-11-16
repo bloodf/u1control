@@ -220,6 +220,9 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
   Screen, SSH and more) with restart Klipper, restart Moonraker and reboot, Spooler, and the connection.
   While a print runs, firmware settings that restart Klipper or reboot the printer, Restart Klipper and
   Reboot wait until it ends ([which ones](docs/firmware.md#firmware-settings-during-a-print)).
+- **Languages:** English, Português (Brasil), Español, Deutsch and 简体中文. The tab, the U1 print setup window
+  and the messages in OrcaSlicer's Print dialog follow OrcaSlicer's language (Traditional Chinese shows Simplified
+  Chinese, any other language English); **Settings > Language** picks one by hand.
 
 ### Firmware support
 

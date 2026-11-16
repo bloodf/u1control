@@ -5,6 +5,7 @@ Command names and fields come from Snapmaker's open U1 Klipper source
 """
 
 import re
+from i18n import tr
 
 TOOLHEADS = 4         # PHYSICAL_EXTRUDER_NUM
 MAX_FILAMENTS = 32    # LOGICAL_EXTRUDER_NUM
@@ -312,9 +313,9 @@ def mapping_warnings(filaments, heads, mapping):
         if f is None or h is None:
             continue
         if not h["loaded"]:
-            out.append("Filament %d → T%d: toolhead is empty" % (fi + 1, t + 1))
+            out.append(tr("Filament %d → T%d: toolhead is empty") % (fi + 1, t + 1))
         elif material_family(f.get("type")) != material_family(h["type"]):
-            out.append("Filament %d (%s) → T%d loaded with %s" % (fi + 1, f.get("type"), t + 1, h["type"]))
+            out.append(tr("Filament %d (%s) → T%d loaded with %s") % (fi + 1, f.get("type"), t + 1, h["type"]))
     return out
 
 

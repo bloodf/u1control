@@ -23,6 +23,7 @@ import zipfile
 
 import gcode
 import u1
+from i18n import tr
 from moonraker import UploadCancelled as Cancelled  # noqa: F401  (raised by run_job and send_job)
 
 UNSUPPORTED = -7010            # IPrinterAgent: "command not supported"
@@ -247,7 +248,7 @@ def plate_gcode(path, plate_index, out):
         if wanted not in names:
             plates = [n for n in names if re.fullmatch(r"Metadata/plate_\d+\.gcode", n)]
             if len(plates) != 1:
-                raise JobError("no G-code for plate %s in %s" % (plate_index, os.path.basename(path)))
+                raise JobError(tr("no G-code for plate %s in %s") % (plate_index, os.path.basename(path)))
             wanted = plates[0]
         with z.open(wanted) as src:
             while True:
@@ -295,14 +296,14 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
         lines, newline = gcode.read(tmp)
         cfg = gcode.settings(lines)
         if not gcode.is_u1(cfg):
-            raise JobError("this G-code was not sliced for a Snapmaker U1")
+            raise JobError(tr("this G-code was not sliced for a Snapmaker U1"))
         mapping, filaments, heads = None, gcode.filaments(lines, cfg), None
         if view is not None:
             heads = view["heads"]
             mapping = job_mapping(ams_mapping, filaments, heads)
             problems = u1.mapping_warnings(filaments, heads, mapping)
             if problems:
-                raise JobError("; ".join(problems) + ". Pick other slots in the print dialog, or load the filament.")
+                raise JobError(tr("%s. Pick other slots in the print dialog, or load the filament.") % "; ".join(problems))
         lines, _ = gcode.process(lines, cfg, options, mapping, heads, version)
         gcode.write(tmp, lines, newline)
         return tmp, mapping, filaments
@@ -315,7 +316,7 @@ HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")   # as plugin._s
 
 
 def _busy_reason(view):
-    return "the U1 is busy (%s); wait for it to finish first" % (view["machine_state"] or view["state"]).lower()
+    return tr("the U1 is busy (%s); wait for it to finish first") % (view["machine_state"] or view["state"]).lower()
 
 
 def send_job(client, path, name, plate_index, options, version, work_dir, progress=None, cancelled=None):
@@ -324,7 +325,7 @@ def send_job(client, path, name, plate_index, options, version, work_dir, progre
     filename = upload_name(name, path)
     view = u1.summarize(client.query(u1.STATUS_OBJECTS))
     if u1.is_busy(view["state"]) and view["filename"].lstrip("/") == filename:
-        raise JobError("the U1 is printing %s now; send it under another name or wait" % filename)
+        raise JobError(tr("the U1 is printing %s now; send it under another name or wait") % filename)
     tmp, _, _ = prepare_gcode(path, plate_index, options, None, None, version, work_dir)
     try:
         client.upload(tmp, filename, progress=progress, cancelled=cancelled)
@@ -354,11 +355,11 @@ def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs
             raise Cancelled()
         after = u1.summarize(client.query(u1.STATUS_OBJECTS))   # the upload can take a while: check again
         if u1.machine_busy(after):
-            raise JobError(_busy_reason(after) + "; the file is on the U1, nothing was started")
+            raise JobError(tr("%s; the file is on the U1, nothing was started") % _busy_reason(after))
         for t in sorted(set(mapping.values())):
             if any(view["heads"][t].get(k) != after["heads"][t].get(k) for k in HEAD_FACTS):
-                raise JobError("T%d changed during the upload; the file is on the U1, nothing was started. "
-                               "Print again." % (t + 1))
+                raise JobError(tr("T%d changed during the upload; the file is on the U1, nothing was started. "
+                               "Print again.") % (t + 1))
         if stage:
             stage("start")
         client.gcode(script)

@@ -1,5 +1,5 @@
 // MOCK evidence: the built page in owned headless Chrome (CSP, scripted bridge), screenshots in light/dark,
-// en/pt-BR, 1280/720 px and 200 % zoom, with overflow and DOM measurements. Not a substitute for OrcaSlicer.
+// en/pt-BR (LANGS=… any host language), 1280/720 px and 200 % zoom, with overflow and DOM measurements. Not a substitute for OrcaSlicer.
 //   OUT=<dir> PAGE=<page with icons> node tests/page/shots.mjs
 import { writeFile, mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -49,6 +49,10 @@ const SCENES = [
   ['settings', 'light', 'en', 1280, 1], ['settings', 'dark', 'pt_BR', 720, 1], ['files', 'light', 'pt_BR', 1280, 1], ['files', 'dark', 'en', 640, 2],
   ['console', 'dark', 'en', 1280, 1], ['setup', 'light', 'pt_BR', 720, 1], ['setup', 'dark', 'en', 1280, 1], ['setup', 'light', 'en', 360, 2],
 ];
+// LANGS=de_DE,zh_CN,...: every scene in those languages instead, wide light and narrow dark (and the reverse).
+if (process.env.LANGS) SCENES.splice(0, SCENES.length, ...process.env.LANGS.split(',').flatMap(lang =>
+  ['dash', 'notarget', 'dialog', 'settings', 'files', 'console', 'setup'].flatMap(scn =>
+    [[scn, 'light', lang, 1280, 1], [scn, 'dark', lang, 400, 1], [scn, 'dark', lang, 1280, 1], [scn, 'light', lang, 400, 1]])));
 const dir = await mkdtemp(join(tmpdir(), 'u1-shots-'));
 const browser = await launch();
 const metrics = [];

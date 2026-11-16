@@ -3,15 +3,16 @@ to a toolhead. Every printer command still goes through u1control's own queue (S
 the printer the page shows; Spooler only supplies the list. Free of the `orca` module."""
 
 import peers
+from i18n import tr
 
 STOCK_CHANGED = "Spooler's stock list changed since this one was shown; nothing was written. Pick the spool again."
 
 
 def _assign_args(head, spool_id, key):
     if not isinstance(spool_id, int) or isinstance(spool_id, bool) or spool_id <= 0:
-        raise ValueError("no spool chosen")
+        raise ValueError(tr("no spool chosen"))
     if not isinstance(key, str) or not key:
-        raise ValueError(STOCK_CHANGED)
+        raise ValueError(tr(STOCK_CHANGED))
     return head, spool_id, key
 
 
@@ -68,15 +69,15 @@ class StockMixin:
 
     def _current_row(self, key, spool_id):
         if self.peers is None:
-            raise ValueError(peers.STATE_TEXT["absent"])
+            raise ValueError(tr(peers.STATE_TEXT["absent"]))
         spooler, stock = self.peers.stock()
         if spooler["state"] != "active":
-            raise ValueError(spooler["text"])
+            raise ValueError(tr(spooler["text"]))
         if stock["key"] != key:
-            raise ValueError(STOCK_CHANGED)
+            raise ValueError(tr(STOCK_CHANGED))
         row = next((r for r in stock["rows"] if r["id"] == spool_id), None)
         if row is None:
-            raise ValueError("Spool #%d is no longer in Spooler's stock list; nothing was written." % spool_id)
+            raise ValueError(tr("Spool #%d is no longer in Spooler's stock list; nothing was written.") % spool_id)
         return spooler, row
 
     def cmd_stock_assign(self, head, spool_id, key, force=False):
@@ -87,17 +88,17 @@ class StockMixin:
         _, _, target = self._ctx()
         spooler, row = self._current_row(key, spool_id)
         if self._origin_check(target, spooler["origin"]) is False:
-            raise ValueError("U1 Control's Spoolman (%s) isn't the one Spooler uses (%s); nothing was written. "
-                             "Set the same Spoolman address in both." % (peers.normalize_origin(target.spoolman_url),
+            raise ValueError(tr("U1 Control's Spoolman (%s) isn't the one Spooler uses (%s); nothing was written. "
+                             "Set the same Spoolman address in both.") % (peers.normalize_origin(target.spoolman_url),
                                                                          spooler["origin"]))
         self.cmd_spools()   # U1 Control's own, fresh read of the spool it will write
         with self.lock:
             mine = next((s for s in self.spools if s["id"] == spool_id), None)
         if mine is None:
-            raise ValueError("Spool #%d isn't in the Spoolman U1 Control reaches; nothing was written. "
-                             "Do both plugins use the same Spoolman?" % spool_id)
+            raise ValueError(tr("Spool #%d isn't in the Spoolman U1 Control reaches; nothing was written. "
+                             "Do both plugins use the same Spoolman?") % spool_id)
         if row["filament_id"] is not None and mine.get("filament_id") != row["filament_id"]:
-            raise ValueError("Spool #%d holds another filament in the Spoolman U1 Control reaches than in Spooler's "
-                             "list; nothing was written. Do both plugins use the same Spoolman?" % spool_id)
+            raise ValueError(tr("Spool #%d holds another filament in the Spoolman U1 Control reaches than in Spooler's "
+                             "list; nothing was written. Do both plugins use the same Spoolman?") % spool_id)
         self._current_row(key, spool_id)   # Spooler didn't restart or change source during the read
         return self.cmd_bind_spool(head, spool_id, bool(force))

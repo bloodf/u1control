@@ -13,6 +13,7 @@ import { s, run, tracker, controlsOff, busy, loadSpools, printerName } from '../
 import { config, form, dirty, saving, save, discard, valueOf } from '../app/settings';
 import { ask } from '../core/dialog';
 import { t, tMaybe, langPref, setLangPref, autoLocale, fmt } from '../core/i18n';
+import { LOCALES } from '../core/i18n-core';
 import type { Automation } from '../app/types';
 import type { LangPref } from '../core/i18n-core';
 import { boot } from '../core/boot';
@@ -47,7 +48,7 @@ const pipe = computed(() => config.value?.pipeline ?? null);
 const dialogRule = computed(() => tMaybe(`ps.dialog.${config.value?.settings.print_dialog}`, ''));
 const langOptions = computed(() => [
   { value: 'auto', label: t('lang.auto', { current: t(`lang.${autoLocale.value}`) }) },
-  { value: 'en', label: t('lang.en') }, { value: 'pt-BR', label: t('lang.pt-BR') }]);
+  ...LOCALES.map(value => ({ value, label: t(`lang.${value}`) }))]);
 const sections = computed<OuiSettingsSection[]>(() => [
   { id: 'mode', label: t('mode.title'), icon: zap },
   { id: 'print-setup', label: t('ps.title'), icon: printer, ...(pipe.value && !pipe.value.on ? { state: 'warn' as const } : {}) },

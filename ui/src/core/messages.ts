@@ -1,4 +1,5 @@
-// Every visible string of the U1 Control pages, in English and Brazilian Portuguese. Texts that come from the
+// Every visible string of the U1 Control pages, in English and Brazilian Portuguese (Spanish, German and Simplified
+// Chinese: messages-es.ts, messages-de.ts, messages-zh.ts; tests/unit/i18n.test.ts keeps the five complete and alike). Texts that come from the
 // printer or from Python (error details, Extended Firmware labels) are shown inside these, not translated.
 export const en = {
   'app.title': 'U1 Control',
@@ -47,6 +48,8 @@ export const en = {
   'common.unknown': 'unknown',
   'common.none': '—',
   'common.ok': 'OK',
+  'common.stop': '.',
+  'common.paren': '{a} ({b})',
 
   'msg.region': 'Messages',
   'msg.waiting': '{action}: waiting for the printer…',
@@ -497,6 +500,9 @@ export const en = {
   'lang.auto': 'Automatic ({current})',
   'lang.en': 'English',
   'lang.pt-BR': 'Português (Brasil)',
+  'lang.es': 'Español',
+  'lang.de': 'Deutsch',
+  'lang.zh-CN': '简体中文',
   'lang.help': 'Automatic follows OrcaSlicer’s language, then the system’s. Your choice is kept in this OrcaSlicer only.',
   'about.text': 'U1 Control {version} · Independent project, not made by Snapmaker.',
 
@@ -603,6 +609,8 @@ export const en = {
   'age.seconds': '{n} s ago',
   'age.minutes': '{n} min ago',
   'age.at': 'at {time}',
+  'dur.hm': '{h} h {m} min',
+  'dur.m': '{m} min',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -654,6 +662,8 @@ export const ptBR: Record<MessageKey, string> = {
   'common.unknown': 'desconhecido',
   'common.none': '—',
   'common.ok': 'OK',
+  'common.stop': '.',
+  'common.paren': '{a} ({b})',
 
   'msg.region': 'Mensagens',
   'msg.waiting': '{action}: aguardando a impressora…',
@@ -1104,6 +1114,9 @@ export const ptBR: Record<MessageKey, string> = {
   'lang.auto': 'Automático ({current})',
   'lang.en': 'English',
   'lang.pt-BR': 'Português (Brasil)',
+  'lang.es': 'Español',
+  'lang.de': 'Deutsch',
+  'lang.zh-CN': '简体中文',
   'lang.help': 'Automático segue o idioma do OrcaSlicer e depois o do sistema. A escolha fica guardada só neste OrcaSlicer.',
   'about.text': 'U1 Control {version} · Projeto independente, não feito pela Snapmaker.',
 
@@ -1209,4 +1222,6 @@ export const ptBR: Record<MessageKey, string> = {
   'age.seconds': 'há {n} s',
   'age.minutes': 'há {n} min',
   'age.at': 'às {time}',
+  'dur.hm': '{h} h {m} min',
+  'dur.m': '{m} min',
 };

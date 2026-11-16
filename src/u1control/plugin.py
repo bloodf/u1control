@@ -14,10 +14,12 @@ import orca
 import agent
 import extended as ext
 import gcode
+import i18n
 import peers
 import settings
 import spooler_bridge
 import u1
+from i18n import tr
 from moonraker import Moonraker, PrinterError
 from service import Service, Target
 
@@ -43,15 +45,37 @@ def _asset(name):
         return f.read()
 
 
+_host_lang = None   # OrcaSlicer's UI language as last read
+
+
 def _host_language():
     """OrcaSlicer's UI language (`orca.host.app_language()`, e.g. "pt_BR"), or None when the host doesn't offer it.
-    The page maps it to a language it has and falls back to the browser's; an explicit choice on the page wins."""
+    The page maps it to a language it has and falls back to the browser's; an explicit choice on the page wins.
+    The last answer is kept for the threads where OrcaSlicer doesn't give one (it only changes with a restart)."""
+    global _host_lang
     try:
         attr = orca.host.app_language
         lang = attr() if callable(attr) else attr
     except Exception:
-        return None
-    return lang if isinstance(lang, str) and lang else None
+        return _host_lang
+    if isinstance(lang, str) and lang:
+        _host_lang = lang
+    return _host_lang
+
+
+def use_language(cap=None):
+    """Python's own texts (errors, notices, the agent's progress in OrcaSlicer's Print dialog) follow the page: the
+    language chosen in Settings, else OrcaSlicer's, else English. Never raises.
+    cap: the capability asking, when it reads the settings anyway; without one only settings already loaded count,
+    so asking for the language never decides where the settings are kept (get_store)."""
+    choice = "auto"
+    try:
+        store = get_store(cap) if cap is not None else _store
+        if store is not None:
+            choice = store.effective()["ui_language"]
+    except Exception as e:
+        log("language: settings not readable (%s)" % e)
+    i18n.use(i18n.resolve(choice, _host_language()))
 
 
 def page_html(mode, data=None, language="auto"):
@@ -189,7 +213,7 @@ def run_off_thread(fn, timeout=20):
     t.start()
     t.join(timeout)
     if t.is_alive():
-        raise PrinterError("the U1 did not answer in %d s" % timeout)
+        raise PrinterError(tr("the U1 did not answer in %d s") % timeout)
     if "error" in box:
         raise box["error"]
     return box.get("value")
@@ -233,6 +257,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
         return {}
 
     def get_ui(self):
+        use_language(self)
         return page_html("app", language=self._config()["ui_language"])
 
     def _settings(self):
@@ -248,11 +273,11 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
             bundle = orca.host.preset_bundle()
             preset = bundle.current_printer_preset()
             if not is_u1_name(preset.config_value("printer_model"), preset.name, preset.config_value("inherits")):
-                raise ValueError("Select a Snapmaker U1 printer, or set \"host\" in U1 Control's plugin config.")
+                raise ValueError(tr("Select a Snapmaker U1 printer, or set \"host\" in U1 Control's plugin config."))
             host = clean(preset.config_value("print_host")) or clean(bundle.full_config_value("print_host"))
             key = clean(preset.config_value("printhost_apikey")) or clean(bundle.full_config_value("printhost_apikey"))
             if not host:
-                raise ValueError("The selected U1 has no address: click the Wi-Fi icon next to the printer and enter its IP.")
+                raise ValueError(tr("The selected U1 has no address: click the Wi-Fi icon next to the printer and enter its IP."))
         return Target(host, key, settings.printer_label(clean(cfg.get("printer_name"))), clean(cfg.get("spoolman_url")),
                       bool(cfg["spoolman_auto"]), bool(cfg["spoolman_report_usage"]), bool(cfg["spoolman_write_printer"]))
 
@@ -263,6 +288,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
         svc = service(self.post_message)
         try:
             if kind == "hello":
+                use_language(self)
                 try:
                     self._select(svc)
                 except Exception as e:   # no U1 selected (or no address): the page disables every printer control
@@ -285,9 +311,9 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
             elif kind == "sync_project":
                 view = svc.last_view
                 if data.get("auto") and spooler_keeping_slots():
-                    self.post_message({"type": "notice", "text": "Spooler is keeping slots synced"})
+                    self.post_message({"type": "notice", "text": tr("Spooler is keeping slots synced")})
                 elif not view:
-                    self.post_message({"type": "notice", "text": "No printer status yet; try again in a moment."})
+                    self.post_message({"type": "notice", "text": tr("No printer status yet; try again in a moment.")})
                 else:
                     overrides = self._config()["profile_overrides"]
 
@@ -296,12 +322,13 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                             done, problems = sync_project(view["heads"], view["rfid"], overrides, bound=bound_spool_lookup(svc))
                             text = sync_message(done, problems)
                         except Exception as e:
-                            text = "Couldn't update the project filaments: %s" % e
+                            text = tr("Couldn't update the project filaments: %s") % e
                         self.post_message({"type": "notice", "text": text})
                     if not self._background(job):
-                        self.post_message({"type": "notice", "text": "Another preset update is running; try again in a moment."})
+                        self.post_message({"type": "notice", "text": tr("Another preset update is running; try again in a moment.")})
             elif kind == "ui_language":   # the page's language choice; nothing else is touched
                 self._settings().update({"ui_language": data.get("value")})
+                use_language(self)
             elif kind == "camera_fps":    # the camera card's frame rate; an invalid value keeps the stored one
                 svc.set_camera_fps(self._settings().update({"camera_fps": data.get("value")})["camera_fps"])
             elif kind == "save_settings":
@@ -366,7 +393,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
             try:
                 name = ensure_pipeline(cfg)
                 if name:
-                    self.post_message({"type": "notice", "text": "U1 print setup added to %s; save the preset to keep it" % name})
+                    self.post_message({"type": "notice", "text": tr("U1 print setup added to %s; save the preset to keep it") % name})
             except Exception as e:
                 log("auto-add U1 print setup failed: %r" % e)
             self.post_message(self._config_message())   # the Settings page says whether this preset runs it
@@ -385,6 +412,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
     def on_load(self):
         # OrcaSlicer calls this when the plugin loads, whether or not the tab is enabled or shown.
         _storage()  # a plugin callback: the one place storage() is sure to answer
+        use_language()
         try:
             start_link()
         except Exception as e:   # never fail the plugin load over discovery
@@ -425,7 +453,7 @@ def ensure_pipeline(cfg):
     try:
         ui = orca.host.ui
         ui.push_notification(ui.NotificationLevel.RegularNotificationLevel,
-                             "U1 print setup added to %s; save the preset to keep it" % name)
+                             tr("U1 print setup added to %s; save the preset to keep it") % name)
     except Exception as e:
         log("notification failed: %r" % e)
     return name
@@ -451,7 +479,7 @@ class Cancelled(Exception):
 
 
 def _cover_text(mode):
-    return "left as sliced" if mode == "off" else mode
+    return tr("left as sliced") if mode == "off" else mode
 
 
 class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
@@ -469,37 +497,38 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
     def execute(self, ctx):
         if ctx.step != orca.slicing.Step.psGCodePostProcess:
             return orca.ExecutionResult.skipped()
+        use_language(self)
         try:
             return orca.ExecutionResult.success(self._postprocess(ctx))
         except Cancelled:
             return orca.ExecutionResult.failure(orca.PluginResult.FatalError,
-                                                "U1 print setup: cancelled, nothing was sent.")
+                                                tr("U1 print setup: cancelled, nothing was sent."))
         except Exception as e:
             log("print setup failed: %r" % e)
-            return orca.ExecutionResult.failure(orca.PluginResult.FatalError, "U1 print setup: %s" % e)
+            return orca.ExecutionResult.failure(orca.PluginResult.FatalError, tr("U1 print setup: %s") % e)
 
     def _postprocess(self, ctx):
         lines, newline = gcode.read(ctx.gcode_path)
         cfg = gcode.settings(lines)
         if not gcode.is_u1(cfg):
-            return "not a Snapmaker U1 print; skipped"
+            return tr("not a Snapmaker U1 print; skipped")
         store = self._settings()
         options = store.effective()
         sending = clean(ctx.host) not in ("", "File")
         if not sending:
             lines, mode = gcode.process(lines, cfg, options, version=VERSION)
             gcode.write(ctx.gcode_path, lines, newline)
-            return "U1 G-code prepared (top cover: %s)" % _cover_text(mode)
+            return tr("U1 G-code prepared (top cover: %s)") % _cover_text(mode)
 
         host = clean(ctx.config_value("print_host"))
         if not host:
-            raise PrinterError("no U1 address set: click the Wi-Fi icon next to the printer and enter its IP")
+            raise PrinterError(tr("no U1 address set: click the Wi-Fi icon next to the printer and enter its IP"))
         key = clean(ctx.config_value("printhost_apikey"))
         client = Moonraker(host, key, timeout=5)
         status = run_off_thread(lambda: client.query(u1.STATUS_OBJECTS))
         view = u1.summarize(status)
         if u1.machine_busy(view):
-            raise PrinterError("the U1 is busy (%s); wait for it to finish first"
+            raise PrinterError(tr("the U1 is busy (%s); wait for it to finish first")
                                % (view["machine_state"] or view["state"]).lower())
         filaments = gcode.filaments(lines, cfg)
         heads = view["heads"]
@@ -517,7 +546,7 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
         else:
             problems = u1.mapping_warnings(filaments, heads, mapping)
             if problems:
-                raise PrinterError("; ".join(problems) + ". Set the print setup pop-up to auto or always to choose toolheads.")
+                raise PrinterError(tr("%s. Set the print setup pop-up to auto or always to choose toolheads.") % "; ".join(problems))
         _still_valid(ctx, host, client, heads, mapping)
         lines, mode = gcode.process(lines, cfg, {**options, "purifier": purifier}, mapping, heads, VERSION)
         gcode.write(ctx.gcode_path, lines, newline)
@@ -529,7 +558,7 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
             "printer_name": settings.printer_label(clean(options.get("printer_name"))),
             "spoolman_url": clean(options.get("spoolman_url")),
             "spoolman_report_usage": bool(options.get("spoolman_report_usage", True))})
-        return "sent to %s: %s" % (client.address, script.replace("\n", " | "))
+        return tr("sent to %s: %s") % (client.address, script.replace("\n", " | "))
 
     @staticmethod
     def _offered_prefs(options, printer_opts):
@@ -590,7 +619,7 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
             except Exception:
                 return False
 
-        window = ui.create_window(html, title="U1 print setup", width=720, height=640, on_message=on_message,
+        window = ui.create_window(html, title=tr("U1 print setup"), width=720, height=640, on_message=on_message,
                                   on_close=done.set, on_submit=on_submit, style=ui.WINDOW_MODAL)
         window_box.append(window)
         threading.Thread(target=refresher, name="u1control-refresh", daemon=True).start()
@@ -603,12 +632,12 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
                     raise Cancelled()
                 if waited > SETUP_TIMEOUT:
                     window.close()
-                    raise PrinterError("print setup timed out; nothing was sent")
+                    raise PrinterError(tr("print setup timed out; nothing was sent"))
                 if not window.is_open():
                     break
                 if not ready.is_set() and waited > 20:
                     window.close()
-                    raise PrinterError("the print setup window didn't open (OrcaSlicer was busy); nothing was sent")
+                    raise PrinterError(tr("the print setup window didn't open (OrcaSlicer was busy); nothing was sent"))
         finally:
             stop.set()
         answer = result.get("data")
@@ -623,8 +652,8 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
         warned = u1.warning_ids(filaments, shown[-1], final)
         acked = answer.get("acknowledged")
         if warned and (not isinstance(acked, list) or sorted(str(x) for x in acked) != sorted(warned)):
-            raise PrinterError("the print setup has warnings (%s) that weren't confirmed for these toolheads; "
-                               "nothing was sent" % "; ".join(u1.mapping_warnings(filaments, shown[-1], final)))
+            raise PrinterError(tr("the print setup has warnings (%s) that weren't confirmed for these toolheads; "
+                               "nothing was sent") % "; ".join(u1.mapping_warnings(filaments, shown[-1], final)))
         picked = answer.get("prefs") or {}
         purifier = answer.get("purifier") if answer.get("purifier") in ("auto", "off", *u1.PURIFIER) else "auto"
         return {"map": final, "prefs": {k: bool(picked.get(k, v)) for k, v in prefs.items()},
@@ -638,14 +667,14 @@ def _still_valid(ctx, host, client, heads, mapping):
     """Right before anything is written or sent: same printer address, the U1 still idle, and the toolheads
     the print uses still hold what the user saw. Otherwise nothing is sent."""
     if clean(ctx.config_value("print_host")) != host:
-        raise PrinterError("the printer address changed while the print setup was open; nothing was sent")
+        raise PrinterError(tr("the printer address changed while the print setup was open; nothing was sent"))
     view = u1.summarize(run_off_thread(lambda: client.query(u1.STATUS_OBJECTS)))
     if u1.machine_busy(view):
-        raise PrinterError("the U1 became busy (%s); nothing was sent"
+        raise PrinterError(tr("the U1 became busy (%s); nothing was sent")
                            % (view["machine_state"] or view["state"]).lower())
     for t in sorted(set(mapping.values())):
         if any(heads[t].get(k) != view["heads"][t].get(k) for k in HEAD_FACTS):
-            raise PrinterError("T%d changed after you chose the toolheads; nothing was sent. Send again." % (t + 1))
+            raise PrinterError(tr("T%d changed after you chose the toolheads; nothing was sent. Send again.") % (t + 1))
 
 
 # ====================================================================== printer agent
@@ -719,7 +748,8 @@ class U1Agent(pa.PrinterAgentBase):
         return AGENT_NAME
 
     def get_agent_info(self):
-        return pa.AgentInfo(AGENT_ID, AGENT_NAME, VERSION, "Snapmaker U1 over Moonraker, by u1control")
+        use_language()
+        return pa.AgentInfo(AGENT_ID, AGENT_NAME, VERSION, tr("Snapmaker U1 over Moonraker, by u1control"))
 
     def _settings(self):
         return get_store(self)
@@ -958,7 +988,7 @@ class U1Agent(pa.PrinterAgentBase):
         host = self.host or host_of(getattr(params, "dev_ip", ""))
         key = self.api_key or clean(getattr(params, "password", ""))
         if not host:
-            raise PrinterError(NO_ADDRESS)
+            raise PrinterError(tr(NO_ADDRESS))
         return host, key, Moonraker(self.base if self.host else base_url(host), key, timeout=10)
 
     @staticmethod
@@ -974,7 +1004,7 @@ class U1Agent(pa.PrinterAgentBase):
             pct = int(sent * 100 / total) if total else 100
             if update_fn and pct != last[0]:
                 last[0] = pct
-                update_fn(STAGE_UPLOAD, pct, "Uploading G-code...")
+                update_fn(STAGE_UPLOAD, pct, tr("Uploading G-code..."))
         return progress
 
     @staticmethod
@@ -989,13 +1019,14 @@ class U1Agent(pa.PrinterAgentBase):
         return os.path.join(_storage_or_raise(), JOBS_DIR)
 
     def start_send_gcode_to_sdcard(self, params, update_fn, cancel_fn, wait_fn):
+        use_language(self)
         try:
             host, key, client = self._job_client(params)
             if getattr(params, "project_name", "") == "verify_job":   # PrintJob.cpp: a connectivity check only
                 client.info()
                 return OK
             if update_fn:
-                update_fn(STAGE_CREATE, 0, "Preparing...")
+                update_fn(STAGE_CREATE, 0, tr("Preparing..."))
             options = self._settings().effective()
             agent.send_job(client, self._job_path(params), clean(params.project_name) or clean(params.task_name),
                            getattr(params, "plate_index", 1), options, VERSION, self._work_dir(),
@@ -1005,12 +1036,13 @@ class U1Agent(pa.PrinterAgentBase):
         except Exception as e:
             return self._fail(update_fn, ERR_SG_UPLOAD, e)
         if update_fn:
-            update_fn(STAGE_FINISHED, 100, "File uploaded")
+            update_fn(STAGE_FINISHED, 100, tr("File uploaded"))
         return OK
 
     def start_local_print(self, params, update_fn, cancel_fn):
+        use_language(self)
         if update_fn:
-            update_fn(STAGE_CREATE, 0, "Preparing...")
+            update_fn(STAGE_CREATE, 0, tr("Preparing..."))
         if cancel_fn and cancel_fn():
             return ERR_CANCELED
         stage = ["prepare"]
@@ -1018,7 +1050,7 @@ class U1Agent(pa.PrinterAgentBase):
         def on_stage(name):
             stage[0] = name
             if update_fn and name == "start":
-                update_fn(STAGE_SENDING, 0, "Starting print...")
+                update_fn(STAGE_SENDING, 0, tr("Starting print..."))
         try:
             host, key, client = self._job_client(params)
             options = self._settings().effective()
@@ -1044,7 +1076,7 @@ class U1Agent(pa.PrinterAgentBase):
             log("agent: filament use not recorded: %r" % e)
         self._wake.set()
         if update_fn:
-            update_fn(STAGE_FINISHED, 100, "Print started")
+            update_fn(STAGE_FINISHED, 100, tr("Print started"))
         return OK
 
     def start_local_print_with_record(self, params, update_fn, cancel_fn, wait_fn):
@@ -1056,15 +1088,16 @@ class U1Agent(pa.PrinterAgentBase):
     def start_sdcard_print(self, params, update_fn, cancel_fn):
         """Print a file already on the U1 with the printer's own toolhead map and options."""
         name = os.path.basename(clean(getattr(params, "dst_file", "")) or clean(params.filename))
+        use_language()
         try:
             _, _, client = self._job_client(params)
             if u1.machine_busy(u1.summarize(client.query(u1.STATUS_OBJECTS))):
-                raise PrinterError("the U1 is busy; wait for it to finish first")
+                raise PrinterError(tr("the U1 is busy; wait for it to finish first"))
             client.print_start(name)
         except Exception as e:
             return self._fail(update_fn, ERR_LP_PUBLISH, e)
         if update_fn:
-            update_fn(STAGE_FINISHED, 100, "Print started")
+            update_fn(STAGE_FINISHED, 100, tr("Print started"))
         return OK
 
     # no binding or certificates on this printer -------------------------------------------------------------
@@ -1095,7 +1128,7 @@ def _selected_u1():
     host = clean(preset.config_value("print_host")) or clean(bundle.full_config_value("print_host"))
     key = clean(preset.config_value("printhost_apikey")) or clean(bundle.full_config_value("printhost_apikey"))
     if not host:
-        raise ValueError("Select your Snapmaker U1 printer and set its IP (Wi-Fi icon next to the printer).")
+        raise ValueError(tr("Select your Snapmaker U1 printer and set its IP (Wi-Fi icon next to the printer)."))
     return Moonraker(host, key, timeout=5)
 
 
@@ -1104,16 +1137,17 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
         return "Check U1 connection"
 
     def execute(self):
+        use_language()
         try:
             client = _selected_u1()
             info, ext_status = run_off_thread(lambda: (client.info(), ext.Extended(client).status()))
             heads = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS))["heads"])
         except Exception as e:
-            return orca.ExecutionResult.skipped("Couldn't reach the U1: %s" % e)
+            return orca.ExecutionResult.skipped(tr("Couldn't reach the U1: %s") % e)
         fw = u1.detect_firmware(info, ext_status)   # as the tab does: the version alone misses some Extended builds
         loaded = ", ".join("T%d %s" % (h["index"] + 1, ("%s %s" % (h["type"], h["colour"] or "")).strip()
-                                       if h["loaded"] else "empty") for h in heads)
-        return orca.ExecutionResult.success("U1 at %s (%s firmware %s). %s" % (client.address, fw["kind"],
+                                       if h["loaded"] else tr("empty")) for h in heads)
+        return orca.ExecutionResult.success(tr("U1 at %s (%s firmware %s). %s") % (client.address, fw["kind"],
                                                                                fw["version"], loaded))
 
 
@@ -1287,13 +1321,13 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
             tx.commit()
             done.append("%d: %s" % (slot, preset_name or (tag or head).get("type") or "?"))
         except Exception as e:
-            problems.append("filament %d: %s" % (slot, e))
+            problems.append(tr("filament %d: %s") % (slot, e))
     return done, problems
 
 
 def sync_message(done, problems):
-    message = "Project filaments " + (", ".join(done) or "unchanged")
-    return message + (". Problems: " + "; ".join(problems) if problems else "")
+    message = tr("Project filaments %s") % (", ".join(done) or tr("unchanged"))
+    return message + (tr(". Problems: %s") % "; ".join(problems) if problems else "")
 
 
 class SyncHeadsToProject(orca.script.ScriptPluginCapabilityBase):
@@ -1301,11 +1335,12 @@ class SyncHeadsToProject(orca.script.ScriptPluginCapabilityBase):
         return "Sync U1 toolheads to project filaments"
 
     def execute(self):
+        use_language(self)
         try:
             client = _selected_u1()
             view = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS)))
         except Exception as e:
-            return orca.ExecutionResult.skipped("Couldn't reach the U1: %s" % e)
+            return orca.ExecutionResult.skipped(tr("Couldn't reach the U1: %s") % e)
         overrides = get_store(self).effective()["profile_overrides"]
         done, problems = sync_project(view["heads"], view["rfid"], overrides, bound=bound_spool_lookup(_service))
         return orca.ExecutionResult.success(sync_message(done, problems))
@@ -1334,25 +1369,26 @@ class ApplyForkTuning(orca.script.ScriptPluginCapabilityBase):
         return "Apply Snapmaker Orca U1 process tuning"
 
     def execute(self):
+        use_language()
         bundle = orca.host.preset_bundle()
         printer = bundle.current_printer_preset()
         if not is_u1_name(printer.config_value("printer_model"), printer.name, printer.config_value("inherits")):
-            return orca.ExecutionResult.skipped("Select a Snapmaker U1 printer first.")
+            return orca.ExecutionResult.skipped(tr("Select a Snapmaker U1 printer first."))
         process = bundle.current_process_preset()
         keys = [k for k, _ in FORK_PROCESS_TUNING] + ["layer_height"]
         changes = tuning_changes(process.name, {k: bundle.full_config_value(k) for k in keys})
         if not changes:
-            return orca.ExecutionResult.success("\"%s\" already matches Snapmaker Orca." % process.name)
+            return orca.ExecutionResult.success(tr("\"%s\" already matches Snapmaker Orca.") % process.name)
         listing = "\n".join("  %s: %s -> %s" % c for c in changes)
-        if orca.host.ui.message("Change the process preset \"%s\" to Snapmaker Orca's U1 values?\n\n%s\n\n"
-                                "The preset stays unsaved until you save it." % (process.name, listing),
+        if orca.host.ui.message(tr("Change the process preset \"%s\" to Snapmaker Orca's U1 values?\n\n%s\n\n"
+                                "The preset stays unsaved until you save it.") % (process.name, listing),
                                 title="U1 Control", buttons="yes_no", icon="question") != "yes":
-            return orca.ExecutionResult.skipped("No changes made.")
+            return orca.ExecutionResult.skipped(tr("No changes made."))
         tx = orca.host.preset.process.begin_update("")
         for key, _, value in changes:
             tx.set(key, value)
         tx.commit()
-        return orca.ExecutionResult.success("Updated %d setting(s); save the preset to keep them." % len(changes))
+        return orca.ExecutionResult.success(tr("Updated %d setting(s); save the preset to keep them.") % len(changes))
 
 
 @orca.plugin

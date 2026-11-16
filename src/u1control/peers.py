@@ -24,6 +24,7 @@ import secrets
 import threading
 import time
 import urllib.parse
+from i18n import tr
 
 SCHEMA = "orca-plugin-presence"
 VERSION = 1
@@ -113,12 +114,12 @@ def peer_status(doc, now=None, pid=None, plugin=SPOOLER):
     if doc is None:
         return "absent", ""
     if doc.get("schema") != SCHEMA or doc.get("plugin") != plugin:
-        return "incompatible", "not a presence file"
+        return "incompatible", tr("not a presence file")
     if doc.get("version") != VERSION:
-        return "incompatible", "presence version %r" % (doc.get("version"),)
+        return "incompatible", tr("presence version %r") % (doc.get("version"),)
     ts, session = _num(doc.get("ts")), doc.get("session")
     if ts is None or not isinstance(session, str) or not session:
-        return "incompatible", "presence without ts or session"
+        return "incompatible", tr("presence without ts or session")
     if doc.get("pid") != pid:
         return "other_process", ""
     if doc.get("state") == "stopped":
@@ -126,7 +127,7 @@ def peer_status(doc, now=None, pid=None, plugin=SPOOLER):
     if doc.get("state") != "active":
         return "incompatible", "state %r" % (doc.get("state"),)
     if ts > now + FUTURE_SLACK or now - ts > FRESH:
-        return "stale", "last seen %d s ago" % max(0, int(now - ts))
+        return "stale", tr("last seen %d s ago") % max(0, int(now - ts))
     return "active", ""
 
 
@@ -306,7 +307,7 @@ class SpoolerLink:
         spoolman = (doc or {}).get("spoolman") if isinstance((doc or {}).get("spoolman"), dict) else {}
         provides = (doc or {}).get("provides") if isinstance((doc or {}).get("provides"), dict) else {}
         if state == "active" and provides.get("stock") != STOCK_VERSION:
-            state, detail = "incompatible", "stock list version %r" % (provides.get("stock"),)
+            state, detail = "incompatible", tr("stock list version %r") % (provides.get("stock"),)
         return {"state": state, "text": STATE_TEXT[state], "detail": detail,
                 "version": _text((doc or {}).get("plugin_version")),
                 "session": (doc or {}).get("session") if state == "active" else "",

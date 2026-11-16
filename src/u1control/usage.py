@@ -26,6 +26,7 @@ import settings
 import spoolman as sm
 import u1
 from moonraker import PrinterError, normalize_host
+from i18n import tr
 JOB_POLL = 5.0                  # tracker: seconds between print_stats checks of a printer with a pending job
 JOB_TTL = 3 * 24 * 3600.0       # a job that never finishes is dropped after this long
 RETRY_AFTER = 60.0              # heads not yet attempted (Spoolman unreachable before any write) retry after this
@@ -112,9 +113,9 @@ class LedgerStore:
         except FileNotFoundError:
             return [], [], "", []
         except (OSError, ValueError) as e:
-            return [], [], self._set_aside("unreadable (%s)" % e), []
+            return [], [], self._set_aside(tr("unreadable (%s)") % e), []
         if not isinstance(data, dict) or data.get("version") != LEDGER_VERSION:
-            return [], [], self._set_aside("of an unknown format"), []
+            return [], [], self._set_aside(tr("of an unknown format")), []
         jobs, bad = [], 0
         for entry in data.get("jobs") if isinstance(data.get("jobs"), list) else []:
             try:
@@ -128,10 +129,12 @@ class LedgerStore:
         acknowledged = [u for u in acked if isinstance(u, dict)][-MAX_ACKNOWLEDGED:]
         notes = []
         if bad:
-            notes.append("%d unreadable job(s) in %s were skipped" % (bad, self.path))
+            notes.append(tr("%d unreadable job(s) in %s were skipped") % (bad, self.path))
         if bad_entries:
-            notes.append("%d unreadable unconfirmed entr%s in %s were skipped; check Spoolman for prints that "
-                         "finished meanwhile" % (bad_entries, "y" if bad_entries == 1 else "ies", self.path))
+            notes.append((tr("%d unreadable unconfirmed entry in %s were skipped; check Spoolman for prints that "
+                             "finished meanwhile") if bad_entries == 1 else
+                          tr("%d unreadable unconfirmed entries in %s were skipped; check Spoolman for prints that "
+                             "finished meanwhile")) % (bad_entries, self.path))
         return jobs, unconfirmed[-MAX_UNCONFIRMED:], "; ".join(notes), acknowledged
 
     def _set_aside(self, why):
@@ -139,9 +142,9 @@ class LedgerStore:
         try:
             os.replace(self.path, aside)
         except OSError as e:
-            return "the print ledger %s is %s and could not be moved aside (%s); it was not used" % (self.path, why, e)
-        return "the print ledger was %s; it was kept as %s and not used. Check Spoolman for prints that " \
-               "finished meanwhile." % (why, aside)
+            return tr("the print ledger %s is %s and could not be moved aside (%s); it was not used") % (self.path, why, e)
+        return tr("the print ledger was %s; it was kept as %s and not used. Check Spoolman for prints that " \
+               "finished meanwhile.") % (why, aside)
 
     def save(self, jobs, unconfirmed, acknowledged=()):
         """Raises OSError when the file can't be written."""
@@ -179,7 +182,7 @@ class Ledger:
             for job in jobs:
                 for head, grams in sorted(job.sending.items()):   # closed or crashed during this call
                     self.unconfirmed.append(_unconfirmed(job, head, job.per_head.pop(head, grams),
-                                                         "OrcaSlicer closed while this was being recorded"))
+                                                         tr("OrcaSlicer closed while this was being recorded")))
                 job.sending = {}
                 key = ("retry", job.id) if job.retry_at is not None else ("restored", job.id) if job.booking else job.key
                 job.booking = False   # read back mid-booking: waits again, and restored + armed decides it
@@ -195,7 +198,7 @@ class Ledger:
         try:
             self.store.save(list(self.jobs.values()), self.unconfirmed, self.acknowledged)
         except OSError as e:
-            self.save_error = "can't save the print ledger (%s); pending prints won't survive a restart" % e
+            self.save_error = tr("can't save the print ledger (%s); pending prints won't survive a restart") % e
             return False
         self.save_error = ""
         return True
@@ -308,7 +311,7 @@ class Ledger:
         with self.lock:
             entry = next((u for u in self.unconfirmed if u.get("id") == entry_id), None)
             if entry is None:
-                raise ValueError("That unconfirmed entry is no longer listed; nothing was changed.")
+                raise ValueError(tr("That unconfirmed entry is no longer listed; nothing was changed."))
             done = {**entry, "acknowledged_at": time.time() if now is None else now}
             self.unconfirmed = [u for u in self.unconfirmed if u is not entry]
             self.acknowledged = (self.acknowledged + [done])[-MAX_ACKNOWLEDGED:]
@@ -388,7 +391,7 @@ class UsageMixin:
             self.log("u1control: %s was sent again before the earlier copy finished; only the new one is tracked" % job.path)
         if self.ledger.save_error:
             self.log("u1control: " + self.ledger.save_error)
-            self._notice("U1 Control " + self.ledger.save_error + ".")
+            self._notice(tr("U1 Control %s.") % self.ledger.save_error)
         return job
 
     def _track(self):
@@ -414,24 +417,24 @@ class UsageMixin:
                 self._book(job)
             except Exception as e:  # keep the tracker alive; the job was taken out, so say so
                 self.log("u1control: booking %s failed: %s\n%s" % (job.path, e, traceback.format_exc()))
-                self._notice("Spoolman usage for %s not recorded: %s" % (job.path, e))
+                self._notice(tr("Spoolman usage for %s not recorded: %s") % (job.path, e))
             finally:
                 self.ledger.end_booking(job)
         elif outcome in ("ambiguous", "restart"):
-            why = ("printing before OrcaSlicer closed; how it ended wasn't seen" if outcome == "restart"
-                   else "finished without being seen printing")
+            why = (tr("printing before OrcaSlicer closed; how it ended wasn't seen") if outcome == "restart"
+                   else tr("finished without being seen printing"))
             for head, grams in sorted(job.per_head.items()):
                 self.ledger.unconfirmed_use(_unconfirmed(job, head, grams, why))
             if outcome == "restart":
-                self._notice("%s was printing before OrcaSlicer closed and u1control didn't see how it ended, so its "
-                             "filament use was not recorded. Check Spoolman." % job.path)
+                self._notice(tr("%s was printing before OrcaSlicer closed and u1control didn't see how it ended, so its "
+                             "filament use was not recorded. Check Spoolman.") % job.path)
             else:
-                self._notice("%s finished, but u1control never saw it printing, so its filament use was not recorded. "
-                             "Check Spoolman." % job.path)
+                self._notice(tr("%s finished, but u1control never saw it printing, so its filament use was not recorded. "
+                             "Check Spoolman.") % job.path)
         elif outcome == "failed":
-            self._notice("%s was cancelled or failed; its filament use was not recorded." % job.path)
+            self._notice(tr("%s was cancelled or failed; its filament use was not recorded.") % job.path)
         elif outcome == "expired":
-            self._notice("u1control stopped waiting for %s to finish; its filament use was not recorded." % job.path)
+            self._notice(tr("u1control stopped waiting for %s to finish; its filament use was not recorded.") % job.path)
 
     def _book(self, job):
         """Book one finished job, one Spoolman call per toolhead, each saved as "sending" first. A failed call
@@ -450,7 +453,7 @@ class UsageMixin:
                 bindings = sm.bindings_from_locations([sm.spool_view(s) for s in smc.spools()], job.printer_name)
         except (PrinterError, sm.SpoolmanError, OSError, ValueError) as e:
             self.ledger.retry_later(job)
-            self._notice("Spoolman usage for %s waits for a retry: %s" % (job.path, e))
+            self._notice(tr("Spoolman usage for %s waits for a retry: %s") % (job.path, e))
             return
         job.bindings = bindings
         booked, unlinked = [], []
@@ -462,24 +465,24 @@ class UsageMixin:
                 continue
             if not self.ledger.begin_use(job, head, grams):
                 self.ledger.retry_later(job)   # nothing sent for this head; try again once the file can be saved
-                self._notice("Spoolman usage for %s waits: %s." % (job.path, self.ledger.save_error))
+                self._notice(tr("Spoolman usage for %s waits: %s.") % (job.path, self.ledger.save_error))
                 return
             job.per_head.pop(head)
             try:
                 smc.use_weight(sid, grams)
             except (PrinterError, sm.SpoolmanError, OSError, ValueError) as e:
                 self.ledger.end_use(job, head, False, str(e))
-                self._notice("Spoolman may not have recorded %s g on spool #%d (T%d): %s. Check spool #%d before adding it "
-                             "by hand; u1control won't repeat it." % (round(grams, 2), sid, head + 1, e, sid))
+                self._notice(tr("Spoolman may not have recorded %s g on spool #%d (T%d): %s. Check spool #%d before adding it "
+                             "by hand; u1control won't repeat it.") % (round(grams, 2), sid, head + 1, e, sid))
                 if job.per_head:
                     self.ledger.retry_later(job)
                 return
             self.ledger.end_use(job, head, True)
             booked.append(head)
         if booked:
-            self._notice("Spoolman updated with this print's filament use")
+            self._notice(tr("Spoolman updated with this print's filament use"))
         if unlinked:
-            self._notice("No Spoolman spool was linked to %s; that filament use was not recorded." % ", ".join(unlinked))
+            self._notice(tr("No Spoolman spool was linked to %s; that filament use was not recorded.") % ", ".join(unlinked))
 
     def _job_on_extended(self, job, client):
         with self.lock:
@@ -488,7 +491,7 @@ class UsageMixin:
         status, conclusive = ext.Extended(client).probe()
         firmware = u1.detect_firmware(client.info(), status)
         if firmware["kind"] != "extended" and not conclusive:   # booking now could book it twice: SpoolLink books too
-            raise PrinterError("can't tell yet whether the printer runs the Extended Firmware")
+            raise PrinterError(tr("can't tell yet whether the printer runs the Extended Firmware"))
         return firmware["kind"] == "extended"
 
     def cmd_usage(self):

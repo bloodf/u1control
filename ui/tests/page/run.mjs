@@ -692,6 +692,97 @@ test('X04: an explicit language choice wins over the host and is kept', `
   assert(text(q('[data-tab="settings"]')).includes('Ajustes'), 'back to the host language');
 `, { lang: 'pt_BR' });
 
+test('i18n: host language de_DE gives de, including safety dialogs and errors', `
+  await until(() => last('hello'));
+  eq(document.documentElement.lang, 'de', 'lang attribute');
+  assert(text(q('[data-tab="dash"]')).includes('Übersicht') && text(q('[data-tab="settings"]')).includes('Einstellungen'), 'nav in de');
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  assert(text(byTest('state')).startsWith('Druckt'), 'state translated: ' + text(byTest('state')));
+  await click(byTest('cancel'));
+  assert(btn('Druck abbrechen', dialogEl()) && btn('Weiterdrucken', dialogEl()), 'cancel dialog in de');
+  await no();
+  await click(byTest('estop'));
+  assert(btn('Jetzt stoppen (Not-Aus)', dialogEl()) && btn('Zurück', dialogEl()), 'E-stop dialog in de');
+  await no();
+  await fail(last('cmd', 'spools') || {id: -1}, 'x');
+  await click(byTest('pause'));
+  await fail(last('cmd', 'pause'), 'timeout');
+  assert(alerts().includes('Pause fehlgeschlagen') && alerts().includes('timeout'), 'errors in de, printer text as given: ' + alerts());
+`, { lang: 'de_DE' });
+
+test('i18n: host language es_ES gives es, including safety dialogs and errors', `
+  await until(() => last('hello'));
+  eq(document.documentElement.lang, 'es', 'lang attribute');
+  assert(text(q('[data-tab="dash"]')).includes('Panel') && text(q('[data-tab="settings"]')).includes('Ajustes'), 'nav in es');
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  assert(text(byTest('state')).startsWith('Imprimiendo'), 'state translated: ' + text(byTest('state')));
+  await click(byTest('cancel'));
+  assert(btn('Cancelar impresión', dialogEl()) && btn('Seguir imprimiendo', dialogEl()), 'cancel dialog in es');
+  await no();
+  await click(byTest('estop'));
+  assert(btn('Detener ahora (parada de emergencia)', dialogEl()) && btn('Volver', dialogEl()), 'E-stop dialog in es');
+  await no();
+  await fail(last('cmd', 'spools') || {id: -1}, 'x');
+  await click(byTest('pause'));
+  await fail(last('cmd', 'pause'), 'timeout');
+  assert(alerts().includes('Pausar falló') && alerts().includes('timeout'), 'errors in es, printer text as given: ' + alerts());
+`, { lang: 'es_ES' });
+
+test('i18n: host language zh_CN gives zh-CN, including safety dialogs and errors', `
+  await until(() => last('hello'));
+  eq(document.documentElement.lang, 'zh-CN', 'lang attribute');
+  assert(text(q('[data-tab="dash"]')).includes('仪表盘') && text(q('[data-tab="settings"]')).includes('设置'), 'nav in zh-CN');
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  assert(text(byTest('state')).startsWith('打印中'), 'state translated: ' + text(byTest('state')));
+  await click(byTest('cancel'));
+  assert(btn('取消打印', dialogEl()) && btn('继续打印', dialogEl()), 'cancel dialog in zh-CN');
+  await no();
+  await click(byTest('estop'));
+  assert(btn('立即停止（紧急停止）', dialogEl()) && btn('返回', dialogEl()), 'E-stop dialog in zh-CN');
+  await no();
+  await fail(last('cmd', 'spools') || {id: -1}, 'x');
+  await click(byTest('pause'));
+  await fail(last('cmd', 'pause'), 'timeout');
+  assert(alerts().includes('暂停失败') && alerts().includes('timeout'), 'errors in zh-CN, printer text as given: ' + alerts());
+`, { lang: 'zh_CN' });
+
+test('i18n: Traditional Chinese OrcaSlicer reads Simplified Chinese', `
+  await until(() => last('hello'));
+  eq(document.documentElement.lang, 'zh-CN', 'zh_TW -> zh-CN');
+  assert(text(q('[data-tab="settings"]')).includes('设置'), 'nav in Chinese');
+`, { lang: 'zh_TW' });
+
+test('i18n: unknown host language falls back to English', `
+  await until(() => last('hello'));
+  eq(document.documentElement.lang, 'en', 'fr_FR -> en');
+  assert(text(q('[data-tab="settings"]')).includes('Settings'), 'nav in English');
+`, { lang: 'fr_FR' });
+
+test('i18n: Deutsch, Español and 简体中文 can be chosen by hand and are kept', `
+  await connect();
+  await tab('settings');
+  await pick(byTest('lang'), 'Deutsch');
+  assert(text(q('[data-tab="settings"]')).includes('Einstellungen'), 'switched to German');
+  eq(last('ui_language').value, 'de', 'kept in the plugin settings');
+  await pick(byTest('lang'), 'Español');
+  assert(text(q('[data-tab="settings"]')).includes('Ajustes'), 'switched to Spanish');
+  eq(last('ui_language').value, 'es', 'Spanish kept');
+  await pick(byTest('lang'), '简体中文');
+  assert(text(q('[data-tab="settings"]')).includes('设置'), 'switched to Chinese');
+  eq(last('ui_language').value, 'zh-CN', 'Chinese kept');
+  await pick(byTest('lang'), '自动（English）');
+  eq(last('ui_language').value, 'auto', 'automatic again');
+  assert(text(q('[data-tab="settings"]')).includes('Settings'), 'back to the host language');
+`);
+
+test('i18n: a saved German choice wins over a Chinese host at load', `
+  await until(() => last('hello'));
+  assert(text(q('[data-tab="settings"]')).includes('Einstellungen'), 'German kept although the host is zh_CN');
+`, { lang: 'zh_CN', pref: 'de' });
+
 test('X04: the saved explicit choice wins over the host language at load', `
   await until(() => last('hello'));
   assert(text(q('[data-tab="settings"]')).includes('Settings'), 'English kept although the host is pt_BR');

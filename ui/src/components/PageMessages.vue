@@ -19,8 +19,8 @@ const TONE = { error: 'error', unknown: 'warn', success: 'success', info: 'info'
 const lasting = computed(() => tracker.notices.filter(n => n.kind === 'error' || n.kind === 'unknown'));
 const passing = computed(() => tracker.notices.filter(n => n.kind === 'success' || n.kind === 'info'));
 const waiting = computed(() => [...tracker.pending.values()].filter(p => p.key !== 'spools'));
-/** "Pause failed: timeout" reads as a title and its detail. */
-const split = (text: string) => { const i = text.indexOf(': '); return i < 0 ? [text, ''] : [text.slice(0, i + 1), text.slice(i + 2)]; };
+/** "Pause failed: timeout" reads as a title and its detail (Chinese writes the colon as "："). */
+const split = (text: string) => { const m = /: |：/.exec(text); return m ? [text.slice(0, m.index + 1), text.slice(m.index + m[0].length)] : [text, '']; };
 </script>
 <template>
   <div class="u1-top">
@@ -46,7 +46,7 @@ const split = (text: string) => { const i = text.indexOf(': '); return i < 0 ? [
         <!-- The age ticks every second: it is kept out of the announcement (the app bar's state says it too). -->
         <OuiBanner v-else-if="s.status && statusAge > STALE_STATUS_S" role="none" tone="warn" :title="t('target.staleTitle')" data-test="stale">
           <span class="u1-stale-age" aria-hidden="true">{{ t('target.staleAge', { age: fmt.ago(s.statusAt / 1000, s.now / 1000) }) }}</span></OuiBanner>
-        <OuiBanner v-if="!controlsOff && busy" id="heads-why" role="none" data-test="heads-why" tone="info" :title="t('reason.busy') + '.'">{{ t('busy.body') }}</OuiBanner>
+        <OuiBanner v-if="!controlsOff && busy" id="heads-why" role="none" data-test="heads-why" tone="info" :title="t('reason.busy') + t('common.stop')">{{ t('busy.body') }}</OuiBanner>
       </template>
     </div>
     <section class="notices" :aria-label="t('msg.region')">

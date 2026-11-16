@@ -29,6 +29,7 @@ from files import GCODE_ROOT, FilesMixin, _local_name, _new_file, _safe_path, do
 from moonraker import Moonraker, PrinterError
 from stockview import StockMixin
 from usage import job_key, printer_ident  # noqa: F401  (job_key: used by tests)
+from i18n import tr
 
 LEASE_SECONDS = 6.0
 STATUS_EVERY = 2.0
@@ -194,7 +195,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         with self.lock:
             current, client, target = self.generation, self.client, self.target
         if gen is not None and gen != current:
-            self.publish({"type": "reply", "id": request_id, "error": STALE})
+            self.publish({"type": "reply", "id": request_id, "error": tr(STALE)})
             return
         job = (request_id, command, args, (current, client, target))
         if command in DEDICATED:   # E-stop, pause, cancel and downloads must not queue behind a slow command
@@ -203,7 +204,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             try:
                 self.thumbs.put_nowait(job)
             except queue.Full:
-                self.publish({"type": "reply", "id": request_id, "error": "too many thumbnails waiting"})
+                self.publish({"type": "reply", "id": request_id, "error": tr("too many thumbnails waiting")})
         else:
             self.jobs.put(job)
 
@@ -229,14 +230,14 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def _run(self, request_id, command, args, ctx=None):
         handler = getattr(self, "cmd_" + str(command), None)
         if handler is None:
-            self.publish({"type": "reply", "id": request_id, "error": "unknown command %s" % command})
+            self.publish({"type": "reply", "id": request_id, "error": tr("unknown command %s") % command})
             return
         if ctx is None:
             ctx = self._snapshot()
         gen, client, target = ctx
         pinned = command in URGENT
         if not pinned and not self._current(gen):
-            self.publish({"type": "reply", "id": request_id, "error": STALE})
+            self.publish({"type": "reply", "id": request_id, "error": tr(STALE)})
             return
         try:
             with self._bound(gen, client, target, pinned):
@@ -246,7 +247,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             self.publish({"type": "reply", "id": request_id, "error": str(e)})
         except Exception as e:  # never kill the worker; keep details in the log only
             self.log("u1control: %s failed: %s\n%s" % (command, e, traceback.format_exc()))
-            self.publish({"type": "reply", "id": request_id, "error": "%s failed: %s" % (command, e)})
+            self.publish({"type": "reply", "id": request_id, "error": tr("%s failed: %s") % (command, e)})
 
     def _snapshot(self):
         with self.lock:
@@ -270,9 +271,9 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         else:
             gen, client, target, pinned = ctx
             if not pinned and not self._current(gen):
-                raise PrinterError(STALE)
+                raise PrinterError(tr(STALE))
         if client is None:
-            raise PrinterError(NO_U1)
+            raise PrinterError(tr(NO_U1))
         return gen, client, target
 
     def _client(self):
@@ -335,7 +336,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def _push_status(self):
         gen, client, target = self._snapshot()
         if client is None:
-            raise PrinterError(NO_U1)
+            raise PrinterError(tr(NO_U1))
         with self._bound(gen, client, target):
             with self.lock:
                 check = self.firmware["kind"] == "unknown" or (
@@ -397,7 +398,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         path = EXT_CAMERA if extended else STOCK_CAMERA
         data, _ = client.raw("GET", path + "?t=%d" % int(time.time() * 1000), timeout=4)
         if data[:2] != b"\xff\xd8":
-            raise PrinterError("camera returned no image")
+            raise PrinterError(tr("camera returned no image"))
         with self.lock:
             if gen != self.generation:
                 return   # a picture of the printer that is no longer selected
@@ -423,7 +424,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         with self.lock:
             frame = self.last_frame if gen == self.generation else None
         if not frame or time.monotonic() - frame[1] > SNAPSHOT_MAX_AGE:
-            raise PrinterError("no recent camera picture: start the camera first")
+            raise PrinterError(tr("no recent camera picture: start the camera first"))
         name = _local_name("%s %s.jpg" % (target.name.replace("/", "_"), time.strftime("%Y-%m-%d %H-%M-%S")))
         path, out = _new_file(download_folder(), name)
         with out:
@@ -439,7 +440,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             gen, client, _ = self._ctx()
             data, _ = client.raw("GET", EXT_SCREEN + "?t=%d" % int(time.time() * 1000), timeout=4)
             if data[:8] != b"\x89PNG\r\n\x1a\n":
-                raise PrinterError("remote screen is off: turn on Remote Screen in Settings > Firmware")
+                raise PrinterError(tr("remote screen is off: turn on Remote Screen in Settings > Firmware"))
         except Exception as e:   # the screen has its own error and retry: it must never stop the monitor thread
             self.screen_at = time.monotonic() + SCREEN_RETRY
             self.screen_digest = None
@@ -501,7 +502,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 pick = sm.best_spool(heads[t], spools, exclude=taken)
                 if pick:
                     self._bind(t, pick)
-                    self._notice("T%d now uses Spoolman spool #%d (%s %s)" % (t + 1, pick["id"], pick["vendor"], pick["name"]), gen)
+                    self._notice(tr("T%d now uses Spoolman spool #%d (%s %s)") % (t + 1, pick["id"], pick["vendor"], pick["name"]), gen)
         except (PrinterError, sm.SpoolmanError) as e:
             self._notice("Spoolman: %s" % e, gen)
 
@@ -540,9 +541,11 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             smc.set_location(spool["id"], sm.LOCATION_FMT % (target.name, head + 1))
         except (PrinterError, sm.SpoolmanError) as e:
             self._reconcile()
-            raise sm.SpoolmanError("%sSpoolman did not record spool #%d on T%d (%s); links reloaded from Spoolman"
-                                   % ("T%d now shows that filament, but " % (head + 1) if wrote else "",
-                                      spool["id"], head + 1, e)) from e
+            raise sm.SpoolmanError(
+                tr("T%d now shows that filament, but Spoolman did not record spool #%d on T%d (%s); links reloaded "
+                   "from Spoolman") % (head + 1, spool["id"], head + 1, e) if wrote else
+                tr("Spoolman did not record spool #%d on T%d (%s); links reloaded from Spoolman")
+                % (spool["id"], head + 1, e)) from e
         self._set_binding(gen, head, spool["id"])
         if previous and previous != spool["id"]:
             try:
@@ -550,8 +553,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 smc.set_location(previous, "")
             except (PrinterError, sm.SpoolmanError) as e:
                 self._reconcile()
-                raise sm.SpoolmanError("spool #%d is linked to T%d, but spool #%d still lists T%d in Spoolman (%s); "
-                                       "clear its location there" % (spool["id"], head + 1, previous, head + 1, e)) from e
+                raise sm.SpoolmanError(tr("spool #%d is linked to T%d, but spool #%d still lists T%d in Spoolman (%s); "
+                                       "clear its location there") % (spool["id"], head + 1, previous, head + 1, e)) from e
 
     def _set_binding(self, gen, head, spool_id):
         with self.lock:
@@ -575,7 +578,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         sure = conclusive or firmware["kind"] == "extended"
         with self.lock:
             if gen != self.generation:
-                raise PrinterError(STALE)
+                raise PrinterError(tr(STALE))
             if sure or self.firmware["kind"] != "extended":   # no answer never turns Extended back into stock
                 self.firmware = firmware
             self.firmware_sure = sure or self.firmware["kind"] == "extended"
@@ -593,7 +596,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         """Console: send, then read back the printer's replies logged since (Moonraker's gcode store)."""
         script = str(script or "").strip()
         if not script:
-            raise ValueError("empty command")
+            raise ValueError(tr("empty command"))
         client = self._client()
         try:
             since = (self._gcode_store(client, 1) or [{}])[-1].get("time", 0.0)
@@ -601,20 +604,20 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             since, why = None, str(e)
         client.gcode(script, timeout=600)
         if since is None:
-            return {"ok": True, "output": [], "note": "printer replies unavailable (%s)" % why}
+            return {"ok": True, "output": [], "note": tr("printer replies unavailable (%s)") % why}
         try:
             entries = self._gcode_store(client, GCODE_STORE_COUNT)
         except (PrinterError, OSError, ValueError) as e:
-            return {"ok": True, "output": [], "note": "printer replies unavailable (%s)" % e}
+            return {"ok": True, "output": [], "note": tr("printer replies unavailable (%s)") % e}
         return {"ok": True, "output": _console_lines(entries, since),
-                "note": "replies the printer logged since this command; other clients' messages can show up too"}
+                "note": tr("replies the printer logged since this command; other clients' messages can show up too")}
 
     @staticmethod
     def _gcode_store(client, count):
         result = client.request("GET", "/server/gcode_store", {"count": count}) or {}
         entries = result.get("gcode_store") if isinstance(result, dict) else None
         if not isinstance(entries, list):
-            raise ValueError("unexpected gcode store answer")
+            raise ValueError(tr("unexpected gcode store answer"))
         return [e for e in entries if isinstance(e, dict)]
 
     def cmd_pause(self):
@@ -645,18 +648,18 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         if mode == "idle":
             return self._gcode("SET_PURIFIER_MODE MODE=0")
         if mode not in u1.PURIFIER:
-            raise ValueError("bad purifier mode")
+            raise ValueError(tr("bad purifier mode"))
         return self._gcode(u1.PURIFIER[mode])
 
     def cmd_preferences(self, prefs):
         """Toggle the printer's print preferences outside a print (as the touchscreen does)."""
         prefs = prefs or {}
         if "unload_when_done" in prefs:
-            raise ValueError("Unload when done is chosen for each print, per toolhead, in the U1 print setup pop-up")
+            raise ValueError(tr("Unload when done is chosen for each print, per toolhead, in the U1 print setup pop-up"))
         clean = {k: bool(v) for k, v in prefs.items() if k in u1.PREF_KEYS}
         params = ["%s=%d" % (param, 1 if clean[key] else 0) for key, param, _, _, _ in u1.PREFERENCES if key in clean]
         if not params:
-            raise ValueError("nothing to change")
+            raise ValueError(tr("nothing to change"))
         self._require_idle()
         return self._gcode("SET_PRINT_PREFERENCES " + " ".join(params))
 
@@ -685,7 +688,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         """Tap the printer's touchscreen at framebuffer pixel (x, y) through the remote screen."""
         x, y = int(x), int(y)
         if not (0 <= x < 4096 and 0 <= y < 4096):
-            raise ValueError("touch outside the screen")
+            raise ValueError(tr("touch outside the screen"))
         self._client().raw("POST", "%s?a=tap&x=%d&y=%d" % (EXT_TOUCH, x, y), b"", timeout=4)
         with self.lock:
             self.screen_at = 0.0   # show the result of the tap right away
@@ -699,14 +702,14 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def _require_idle(self):
         view = u1.summarize(self._client().query(u1.STATUS_OBJECTS))
         if u1.machine_busy(view):
-            raise PrinterError("the U1 is busy (%s)" % (view["machine_state"] or view["state"]).lower())
+            raise PrinterError(tr("the U1 is busy (%s)") % (view["machine_state"] or view["state"]).lower())
         return view
 
     # maintenance -------------------------------------------------------------
 
     def cmd_calibrate(self, kind):
         if kind not in u1.CALIBRATIONS:
-            raise ValueError("unknown calibration")
+            raise ValueError(tr("unknown calibration"))
         self._require_idle()
         return self._gcode(u1.CALIBRATIONS[kind])
 
@@ -717,7 +720,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             return self._gcode("SDCARD_PRINT_PL_RESTORE")
         if action == "discard":
             return self._gcode("SDCARD_PRINT_PL_CLEAR_ENV")
-        raise ValueError("bad action")
+        raise ValueError(tr("bad action"))
 
     # spoolman --------------------------------------------------------------
 
@@ -729,7 +732,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         spools = [sm.spool_view(s) for s in smc.spools()]
         with self.lock:
             if gen != self.generation:
-                raise PrinterError(STALE)
+                raise PrinterError(tr(STALE))
             self.spools = spools
             if self.firmware["kind"] != "extended":
                 self.bindings = sm.bindings_from_locations(spools, target.name)
@@ -745,7 +748,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             spool = next((s for s in self.spools if s["id"] == int(spool_id)), None)
             stock = self.firmware["kind"] != "extended"
         if spool is None:
-            raise ValueError("spool #%s not found" % spool_id)
+            raise ValueError(tr("spool #%s not found") % spool_id)
         if stock and self._ctx()[2].spoolman_write_printer:
             _check_tag(self._require_idle(), head, force)   # re-read right before writing the head
         self._bind(head, spool, bool(force))
@@ -771,7 +774,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
 
     def _extended(self):
         if self.firmware["kind"] != "extended":
-            raise PrinterError("this needs the U1 Extended Firmware (with Advanced Mode on)")
+            raise PrinterError(tr("this needs the U1 Extended Firmware (with Advanced Mode on)"))
         return ext.Extended(self._client())
 
     def cmd_ext_settings(self):
@@ -781,21 +784,22 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def cmd_ext_set(self, setting_id, value, inputs=None):
         e = self._extended()
         if setting_id not in ext.PRINT_SAFE:
-            self._refuse_while_printing("changing %s restarts Klipper or reboots the printer, which" % setting_id)
+            self._refuse_while_printing(tr("the U1 is busy (%s); changing %s restarts Klipper or reboots the printer, "
+                                           "which would end the print. Try again once it has finished."), setting_id)
         return e.set(setting_id, value, inputs)
 
     def cmd_ext_action(self, action_id):
         e = self._extended()
         if action_id in ext.PRINT_ENDING_ACTIONS:
-            self._refuse_while_printing(action_id)
+            self._refuse_while_printing(tr("the U1 is busy (%s); %s would end the print. Try again once it has "
+                                           "finished."), action_id)
         return e.action(action_id)
 
-    def _refuse_while_printing(self, what):
+    def _refuse_while_printing(self, message, what):
         """Only a print blocks it: a stuck machine state is what a restart is for."""
         state = u1.summarize(self._client().query(u1.STATUS_OBJECTS))["state"]
         if u1.is_busy(state):
-            raise PrinterError("the U1 is busy (%s); %s would end the print. Try again once it has finished."
-                               % (state, what))
+            raise PrinterError(message % (state, what))
 
 
 
@@ -804,7 +808,7 @@ def _check_tag(view, head, force):
     """A manual write over a head's RFID data needs the user's confirmation (force). Official spools are also
     refused by the firmware without FORCE=1; third-party tags are not, so this is the only guard for them."""
     if view["rfid"][head] and not view["heads"][head].get("official") and not force:
-        raise PrinterError("T%d holds an RFID-tagged spool; confirm overwriting its tag data first" % (head + 1))
+        raise PrinterError(tr("T%d holds an RFID-tagged spool; confirm overwriting its tag data first") % (head + 1))
 
 
 def _console_lines(entries, since):
@@ -815,7 +819,7 @@ def _console_lines(entries, since):
         text = str(e.get("message") or "")
         size += len(text)
         if size > CONSOLE_MAX_CHARS:
-            lines.append("… (more in the printer's console)")
+            lines.append(tr("… (more in the printer's console)"))
             break
         lines.append(text)
     return lines
@@ -824,5 +828,5 @@ def _console_lines(entries, since):
 def _head(value):
     head = int(value)
     if not 0 <= head < u1.TOOLHEADS:
-        raise ValueError("bad toolhead")
+        raise ValueError(tr("bad toolhead"))
     return head

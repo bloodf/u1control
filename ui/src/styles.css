@@ -5,6 +5,9 @@ html, body, #app { min-height: 100%; }
 /* Narrow bar: the tabs wrap under Emergency stop. Keep a clear gap so a tab press never lands on it. */
 @container oui-appbar (max-width: 760px) { .oui-appbar-actions { padding-bottom: var(--oui-s3); } }
 
+/* Longer labels (German, Spanish) on a narrow tab: a panel's buttons wrap under each other instead of pushing the page wider. */
+.oui-panel-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
+
 /* Page-level messages, under the app bar on every tab. The live regions stay in the DOM while empty (what is added
    later is then announced); only filled ones take space. */
 .u1-top { padding: 0 var(--oui-s4); }

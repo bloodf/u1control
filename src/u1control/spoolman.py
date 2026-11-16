@@ -19,6 +19,7 @@ import urllib.request
 
 import u1
 from moonraker import PrinterError, _NO_PROXY
+from i18n import tr
 
 LOCATION_FMT = "%s T%d"
 
@@ -48,7 +49,7 @@ class Spoolman:
             except PrinterError:
                 pass
         if not self.url:
-            raise SpoolmanError("Spoolman not configured: set its URL in u1control settings")
+            raise SpoolmanError(tr("Spoolman not configured: set its URL in u1control settings"))
         self.via_moonraker = False
         self.call("GET", "/v1/health")
         return {"via": "direct", "active_spool": None}
@@ -70,13 +71,13 @@ class Spoolman:
             with self._open(req, timeout=self.timeout) as resp:
                 raw = resp.read(32 * 1024 * 1024)
         except urllib.error.HTTPError as e:
-            raise SpoolmanError("Spoolman said HTTP %d" % e.code)
+            raise SpoolmanError(tr("Spoolman said HTTP %d") % e.code)
         except (OSError, ValueError, http.client.HTTPException) as e:
-            raise SpoolmanError("can't reach Spoolman at %s (%s)" % (self.url, getattr(e, "reason", e)))
+            raise SpoolmanError(tr("can't reach Spoolman at %s (%s)") % (self.url, getattr(e, "reason", e)))
         try:
             return json.loads(raw.decode("utf-8")) if raw else None
         except ValueError as e:   # a proxy's login page, or not Spoolman at that address
-            raise SpoolmanError("%s didn't answer like Spoolman (%s)" % (self.url, e)) from e
+            raise SpoolmanError(tr("%s didn't answer like Spoolman (%s)") % (self.url, e)) from e
 
     # ------------------------------------------------------------------ api
 

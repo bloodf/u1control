@@ -8,6 +8,7 @@ import posixpath
 import re
 
 from moonraker import PrinterError
+from i18n import tr
 
 GCODE_ROOT = "gcodes"
 FOLDER_NAME_RE = re.compile(r"^[\w .-]{1,64}$")
@@ -60,14 +61,14 @@ class FilesMixin:
             thumb = thumbs[0]["relative_path"]
         thumb = str(thumb)
         if not THUMB_RE.match(thumb) or ".." in thumb.split("/"):
-            raise ValueError("bad thumbnail path")
+            raise ValueError(tr("bad thumbnail path"))
         data = self._client().thumbnail(folder + thumb)
         return "data:image/png;base64," + base64.b64encode(data).decode()
 
     def cmd_delete(self, path, is_dir=False):
         path = _safe_path(path)
         if "/" not in path:
-            raise ValueError("refusing to delete a file root")
+            raise ValueError(tr("refusing to delete a file root"))
         if is_dir:
             return self._client().delete_directory(path, force=True)
         return self._client().delete_file(path)
@@ -76,14 +77,14 @@ class FilesMixin:
         path = _safe_path(path)
         name = path.rsplit("/", 1)[-1]
         if "/" not in path or name.startswith(".") or not FOLDER_NAME_RE.match(name):
-            raise ValueError("folder names use letters, digits, spaces, '-', '_' and '.'")
+            raise ValueError(tr("folder names use letters, digits, spaces, '-', '_' and '.'"))
         return self._client().create_directory(path)
 
     def cmd_folders(self, root=GCODE_ROOT, limit=200):
         """Every folder under a root (breadth first, at most `limit`), for the Move dialog."""
         root = _safe_path(root)
         if "/" in root:
-            raise ValueError("folders are listed from a file root")
+            raise ValueError(tr("folders are listed from a file root"))
         client, out, todo = self._client(), [root], [root]
         while todo and len(out) < limit:
             here = todo.pop(0)
@@ -96,11 +97,11 @@ class FilesMixin:
         """Move a file or folder into another folder of the same root (keeps its name)."""
         path, folder = _safe_path(path), _safe_path(folder)
         if "/" not in path:
-            raise ValueError("refusing to move a file root")
+            raise ValueError(tr("refusing to move a file root"))
         if path.split("/")[0] != folder.split("/")[0]:
-            raise ValueError("files stay in their own root")
+            raise ValueError(tr("files stay in their own root"))
         if folder == path or folder.startswith(path + "/"):
-            raise ValueError("can't move a folder into itself")
+            raise ValueError(tr("can't move a folder into itself"))
         dest = folder + "/" + path.rsplit("/", 1)[-1]
         if dest == path:
             return {"path": path}
@@ -114,22 +115,22 @@ class FilesMixin:
         extension (the printer only lists and prints those)."""
         path = _safe_path(path)
         if "/" not in path:
-            raise ValueError("refusing to rename a file root")
+            raise ValueError(tr("refusing to rename a file root"))
         folder, old = path.rsplit("/", 1)
         name = str(name or "").strip()
         if not name or name.startswith(".") or len(name) > NAME_MAX or UNSAFE_NAME_RE.search(name):
-            raise ValueError("a name can't be empty, start with '.', be longer than %d characters or hold "
-                             "/ \\ : * ? \" < > | or control characters" % NAME_MAX)
+            raise ValueError(tr("a name can't be empty, start with '.', be longer than %d characters or hold "
+                             "/ \\ : * ? \" < > | or control characters") % NAME_MAX)
         if name == old:
             return {"path": path}
         files, dirs = self._names(folder)
         if old not in files and old not in dirs:
-            raise ValueError("%s is no longer in %s; nothing was renamed" % (old, folder))
+            raise ValueError(tr("%s is no longer in %s; nothing was renamed") % (old, folder))
         if name in files or name in dirs:
-            raise ValueError("%s already has something named %s; nothing was renamed" % (folder, name))
+            raise ValueError(tr("%s already has something named %s; nothing was renamed") % (folder, name))
         if old in files and folder.split("/")[0] == GCODE_ROOT and old.lower().endswith(GCODE_EXTS) \
                 and not name.lower().endswith(GCODE_EXTS):
-            raise ValueError("a print file keeps a G-code extension (.gcode, .gco or .g)")
+            raise ValueError(tr("a print file keeps a G-code extension (.gcode, .gco or .g)"))
         dest = folder + "/" + name
         self._client().move(path, dest)
         return {"path": dest}
@@ -144,7 +145,7 @@ class FilesMixin:
         """Moonraker's move replaces what has that name: refuse instead, so nothing is lost."""
         files, dirs = self._names(folder)
         if name in files or name in dirs:
-            raise ValueError("%s already has something named %s; nothing was moved" % (folder, name))
+            raise ValueError(tr("%s already has something named %s; nothing was moved") % (folder, name))
 
     def cmd_timelapses(self):
         """The U1's time-lapse videos, newest first (see timelapse_videos). supported is False when the firmware
@@ -160,10 +161,10 @@ class FilesMixin:
         COVER_MAX bytes from the time-lapse folder. Runs on the thumbnail worker."""
         path = _safe_path(path, (TIMELAPSE_ROOT,))
         if not path.lower().endswith(PICTURE_EXTS):
-            raise ValueError("not a time-lapse picture: %r" % path)
+            raise ValueError(tr("not a time-lapse picture: %r") % path)
         data = self._client().file_bytes(path, COVER_MAX)
         if not data.startswith(b"\xff\xd8"):
-            raise PrinterError("%s is not a JPEG picture" % path)
+            raise PrinterError(tr("%s is not a JPEG picture") % path)
         return "data:image/jpeg;base64," + base64.b64encode(data).decode()
 
     def cmd_timelapse_delete(self, path):
@@ -174,7 +175,7 @@ class FilesMixin:
         client = self._client()
         video = next((v for v in timelapse_videos(client.file_list(TIMELAPSE_ROOT)) if v["path"] == path), None)
         if video is None:
-            raise ValueError("%s is not a time-lapse on the printer; nothing was deleted" % path)
+            raise ValueError(tr("%s is not a time-lapse on the printer; nothing was deleted") % path)
         doomed = video["pictures"] + [path]
         for item in doomed:
             client.delete_file(item)
@@ -198,12 +199,12 @@ class FilesMixin:
             self._client().download_to(path, open_out)
         except BaseException as e:
             if part:
-                raise PrinterError("download interrupted, partial file kept at %s (%s)" % (part[0], e))
+                raise PrinterError(tr("download interrupted, partial file kept at %s (%s)") % (part[0], e))
             raise
         try:
             return _publish(part[0], folder, name)
         except OSError as e:
-            raise PrinterError("download kept at %s: couldn't give it its final name (%s)" % (part[0], e)) from e
+            raise PrinterError(tr("download kept at %s: couldn't give it its final name (%s)") % (part[0], e)) from e
 
 
 def timelapse_videos(listing):
@@ -283,7 +284,7 @@ def _publish(src, folder, name):
         except FileExistsError:
             continue
         return target
-    raise PrinterError("too many files named %s in %s" % (name, folder))
+    raise PrinterError(tr("too many files named %s in %s") % (name, folder))
 
 
 def _link_new(src, dst):
@@ -307,7 +308,7 @@ def _new_file(folder, name):
             return target, open(target, "xb")
         except FileExistsError:
             continue
-    raise PrinterError("too many files named %s in %s" % (name, folder))
+    raise PrinterError(tr("too many files named %s in %s") % (name, folder))
 
 
 def _safe_path(path, roots=FILE_ROOTS):
@@ -315,5 +316,5 @@ def _safe_path(path, roots=FILE_ROOTS):
     path = str(path or "").strip().strip("/")
     parts = [p for p in path.split("/") if p not in ("", ".")]
     if not parts or parts[0] not in roots or ".." in parts:
-        raise ValueError("bad path %r" % path)
+        raise ValueError(tr("bad path %r") % path)
     return "/".join(parts)

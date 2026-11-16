@@ -43,10 +43,16 @@ test('move targets exclude the current folder, the item and its subfolders', () 
 });
 
 test('locale: explicit choice, then host (pt_BR), then browser, then English', () => {
-  assert.equal(normalizeLocale('pt_BR'), 'pt-BR'); assert.equal(normalizeLocale('pt'), 'pt-BR'); assert.equal(normalizeLocale('de_DE'), null);
+  assert.equal(normalizeLocale('pt_BR'), 'pt-BR'); assert.equal(normalizeLocale('pt'), 'pt-BR'); assert.equal(normalizeLocale('fr_FR'), null);
+  assert.equal(normalizeLocale('de_DE'), 'de'); assert.equal(normalizeLocale('es'), 'es'); assert.equal(normalizeLocale('es-MX'), 'es');
+  assert.equal(normalizeLocale('zh_CN'), 'zh-CN'); assert.equal(normalizeLocale('zh_TW'), 'zh-CN'); assert.equal(normalizeLocale('zh-Hant-TW'), 'zh-CN');
+  assert.equal(normalizeLocale('ESP'), null); assert.equal(normalizeLocale(''), null); assert.equal(normalizeLocale(undefined), null);
   assert.equal(resolveLocale('en', 'pt_BR', ['pt-BR']), 'en');
+  assert.equal(resolveLocale('de', 'zh_CN', ['es']), 'de'); assert.equal(resolveLocale('zh-CN', 'de', []), 'zh-CN');
   assert.equal(resolveLocale('auto', 'pt_BR', ['en-US']), 'pt-BR');
-  assert.equal(resolveLocale('auto', null, ['de-DE', 'pt-PT']), 'pt-BR');
+  assert.equal(resolveLocale('auto', 'es_ES', ['en-US']), 'es');
+  assert.equal(resolveLocale('auto', null, ['fr-FR', 'pt-PT']), 'pt-BR');
+  assert.equal(resolveLocale('auto', null, ['de-DE', 'pt-PT']), 'de');
   assert.equal(resolveLocale('auto', 'fr_FR', ['fr']), 'en');
   assert.equal(interpolate('T{n} {x}', { n: 2 }), 'T2 {x}');
 });

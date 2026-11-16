@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "u1control"
-MODULES = ("moonraker", "u1", "gcode", "agent", "extended", "spoolman", "settings", "spooler_bridge", "peers", "usage", "files", "stockview", "service")  # dependency order
+MODULES = ("i18n_text", "i18n", "moonraker", "u1", "gcode", "agent", "extended", "spoolman", "settings", "spooler_bridge", "peers", "usage", "files", "stockview", "service")  # dependency order
 ASSETS = {"APP_HTML": "app.html", "ICON_SVG": "icon.svg"}   # app.html: the compiled Vue page (ui/, npm run build)
 def page_html(name):
     """ui/<name> as shipped: the compiled page draws its icons from the shared foundation (no icon map to inject)."""

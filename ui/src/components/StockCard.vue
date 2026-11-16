@@ -24,7 +24,7 @@ const usable = computed(() => !s.stockError && sp.value?.state === 'active' && s
 const blocker = computed<{ state: 'error' | 'loading' | 'offline' | 'empty'; text: string } | null>(() => {
   if (s.stockError) return { state: 'error', text: t('stock.failed', { error: s.stockError }) };
   if (!s.stock) return { state: 'loading', text: t('stock.loading') };
-  if (sp.value!.state !== 'active') return { state: 'offline', text: tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text) + (sp.value!.detail ? ` (${sp.value!.detail})` : '') };
+  if (sp.value!.state !== 'active') return { state: 'offline', text: sp.value!.detail ? t('common.paren', { a: tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text), b: sp.value!.detail }) : tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text) };
   const k = sk.value!;
   if (usable.value) return null;
   const text = k.code ? tMaybe(`stock.code.${k.code}`, k.text, { detail: k.detail ?? '' }) : k.text;
