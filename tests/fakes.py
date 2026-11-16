@@ -60,7 +60,8 @@ class FakePrinter:
     def __init__(self, version="2.0.0.205", state="standby", extended=False, spoolman=False):
         self.version, self.state, self.extended, self.spoolman = version, state, extended, spoolman
         self.scripts, self.deleted, self.started = [], [], []
-        self.uploads, self.order, self.last_body = {}, [], b""   # /server/files/upload: name -> bytes; request order
+        self.uploads, self.order, self.last_body = {}, [], b""
+        self.hold = None   # threading.Event: an M109 script waits for it (a G-code line that takes long)   # /server/files/upload: name -> bytes; request order
         self.files = {}   # "camera/t.mp4" -> bytes served under /server/files/
         self.task = task_config()
         self.tags = {}   # head -> filament_detect info dict
@@ -184,6 +185,8 @@ class FakePrinter:
                 q = dict(urllib.parse.parse_qsl(u.query))
                 body = self._body()
                 if u.path == "/printer/gcode/script":
+                    if fake.hold is not None and body.get("script", "").startswith("M109"):
+                        fake.hold.wait(10)   # a long G-code line (heating) the test releases
                     if fake.state == "printing" and "SET_PRINT_EXTRUDER_MAP" in body.get("script", ""):
                         return self._send(400, {"error": {"message": "printing"}})
                     fake.scripts.append(body.get("script"))
@@ -196,6 +199,9 @@ class FakePrinter:
                     fake.uploads[name] = data
                     fake.order.append(("upload", name))
                     return self._send(201, {"result": {"item": {"path": name, "root": "gcodes"}, "action": "create_file"}})
+                if u.path in ("/printer/print/pause", "/printer/print/resume", "/printer/print/cancel"):
+                    fake.order.append((u.path.rsplit("/", 1)[1], None))
+                    return self._send(200, {"result": "ok"})
                 if u.path == "/printer/print/start":
                     fake.started.append(body.get("filename"))
                     fake.order.append(("start", body.get("filename")))

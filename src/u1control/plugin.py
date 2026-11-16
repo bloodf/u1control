@@ -661,6 +661,7 @@ STAGE_CREATE, STAGE_UPLOAD, STAGE_SENDING, STAGE_FINISHED, STAGE_ERROR = 0, 1, 3
 AGENT_POLL = 2.0         # s between status queries while OrcaSlicer is connected to the U1
 
 
+URGENT_KINDS = ("pause", "resume", "stop")   # Device tab commands sent at once, on their own thread
 DEVICE_GCODE_TIMEOUT = 600   # s: a Device tab G-code line may run long (homing, heating), as the console's cmd_gcode
 
 
@@ -753,8 +754,12 @@ class U1Agent(pa.PrinterAgentBase):
         except Exception as e:
             log("host callback %s failed: %r" % (key, e))
 
+    def _dev_id(self):
+        with self._lock:
+            return self.dev_id
+
     def _message(self, payload):
-        self._emit("local_message", self.dev_id, json.dumps(payload))
+        self._emit("local_message", self._dev_id(), json.dumps(payload))
 
     # discovery and selection ---------------------------------------------------------------------------
     def start_discovery(self, start, sending):
@@ -801,6 +806,13 @@ class U1Agent(pa.PrinterAgentBase):
         with self._lock:
             self._stop.set()
             self.view, self.client = None, None
+            while True:   # queued commands were for this printer: drop them (the worker also checks the client)
+                try:
+                    if self._commands.get_nowait() is None:
+                        self._commands.put(None)   # keep a pending worker stop
+                        break
+                except queue.Empty:
+                    break
         self._wake.set()
         return OK
 
@@ -841,7 +853,11 @@ class U1Agent(pa.PrinterAgentBase):
         while not stop.is_set():
             try:
                 if not self.firmware:
-                    self.firmware = str((client.info() or {}).get("software_version") or "")
+                    firmware = str((client.info() or {}).get("software_version") or "")
+                    with self._lock:   # as the view below: never about the printer of an earlier connection
+                        if stop.is_set():
+                            return
+                        self.firmware = firmware
                 view = u1.summarize(client.query(u1.STATUS_OBJECTS))
                 with self._lock:   # a disconnect or reconnect meanwhile: this answer is about the old printer
                     if stop.is_set():
@@ -849,8 +865,9 @@ class U1Agent(pa.PrinterAgentBase):
                     self.view = view
                 if not connected:
                     connected = True   # MRA perform_connection_async: ConnectStatusOk, then printer_connected
-                    self._emit("local_connect", 0, self.dev_id, "0")
-                    self._emit("printer_connected", self.dev_id)
+                    dev_id = self._dev_id()
+                    self._emit("local_connect", 0, dev_id, "0")
+                    self._emit("printer_connected", dev_id)
                 self._message(agent.push_status(view, self._filament_ids.get))
             except Exception as e:
                 if connected:
@@ -884,9 +901,14 @@ class U1Agent(pa.PrinterAgentBase):
             return OK
         if kind == "noop":
             return OK
-        client = self.client
-        if client is None or self.view is None:
+        with self._lock:
+            client, view = self.client, self.view
+        if client is None or view is None:
             return ERR_CONNECT
+        if kind in URGENT_KINDS:   # never behind a long G-code line in the queue (as the tab's URGENT/DEDICATED)
+            threading.Thread(target=self._run_command, args=(client, command), name="u1control-device-urgent",
+                             daemon=True).start()
+            return OK
         with self._lock:
             if self._worker is None or not self._worker.is_alive():
                 self._worker = threading.Thread(target=self._command_worker, name="u1control-device", daemon=True)
@@ -895,12 +917,19 @@ class U1Agent(pa.PrinterAgentBase):
         return OK
 
     def _command_worker(self):
-        """One thread runs the Device tab's commands in the order they came."""
+        """One thread runs the Device tab's G-code lines and light switch in the order they came. A command queued
+        for a printer that is no longer the connected one is dropped, never sent."""
         while True:
             item = self._commands.get()
             if item is None:
                 return
-            self._run_command(*item)
+            client, command = item
+            with self._lock:
+                current = self.client
+            if client is not current:
+                log("agent: Device tab %s dropped: the printer was disconnected" % command["kind"])
+                continue
+            self._run_command(client, command)
 
     def _run_command(self, client, command):
         kind, ok = command["kind"], False

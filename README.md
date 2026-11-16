@@ -137,7 +137,8 @@ Then **Print** in OrcaSlicer opens its own print dialog:
 - **Auto Bed Leveling**, **Flow Dynamics Calibration** and **Timelapse** start ticked in OrcaSlicer's
   dialog, so U1 Control's own print options decide what is used: an option runs only when its box is ticked
   **and** it is on in U1 Control (by default bed leveling and flow calibration are on, time-lapse is off).
-  Unticking a box turns that option off for this print. Auto-refill, tangle detection, unload when done and
+  Unticking a box turns that option off. OrcaSlicer remembers the box; tick it again to go back to
+  U1 Control's setting. Auto-refill, tangle detection, unload when done and
   light off when done come from the U1 Control settings (the options you last chose), or the printer's own.
 - u1control applies the same G-code fixes as above, then uploads the file, sends the toolhead map and
   options, and starts the print.
@@ -165,7 +166,7 @@ A janela **Imprimir** do próprio OrcaSlicer passa a mostrar as quatro cabeças 
 filamento e cor. As caixas **Auto Bed Leveling**, **Flow Dynamics Calibration** e **Timelapse** já vêm
 marcadas, então as opções de impressão do U1 Control decidem: uma opção só roda com a caixa marcada **e**
 ligada no U1 Control (por padrão nivelamento e calibração de fluxo ligados, time-lapse desligado); desmarcar
-a caixa a desliga naquela impressão. Reabastecimento automático, detecção de
+a caixa a desliga. O OrcaSlicer lembra a caixa; marque-a de novo para voltar ao ajuste do U1 Control. Reabastecimento automático, detecção de
 emaranhado, descarregar ao terminar e apagar a luz ao terminar vêm dos ajustes do U1 Control. O u1control
 aplica as mesmas correções de G-code, envia o arquivo, o mapa das cabeças e as opções, e inicia a
 impressão. Uma U1 ocupada, uma cabeça vazia ou outro material no slot escolhido impedem o envio, com o

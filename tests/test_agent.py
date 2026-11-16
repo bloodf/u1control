@@ -371,6 +371,43 @@ class PluginAgentTests(unittest.TestCase):
         worker.join(5)
         self.assertFalse(worker.is_alive())
 
+    def test_stop_is_sent_at_once_while_a_long_gcode_line_runs(self):
+        import threading
+        self.fake.hold = threading.Event()
+        self.addCleanup(self.fake.hold.set)
+        self.connect()
+        heat = json.dumps({"print": {"command": "gcode_line", "param": "M109 S220", "sequence_id": "1"}})
+        light = json.dumps({"system": {"command": "ledctrl", "led_node": "chamber_light", "led_mode": "on"}})
+        self.agent.send_message_to_printer("u1", heat, 0, 0)
+        self.agent.send_message_to_printer("u1", light, 0, 0)          # queued behind M109
+        for kind in ("pause", "resume", "stop"):
+            self.assertEqual(self.agent.send_message_to_printer("u1", json.dumps({"print": {"command": kind}}), 0, 0), 0)
+        self.assertTrue(wait_for(lambda: [k for k, _ in self.fake.order if k in ("pause", "resume", "cancel")]
+                                 and ("cancel", None) in self.fake.order))
+        self.assertEqual(self.fake.scripts, [])                         # M109 and the light still waiting
+        self.fake.hold.set()
+        self.assertTrue(wait_for(lambda: self.fake.scripts == ["M109 S220", agent.LIGHT_ON]))
+
+    def test_queued_commands_never_reach_the_old_printer(self):
+        import threading
+        self.fake.hold = threading.Event()
+        self.addCleanup(self.fake.hold.set)
+        self.connect()
+        heat = json.dumps({"print": {"command": "gcode_line", "param": "M109 S220", "sequence_id": "1"}})
+        late = json.dumps({"print": {"command": "gcode_line", "param": "M117 late", "sequence_id": "2"}})
+        self.agent.send_message_to_printer("u1", heat, 0, 0)
+        self.assertTrue(wait_for(lambda: self.agent._commands.empty()))   # M109 taken, waiting on the printer
+        self.agent.send_message_to_printer("u1", late, 0, 0)
+        old = self.agent.client
+        self.agent.disconnect_printer()
+        self.assertTrue(self.agent._commands.empty())                   # dropped at disconnect
+        self.agent._commands.put((old, {"kind": "gcode", "script": "M117 stale", "seq": "3"}))   # a race's leftover
+        self.fake.hold.set()
+        self.assertTrue(wait_for(lambda: self.agent._commands.empty()))
+        self.agent._commands.put(None)
+        self.agent._worker.join(5)
+        self.assertEqual(self.fake.scripts, ["M109 S220"])              # only what was already running
+
     def test_device_gcode_waits_like_the_console(self):
         seen = []
         client = type("C", (), {"gcode": lambda self, script, timeout=30: seen.append(timeout)})()
@@ -408,6 +445,21 @@ class PluginAgentTests(unittest.TestCase):
         self_fake = self.fake
         self.agent._poll(stop, Late())
         self.assertIsNone(self.agent.view)
+
+    def test_poll_firmware_answer_after_disconnect_is_dropped(self):
+        import threading
+        stop = threading.Event()
+
+        class Late:
+            def info(self):
+                stop.set()   # the agent was disconnected while this answer was on its way
+                return {"software_version": "old printer"}
+
+            def query(self, objects):
+                raise AssertionError("no status query after the disconnect")
+        self.agent.firmware = ""
+        self.agent._poll(stop, Late())
+        self.assertEqual(self.agent.firmware, "")
 
     def test_stale_work_files_are_swept_on_load(self):
         work = os.path.join(self.ns["_storage"](), "jobs")
