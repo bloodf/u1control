@@ -206,10 +206,14 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
     [the Spooler contract](docs/spooler-contract.md#filament-use) for what is and isn't covered).
   - With the Extended Firmware: the printer's touchscreen (Remote Screen), live, and tappable.
   - Resume or discard a print interrupted by a power cut, and see the printer's error list.
-- **Files:** browse, print and delete G-code files; browse, save and delete time-lapses. Create
+- **Files:** browse, print and delete G-code files. Create
   folders, rename and move files and folders (**Move**, or drag a row onto a folder), and filter the
   list by name. Each print file shows its estimated time and filament. Nothing is ever replaced: a
   rename or move onto a name the folder already has is refused.
+  - **Time-lapses:** every video the U1 recorded, newest first, with its cover picture, the print's
+    name, the date and the size. **Save** copies the video to `Downloads/u1control` on your computer;
+    **Delete** asks first, then removes the video and its cover pictures from the printer. Both work
+    while the U1 prints.
 - **Console:** send G-code and see the printer's replies; `M112` runs the E-stop.
 - **Settings:** Automagic or Expert, Spoolman, the printer's print options, bed mesh, input shaper
   and flow calibration, the Extended Firmware's settings (web UI, camera, RFID system, Spoolman, Remote

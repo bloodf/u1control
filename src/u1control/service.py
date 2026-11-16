@@ -199,7 +199,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         job = (request_id, command, args, (current, client, target))
         if command in DEDICATED:   # E-stop, pause, cancel and downloads must not queue behind a slow command
             threading.Thread(target=self._run, args=job, name="u1control-" + str(command), daemon=True).start()
-        elif command == "thumbnail":
+        elif command in ("thumbnail", "timelapse_cover"):   # pictures share the thumbnail worker and its queue
             try:
                 self.thumbs.put_nowait(job)
             except queue.Full:

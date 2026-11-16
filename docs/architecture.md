@@ -18,7 +18,7 @@ plugin. The sources live in `src/u1control/`, and `scripts/build.py` packs them.
 | `peers.py` | Presence files in Orca's data folder: says U1 Control runs, finds a running Spooler and reads its stock list | no |
 | `usage.py` | Prints u1control sent, by printer and file, until their filament use is booked in Spoolman; kept in `usage_ledger.json` | no |
 | `stockview.py` | Spooler's stock in the tab and linking one of its spools to a toolhead through u1control's own bind | no |
-| `files.py` | File manager commands and downloads that never overwrite a local file | no |
+| `files.py` | File manager commands, the time-lapse list (videos paired with their cover pictures) and downloads that never overwrite a local file | no |
 | `service.py` | Runs printer work for the U1 Control tab: command worker, status monitor, camera, Spoolman follow, job tracker | no |
 | `plugin.py` | OrcaSlicer glue: the capabilities (including the `U1Agent` printer agent), settings wiring, preset changes | yes |
 | `ui/app.html` | The U1 Control tab and the print setup pop-up: one compiled Vue 3 + PrimeVue page (built from the top-level `ui/` project; mode chosen by the boot JSON `plugin.page_html` fills in) | — |
@@ -51,8 +51,9 @@ its script worker. u1control never sends printer traffic from those threads. All
 threads the plugin starts:
 
 - **Command worker:** one thread runs page commands in order.
-- **Thumbnail worker:** one thread fetches file thumbnails, at most 8 waiting; the page asks only for
-  rows on screen, 2 at a time, and drops the rest when you change folder. Commands never wait for it.
+- **Thumbnail worker:** one thread fetches file thumbnails and time-lapse covers, at most 8 waiting; the
+  page asks only for rows on screen, 2 at a time per list, and drops the rest when you change folder or
+  printer. Commands never wait for it. A cover is a JPEG of at most 1 MB; a bigger one is not fetched whole.
 - **Urgent commands:** emergency stop, pause and cancel each get their own short-lived thread, so they
   never wait behind a long job like a bed mesh. Downloads and Save picture also get their own thread.
 - **Monitor:** polls status every 2 s, follows RFID and Spoolman changes, and fetches camera frames at

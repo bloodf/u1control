@@ -80,6 +80,12 @@ class FakePrinter:
         self.ext_error = None   # HTTP status the Firmware Config API answers with instead (e.g. 503 while it starts)
         self.ext_probes = 0     # GET /firmware-config/api/status requests
         self.listing = None     # {"dirs": [...], "files": [...]} served by /server/files/directory instead of the default
+        # File roots as on a U1 (seen 2026-11-16): `timelapse` and `camera` are one folder, `camera` read only.
+        self.roots = [{"name": "gcodes", "path": "/oem/printer_data/gcodes", "permissions": "rw"},
+                      {"name": "timelapse", "path": "/oem/printer_data/camera", "permissions": "rw"},
+                      {"name": "camera", "path": "/oem/printer_data/camera", "permissions": "r"}]
+        self.file_list = None   # served by /server/files/list instead of the files under that root
+        self.undeletable = set()   # "timelapse/x.jpg": DELETE answers 500
         handler = self._handler()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -156,6 +162,17 @@ class FakePrinter:
                                                        "files": [{"filename": "a.gcode", "size": 10, "modified": 2},
                                                                  {"filename": "b.gcode", "size": 20, "modified": 5}] if top else [],
                                                        "disk_usage": {"free": 100}}})
+                if u.path == "/server/files/roots":
+                    return self._send(200, {"result": fake.roots})
+                if u.path == "/server/files/list":
+                    root = q.get("root", "gcodes") + "/"
+                    if fake.file_list is not None:
+                        return self._send(200, {"result": fake.file_list})
+                    if not any(r["name"] + "/" == root for r in fake.roots):   # as Moonraker for an unknown root
+                        return self._send(400, {"error": {"message": "Failed to build file list, invalid path: %s: None" % root[:-1]}})
+                    names = sorted(n for n in fake.files if n.startswith(root))
+                    return self._send(200, {"result": [{"path": n[len(root):], "size": len(fake.files[n]), "modified": 1000.0 + i,
+                                                        "permissions": "rw"} for i, n in enumerate(names)]})
                 if u.path == "/server/files/metadata":
                     return self._send(200, {"result": {"filename": q.get("filename"), "filament_weights": [3.5, 0, 0, 1.5]}})
                 if u.path == "/server/spoolman/status":
@@ -233,7 +250,14 @@ class FakePrinter:
                 return self._send(200, {})
 
             def do_DELETE(self):
-                fake.deleted.append(urllib.parse.unquote(urllib.parse.urlsplit(self.path).path))
+                path = urllib.parse.unquote(urllib.parse.urlsplit(self.path).path)
+                rel = path[len("/server/files/"):]
+                if any(r["permissions"] == "r" and rel.startswith(r["name"] + "/") for r in fake.roots):
+                    return self._send(405, {"error": {"message": "Path not available for DELETE: " + rel}})   # as Moonraker
+                if rel in fake.undeletable:
+                    return self._send(500, {"error": {"message": "delete failed"}})
+                fake.deleted.append(path)
+                fake.files.pop(rel, None)
                 return self._send(200, {"result": {}})
 
         return Handler

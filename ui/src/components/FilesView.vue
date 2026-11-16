@@ -6,6 +6,7 @@ import InputText from 'primevue/inputtext';
 import { OuiEmpty, OuiIcon, OuiPanel, OuiToolbar } from '../../shared/src/components';
 import { download as downloadIcon, edit, files as filesIcon, folder, move as moveIcon, plus, printer, refresh, trash, undo } from '../../shared/src/icons';
 import Thumb from './Thumb.vue';
+import TimelapsesCard from './TimelapsesCard.vue';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, targetKnown, printerName } from '../app/store';
 import { newFolder } from '../app/thumbs';
@@ -164,6 +165,7 @@ function drop(dir: string | null) {
     </div>
     <template v-if="state === 'ok' && (dirs.length || files.length)" #footer><p class="oui-meta">{{ t('files.dragHint') }}</p></template>
   </OuiPanel>
+  <TimelapsesCard />
 </template>
 <style>
 .fv-bar { border-bottom: 1px solid var(--oui-border); }

@@ -94,6 +94,7 @@ The list (`extended.PRINT_SAFE`) comes from the option commands in the firmware'
 | `GET /screen/snapshot` | Extended Firmware Remote Screen: the touchscreen as PNG (Settings > Firmware > Remote Screen must be on) |
 | `POST /screen/touch?a=tap&x=&y=` | tap the touchscreen at a framebuffer pixel |
 | `GET /server/files/directory`, `/metadata`, `DELETE /server/files/...` | file manager (`gcodes` and `camera` roots) |
+| `GET /server/files/roots`, `GET /server/files/list?root=timelapse`, `GET` and `DELETE /server/files/timelapse/...` | time-lapses: the videos (`<print>_<YYYYMMDDHHMMSS>.mp4`), their cover (`..._cover.jpg`) and last frame (`....jpg`). Seen on a U1 on 2026-11-16: `timelapse` and `camera` are the same folder (`/oem/printer_data/camera`), `timelapse` with `rw` and `camera` with `r`, so a `DELETE` under `camera` answers 405 (u1-moonraker `file_manager.py`, `delete_file`). The root is not registered in u1-moonraker's public source; a printer without it gets "This printer shares no time-lapse folder" |
 | `POST /server/files/directory`, `POST /server/files/move` | new folder; move or rename a file or folder (same root only; the folder is listed first and a name it already has is refused) |
 | `GET /server/spoolman/status`, `POST /server/spoolman/proxy` | the printer's own Spoolman link |
 | `GET /server/gcode_store?count=` | console: the printer's replies logged since a command (u1-moonraker `data_store`) |

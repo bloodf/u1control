@@ -795,6 +795,140 @@ test('files: filter by name and show each file\'s filament', `
   eq(qa('.fv-name').length, 2, 'all back');
 `);
 
+// ------------------------------------------------------------------ 0.11.0: time-lapses
+const PIXEL = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+const TL = {supported: true, videos: [
+  {path: 'timelapse/benchy_20261116130921.mp4', file: 'benchy_20261116130921.mp4', name: 'benchy', size: 375588, modified: 1794842000, cover: 'timelapse/benchy_20261116130921_cover.jpg'},
+  {path: 'timelapse/vase_20261115080000.mp4', file: 'vase_20261115080000.mp4', name: 'vase', size: 2400000, modified: 1794760000, cover: 'timelapse/vase_20261115080000.jpg'},
+  {path: 'timelapse/no cover.mp4', file: 'no cover.mp4', name: 'no cover', size: 1000, modified: null, cover: null}]};
+const TL_OPEN = `
+  await connect();
+  await tab('files');
+  await until(() => last('cmd', 'timelapses'), 'time-lapses asked for');
+  const panel = byTest('timelapses');
+  const row = file => q('[data-timelapse="timelapse/' + file + '"]', panel);
+`;
+
+test('time-lapses: one row per video with its cover; saving says where the file went', `
+  ${TL_OPEN}
+  eq([last('cmd', 'timelapses').args, last('cmd', 'timelapses').gen], [{}, 1], 'asked for the selected printer');
+  assert(text(panel).includes('Listing time-lapses'), 'loading is said');
+  await reply(last('cmd', 'timelapses'), ${JSON.stringify(TL)});
+  eq(qa('.tl-name', panel).map(text), ['benchy', 'vase', 'no cover'], 'print names, in the order the plugin gave');
+  assert(text(row('benchy_20261116130921.mp4')).includes('benchy_20261116130921.mp4') && text(row('benchy_20261116130921.mp4')).includes('376 kB'), 'file name and size: ' + text(row('benchy_20261116130921.mp4')));
+  assert(text(panel).includes('3 videos'), 'count in the header');
+  eq(text(q('#timelapses-h')), 'Time-lapses', 'its own titled section');
+  eq(panel.getAttribute('aria-labelledby'), 'timelapses-h', 'labelled by its title');
+  await until(() => cmds('timelapse_cover').length === 2, 'covers asked for');
+  eq(cmds('timelapse_cover').map(m => m.args), [{path: 'timelapse/benchy_20261116130921_cover.jpg'}, {path: 'timelapse/vase_20261115080000.jpg'}], 'only the videos that have a picture');
+  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  await click(btn('Refresh', q('#files-h').closest('section')));
+  await reply(cmds('timelapse_cover')[0], ${JSON.stringify(PIXEL)});
+  await until(() => q('.tl-cover img', row('benchy_20261116130921.mp4')), 'cover shown, although the print files were listed again meanwhile');
+  eq(q('.tl-cover img', row('benchy_20261116130921.mp4')).getAttribute('alt'), '', 'decorative: the name is next to it');
+  assert(!q('img', row('no cover.mp4')) && q('.tl-cover svg', row('no cover.mp4')), 'an icon where there is no cover');
+  await fail(cmds('timelapse_cover')[1], 'printer response too large');
+  assert(!q('img', row('vase_20261115080000.mp4')) && !alerts(), 'a cover that fails is an icon, not an error');
+  eq(cmds('thumbnail'), [], 'covers never use the print-file thumbnails');
+  const save = btn('Save the time-lapse benchy_20261116130921.mp4');
+  eq(text(save), 'Save', 'same word as the file list');
+  save.click(); save.click(); await settle();
+  eq(cmds('download').map(m => [m.args, m.gen]), [[{path: 'timelapse/benchy_20261116130921.mp4'}, 1]], 'one download, from the writable root');
+  assert(btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'no delete while that video is being saved');
+  assert(!btn('Delete the time-lapse vase_20261115080000.mp4').disabled && !btn('Save the time-lapse vase_20261115080000.mp4').disabled, 'the other rows stay usable');
+  await reply(last('cmd', 'download'), '/home/u/Downloads/u1control/benchy_20261116130921.mp4');
+  await until(() => text(q('.notices [role=status]')).includes('Saved to /home/u/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
+  assert(!btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'delete is back');
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  assert(!btn('Save the time-lapse vase_20261115080000.mp4').disabled && !btn('Delete the time-lapse vase_20261115080000.mp4').disabled, 'saving and deleting stay on while printing');
+`);
+
+test('time-lapses: delete asks first, names both answers, takes the video and keeps the keyboard in the list', `
+  ${TL_OPEN}
+  await reply(last('cmd', 'timelapses'), ${JSON.stringify(TL)});
+  const del = btn('Delete the time-lapse benchy_20261116130921.mp4');
+  del.focus();
+  await click(del);
+  assert(dialogOpen() && dialogText().includes('benchy_20261116130921.mp4') && dialogText().includes('cover pictures'), 'says what goes: ' + dialogText());
+  assert(btn('Delete', dialogEl()) && btn('Go back', dialogEl()), 'both answers named');
+  await until(() => document.activeElement === q('[data-dlg="no"]'), 'focus starts on the way back');
+  await no();
+  eq(cmds('timelapse_delete'), [], 'cancel deletes nothing');
+  await until(() => document.activeElement === del, 'focus returns to Delete');
+  await click(del);
+  await yes();
+  eq(cmds('timelapse_delete').map(m => [m.args, m.gen]), [[{path: 'timelapse/benchy_20261116130921.mp4'}, 1]], 'only the video is named; the plugin pairs the pictures');
+  assert(btn('Save the time-lapse benchy_20261116130921.mp4').disabled, 'no save while that video is being deleted');
+  const listed = cmds('timelapses').length;
+  await reply(last('cmd', 'timelapse_delete'), {deleted: ['timelapse/benchy_20261116130921_cover.jpg', 'timelapse/benchy_20261116130921.mp4']});
+  await until(() => cmds('timelapses').length > listed, 'listed again after the delete');
+  await reply(last('cmd', 'timelapses'), ${JSON.stringify({ ...TL, videos: TL.videos.slice(1) })});
+  eq(qa('[data-timelapse]', panel).map(r => r.dataset.timelapse), ['timelapse/vase_20261115080000.mp4', 'timelapse/no cover.mp4'], 'the row is gone');
+  assert(text(panel).includes('2 videos'), 'count follows');
+  await until(() => document.activeElement === byTest('tl-refresh'), 'focus goes to Refresh, not to the top of the page');
+  assert(text(q('.notices [role=status]')).includes('Deleted'), 'success is said');
+  btn('Delete the time-lapse no cover.mp4').focus();
+  await click(btn('Delete the time-lapse no cover.mp4'));
+  await yes();
+  const again = cmds('timelapses').length;
+  await fail(last('cmd', 'timelapse_delete'), 'printer said: delete failed');
+  assert(alerts().includes('Delete time-lapse failed: printer said: delete failed'), 'the failure is shown: ' + alerts());
+  await until(() => cmds('timelapses').length > again, 'listed again after a failure too');
+  await reply(last('cmd', 'timelapses'), ${JSON.stringify({ ...TL, videos: TL.videos.slice(1) })});
+  assert(row('no cover.mp4'), 'the video is still there to try again');
+  await until(() => document.activeElement === btn('Delete the time-lapse no cover.mp4'), 'focus is back on its Delete');
+`);
+
+test('time-lapses: no printer, empty, error with a way out, firmware without the folder, another printer', `
+  await until(() => last('hello'), 'hello sent');
+  await tab('files');
+  const panel = byTest('timelapses');
+  assert(text(panel).includes('Connect to a U1 to see its time-lapses.'), 'no printer yet: ' + text(panel));
+  assert(byTest('tl-refresh').disabled, 'nothing to refresh without a printer');
+  eq(cmds('timelapses'), [], 'nothing asked without a printer');
+  await connect();
+  await until(() => last('cmd', 'timelapses'), 'asked once connected');
+  await reply(last('cmd', 'timelapses'), {supported: true, videos: []});
+  assert(text(panel).includes('No time-lapses yet.') && !q('table', panel), 'empty state: ' + text(panel));
+  await click(byTest('tl-refresh'));
+  eq(cmds('timelapses').length, 2, 'Refresh asks again');
+  assert(q('[aria-busy="true"]', panel) || q('.p-button-loading', panel), 'busy while it waits');
+  await fail(last('cmd', 'timelapses'), 'printer said: boom');
+  eq(text(q('[role=alert]', panel)).includes('Couldn’t list the time-lapses: printer said: boom'), true, 'the error is announced in the section: ' + text(panel));
+  await click(btn('Try again', panel));
+  await reply(last('cmd', 'timelapses'), {supported: false, videos: []});
+  assert(text(panel).includes('This printer shares no time-lapse folder.') && !q('[role=alert]', panel), 'a firmware without the folder is said, not shown as an error');
+  await click(byTest('tl-refresh'));
+  await reply(last('cmd', 'timelapses'), ${JSON.stringify(TL)});
+  eq(qa('[data-timelapse]', panel).length, 3, 'listed');
+  const before = cmds('timelapses').length;
+  await post({type: 'selection_changed'});
+  eq(qa('[data-timelapse]', panel).length, 0, "the other printer's videos are never shown");
+  await connect('stock', 2);
+  await until(() => cmds('timelapses').length > before, 'asked from the new printer');
+  eq(last('cmd', 'timelapses').gen, 2, 'for its generation');
+  const late = last('cmd', 'timelapses');
+  await tab('dash');
+  await post({type: 'selection_changed'});
+  await connect('stock', 3);
+  await reply(late, ${JSON.stringify(TL)});
+  await tab('files');
+  eq(qa('[data-timelapse]', panel).length, 0, 'an answer that was on its way for the previous printer is dropped');
+  eq(last('cmd', 'timelapses').gen, 3, 'and the list is asked from the printer now selected');
+`);
+
+test('time-lapses: Portuguese, including the delete question', `
+  ${TL_OPEN}
+  await reply(last('cmd', 'timelapses'), ${JSON.stringify(TL)});
+  eq(text(q('#timelapses-h')), 'Timelapses', 'title');
+  assert(text(panel).includes('3 vídeos') && text(panel).includes('Gravado em'), 'header and columns: ' + text(panel));
+  await click(btn('Excluir o timelapse vase_20261115080000.mp4'));
+  assert(dialogText().includes('Excluir o timelapse vase_20261115080000.mp4 e as imagens de capa dele da impressora?'), dialogText());
+  assert(btn('Excluir', dialogEl()) && btn('Voltar', dialogEl()), 'both answers in pt-BR');
+  await no();
+  eq(cmds('timelapse_delete'), [], 'nothing deleted');
+`, { lang: 'pt_BR' });
+
 test('camera: save the picture on screen', `
   await connect();
   await post({type: 'status', data: VIEW()});

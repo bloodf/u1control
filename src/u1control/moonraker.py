@@ -70,14 +70,15 @@ class Moonraker:
         headers.update(extra or {})
         return headers
 
-    def raw(self, method, path, body=None, headers=None, timeout=None, base=None):
-        """One HTTP request against one base URL. Returns (bytes, response headers)."""
+    def raw(self, method, path, body=None, headers=None, timeout=None, base=None, limit=MAX_BODY):
+        """One HTTP request against one base URL. Returns (bytes, response headers); an answer of more than
+        `limit` bytes is refused."""
         req = urllib.request.Request((base or self.base or self.candidates[0]) + path, data=body,
                                      method=method, headers=self._headers(headers))
         try:
             with self._open(req, timeout=timeout or self.timeout) as resp:
-                data = resp.read(MAX_BODY + 1)
-                if len(data) > MAX_BODY:
+                data = resp.read(limit + 1)
+                if len(data) > limit:
                     raise PrinterError("printer response too large")
                 return data, resp.headers
         except urllib.error.HTTPError as e:
@@ -225,6 +226,19 @@ class Moonraker:
     def thumbnail(self, relative_path):
         """Thumbnail bytes for a path relative to the gcodes root."""
         data, _ = self.raw("GET", "/server/files/gcodes/" + urllib.parse.quote(relative_path))
+        return data
+
+    def roots(self):
+        """Moonraker's file roots: [{"name", "path", "permissions"}]."""
+        return self.request("GET", "/server/files/roots") or []
+
+    def file_list(self, root):
+        """Every file under a root, as a flat list: [{"path" (relative to the root), "size", "modified"}]."""
+        return self.request("GET", "/server/files/list", {"root": root}) or []
+
+    def file_bytes(self, path, limit):
+        """A small file's bytes; path includes the root. A file of more than `limit` bytes is refused."""
+        data, _ = self.raw("GET", "/server/files/" + urllib.parse.quote(path), limit=limit)
         return data
 
     def delete_file(self, path):
