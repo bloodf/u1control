@@ -136,7 +136,7 @@ class FakeJobTests(unittest.TestCase):
         self.client = Moonraker(self.fake.host, timeout=5)
         self.work = tempfile.mkdtemp()
         fd, self.path = tempfile.mkstemp(suffix=".gcode")
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", newline="") as f:
             f.write(SAMPLE)
         self.addCleanup(os.remove, self.path)
 
@@ -222,7 +222,7 @@ class PluginAgentTests(unittest.TestCase):
         self.agent = self.ns["U1Agent"]()
         self.addCleanup(self.agent.disconnect_printer)
         fd, self.path = tempfile.mkstemp(suffix=".gcode")
-        with os.fdopen(fd, "w") as f:
+        with os.fdopen(fd, "w", newline="") as f:
             f.write(SAMPLE)
         self.addCleanup(os.remove, self.path)
         self.updates = []
