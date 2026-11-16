@@ -7,7 +7,7 @@
 - Files: a new **Time-lapses** section lists every video the U1 recorded, newest first, with its cover picture, the print's name, the date and the size. **Refresh** reads the list again. The length of a video is not shown, because the printer doesn't report it.
 - **Save** copies a video to `Downloads/u1control` on your computer, never over a file that is already there, and says where it went.
 - **Delete** asks first, then removes the video together with its cover and last-frame pictures from the printer. Deleting a time-lapse used to fail ("Path not available for DELETE"): the U1 shares the folder twice, and the "Timelapses & camera" folder of the file list is the read-only one. The new section uses the one that can be written. Deleting from "Timelapses & camera" itself still fails; use the Time-lapses section.
-- Saving and deleting work while the U1 prints. A video can't be deleted while it is being saved, or saved while it is being deleted.
+- Saving and deleting work while the U1 prints. In this section, a video can't be deleted while it is being saved, or saved while it is being deleted.
 - A video without a cover shows an icon. A printer whose firmware has no time-lapse folder says so instead of showing an error.
 - The section is in English and Portuguese, and on a narrow tab the date and size move under the name so Save and Delete stay on screen.
 - Checked against a fake U1 only. The folder and file names come from a real U1 (2026-11-16), but listing, covers, Save and Delete of this version have not been run against a printer yet.

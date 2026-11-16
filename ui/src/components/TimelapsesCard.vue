@@ -43,7 +43,8 @@ let shownEpoch = s.epoch;
 watch(() => [s.tab, s.epoch, s.phase], () => {
   // Another printer: none of the old rows or covers, and an answer still on its way for the old one is dropped.
   if (s.epoch !== shownEpoch) { shownEpoch = s.epoch; asked++; state.value = 'idle'; videos.value = []; coverGen.value = covers.reset(); }
-  if (s.tab === 'files') void load();
+  // Only a connected printer is asked: a drop to unreachable keeps the rows instead of an error panel.
+  if (s.tab === 'files' && s.phase === 'connected') void load();
 }, { immediate: true });
 
 async function save(v: Video) {
