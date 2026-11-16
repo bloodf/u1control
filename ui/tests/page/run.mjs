@@ -19,7 +19,10 @@ async function builtPage() {
   return execFileSync('python3', ['-c', 'import sys; sys.path.insert(0, "scripts"); import build; sys.stdout.write(build.page_html("app.html"))'],
     { cwd: repo, encoding: 'utf8', maxBuffer: 64 << 20 });
 }
-const GROUPS = process.env.EXT_GROUPS ? JSON.parse(process.env.EXT_GROUPS) : [];
+// The Extended Firmware settings the scenarios marked needsGroups use. test_ui_page.py passes them; run directly
+// (npm run test:page) they come from the same fake, or those scenarios had no settings to find.
+const GROUPS = JSON.parse(process.env.EXT_GROUPS ?? execFileSync('python3', ['-c', 'import sys, json; sys.path[:0] = ["src/u1control", "tests"]; '
+  + 'import fakes, extended; print(json.dumps(extended.normalize_settings(fakes.ext_settings())))'], { cwd: repo, encoding: 'utf8' }));
 
 const PRELUDE = `
 const head = (type, extra) => ({loaded: !!type, type: type || '', vendor: 'Generic', sub_type: 'Basic', colour: '#112233', official: false, ...extra});
