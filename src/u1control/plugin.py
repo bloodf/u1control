@@ -1,4 +1,4 @@
-"""OrcaSlicer glue: U1 Control tab, U1 print setup (slicing pipeline) and helper scripts."""
+"""OrcaSlicer glue: U1 Control tab, U1 print setup (slicing pipeline), the u1control printer agent and helper scripts."""
 
 import json
 import os
@@ -10,6 +10,7 @@ import time
 
 import orca
 
+import agent
 import extended as ext
 import gcode
 import peers
@@ -646,6 +647,367 @@ def _still_valid(ctx, host, client, heads, mapping):
             raise PrinterError("T%d changed after you chose the toolheads; nothing was sent. Send again." % (t + 1))
 
 
+# ====================================================================== printer agent
+
+pa = orca.printer_agent
+AGENT_ID = "u1control"
+AGENT_NAME = "Snapmaker U1 (u1control)"
+JOBS_DIR = "jobs"        # under the plugin storage: OrcaSlicer denies tempfile.* off the main thread
+# OrcaSlicer status codes (src/slic3r/Utils/bambu_networking.hpp, v2.5.0)
+OK, ERR_INVALID_HANDLE, ERR_CANCELED, ERR_INVALID_RESULT = 0, -1, -18, -19
+ERR_LP_UPLOAD, ERR_LP_PUBLISH, ERR_SG_UPLOAD, ERR_CONNECT = -4020, -4030, -5010, -6010
+STAGE_CREATE, STAGE_UPLOAD, STAGE_SENDING, STAGE_FINISHED, STAGE_ERROR = 0, 1, 3, 6, 7
+AGENT_POLL = 2.0         # s between status queries while OrcaSlicer is connected to the U1
+
+
+def host_of(address):
+    """'http://192.168.1.5:7125/x' -> '192.168.1.5:7125' (scheme and path stripped; Moonraker keeps the port)."""
+    return clean(address).split("://", 1)[-1].split("/", 1)[0]
+
+
+def slicer_temp_root():
+    """OrcaSlicer's per-user temp folder, where Print and Send write the sliced job (OrcaSlicer.cpp per_user_temp_dir):
+    "<temp>/orcaslicer_<uid>" on macOS and Linux, "<temp>" on Windows."""
+    base = tempfile.gettempdir().rstrip("/\\") or os.sep
+    return base if os.name == "nt" else os.path.join(base, "orcaslicer_%d" % os.getuid())
+
+
+def job_read_grants():
+    """Read grants for the sliced job: the realpath form first (/private/var/... on macOS), then as given."""
+    out = []
+    for form in (os.path.realpath(slicer_temp_root()), slicer_temp_root()):
+        target = form.rstrip("/\\") + "/*"
+        if target not in out:
+            out.append(target)
+    return out
+
+
+class U1Agent(pa.PrinterAgentBase):
+    """Printer agent `u1control`: OrcaSlicer's Print / Send dialog and Device tab for the U1, with the same toolhead
+    map, print options and G-code fixes as U1 print setup. Printer I/O runs on the agent's own threads."""
+
+    def __init__(self):
+        super().__init__()
+        self._cb = {}
+        self._lock = threading.Lock()
+        self.selected = ""
+        self.dev_id, self.host, self.api_key = "", "", ""
+        self.client = None
+        self.view = None
+        self.firmware = ""
+        self._filament_ids = {}
+        self._wake = threading.Event()
+        self._stop = threading.Event()
+
+    def get_name(self):
+        return AGENT_NAME
+
+    def get_agent_info(self):
+        return pa.AgentInfo(AGENT_ID, AGENT_NAME, VERSION, "Snapmaker U1 over Moonraker, by u1control")
+
+    def _settings(self):
+        return get_store(self)
+
+    # host callbacks: stored, may be None -------------------------------------------------------------
+    def _store_cb(self, key, fn):
+        with self._lock:
+            self._cb[key] = fn
+        return OK
+
+    def set_on_ssdp_msg_fn(self, fn): return self._store_cb("ssdp", fn)
+    def set_on_local_connect_fn(self, fn): return self._store_cb("local_connect", fn)
+    def set_on_local_message_fn(self, fn): return self._store_cb("local_message", fn)
+    def set_on_message_fn(self, fn): return self._store_cb("message", fn)
+    def set_on_user_message_fn(self, fn): return self._store_cb("user_message", fn)
+    def set_on_printer_connected_fn(self, fn): return self._store_cb("printer_connected", fn)
+    def set_on_subscribe_failure_fn(self, fn): return self._store_cb("subscribe_failure", fn)
+    def set_server_callback(self, fn): return self._store_cb("server_error", fn)
+    def set_queue_on_main_fn(self, fn): return self._store_cb("queue_on_main", fn)
+
+    def _emit(self, key, *args):
+        """Call a host callback the way MoonrakerPrinterAgent dispatches: through queue_on_main when set."""
+        with self._lock:
+            fn, queue = self._cb.get(key), self._cb.get("queue_on_main")
+        if fn is None:
+            return
+        try:
+            if queue is not None:
+                queue(lambda: fn(*args))
+            else:
+                fn(*args)
+        except Exception as e:
+            log("host callback %s failed: %r" % (key, e))
+
+    def _message(self, payload):
+        self._emit("local_message", self.dev_id, json.dumps(payload))
+
+    # discovery and selection ---------------------------------------------------------------------------
+    def start_discovery(self, start, sending):
+        if start and self.host:   # the configured printer only, never a network scan (MRA announce_printhost_device)
+            self._emit("ssdp", json.dumps({
+                "dev_name": "Snapmaker U1", "dev_id": self.dev_id or self.host, "dev_ip": self.host,
+                "dev_type": "Snapmaker U1", "dev_signal": "0", "connect_type": "lan", "bind_state": "free",
+                "sec_link": "secure", "ssdp_version": "v1"}))
+        return True
+
+    def get_user_selected_machine(self):
+        return self.selected
+
+    def set_user_selected_machine(self, dev_id):
+        self.selected = dev_id or ""
+        return OK
+
+    def bind_detect(self, dev_ip, sec_link, detect):
+        detect.dev_id = self.dev_id if self.host and self.host == host_of(dev_ip) else dev_ip
+        detect.dev_name = detect.model_id = "Snapmaker U1"
+        detect.version = self.firmware
+        detect.connect_type, detect.bind_state = "lan", "free"
+        return OK
+
+    # connection -------------------------------------------------------------------------------------------
+    def connect_printer(self, params):
+        """UI thread: remember the printer and start the status thread (which does all the I/O)."""
+        host = host_of(getattr(params, "host", ""))
+        if not host or not getattr(params, "dev_id", ""):
+            return ERR_INVALID_HANDLE
+        self.disconnect_printer()
+        self.dev_id, self.host, self.api_key = params.dev_id, host, clean(getattr(params, "password", ""))
+        self.client = Moonraker(host, self.api_key, timeout=5)
+        self._filament_ids = self._generic_ids()
+        self._stop = threading.Event()
+        threading.Thread(target=self._poll, args=(self._stop, self.client), name="u1control-agent", daemon=True).start()
+        return OK
+
+    def disconnect_printer(self):
+        self._stop.set()
+        self._wake.set()
+        self.view, self.client = None, None
+        return OK
+
+    def on_unload(self):
+        self.disconnect_printer()
+
+    def _generic_ids(self):
+        """{"Generic <family> @System": filament_id} from the loaded system presets (UI thread, no I/O)."""
+        wanted = {agent.generic_preset_name(m) for m in agent.FILAMENT_FAMILIES}
+        out = {}
+        try:
+            collection = orca.host.preset_bundle().filaments
+            for i in range(collection.size()):
+                preset = collection.preset(i)
+                if preset.name in wanted:
+                    fid = getattr(preset, "filament_id", "") or clean(preset.config_value("filament_id"))
+                    if fid:
+                        out[preset.name] = fid
+        except Exception as e:
+            log("agent: filament presets not readable (%s); trays show no preset" % e)
+        return out
+
+    def _poll(self, stop, client):
+        connected = False
+        while not stop.is_set():
+            try:
+                if not self.firmware:
+                    self.firmware = str((client.info() or {}).get("software_version") or "")
+                view = u1.summarize(client.query(u1.STATUS_OBJECTS))
+                if stop.is_set():
+                    return
+                self.view = view
+                if not connected:
+                    connected = True   # MRA perform_connection_async: ConnectStatusOk, then printer_connected
+                    self._emit("local_connect", 0, self.dev_id, "0")
+                    self._emit("printer_connected", self.dev_id)
+                self._message(agent.push_status(view, self._filament_ids.get))
+            except Exception as e:
+                if connected:
+                    log("agent: the U1 stopped answering (%s)" % e)
+                connected = False
+            self._wake.wait(AGENT_POLL)
+            self._wake.clear()
+
+    # Device tab commands ------------------------------------------------------------------------------------
+    def send_message(self, dev_id, json_str, qos, flag):
+        return self.send_message_to_printer(dev_id, json_str, qos, flag)
+
+    def send_message_to_printer(self, dev_id, json_str, qos, flag):
+        command = agent.parse_command(json_str)
+        kind = command["kind"]
+        if kind == "invalid":
+            return ERR_INVALID_RESULT
+        if kind == "unsupported":
+            return agent.UNSUPPORTED
+        if kind == "get_version":
+            self._message(agent.version_reply(self.firmware))
+            return OK
+        if kind == "get_access_code":
+            self._message(agent.access_code_reply(self.api_key))
+            return OK
+        if kind == "pushall":
+            self._wake.set()
+            return OK
+        if kind == "noop":
+            return OK
+        client = self.client
+        if client is None or self.view is None:
+            return ERR_CONNECT
+        threading.Thread(target=self._run_command, args=(client, command), name="u1control-device",
+                         daemon=True).start()
+        return OK
+
+    def _run_command(self, client, command):
+        kind, ok = command["kind"], False
+        try:
+            if kind == "pause":
+                client.pause()
+            elif kind == "resume":
+                client.resume()
+            elif kind == "stop":
+                client.cancel()
+            elif kind == "set_light":
+                client.gcode(agent.LIGHT_ON if command["on"] else agent.LIGHT_OFF)
+            elif kind == "gcode":
+                client.gcode(command["script"])
+            ok = True
+        except Exception as e:
+            log("agent: Device tab %s failed: %s" % (kind, e))
+        if kind == "gcode":
+            self._message(agent.gcode_reply(command["seq"], command["script"], ok))
+        self._wake.set()
+
+    # jobs (OrcaSlicer's job threads: blocking is fine) ---------------------------------------------------------
+    def _job_client(self, params):
+        host = self.host or host_of(getattr(params, "dev_ip", ""))
+        key = self.api_key or clean(getattr(params, "password", ""))
+        if not host:
+            raise PrinterError(NO_ADDRESS)
+        return host, key, Moonraker(host, key, timeout=10)
+
+    @staticmethod
+    def _job_path(params):
+        dst = clean(getattr(params, "dst_file", ""))
+        return dst if dst and os.path.exists(dst) else clean(params.filename)
+
+    @staticmethod
+    def _progress(update_fn):
+        last = [-1]
+
+        def progress(sent, total):
+            pct = int(sent * 100 / total) if total else 100
+            if update_fn and pct != last[0]:
+                last[0] = pct
+                update_fn(STAGE_UPLOAD, pct, "Uploading G-code...")
+        return progress
+
+    @staticmethod
+    def _fail(update_fn, code, error):
+        log("agent: job failed (%d): %s" % (code, error))
+        if update_fn:
+            update_fn(STAGE_ERROR, code, "U1: %s" % error)
+        return code
+
+    @staticmethod
+    def _work_dir():
+        return os.path.join(_storage_or_raise(), JOBS_DIR)
+
+    def start_send_gcode_to_sdcard(self, params, update_fn, cancel_fn, wait_fn):
+        try:
+            host, key, client = self._job_client(params)
+            if getattr(params, "project_name", "") == "verify_job":   # PrintJob.cpp: a connectivity check only
+                client.info()
+                return OK
+            if update_fn:
+                update_fn(STAGE_CREATE, 0, "Preparing...")
+            options = self._settings().effective()
+            agent.send_job(client, self._job_path(params), clean(params.project_name) or clean(params.task_name),
+                           getattr(params, "plate_index", 1), options, VERSION, self._work_dir(),
+                           self._progress(update_fn), cancel_fn)
+        except agent.Cancelled:
+            return ERR_CANCELED
+        except Exception as e:
+            return self._fail(update_fn, ERR_SG_UPLOAD, e)
+        if update_fn:
+            update_fn(STAGE_FINISHED, 100, "File uploaded")
+        return OK
+
+    def start_local_print(self, params, update_fn, cancel_fn):
+        if update_fn:
+            update_fn(STAGE_CREATE, 0, "Preparing...")
+        if cancel_fn and cancel_fn():
+            return ERR_CANCELED
+        stage = ["prepare"]
+
+        def on_stage(name):
+            stage[0] = name
+            if update_fn and name == "start":
+                update_fn(STAGE_SENDING, 0, "Starting print...")
+        try:
+            host, key, client = self._job_client(params)
+            options = self._settings().effective()
+            task = {"bed_leveling": getattr(params, "task_bed_leveling", False),
+                    "flow_cali": getattr(params, "task_flow_cali", False),
+                    "timelapse": getattr(params, "task_record_timelapse", False)}
+            job = agent.run_job(client, self._job_path(params), clean(params.project_name) or clean(params.task_name),
+                                getattr(params, "plate_index", 1), getattr(params, "ams_mapping", ""), options,
+                                lambda view: U1PrintSetup._offered_prefs(options, view["options"]), task, VERSION,
+                                self._work_dir(), self._progress(update_fn), cancel_fn, on_stage)
+        except agent.Cancelled:
+            return ERR_CANCELED
+        except Exception as e:
+            return self._fail(update_fn, ERR_LP_UPLOAD if stage[0] == "upload" else ERR_LP_PUBLISH, e)
+        log("agent: sent %s to %s: %s" % (job["filename"], host, job["script"].replace("\n", " | ")))
+        self._settings().update({"printed_before": True})
+        try:
+            service().remember_job(job["filename"], job["mapping"], job["filaments"], host=host, api_key=key, options={
+                "printer_name": settings.printer_label(clean(options.get("printer_name"))),
+                "spoolman_url": clean(options.get("spoolman_url")),
+                "spoolman_report_usage": bool(options.get("spoolman_report_usage", True))})
+        except Exception as e:   # the print runs; only the filament booking is lost
+            log("agent: filament use not recorded: %r" % e)
+        self._wake.set()
+        if update_fn:
+            update_fn(STAGE_FINISHED, 100, "Print started")
+        return OK
+
+    def start_local_print_with_record(self, params, update_fn, cancel_fn, wait_fn):
+        return self.start_local_print(params, update_fn, cancel_fn)
+
+    def start_print(self, params, update_fn, cancel_fn, wait_fn):
+        return agent.UNSUPPORTED   # cloud printing: the U1 is driven over the LAN only
+
+    def start_sdcard_print(self, params, update_fn, cancel_fn):
+        """Print a file already on the U1 with the printer's own toolhead map and options."""
+        name = os.path.basename(clean(getattr(params, "dst_file", "")) or clean(params.filename))
+        try:
+            _, _, client = self._job_client(params)
+            if u1.machine_busy(u1.summarize(client.query(u1.STATUS_OBJECTS))):
+                raise PrinterError("the U1 is busy; wait for it to finish first")
+            client.print_start(name)
+        except Exception as e:
+            return self._fail(update_fn, ERR_LP_PUBLISH, e)
+        if update_fn:
+            update_fn(STAGE_FINISHED, 100, "Print started")
+        return OK
+
+    # no binding or certificates on this printer -------------------------------------------------------------
+    def check_cert(self): return OK
+    def install_device_cert(self, dev_id, lan_only): return None
+    def ping_bind(self, ping_code): return OK
+    def bind(self, dev_ip, dev_id, dev_model, sec_link, timezone, improved, update_fn): return OK
+    def unbind(self, dev_id): return OK
+    def request_bind_ticket(self): return (OK, "")
+
+    # filaments ----------------------------------------------------------------------------------------------
+    def get_filament_sync_mode(self):
+        return pa.FilamentSyncMode.Subscription
+
+    def fetch_filament_info(self, dev_id, sync_mode=None):
+        self._wake.set()   # the next push carries the toolheads
+        return True
+
+
+NO_ADDRESS = "no U1 address set: set the printer preset's host to the U1's IP"
+
+
 # ====================================================================== scripts
 
 def _selected_u1():
@@ -919,10 +1281,13 @@ class U1Control(orca.base):
     def register_capabilities(self):
         # Network I/O runs on the plugin's own worker threads; downloads are saved under ~/Downloads/u1control.
         # (Declarations match exact target strings, so the folder is informational for the user.)
-        orca.request_permissions(threading=True, fs_readwrite=[os.path.join(os.path.expanduser("~"), "Downloads", "u1control")])
+        # The printer agent reads the sliced job from OrcaSlicer's temp folder (job_read_grants).
+        orca.request_permissions(threading=True, fs_read=job_read_grants(),
+                                 fs_readwrite=[os.path.join(os.path.expanduser("~"), "Downloads", "u1control")])
         _storage()
         orca.register_capability(U1ControlPage)
         orca.register_capability(U1PrintSetup)
         orca.register_capability(CheckConnection)
         orca.register_capability(SyncHeadsToProject)
         orca.register_capability(ApplyForkTuning)
+        orca.register_capability(U1Agent)

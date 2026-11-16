@@ -33,6 +33,10 @@ class PrinterError(RuntimeError):
     status = None   # HTTP status when the printer answered with one
 
 
+class UploadCancelled(Exception):
+    """The caller's cancelled() said stop while an upload was running."""
+
+
 def normalize_host(host):
     """'192.168.1.5' / 'http://u1.lan:80/' -> 'http://192.168.1.5'. Raises PrinterError."""
     host = (host or "").strip().strip('"').rstrip("/")
@@ -149,6 +153,46 @@ class Moonraker:
 
     def print_start(self, filename):
         return self.request("POST", "/printer/print/start", json_body={"filename": filename})
+
+    def upload(self, local_path, name, progress=None, cancelled=None, timeout=300):
+        """POST /server/files/upload (root gcodes) as multipart, streamed from disk. progress(sent, total) after
+        each chunk; cancelled() -> True stops the upload (raises UploadCancelled)."""
+        boundary = "u1control" + os.urandom(12).hex()
+        quoted = name.replace("\\", "_").replace('"', "_")
+        head = ('--%s\r\nContent-Disposition: form-data; name="root"\r\n\r\ngcodes\r\n'
+                '--%s\r\nContent-Disposition: form-data; name="file"; filename="%s"\r\n'
+                'Content-Type: application/octet-stream\r\n\r\n' % (boundary, boundary, quoted)).encode("utf-8")
+        tail = ("\r\n--%s--\r\n" % boundary).encode("ascii")
+        size = os.path.getsize(local_path)
+
+        def body():
+            yield head
+            sent = 0
+            with open(local_path, "rb") as f:
+                while True:
+                    if cancelled and cancelled():
+                        raise UploadCancelled()
+                    chunk = f.read(256 * 1024)
+                    if not chunk:
+                        break
+                    sent += len(chunk)
+                    yield chunk
+                    if progress:
+                        progress(sent, size)
+            yield tail
+
+        if not self.base:
+            self.info()   # pick the working port first: a streamed body can't be replayed on the next one
+        headers = {"Content-Type": "multipart/form-data; boundary=" + boundary,
+                   "Content-Length": str(len(head) + size + len(tail))}
+        try:
+            data, _ = self.raw("POST", "/server/files/upload", body(), headers, timeout)
+        except OSError as e:
+            raise PrinterError("upload failed (%s)" % getattr(e, "reason", e))
+        try:
+            return json.loads(data.decode("utf-8") or "{}")
+        except ValueError:
+            return {}
 
     def pause(self):
         return self.request("POST", "/printer/print/pause")

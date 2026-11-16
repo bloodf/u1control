@@ -368,7 +368,7 @@ class PluginTests(unittest.TestCase):
         orca, ns = self.load()
         ns["U1Control"]().register_capabilities()
         self.assertEqual([c.__name__ for c in orca.registered],
-                         ["U1ControlPage", "U1PrintSetup", "CheckConnection", "SyncHeadsToProject", "ApplyForkTuning"])
+                         ["U1ControlPage", "U1PrintSetup", "CheckConnection", "SyncHeadsToProject", "ApplyForkTuning", "U1Agent"])
 
     def test_print_setup_sends_mapping(self):
         orca, ns = self.load(answer={"map": {"1": 3}, "prefs": {"bed_level": True}, "purifier": "weak",

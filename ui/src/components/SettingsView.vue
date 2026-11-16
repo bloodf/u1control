@@ -97,6 +97,7 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
           <p v-else-if="pipe" data-test="ps-on">{{ t('ps.on', { preset: pipe.preset }) }}</p>
           <p v-if="dialogRule" data-test="ps-rule">{{ dialogRule }}</p>
           <p class="oui-meta">{{ t('ps.how') }}</p>
+          <p class="oui-meta" data-test="ps-agent">{{ t('ps.agent') }}</p>
         </div>
       </OuiFormSection>
 

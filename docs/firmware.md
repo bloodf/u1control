@@ -47,6 +47,25 @@ Firmware), `filament_detect` (RFID tags), `filament_feed left|right` (feeder sta
 Mapping, used heads and print options are refused by the firmware once a print runs, which is why
 they are sent before the upload and not written into the G-code.
 
+## Printer agent (u1control as OrcaSlicer's agent)
+
+| Purpose | Call |
+|---|---|
+| Status for the Device tab and the print dialog (every 2 s while connected) | `GET /printer/objects/query` with the objects above, `GET /printer/info` once |
+| Upload the job | `POST /server/files/upload` (multipart, `root=gcodes`) |
+| Toolhead map and print options | the three commands above, in one `POST /printer/gcode/script`, after the upload |
+| Start | `POST /printer/print/start` (Moonraker sends `SDCARD_PRINT_FILE`) |
+| Device tab | `POST /printer/print/pause`, `/resume`, `/cancel`; `SET_LED LED=cavity_led WHITE=0|1 SYNC=0`; G-code lines as sent |
+
+The print dialog's boxes map to `SET_PRINT_PREFERENCES`: Auto Bed Leveling → `BED_LEVEL`, Flow Dynamics
+Calibration → `FLOW_CALIBRATE`, Timelapse → `TIME_LAPSE_CAMERA`. Untested on a printer: that OrcaSlicer
+shows the last two for `support_flow_calibration` / `support_timelapse` in the push, that the dialog's slot
+ids arrive as toolheads 0-3, and that the two options take effect when set this way.
+
+`SDCARD_PRINT_FILE_WITH_PARAMETERS` (firmware 2.1.0, `virtual_sdcard.py`) would set the map and options in
+the start command itself, but there is no read-only way to tell whether older firmware has it, so it is
+not used.
+
 ## Firmware settings during a print
 
 Changing an Extended Firmware setting runs the option's command on the printer. Most of them restart

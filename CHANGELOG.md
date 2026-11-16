@@ -2,6 +2,25 @@
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-16
+
+- u1control is now also a printer agent, so OrcaSlicer's own Print dialog and Device tab work with the U1. To switch: in OrcaSlicer's **Preferences** turn on **Use printer agents instead of print hosts**, then in your U1 printer preset set **Printer Agent** to `u1control` and the host to the U1's IP, and save the preset. The print-host way (U1 print setup) keeps working as before.
+- Print dialog: the four toolheads are the four slots, each with its filament and colour. The slot you pick for each filament is the toolhead that prints it; a filament you leave unpicked gets the toolhead u1control matches by material and colour.
+- Print dialog: **Auto Bed Leveling**, **Flow Dynamics Calibration** and **Timelapse** go to the U1 as its bed leveling, flow calibration and time-lapse options. Auto-refill, refill from any colour, tangle detection, unload when done and light off when done come from U1 Control's settings (the options you last chose), or stay as the printer has them.
+- Print from the dialog applies the same G-code fixes as U1 print setup, uploads the file, sends the toolhead map and options, then starts the print. A busy U1 (printing, loading, calibrating, updating), an empty toolhead or another material in a picked slot stops it before anything is sent, and the reason shows in OrcaSlicer's dialog. Filament use is booked in Spoolman as for prints sent through U1 print setup.
+- **Send** uploads the fixed G-code without starting it. A .gcode.3mf job is sent as its plate's G-code.
+- Device tab: status, temperatures, progress, layers, the four toolheads and the chamber light, with pause, resume, stop, the light switch and the G-code lines OrcaSlicer sends.
+- Settings > Print setup and the README say how to switch to the agent (English and Portuguese).
+- OrcaSlicer asks once, when the plugin loads, to let u1control read the sliced job from its temp folder; the agent needs this to send a print.
+- Untested on a real printer (built from Snapmaker's firmware 2.1.0 source and OrcaSlicer 2.5.0 source, checked against a fake U1 only):
+  - that OrcaSlicer's dialog shows **Flow Dynamics Calibration** and **Timelapse** for this agent (`support_flow_calibration`, `support_timelapse` in the status push);
+  - that the dialog's slot numbers arrive as toolheads 1 to 4 for this one-unit, four-slot push (`ams_mapping`);
+  - that flow calibration (`FLOW_CALIBRATE`) and time-lapse (`TIME_LAPSE_CAMERA`) set by `SET_PRINT_PREFERENCES` right before the print starts take effect;
+  - that OrcaSlicer's dialog shows the reason u1control gives when it stops a print;
+  - the Device tab's light switch and G-code lines.
+  Bed leveling, the toolhead map and the extended options use the same commands as U1 print setup.
+- Not used: firmware 2.1.0's `SDCARD_PRINT_FILE_WITH_PARAMETERS`, which can't be detected safely on older firmware. Resonance compensation is not offered: OrcaSlicer never sends it, and the firmware's per-print setting has no effect that could be confirmed.
+
 ## [0.9.1] - 2026-11-15
 
 - Screen readers: "U1 unreachable" and "doesn't answer" are announced at once again, as before 0.9.0; connecting, busy and the other reasons stay polite.

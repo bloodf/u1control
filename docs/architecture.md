@@ -10,6 +10,7 @@ plugin. The sources live in `src/u1control/`, and `scripts/build.py` packs them.
 | `moonraker.py` | HTTP client for Moonraker (port 80, then 7125) and a small websocket client for the calls Moonraker only offers over websocket | no |
 | `u1.py` | U1 knowledge: toolheads, print options, filament mapping, RFID tags, top-cover rule, command builders | no |
 | `gcode.py` | Reads exported G-code and applies the U1 fixes | no |
+| `agent.py` | The printer agent's pure part: the Bambu-style status push and Device tab commands, and Print / Send from OrcaSlicer's dialog (map, fixes, upload, options, start) | no |
 | `extended.py` | Client for the Extended Firmware's Firmware Config API | no |
 | `spoolman.py` | Spoolman client and spool matching | no |
 | `settings.py` | The shared settings store and the Automagic / Expert rules | no |
@@ -19,7 +20,7 @@ plugin. The sources live in `src/u1control/`, and `scripts/build.py` packs them.
 | `stockview.py` | Spooler's stock in the tab and linking one of its spools to a toolhead through u1control's own bind | no |
 | `files.py` | File manager commands and downloads that never overwrite a local file | no |
 | `service.py` | Runs printer work for the U1 Control tab: command worker, status monitor, camera, Spoolman follow, job tracker | no |
-| `plugin.py` | OrcaSlicer glue: the capabilities, settings wiring, preset changes | yes |
+| `plugin.py` | OrcaSlicer glue: the capabilities (including the `U1Agent` printer agent), settings wiring, preset changes | yes |
 | `ui/app.html` | The U1 Control tab and the print setup pop-up: one compiled Vue 3 + PrimeVue page (built from the top-level `ui/` project; mode chosen by the boot JSON `plugin.page_html` fills in) | — |
 
 Only `plugin.py` imports `orca`, so everything else is tested without OrcaSlicer.
