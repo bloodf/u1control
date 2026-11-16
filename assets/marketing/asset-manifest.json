@@ -1,0 +1,399 @@
+{
+  "about": "U1 Control marketing images. Sources are the native originals, kept unchanged; exports are made by scripts/render_images.py. The screenshots inside are mock previews of the built page with fake data, not captures from OrcaSlicer.",
+  "sources": [
+    {
+      "file": "assets/marketing/source/u1control-workshop-cover-en.png",
+      "bytes": 1676343,
+      "sha256": "2db619117e75c3e700051f91fdf37c4cf44c24afcede95acbe3e4967ff60da98"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-feature-01-setup-en.png",
+      "bytes": 1641581,
+      "sha256": "a6b91924fa18216f651ba1358f505382ceeb526c9083a798db87a57baf0e72de"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-feature-01-setup-pt-BR.png",
+      "bytes": 1653574,
+      "sha256": "d2a3acc8a33e40d89a7564d98afcfeaba3d1344ca1642ff5bfae2387d1a08a0a"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-feature-02-dashboard-en.png",
+      "bytes": 1673434,
+      "sha256": "f172e60bd1d1425cbf568d4f12ba4e4ac93c8e24aaf7136f4f178abe962db633"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-feature-02-dashboard-pt-BR.png",
+      "bytes": 1704206,
+      "sha256": "67b623954040d1251c20d6342e3dec9f84a89ac64834cd652ece8be9623a06c5"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-feature-03-filament-en.png",
+      "bytes": 1586174,
+      "sha256": "6f0659ea92b167e15686bb646fcc69dc64f6b49321739bc06ac136962de60e87"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-feature-03-filament-pt-BR.png",
+      "bytes": 1689153,
+      "sha256": "7a6c53f852565c84afb62e3489cb119fab17f2d99f9504afe57f546ec6352b2e"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-feature-04-files-en.png",
+      "bytes": 1660361,
+      "sha256": "c2a6a046f9e7fc5868658960f9e49d1ecc1b91abbaee520c8cf24a5cac3ac77e"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-feature-04-files-pt-BR.png",
+      "bytes": 1667952,
+      "sha256": "c6883e9abf2732404fa8b24a20531748d5aca9ea68377d14f65d71e55a162ee3"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-hero-dark-en.png",
+      "bytes": 1693886,
+      "sha256": "be75adc562142de2c81897599b803f14bfb7b3926ac94af42a2550d7f4d4d83a"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-hero-dark-pt-BR.png",
+      "bytes": 1722815,
+      "sha256": "11bbcc54cc35544034fc9239e26064eb8ff33cf9e1cc0424a22bb6fd4d863f9e"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-hero-light-en.png",
+      "bytes": 1545592,
+      "sha256": "d080a0f9011008a5e2cb7b2542f7f5d690575e1a157890f8d06f1ef41ddc3d69"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-hero-light-pt-BR.png",
+      "bytes": 1522651,
+      "sha256": "3cff864f63a2faa1c7ddc711eb24009c6d55a796dd01d9fb04d4c9f327ef92ef"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-main-pt-BR.png",
+      "bytes": 1636686,
+      "sha256": "000c0f2306c3f24e1936b53abf2a6412adfa0f7e6640ce52afedbdf899f9a365"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-main-square-en.png",
+      "bytes": 1758764,
+      "sha256": "1702bde48c5a1b8877d996acc7d4f62ecc23ba9b80642b435328ed8826286f53"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-main-square-pt-BR.png",
+      "bytes": 1841646,
+      "sha256": "6e9a5e6bf8e0072d121832e995eecc302eb62d11589978d738dd1792abb30a3b"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-social-preview-en.png",
+      "bytes": 1698992,
+      "sha256": "b54bed4e4364bc1288d39109a776d5faaff62023cac2a3bef014ab15e93809da"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-social-preview-pt-BR.png",
+      "bytes": 1739902,
+      "sha256": "6c55c5990367d8d89a1c219cb96cb508424fd0eda500b0c058889298f43e5c65"
+    },
+    {
+      "file": "assets/marketing/source/u1control-workshop-tile.png",
+      "bytes": 1222954,
+      "sha256": "73fcff93399b56fe233617ae0229ca60daa3e5aed066a90a657dbb3654552ed9"
+    }
+  ],
+  "exports": [
+    {
+      "file": "assets/orca-cloud/u1control-feature-01-setup-en.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1184316,
+      "sha256": "4a5777d3b7c97bbf6cbcc4c3473dc3130270d6b678d64684f233a9ae3904b40e",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-feature-01-setup-en.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'setup' (dark, en) pasted inside the square at x=847 y=96, 681x657, corner radius 11",
+      "use": "Orca Cloud gallery and README feature grid"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-feature-01-setup-pt-BR.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1146120,
+      "sha256": "339e940d28b68e5bda2d4442c8c9666be345c56d01a51189c8d778d2d85e17ab",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-feature-01-setup-pt-BR.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'setup' (dark, pt-BR) pasted inside the square at x=847 y=96, 681x657, corner radius 11",
+      "use": "Orca Cloud gallery and README feature grid"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-feature-02-dashboard-en.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1207861,
+      "sha256": "bbe9f659d3e3622b0bda4931ade6aeaa80bc1523cd366b21227d311a179bf779",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-feature-02-dashboard-en.png",
+      "operation": "resized 1671x941 to 1600x900 (Lanczos); mock screenshot 'camera' (dark, en) pasted inside the square at x=847 y=96, 681x656, corner radius 11",
+      "use": "Orca Cloud gallery and README feature grid"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-feature-02-dashboard-pt-BR.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1242884,
+      "sha256": "262cde12ea083029b3de7523c3be917076c8bfe073afe3f359ac435d2cbdb18b",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-feature-02-dashboard-pt-BR.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'camera' (dark, pt-BR) pasted inside the square at x=847 y=95, 681x658, corner radius 12",
+      "use": "Orca Cloud gallery and README feature grid"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-feature-03-filament-en.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1191438,
+      "sha256": "e73b8936008348d65f28ea4c2af404e1a4b4c9f1716c4a81ef4411e9fe868496",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-feature-03-filament-en.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'heads' (dark, en) pasted inside the square at x=847 y=96, 681x657, corner radius 12",
+      "use": "Orca Cloud gallery and README feature grid"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-feature-03-filament-pt-BR.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1234263,
+      "sha256": "894c7c9c3a0c328a7ec98ff8d35efc7d83441541a041962e17f07229427664ef",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-feature-03-filament-pt-BR.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'heads' (dark, pt-BR) pasted inside the square at x=848 y=96, 680x656, corner radius 12",
+      "use": "Orca Cloud gallery and README feature grid"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-feature-04-files-en.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1218452,
+      "sha256": "b659f62c1739c070ced20f3492e272400f8dd59c5a469af23883b9b255c0854e",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-feature-04-files-en.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'files' (dark, en) pasted inside the square at x=847 y=96, 681x656, corner radius 13",
+      "use": "Orca Cloud gallery and README feature grid"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-feature-04-files-pt-BR.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1215351,
+      "sha256": "4c84e4e40a18f2b908b7ad893d71a3e8d85492371d849436d4b9443fa1c429ab",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-feature-04-files-pt-BR.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'files' (dark, pt-BR) pasted inside the square at x=847 y=96, 681x657, corner radius 11",
+      "use": "Orca Cloud gallery and README feature grid"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-main-en.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1155776,
+      "sha256": "11d574f8eefd2fe6a6e90d5fa8280ea51fa3e07f14784299385532534d238e99",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-cover-en.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'dash' (dark, en) pasted inside the square at x=847 y=96, 680x657, corner radius 12",
+      "use": "Orca Cloud main image"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-main-pt-BR.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1151631,
+      "sha256": "ae9a9a9cce92a03a3a743dc85ac40a9722a2a1414ae073012be0c55f07a2eb91",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-main-pt-BR.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'dash' (dark, pt-BR) pasted inside the square at x=846 y=96, 681x657, corner radius 12",
+      "use": "Orca Cloud main image"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-main-square-en.png",
+      "width": 900,
+      "height": 900,
+      "bytes": 814550,
+      "sha256": "eb7b4c210ccd4d98930dcae15ec7b0e1ab91a8a91dcf8dd8ea65bb7e690305e9",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-main-square-en.png",
+      "operation": "resized 1254x1254 to 900x900 (Lanczos); mock screenshot 'dash' (dark, en) pasted inside the square at x=513 y=321, 357x359, corner radius 10",
+      "use": "Orca Cloud square image"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-main-square-pt-BR.png",
+      "width": 900,
+      "height": 900,
+      "bytes": 843274,
+      "sha256": "24af7c9cecb6df600faa7e05113bdffe4e53335319bfaec30b771a5040c8781f",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-main-square-pt-BR.png",
+      "operation": "resized 1254x1254 to 900x900 (Lanczos); mock screenshot 'dash' (dark, pt-BR) pasted inside the square at x=498 y=304, 372x371, corner radius 8",
+      "use": "Orca Cloud square image"
+    },
+    {
+      "file": "assets/orca-cloud/u1control-tile.png",
+      "width": 512,
+      "height": 512,
+      "bytes": 192791,
+      "sha256": "58d83040ee34d7ded98cad51e83b0ed5d97d210be24a70701ab806d50eb82eac",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-tile.png",
+      "operation": "resized 1254x1254 to 512x512 (Lanczos)",
+      "use": "store tile and plugin table icon"
+    },
+    {
+      "file": "assets/readme/u1control-hero-dark-en.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1177667,
+      "sha256": "a539ba6a59473c5b818cf968f966e3191c3c86aafbe2214b4fb8fb821bb9096e",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-hero-dark-en.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'dash' (dark, en) pasted inside the square at x=848 y=96, 680x656, corner radius 12",
+      "use": "README hero"
+    },
+    {
+      "file": "assets/readme/u1control-hero-dark-pt-BR.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1194930,
+      "sha256": "b37c03a3934377b3985ad9b128a1e300f42e94e9d1a36b86c410d63f815f0d22",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-hero-dark-pt-BR.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'dash' (dark, pt-BR) pasted inside the square at x=847 y=96, 681x656, corner radius 11",
+      "use": "README hero"
+    },
+    {
+      "file": "assets/readme/u1control-hero-light-en.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1144299,
+      "sha256": "6372945a457d0942cf3b7f884b29269582f90f5b1ea5744cafa6b262b7df7b19",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-hero-light-en.png",
+      "operation": "resized 1671x941 to 1600x900 (Lanczos); mock screenshot 'dash' (light, en) pasted inside the square at x=847 y=96, 681x657, corner radius 13",
+      "use": "README hero"
+    },
+    {
+      "file": "assets/readme/u1control-hero-light-pt-BR.png",
+      "width": 1600,
+      "height": 900,
+      "bytes": 1144458,
+      "sha256": "2844924eaf77ec7dfd4979089d7d199e55d4c27d36afadc4de57e50f9bbfcfd0",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-hero-light-pt-BR.png",
+      "operation": "resized 1672x941 to 1600x900 (Lanczos); mock screenshot 'dash' (light, pt-BR) pasted inside the square at x=847 y=95, 683x659, corner radius 12",
+      "use": "README hero"
+    },
+    {
+      "file": "assets/readme/u1control-screenshot-dashboard-dark-en.png",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 415844,
+      "sha256": "d3eee03bb5da83c66152d5176ada24ed11682eb859db70e56605ecfdb6f96325",
+      "date": "2026-11-16",
+      "source": "the built page (src/u1control/ui/app.html) with fake data",
+      "operation": "mock screenshot 'wide' (dark, en), 1280x800 CSS px at 1.25x",
+      "use": "README screenshot"
+    },
+    {
+      "file": "assets/readme/u1control-screenshot-dashboard-dark-pt-BR.png",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 442127,
+      "sha256": "e2e98a6d9f8ff7f70b0cd66d88bb0f6d53f9c3c89314c5ed89bd29a8cde03e64",
+      "date": "2026-11-16",
+      "source": "the built page (src/u1control/ui/app.html) with fake data",
+      "operation": "mock screenshot 'wide' (dark, pt-BR), 1280x800 CSS px at 1.25x",
+      "use": "README screenshot"
+    },
+    {
+      "file": "assets/readme/u1control-screenshot-dashboard-light-en.png",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 418308,
+      "sha256": "ab0f45dedc6d48349b835f5234d873b535025ec7f3a3b141cfe94c65a28ab363",
+      "date": "2026-11-16",
+      "source": "the built page (src/u1control/ui/app.html) with fake data",
+      "operation": "mock screenshot 'wide' (light, en), 1280x800 CSS px at 1.25x",
+      "use": "README screenshot"
+    },
+    {
+      "file": "assets/readme/u1control-screenshot-dashboard-light-pt-BR.png",
+      "width": 1600,
+      "height": 1000,
+      "bytes": 443297,
+      "sha256": "8d26e1fc7b9864ab946a3b59bfaec9ba0f0e017330bd1825964d78d1c2f79574",
+      "date": "2026-11-16",
+      "source": "the built page (src/u1control/ui/app.html) with fake data",
+      "operation": "mock screenshot 'wide' (light, pt-BR), 1280x800 CSS px at 1.25x",
+      "use": "README screenshot"
+    },
+    {
+      "file": "assets/readme/u1control-screenshot-print-setup-dark-en.png",
+      "width": 900,
+      "height": 800,
+      "bytes": 151777,
+      "sha256": "41b5e42cb811bc006502353855ef61d0c7e93401731a026b2097fe5721ae9202",
+      "date": "2026-11-16",
+      "source": "the built page (src/u1control/ui/app.html) with fake data",
+      "operation": "mock screenshot 'setup' (dark, en), 720x640 CSS px at 1.25x",
+      "use": "README screenshot"
+    },
+    {
+      "file": "assets/readme/u1control-screenshot-print-setup-dark-pt-BR.png",
+      "width": 900,
+      "height": 800,
+      "bytes": 168115,
+      "sha256": "70c79dcba57b3befc8b9cf2d54e5596a56cdfe01999e7fbb0f76241ae9e23f5f",
+      "date": "2026-11-16",
+      "source": "the built page (src/u1control/ui/app.html) with fake data",
+      "operation": "mock screenshot 'setup' (dark, pt-BR), 720x640 CSS px at 1.25x",
+      "use": "README screenshot"
+    },
+    {
+      "file": "assets/readme/u1control-screenshot-print-setup-light-en.png",
+      "width": 900,
+      "height": 800,
+      "bytes": 149067,
+      "sha256": "036fcc8ee83f4f8057da5dcba155a725c50c7222d6e1ca134fb61387f3de76ce",
+      "date": "2026-11-16",
+      "source": "the built page (src/u1control/ui/app.html) with fake data",
+      "operation": "mock screenshot 'setup' (light, en), 720x640 CSS px at 1.25x",
+      "use": "README screenshot"
+    },
+    {
+      "file": "assets/readme/u1control-screenshot-print-setup-light-pt-BR.png",
+      "width": 900,
+      "height": 800,
+      "bytes": 164913,
+      "sha256": "8dbc380909cf11c5fc2b404021d3939bae853bf3b64f948babd4c0221fba294f",
+      "date": "2026-11-16",
+      "source": "the built page (src/u1control/ui/app.html) with fake data",
+      "operation": "mock screenshot 'setup' (light, pt-BR), 720x640 CSS px at 1.25x",
+      "use": "README screenshot"
+    },
+    {
+      "file": "assets/social/u1control-social-preview-en.png",
+      "width": 1280,
+      "height": 640,
+      "bytes": 732756,
+      "sha256": "04cb532018890efaecb2c3ba2a31db4cbb1f746a06c9b3baaa2c62ffe6646622",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-social-preview-en.png",
+      "operation": "resized 1774x887 to 1280x640 (Lanczos); mock screenshot 'dash' (dark, en) pasted inside the square at x=755 y=59, 474x470, corner radius 8",
+      "use": "GitHub social preview"
+    },
+    {
+      "file": "assets/social/u1control-social-preview-pt-BR.png",
+      "width": 1280,
+      "height": 640,
+      "bytes": 740267,
+      "sha256": "24ba9c88fe325053af91d153f431ade9353789a1e64a3a78f06b1fe9d41bbb68",
+      "date": "2026-11-16",
+      "source": "assets/marketing/source/u1control-workshop-social-preview-pt-BR.png",
+      "operation": "resized 1774x887 to 1280x640 (Lanczos); mock screenshot 'dash' (dark, pt-BR) pasted inside the square at x=720 y=61, 508x477, corner radius 8",
+      "use": "GitHub social preview"
+    }
+  ]
+}

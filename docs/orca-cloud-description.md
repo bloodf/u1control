@@ -1,79 +1,132 @@
-# Snapmaker U1 control for OrcaSlicer
+# Orca Cloud description
 
-![u1control](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-main.png){align=center}
+The text of the [U1 Control listing](https://cloud.orcaslicer.com/p/55b8c347d443). Paste the English block into
+the English description and the Portuguese block into the Portuguese one. Each block stays under Orca Cloud's
+4000 characters. The images it embeds are served from `main`, so they show once this file's commit is merged.
+The listing's own images (tile, main, gallery) are in [release.md](release.md#orca-cloud-listing).
 
-u1control brings the U1 parts of Snapmaker Orca to the regular OrcaSlicer and adds a printer tab in
-OrcaSlicer's own colours: a dashboard with camera, status, toolheads, RFID and Spoolman, a file
-manager, and settings for calibration and the Extended Firmware. It works with the stock Snapmaker
-firmware and with the U1 Extended Firmware. Local network only, no cloud.
+Keep the plugin list in step with the README's "More plugins by bloodf" table.
 
-## Print setup
+## English
 
-![Print setup](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-print-setup.png){align=center}
+```markdown
+Run the Snapmaker U1 from OrcaSlicer: toolheads, camera, files.
 
-When you press **Print**, each filament is matched to a toolhead by material and colour, with warnings
-for empty heads or other materials. Auto bed leveling, flow calibration, time-lapse and the top cover
-are set the way Snapmaker Orca sets them. u1control also fixes the U1 G-code: whole-bed mesh,
-print-by-object tool-change lift, real layer count, file colours.
+## What you need
 
-## Dashboard
+- OrcaSlicer 2.5.0 or newer
+- A Snapmaker U1 on the same network, with the stock firmware or the U1 Extended Firmware
+- Spoolman, only if you want a spool per toolhead
 
-![Dashboard](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-live-control.png){align=center}
+## What it does
 
-Camera, status, temperatures with each head's filament, pause, resume, cancel and emergency stop,
-chamber light and top cover, inside OrcaSlicer. With the Extended Firmware the printer's touchscreen
-is on the dashboard too, and you can tap it. Resume a print after a power cut.
+When you press **Print**, each filament is matched to one of the four toolheads and the U1 G-code is fixed, the way Snapmaker Orca does.
 
-## Toolheads and RFID
+![The U1 print setup window: four filaments matched to the toolheads T1 to T4](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-01-setup-en.png){align=center}
 
-![Toolheads and RFID](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-toolheads-rfid.png){align=center}
+The Dashboard shows status, temperatures and the camera, with pause, resume, cancel and emergency stop.
 
-The four toolheads sit on the dashboard: see and edit the filament in each head, load and unload, and
-read tags again. RFID tags (Snapmaker, and with the Extended Firmware OpenRFID, OpenSpool and NTAG)
-pick the right filament profile for your project.
+![The Dashboard: bed temperature, speed, top cover, chamber light and the camera picture](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-02-dashboard-en.png){align=center}
 
-## Spoolman
+Each toolhead shows its filament, its RFID tag and its Spoolman spool with the grams left.
 
-![Spoolman](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-spoolman.png){align=center}
+![Toolheads T1 and T2 with filament, RFID tag and Spoolman spool](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-03-filament-en.png){align=center}
 
-One spool per toolhead, picked from a list that shows each spool's colour, brand, material and grams
-left. Filament use is recorded for each head when the print ends. Works with the
-[Spooler](https://github.com/bloodf/spooler) plugin, which turns your spools into OrcaSlicer filament
-profiles.
+Files on the printer can be printed, renamed, moved and deleted, and time-lapse videos saved to your computer.
 
-## Files and folders
+![The Files page: folders, print files and the time-lapse list](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-04-files-en.png){align=center}
 
-![Files and folders](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/frame-files-firmware.png){align=center}
+Automagic mode runs every step it can by itself and asks only when a choice is needed. Expert mode turns each step into a setting.
 
-Browse, print, rename and delete files, filter them by name, see each file's filament, create folders and
-move files into them. Time-lapses have their own list, with each video's cover: save one to your computer or
-delete it from the printer.
-Calibration, print options and the Extended Firmware settings are under Settings.
+## How to start
 
-## Automagic or Expert
+1. Subscribe, open **File > Plugins**, click **Refresh** and tick **Activate**. Allow the background thread.
+2. Select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name). The **U1 Control** tab appears next to Prepare and Preview.
+3. Automagic adds **U1 print setup** to your U1 process preset. Save the preset, slice and press **Print**.
 
-Automagic does everything it can by itself and only asks when a decision is needed. Expert turns each
-step into a setting.
+## Privacy
 
-## Install
+U1 Control talks only to your printer and, if you set one up, your Spoolman server, on your local network. It has no cloud service and sends nothing to the internet. Deleting files, loading or unloading filament, calibration and emergency stop ask first.
 
-1. Subscribe, then open **File > Plugins**, click **Refresh** and tick **Activate**. Allow the
-   background thread.
-2. Select your Snapmaker U1 printer and enter its IP address (Wi-Fi icon next to the printer).
-3. Automagic adds **U1 print setup** to your U1 process preset; save the preset.
-4. Open the **U1 Control** tab next to Prepare and Preview.
+Independent project, not made or supported by Snapmaker.
 
-Requires OrcaSlicer 2.5.0 or newer. Independent project, not made or supported by Snapmaker.
+## Languages
 
-Source, documentation and issues: [github.com/bloodf/u1control](https://github.com/bloodf/u1control)
-· License: GPL-3.0-only
+English and Brazilian Portuguese.
 
-## More plugins for your OrcaSlicer workflow
+## More plugins by bloodf
 
-- **[Organizer](https://cloud.orcaslicer.com/p/5bf381fd42d4)**: Arrange objects by their real outline and fill a build plate with more copies.
-- **[Orca Print Calculator](https://cloud.orcaslicer.com/p/521c07cf6de2)**: Price every build plate: Spoolman filament cost, energy, labor, fees and a suggested selling price.
-- **[Spooler](https://cloud.orcaslicer.com/p/50c35dcbd6f3)**: Your Spoolman spools and filament presets in OrcaSlicer, with what is left on each spool.
-- **[Kobra Control](https://cloud.orcaslicer.com/p/59c786285255)**: The Anycubic Kobra X in OrcaSlicer: Print and Send, the Device tab, ACE slots and a dashboard.
-- **[Embedder](https://cloud.orcaslicer.com/p/58222d4f9e52)**: Cut magnet and NFC sticker pockets into a part, with a pause at the right layer to drop each insert in.
+- [Organizer](https://cloud.orcaslicer.com/p/5bf381fd42d4): Arrange parts by their real outline and fill a plate with more copies.
+- [Embedder](https://cloud.orcaslicer.com/p/58222d4f9e52): Magnet and NFC pockets, with the pause at the right layer.
+- [Print Calculator](https://cloud.orcaslicer.com/p/521c07cf6de2): Price every plate: filament, energy, labour, fees and margin.
+- [Spooler](https://cloud.orcaslicer.com/p/50c35dcbd6f3): Your Spoolman stock inside OrcaSlicer, with what is left on each spool.
+- [Kobra Control](https://cloud.orcaslicer.com/p/59c786285255): Run the Anycubic Kobra X from OrcaSlicer over your LAN.
 
-Each plugin works on its own; installed together they share data where it helps (U1 Control shows Spooler's stock; the Print Calculator uses Spooler's Spoolman address and filament presets).
+Each plugin works on its own; installed together they share data where it helps.
+
+## Source code
+
+[github.com/bloodf/u1control](https://github.com/bloodf/u1control) · GPL-3.0-only · by bloodf
+```
+
+## Português (Brasil)
+
+```markdown
+Controle a Snapmaker U1 pelo OrcaSlicer: cabeças, câmera, arquivos.
+
+## O que você precisa
+
+- OrcaSlicer 2.5.0 ou mais novo
+- Uma Snapmaker U1 na mesma rede, com o firmware original ou o U1 Extended Firmware
+- Spoolman, só se você quiser uma bobina por cabeça
+
+## O que faz
+
+Quando você aperta **Imprimir**, cada filamento é relacionado a uma das quatro cabeças e o G-code da U1 é corrigido, como o Snapmaker Orca faz.
+
+![A janela Preparar impressão na U1: quatro filamentos relacionados às cabeças T1 a T4](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-01-setup-pt-BR.png){align=center}
+
+O Painel mostra o status, as temperaturas e a câmera, com pausar, retomar, cancelar e parada de emergência.
+
+![O Painel: temperatura da mesa, velocidade, tampa superior, luz da câmara e a imagem da câmera](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-02-dashboard-pt-BR.png){align=center}
+
+Cada cabeça mostra o filamento, a etiqueta RFID e a bobina do Spoolman com as gramas restantes.
+
+![As cabeças T1 e T2 com filamento, etiqueta RFID e bobina do Spoolman](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-03-filament-pt-BR.png){align=center}
+
+Os arquivos da impressora podem ser impressos, renomeados, movidos e apagados, e os vídeos de timelapse salvos no computador.
+
+![A página Arquivos: pastas, arquivos de impressão e a lista de timelapses](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-04-files-pt-BR.png){align=center}
+
+O modo Automágico roda sozinho tudo o que pode e só pergunta quando é preciso escolher. O modo Especialista transforma cada etapa em um ajuste.
+
+## Como começar
+
+1. Assine, abra **File > Plugins**, clique em **Refresh** e marque **Activate**. Permita a thread em segundo plano.
+2. Selecione a sua Snapmaker U1 e informe o endereço IP dela (o ícone de Wi-Fi ao lado do nome da impressora). A aba **U1 Control** aparece ao lado de Prepare e Preview.
+3. O Automágico acrescenta **U1 print setup** ao seu perfil de processo da U1. Salve o perfil, fatie e aperte **Imprimir**.
+
+## Privacidade
+
+O U1 Control fala só com a sua impressora e, se você configurar, com o seu servidor Spoolman, na sua rede local. Não tem serviço de nuvem e não envia nada para a internet. Apagar arquivos, carregar ou descarregar filamento, calibrar e a parada de emergência sempre perguntam antes.
+
+Projeto independente, não é feito nem suportado pela Snapmaker.
+
+## Idiomas
+
+Inglês e português do Brasil.
+
+## Mais plugins do bloodf
+
+- [Organizer](https://cloud.orcaslicer.com/p/5bf381fd42d4): Organize as peças pelo contorno real e encha a mesa com mais cópias.
+- [Embedder](https://cloud.orcaslicer.com/p/58222d4f9e52): Bolsos para ímãs e NFC, com a pausa na camada certa.
+- [Print Calculator](https://cloud.orcaslicer.com/p/521c07cf6de2): Preço de cada mesa: filamento, energia, mão de obra, taxas e margem.
+- [Spooler](https://cloud.orcaslicer.com/p/50c35dcbd6f3): Seu estoque do Spoolman dentro do OrcaSlicer, com o que resta em cada bobina.
+- [Kobra Control](https://cloud.orcaslicer.com/p/59c786285255): Controle a Anycubic Kobra X pelo OrcaSlicer na sua rede.
+
+Cada plugin funciona sozinho; instalados juntos, compartilham dados onde ajuda.
+
+## Código-fonte
+
+[github.com/bloodf/u1control](https://github.com/bloodf/u1control) · GPL-3.0-only · by bloodf
+```

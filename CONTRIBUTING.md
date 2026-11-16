@@ -43,7 +43,7 @@ src/u1control/      plugin sources (see docs/architecture.md)
 src/u1control/ui/   the tab and pop-up pages, icons, toolhead badges, illustrations
 scripts/build.py    builds the single-file plugin
 tests/              unit tests, a fake `orca` module and a fake U1 + Spoolman server
-assets/             README, store and social images, fonts with their licences
+assets/             README, store and social images, diagrams, fonts with their licences
 docs/               reference documentation
 ```
 
@@ -99,12 +99,22 @@ Maintainers only:
 
 Images live in `assets/` and the UI icons in `src/u1control/ui/`. Keep the SVG and PNG of an image
 together and update both. Fonts stay with their licence files.
-The screenshots inside the README, Orca Cloud and install images are real renders of the plugin's pages: regenerate them with
-`python3 scripts/render_images.py` (needs Node 24+ and Google Chrome; pass a name such as `hero` to redo one image) instead of editing the PNGs.
+The README, Orca Cloud and social images are made by `python3 scripts/render_images.py`: do not edit the PNGs.
+The script needs Pillow (`pip install pillow`; nothing else here uses it), Node 24+ and Google Chrome. Pass a name
+such as `hero` or `feature-03` to redo one image.
+
+- `assets/marketing/source/` holds the native marketing artwork, each with an empty screenshot square. Never
+  change these files.
+- The script scales each one to its listing size, renders the matching screen of the built page with fake data
+  and pastes it inside the square. It also takes the README screenshots.
+- `assets/marketing/asset-manifest.json` records every export: source, operation, size, bytes, hash and date.
+  The script rewrites it; commit it with the images.
+
 Build the Vue page with `npm --prefix ui run build` first. These are mock previews, not captures from OrcaSlicer.
 Set `RENDER_OUT=/tmp/u1control-artwork` to inspect the output without replacing existing artwork.
 The renderer blocks network access, validates the page before capturing and saves HTML/JSON evidence if it fails.
-The script also inlines Spooler's logo into the integration SVGs and keeps every PNG under Orca Cloud's 2 MB limit.
+It refuses a PNG over Orca Cloud's 2 MB limit. Named `integration`, it inlines Spooler's logo into the
+integration SVGs (needs the Spooler repo next to this one).
 
 ## License
 
