@@ -284,6 +284,50 @@ class PluginAgentTests(unittest.TestCase):
         reads = self.orca.permission_requests[0]["fs_read"]
         self.assertTrue(reads and all(r.endswith("/*") for r in reads))
 
+    def test_raising_queued_callback_is_caught(self):
+        """A callback queued to OrcaSlicer's UI thread that raises must not escape: OnExceptionInMainLoop would end
+        OrcaSlicer."""
+        queued, logged = [], []
+        self.agent.set_queue_on_main_fn(queued.append)
+
+        def boom(*args):
+            raise RuntimeError("host gone")
+        self.agent.set_on_printer_connected_fn(boom)
+        self.agent._emit("printer_connected", "dev")
+        old_log, self.ns["log"] = self.ns["log"], logged.append
+        try:
+            queued[0]()   # what OrcaSlicer's CallAfter runs later: must return normally
+        finally:
+            self.ns["log"] = old_log
+        self.assertEqual(len(logged), 1)
+        self.assertIn("printer_connected", logged[0])
+        self.assertIn("host gone", logged[0])
+
+    def test_no_preset_read_until_loaded(self):
+        """OrcaSlicer 2.5.1 crashed (SIGSEGV in PresetBundle::full_fff_config on the plugin load thread, under
+        PythonPluginBridge::finalize_plugin_capture) when a plugin read presets while the UI thread was still
+        loading them. Nothing preset-related may run at import, class definition, capability construction,
+        register_capabilities or on_load."""
+        touched = []
+
+        def guard(name):
+            def call(*a, **k):
+                touched.append(name)
+                raise AssertionError("orca.host.%s read during plugin load" % name)
+            return call
+        orca = fakes.install_orca()
+        orca.host.preset_bundle = guard("preset_bundle")
+        orca.host.preset = type("Guard", (), {"__getattr__": lambda self, n: guard("preset." + n)()})()
+        orca.registered.clear()
+        ns = fakes.load_wheel(self.artifact)   # import and class definitions
+        ns["U1Control"]().register_capabilities()
+        for cls in list(orca.registered):
+            cap = cls()
+            if hasattr(cap, "on_load"):
+                cap.on_load()
+                self.addCleanup(cap.on_unload)
+        self.assertEqual(touched, [])
+
     def test_default_settings_with_every_box_ticked(self):
         """OrcaSlicer's dialog starts every box ticked: U1 Control's defaults decide, time-lapse stays off."""
         p = self.params(task_bed_leveling=True, task_flow_cali=True, task_record_timelapse=True)

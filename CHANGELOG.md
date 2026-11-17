@@ -9,6 +9,14 @@
 - Notifications appear bottom-left and each one can be closed; warnings and notices on the page can be dismissed.
 - Settings > Spoolman lists what the Spoolman features need (Spoolman and the Spooler plugin), whether each was found, and how to install it, with a Check again button.
 
+### Fixed
+
+- OrcaSlicer could close by itself at start-up, or while the Device tab was open, if one of the status updates
+  U1 Control hands to it failed. Such a failure is now written to the log and OrcaSlicer keeps running.
+- U1 Control now reads OrcaSlicer's presets only on OrcaSlicer's own UI thread when it adds "U1 print setup"
+  to a process preset, and for Check U1 connection and Sync U1 toolheads to project. Before, it read them from a
+  thread of its own while OrcaSlicer might be changing them.
+
 ## [0.12.0] - 2026-11-16
 
 - U1 Control now speaks Spanish, German and Simplified Chinese as well as English and Portuguese: the U1 Control tab (Dashboard, Files with Time-lapses, Console, Settings), the U1 print setup window, confirmations, empty states, notices and errors, and the progress and error messages u1control shows in OrcaSlicer's Print dialog.
