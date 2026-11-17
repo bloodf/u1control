@@ -8,6 +8,7 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
 
 import orca
 
@@ -691,6 +692,7 @@ OK, ERR_INVALID_HANDLE, ERR_CANCELED, ERR_INVALID_RESULT = 0, -1, -18, -19
 ERR_LP_UPLOAD, ERR_LP_PUBLISH, ERR_SG_UPLOAD, ERR_CONNECT = -4020, -4030, -5010, -6010
 STAGE_CREATE, STAGE_UPLOAD, STAGE_SENDING, STAGE_FINISHED, STAGE_ERROR = 0, 1, 3, 6, 7
 AGENT_POLL = 2.0         # s between status queries while OrcaSlicer is connected to the U1
+CATALOG_EVERY = 30.0     # s between re-reads of the filament presets and Spooler's profiles.json for tray ids
 
 
 URGENT_KINDS = ("pause", "resume", "stop")   # Device tab commands sent at once, on their own thread
@@ -700,6 +702,12 @@ DEVICE_GCODE_TIMEOUT = 600   # s: a Device tab G-code line may run long (homing,
 def host_of(address):
     """'http://192.168.1.5:7125/x' -> '192.168.1.5:7125' (scheme and path stripped; Moonraker keeps the port)."""
     return clean(address).split("://", 1)[-1].split("/", 1)[0]
+
+
+def _hostname(address):
+    """The host name alone: 'http://192.168.1.5:7125/x' and '192.168.1.5' are the same U1."""
+    address = clean(address)
+    return urllib.parse.urlsplit(address if "://" in address else "http://" + address).hostname or ""
 
 
 def base_url(host, port="", use_ssl=False):
@@ -741,6 +749,8 @@ class U1Agent(pa.PrinterAgentBase):
         self.view = None
         self.firmware = ""
         self._filament_ids = {}
+        self._catalog = ([], "", None)       # (presets, printer label, Spooler's profiles.json) for tray ids
+        self._catalog_at = 0.0
         self.base = ""
         self._wake = threading.Event()
         self._stop = threading.Event()
@@ -827,7 +837,8 @@ class U1Agent(pa.PrinterAgentBase):
         key = clean(getattr(params, "password", ""))
         base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
         client = Moonraker(base, key, timeout=5)
-        self._filament_ids = self._generic_ids()
+        self._catalog_at = 0.0   # the first push re-reads Spooler's profiles.json
+        self._refresh_catalog()
         with self._lock:   # one step: a reader under the lock never sees the new printer with the old one's id
             self.dev_id, self.host, self.api_key, self.base = params.dev_id, host, key, base
             self.firmware = ""   # another printer, or the same one updated meanwhile
@@ -867,21 +878,42 @@ class U1Agent(pa.PrinterAgentBase):
                 self._commands.put(None)
             self._worker = None
 
-    def _generic_ids(self):
-        """{"Generic <family> @System": filament_id} from the loaded system presets (UI thread, no I/O)."""
-        wanted = {agent.generic_preset_name(m) for m in agent.FILAMENT_FAMILIES}
-        out = {}
+    def _refresh_catalog(self, profiles=None):
+        """UI thread, no I/O: re-read the presets the trays' ids come from (Spooler adds its own at any time)."""
         try:
-            collection = orca.host.preset_bundle().filaments
-            for i in range(collection.size()):
-                preset = collection.preset(i)
-                if preset.name in wanted:
-                    fid = getattr(preset, "filament_id", "") or clean(preset.config_value("filament_id"))
-                    if fid:
-                        out[preset.name] = fid
+            generic, presets, label = filament_catalog()
         except Exception as e:
             log("agent: filament presets not readable (%s); trays show no preset" % e)
-        return out
+            return
+        self._filament_ids = generic
+        self._catalog = (presets, label, profiles if profiles is not None else self._catalog[2])
+
+    def _bound_spools(self):
+        """{toolhead index: Spoolman spool} for this U1's toolheads linked to spools, as the tab last loaded them."""
+        svc = _service
+        if svc is None:
+            return {}
+        with svc.lock:
+            if not (svc.target and _hostname(svc.target.host) == _hostname(self.host)):
+                return {}
+            by_id = {s["id"]: s for s in svc.spools}
+            return {h: by_id[sid] for h, sid in svc.bindings.items() if sid in by_id}
+
+    def _preferred(self):
+        """preferred(head) for agent.push_status: the filament_id of the head's spool's preset, or ""."""
+        if time.time() - self._catalog_at >= CATALOG_EVERY:   # this thread may read files, not presets
+            self._catalog_at = time.time()
+            profiles = spooler_bridge.read_json(spooler_dir(), spooler_bridge.PROFILES_FILE)
+            with self._lock:
+                on_main = self._cb.get("queue_on_main")
+            if on_main is not None:
+                on_main(lambda: self._refresh_catalog(profiles or {}))
+        bound = self._bound_spools()
+        presets, label, profiles = self._catalog
+
+        def preferred(head):
+            return spooler_bridge.tray_filament_id(bound.get(head["index"]), presets, profiles, label)
+        return preferred
 
     def _poll(self, stop, client):
         connected = False
@@ -903,7 +935,7 @@ class U1Agent(pa.PrinterAgentBase):
                     dev_id = self._dev_id()
                     self._emit("local_connect", 0, dev_id, "0")
                     self._emit("printer_connected", dev_id)
-                self._message(agent.push_status(view, self._filament_ids.get))
+                self._message(agent.push_status(view, self._filament_ids.get, self._preferred()))
             except Exception as e:
                 if connected:
                     log("agent: the U1 stopped answering (%s)" % e)
@@ -1256,6 +1288,32 @@ def filament_meta(full=True):
                         colour=colours[0] if colours else "", vendor=vendor[0] if vendor else "")
         out.append(meta)
     return out
+
+
+def filament_catalog():
+    """(Generic ids, presets, printer label) for the Device tab's tray ids; UI thread, no I/O.
+    Generic ids: {"Generic <family> @System": filament_id}. Presets: spooler_bridge.tray_filament_id meta for
+    the system and Spooler presets OrcaSlicer counts as compatible with the selected printer, the only ones its
+    AMS sync loads."""
+    bundle = orca.host.preset_bundle()
+    printer = bundle.current_printer_preset()
+    wanted = {agent.generic_preset_name(m) for m in agent.FILAMENT_FAMILIES}
+    collection = bundle.filaments
+    generic, presets = {}, []
+    for i in range(collection.size()):
+        preset = collection.preset(i)
+        bundle_id = getattr(preset, "bundle_id", "") or ""
+        first = lambda key: (spooler_bridge.as_list(preset.config_value(key)) or [""])[0]   # noqa: E731
+        if preset.name in wanted and first("filament_id"):
+            generic[preset.name] = first("filament_id")
+        system = bool(getattr(preset, "is_system", False))
+        if not getattr(preset, "is_compatible", True) or not (system or bundle_id == spooler_bridge.BUNDLE_ID):
+            continue
+        presets.append({"name": preset.name, "bundle_id": bundle_id, "is_system": system,
+                        "filament_id": first("filament_id"), "vendor": first("filament_vendor"),
+                        "type": first("filament_type"),
+                        "colour": first("default_filament_colour") or first("filament_colour")})
+    return generic, presets, clean(printer.config_value("printer_model")) or printer.name
 
 
 def spooler_state():

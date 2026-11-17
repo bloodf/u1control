@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- OrcaSlicer's "sync from AMS" picks the right filament for each toolhead. The Device tab reported the Generic preset's id for every loaded toolhead, and nothing at all for a material it didn't know ("PLA WOOD", "PETG-CF"), which OrcaSlicer turns into "Generic PLA". A toolhead linked to a Spoolman spool now reports the id of that spool's Spooler preset, else a system preset of the spool's vendor and material, else the Generic preset of the toolhead's real material. OrcaSlicer keeps a slot's Spooler preset when it already holds it; on a slot that holds something else it loads the system preset the Spooler preset is based on, since its sync only loads base presets.
+- "Apply to project filaments" uses the spool's own Spooler preset when Spooler makes presets per spool, instead of the preset of the filament's lowest-numbered spool.
+
 ## [0.12.0] - 2026-11-16
 
 - U1 Control now speaks Spanish, German and Simplified Chinese as well as English and Portuguese: the U1 Control tab (Dashboard, Files with Time-lapses, Console, Settings), the U1 print setup window, confirmations, empty states, notices and errors, and the progress and error messages u1control shows in OrcaSlicer's Print dialog.

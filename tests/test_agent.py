@@ -13,6 +13,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [os.path.join(ROOT, "src", "u1control"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "scripts")]
 
 import agent  # noqa: E402
+import spooler_bridge as sb  # noqa: E402
 import fakes  # noqa: E402
 import u1  # noqa: E402
 from moonraker import Moonraker, UploadCancelled  # noqa: E402
@@ -40,6 +41,18 @@ class PushTests(unittest.TestCase):
         self.assertIs(p["sdcard"], True)
         self.assertEqual(p["home_flag"] >> 8 & 3, agent.HAS_SDCARD_NORMAL)
         self.assertEqual(p["gcode_state"], "IDLE")
+
+    def test_tray_ids_prefer_the_linked_spools_preset_then_generic_by_material(self):
+        ids = {"Generic PLA @System": "GFL99", "Generic PETG @System": "GFG99", "Generic PLA Matte @System": "GFLM"}
+        block = agent.push_status(view(), ids.get, lambda h: {1: "SPOOLER_PETG"}.get(h["index"], ""))["print"]
+        self.assertEqual([t["tray_info_idx"] for t in block["ams"][0]["tray"]], ["GFL99", "SPOOLER_PETG", "", "GFLM"])
+
+    def test_generic_preset_by_the_real_material(self):
+        self.assertEqual(agent.generic_preset_name("PETG"), "Generic PETG @System")
+        self.assertEqual(agent.generic_preset_name("PLA WOOD"), "Generic PLA @System")   # not in the table: by word
+        self.assertEqual(agent.generic_preset_name("PETG-CF"), "Generic PETG @System")
+        self.assertEqual(agent.generic_preset_name("PLA-CF MATTE"), "Generic PLA-CF @System")   # longest family
+        self.assertIsNone(agent.generic_preset_name("WEIRD"))
 
     def test_four_toolheads_are_one_four_tray_unit(self):
         block = agent.push_status(view(), {"Generic PLA @System": "GFL99"}.get)["print"]
@@ -351,6 +364,32 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(self.agent.send_message_to_printer("u1", json.dumps({"print": {"command": "calibration"}}), 0, 0),
                          agent.UNSUPPORTED)
 
+    def test_linked_toolhead_reports_its_spooler_preset_id(self):
+        """OrcaSlicer's AMS sync matches presets on tray_info_idx: a toolhead linked to a Spoolman spool carries the id
+        of the spool's Spooler preset (here per spool, from profiles.json); the others the Generic id of their material."""
+        import threading
+        import types
+        mine = {"name": "_local/spooler/Acme PLA #5 @Snapmaker U1", "bundle_id": "spooler", "is_system": False,
+                "filament_id": "ACME_PLA", "vendor": "Acme", "type": "PLA", "colour": "#00FF00"}
+        self.ns["filament_catalog"] = lambda: ({"Generic PLA @System": "GFL99", "Generic PETG @System": "GFG99"},
+                                               [mine], "Snapmaker U1")
+        profiles = {"version": 1, "filaments": {}, "spools": {"5": {"Snapmaker U1": mine["name"]}}}
+        self.ns["spooler_bridge"].read_json = lambda folder, name: profiles   # the wheel's own module object
+        self.ns["_service"] = types.SimpleNamespace(
+            lock=threading.RLock(), target=types.SimpleNamespace(host="http://%s/" % self.fake.host.split(":")[0]),
+            spools=[{"id": 5, "filament_id": 9, "vendor": "Acme", "material": "PLA", "colour": "#FF0000"}],
+            bindings={0: 5})
+        messages = []
+        self.agent.set_on_local_message_fn(lambda dev, text: messages.append(json.loads(text)))
+        self.agent.set_queue_on_main_fn(lambda task: task())
+        self.connect()
+        self.assertTrue(wait_for(lambda: messages))
+        trays = messages[-1]["print"]["ams"][0]["tray"]
+        self.assertEqual((trays[0]["tray_type"], trays[0]["tray_info_idx"]), ("PLA", "ACME_PLA"))
+        self.assertEqual((trays[1]["tray_type"], trays[1]["tray_info_idx"]), ("PETG", "GFG99"))
+        self.ns["_service"].target.host = "10.9.9.9"   # another U1's links never reach this one's trays
+        self.assertEqual(self.agent._bound_spools(), {})
+
     def connect(self, **kw):
         conn = self.orca.printer_agent.PrinterConnectionParams(**{"dev_id": "u1", "host": self.fake.host, **kw})
         self.assertEqual(self.agent.connect_printer(conn), 0)
@@ -512,6 +551,50 @@ class PluginAgentTests(unittest.TestCase):
     def test_commands_need_a_connection(self):
         pause = json.dumps({"print": {"command": "pause"}})
         self.assertEqual(self.agent.send_message_to_printer("u1", pause, 0, 0), self.ns["ERR_CONNECT"])
+
+
+def bridge_preset(name, vendor="Generic", colour="#FF0000"):
+    return {"name": sb.NAME_PREFIX + name, "bundle_id": sb.BUNDLE_ID, "compatible_printers": ["Snapmaker U1"],
+            "colour": colour, "vendor": vendor}
+
+
+class TrayIdTests(unittest.TestCase):
+    """tray_filament_id: the id OrcaSlicer's AMS sync matches presets on, for a slot linked to a spool."""
+    LABEL = "Snapmaker U1"
+    SYSTEM = [{"name": "Generic PLA @System", "is_system": True, "filament_id": "OGFL99", "vendor": "Generic", "type": "PLA"},
+              {"name": "SUNLU PLA Matte @System", "is_system": True, "filament_id": "SNLM", "vendor": "SUNLU", "type": "PLA"},
+              {"name": "SUNLU PLA @System", "is_system": True, "filament_id": "SNL01", "vendor": "SUNLU", "type": "PLA"},
+              {"name": "SUNLU PETG @System", "is_system": True, "filament_id": "SNLG", "vendor": "SUNLU", "type": "PETG"}]
+    SPOOL = {"id": 12, "filament_id": 7, "vendor": "SUNLU", "material": "PLA", "colour": "#101010"}
+
+    def spooler(self, name, fid, colour="#101010"):
+        return {**bridge_preset(name, vendor="SUNLU", colour=colour), "filament_id": fid, "type": "PLA", "is_system": False}
+
+    def test_linked_spool_reports_its_spooler_preset(self):
+        presets = self.SYSTEM + [self.spooler("SUNLU PLA Matte Black @Snapmaker U1", "SNLM")]
+        profiles = {"version": 1, "filaments": {"7": {self.LABEL: "_local/spooler/SUNLU PLA Matte Black @Snapmaker U1"}}}
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, presets, profiles, self.LABEL), "SNLM")
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, presets, None, self.LABEL), "SNLM")   # by vendor, material, colour
+
+    def test_per_spool_preset_wins_over_the_filament_one(self):
+        presets = self.SYSTEM + [self.spooler("SUNLU PLA #3 @Snapmaker U1", "SNL01"),
+                                 self.spooler("SUNLU PLA #12 @Snapmaker U1", "SNLM")]
+        profiles = {"version": 1, "filaments": {"7": {self.LABEL: "_local/spooler/SUNLU PLA #3 @Snapmaker U1"}},
+                    "spools": {"12": {self.LABEL: "_local/spooler/SUNLU PLA #12 @Snapmaker U1"},
+                               "3": {self.LABEL: "_local/spooler/SUNLU PLA #3 @Snapmaker U1"}}}
+        self.assertEqual(sb.profile_lookup(profiles, 7, self.LABEL, 12), "_local/spooler/SUNLU PLA #12 @Snapmaker U1")
+        self.assertEqual(sb.profile_lookup(profiles, 7, self.LABEL, 99), "_local/spooler/SUNLU PLA #3 @Snapmaker U1")
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, presets, profiles, self.LABEL), "SNLM")
+        self.assertEqual(sb.tray_filament_id({**self.SPOOL, "id": 3}, presets, profiles, self.LABEL), "SNL01")
+
+    def test_no_spooler_preset_falls_back_to_the_vendors_system_preset(self):
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, self.SYSTEM, None, self.LABEL), "SNL01")   # the plain line
+        self.assertEqual(sb.tray_filament_id({**self.SPOOL, "material": "PETG"}, self.SYSTEM), "SNLG")
+
+    def test_unknown_or_unlinked_leaves_it_to_the_generic_preset(self):
+        self.assertEqual(sb.tray_filament_id(None, self.SYSTEM), "")
+        self.assertEqual(sb.tray_filament_id({**self.SPOOL, "vendor": "Nobody"}, self.SYSTEM), "")
+        self.assertEqual(sb.tray_filament_id({**self.SPOOL, "material": "ASA"}, self.SYSTEM), "")
 
 
 if __name__ == "__main__":

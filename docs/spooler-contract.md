@@ -24,11 +24,17 @@ Spooler writes `<OrcaSlicer data folder>/spooler/profiles.json`:
 
 ```json
 {"version": 1, "updated": 1794300000,
- "filaments": {"42": {"Snapmaker U1": "_local/spooler/Polymaker PLA Matte Black @Snapmaker U1"}}}
+ "filaments": {"42": {"Snapmaker U1": "_local/spooler/Polymaker PLA Matte Black @Snapmaker U1"}},
+ "spools": {"7": {"Snapmaker U1": "_local/spooler/Polymaker PLA Matte Black #7 @Snapmaker U1"}}}
 ```
 
+`"spools"` is there only when Spooler makes presets per spool: each spool's own preset, which wins over
+the filament's.
+
 When u1control puts filament profiles into the project, it uses that file to pick the exact Spooler
-profile for each linked spool. It reads only `"version": 1` with `filaments` as an object of objects
+profile for each linked spool. The printer agent uses it too: a toolhead linked to a spool reports
+that profile's `filament_id` as the tray's `tray_info_idx`, which OrcaSlicer's "sync from AMS" matches
+presets on. It reads only `"version": 1` with `filaments` as an object of objects
 whose values are preset names; any other version or shape is ignored (logged) as if the file were
 missing. Without the file, or without a linked spool, it falls back to the
 nearest colour among Spooler's profiles, then to its own matcher.

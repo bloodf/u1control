@@ -63,7 +63,13 @@ def tray_type(ftype, sub_type=""):
 
 
 def generic_preset_name(material):
-    family = FILAMENT_FAMILIES.get(" ".join(str(material or "").split()).upper())
+    """'Generic <family> @System' for a toolhead's material, or None. A material not in the table takes the
+    longest family named in it as a whole word ("PLA WOOD", "PETG HF" -> PLA, PETG), as OrcaSlicer's own
+    similarity fallback does: an empty tray id makes its AMS sync pick "Generic PLA"."""
+    text = " ".join(str(material or "").split()).upper()
+    family = FILAMENT_FAMILIES.get(text) or next(
+        (FILAMENT_FAMILIES[k] for k in sorted(FILAMENT_FAMILIES, key=len, reverse=True)
+         if re.search(r"(?<![A-Z0-9])%s(?![A-Z0-9])" % re.escape(k), text)), None)
     return "Generic %s @System" % family if family else None
 
 
@@ -72,9 +78,11 @@ def _rgba(colour):
     return (c[1:] if c else "FFFFFF") + "FF"
 
 
-def ams_block(heads, filament_id=None):
+def ams_block(heads, filament_id=None, preferred=None):
     """The four toolheads as one four-tray unit (MRA build_ams_payload: id "0", info "0002"), tray id = toolhead.
-    filament_id(preset name) -> the filament_id of that system preset, or None."""
+    tray_info_idx is what OrcaSlicer's AMS sync matches presets on (filament_id): preferred(head) first (the
+    preset of the head's Spoolman spool, or ""), else filament_id(preset name), the id of the Generic preset of
+    the head's material, or None."""
     trays, bits = [], 0
     for h in heads[:u1.TOOLHEADS]:
         tray = {"id": str(h["index"]), "tag_uid": "0000000000000000"}
@@ -85,7 +93,8 @@ def ams_block(heads, filament_id=None):
             colour = _rgba(h.get("colour"))
             colours = [_rgba(c) for c in h.get("colours") or []] or [colour]
             tray.update(tray_type=material, tray_color=colour, cols=colours, ctype=1, remain=-1,
-                        tray_info_idx=(filament_id(preset) if filament_id and preset else None) or "")
+                        tray_info_idx=(preferred(h) if preferred else "")
+                        or (filament_id(preset) if filament_id and preset else None) or "")
         else:
             tray.update(tray_info_idx="", tray_type="", tray_color="00000000", tray_slot_placeholder="1")
         trays.append(tray)
@@ -99,8 +108,8 @@ def _remaining_minutes(view):
     return int(spent * (1 - p) / p // 60)
 
 
-def push_status(view, filament_id=None):
-    """{"print": {...}} for on_local_message_fn, from u1.summarize()."""
+def push_status(view, filament_id=None, preferred=None):
+    """{"print": {...}} for on_local_message_fn, from u1.summarize(); filament_id and preferred as ams_block."""
     state = view.get("state") or "standby"
     gstate = GCODE_STATE.get(state, "RUNNING")
     if gstate == "IDLE" and view.get("machine_state") not in ("", "IDLE", None):
@@ -128,7 +137,7 @@ def push_status(view, filament_id=None):
         "mc_remaining_time": _remaining_minutes(view),
         "layer_num": int(view.get("layer") or 0), "total_layer_num": int(view.get("total_layers") or 0),
         "lights_report": [{"node": CHAMBER_LIGHT, "mode": "on" if view.get("light") else "off"}],
-        **ams_block(view.get("heads") or [], filament_id),
+        **ams_block(view.get("heads") or [], filament_id, preferred),
     }
     return {"print": p}
 
