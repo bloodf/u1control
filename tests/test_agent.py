@@ -303,23 +303,29 @@ class PluginAgentTests(unittest.TestCase):
         self.assertIn("printer_connected", logged[0])
         self.assertIn("host gone", logged[0])
 
-    def test_register_capabilities_reads_no_preset(self):
-        """Plugins load on a thread of their own while OrcaSlicer's UI thread loads the presets: reading them then
-        races it. Only the plugin's own storage folder is asked for."""
+    def test_no_preset_read_until_loaded(self):
+        """OrcaSlicer 2.5.1 crashed (SIGSEGV in PresetBundle::full_fff_config on the plugin load thread, under
+        PythonPluginBridge::finalize_plugin_capture) when a plugin read presets while the UI thread was still
+        loading them. Nothing preset-related may run at import, class definition, capability construction,
+        register_capabilities or on_load."""
         touched = []
-        real = self.orca.host
 
-        class Host:
-            plugin = real.plugin
-
-            def __getattr__(self, name):
+        def guard(name):
+            def call(*a, **k):
                 touched.append(name)
-                raise AssertionError("orca.host.%s read at load" % name)
-        self.orca.host = Host()
-        try:
-            self.ns["U1Control"]().register_capabilities()
-        finally:
-            self.orca.host = real
+                raise AssertionError("orca.host.%s read during plugin load" % name)
+            return call
+        orca = fakes.install_orca()
+        orca.host.preset_bundle = guard("preset_bundle")
+        orca.host.preset = type("Guard", (), {"__getattr__": lambda self, n: guard("preset." + n)()})()
+        orca.registered.clear()
+        ns = fakes.load_wheel(self.artifact)   # import and class definitions
+        ns["U1Control"]().register_capabilities()
+        for cls in list(orca.registered):
+            cap = cls()
+            if hasattr(cap, "on_load"):
+                cap.on_load()
+                self.addCleanup(cap.on_unload)
         self.assertEqual(touched, [])
 
     def test_default_settings_with_every_box_ticked(self):
