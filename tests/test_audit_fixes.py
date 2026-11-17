@@ -64,6 +64,18 @@ class MalformedHttpTests(unittest.TestCase):
             client.request("GET", "/printer/info")
 
 
+class SpoolNamesTests(unittest.TestCase):
+    def test_names_of_linked_spools_for_the_followed_printer_only(self):
+        svc = Service(lambda m: None, log=lambda m: None)
+        self.addCleanup(svc.close)
+        self.assertEqual(svc.spool_names("10.0.0.5"), {})                      # no printer followed
+        svc.set_target(Target("http://10.0.0.5/"))
+        svc.spools = [{"id": 7, "vendor": "Acme", "name": "Cobalt"}, {"id": 8, "vendor": "", "name": "Basic"}]
+        svc.bindings = {1: 7, 2: 8, 3: 99}                                       # 99: not in the list
+        self.assertEqual(svc.spool_names("10.0.0.5"), {"1": "Acme Cobalt", "2": "Basic"})
+        self.assertEqual(svc.spool_names("10.0.0.6"), {})                      # another U1
+
+
 class MonitorTests(unittest.TestCase):
     def test_remote_screen_failure_never_stops_the_monitor(self):
         fake = fakes.FakePrinter(extended=True)

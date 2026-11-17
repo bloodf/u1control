@@ -474,8 +474,7 @@ def pipeline_state():
         return None
 
 
-class Cancelled(Exception):
-    pass
+Cancelled = agent.Cancelled   # one "the user said no" for the pipeline and the agent (nothing is sent)
 
 
 COVER_TEXT = {"off": "left as sliced", "keep-warm": "keep warm", "weak": "weak cooling", "strong": "strong cooling"}
@@ -539,13 +538,20 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
         prefs = self._offered_prefs(options, view["options"])
         purifier = options["purifier"]
         dialog = options["print_dialog"]
-        if dialog == "always" or (dialog == "auto" and u1.needs_dialog(
-                filaments, heads, mapping, bool(view["options"]), not options["printed_before"])):
-            choice = self._ask(ctx, lines, cfg, filaments, heads, mapping, prefs, purifier, client)
+        if wants_setup(options, filaments, view, mapping):
+            cancel = getattr(ctx, "cancelled", None) or getattr(ctx, "canceled", None)
+
+            def slicing_cancelled():
+                try:
+                    return bool(cancel() if callable(cancel) else cancel)
+                except Exception:
+                    return False
+            job = setup_job(lines, cfg, clean(getattr(ctx, "output_name", "")), client)
+            choice = ask_setup(job, slicing_cancelled, filaments, heads, mapping, prefs, purifier, client,
+                               setup_extras(options, view, host), options["ui_language"])
             mapping, prefs, purifier = choice["map"], choice["prefs"], choice["purifier"]
             heads = choice.get("heads") or heads
-            if options["remember_print_options"]:
-                store.update({"prefs": prefs, **({"purifier": purifier} if options["mode"] == settings.EXPERT else {})})
+            remember_choice(store, options, choice)
         else:
             problems = u1.mapping_warnings(filaments, heads, mapping)
             if problems:
@@ -574,93 +580,135 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
                 prefs[key] = bool(saved[key]) if key in saved else printer_opts[key]
         return prefs
 
-    def _ask(self, ctx, lines, cfg, filaments, heads, mapping, prefs, purifier, client):
-        ui = orca.host.ui
-        data = {
-            "job": {**gcode.summary(lines, cfg), "name": clean(getattr(ctx, "output_name", "")),
-                    "address": client.address, "thumbnail": gcode.thumbnail(lines)},
-            "filaments": filaments, "heads": heads, "map": {str(k): v for k, v in mapping.items()},
-            "prefs": prefs, "labels": {p[0]: p[2] for p in u1.PREFERENCES},
-            "purifier": purifier, "auto_purifier": u1.purifier_mode(filaments),
-        }
-        html = page_html("setup", data, language=self._settings().effective()["ui_language"])
-        done, ready, wanted, stop = (threading.Event() for _ in range(4))
-        result = {}
-        window_box = []
-        shown = [heads]   # the toolheads the window shows now; the choice is checked against them
 
-        def refresher():   # one long-lived thread; refresh requests that arrive while it is busy coalesce
-            while not stop.is_set():
-                if not wanted.wait(0.5):
-                    continue
-                wanted.clear()
-                try:
-                    fresh = u1.summarize(client.query(u1.STATUS_OBJECTS))["heads"]
-                    shown.append(fresh)
-                    window_box[0].post({"heads": fresh, "map": {str(k): v for k, v in
-                                                                u1.auto_map(filaments, fresh).items()}})
-                except Exception as e:
-                    log("refresh failed: %s" % e)
 
-        def on_message(msg):
-            if not isinstance(msg, dict):
-                return
-            if msg.get("ready"):
-                ready.set()
-            if msg.get("refresh") and window_box:
-                wanted.set()
+def wants_setup(options, filaments, view, mapping):
+    """The print setup pop-up setting: always, never, or auto (only when something needs a decision)."""
+    dialog = options["print_dialog"]
+    return dialog == "always" or (dialog == "auto" and u1.needs_dialog(
+        filaments, view["heads"], mapping, bool(view["options"]), not options["printed_before"]))
 
-        def on_submit(msg):
-            result["data"] = msg
-            done.set()
 
-        cancel = getattr(ctx, "cancelled", None) or getattr(ctx, "canceled", None)
+def setup_job(lines, cfg, name, client):
+    """The print shown at the top of the print setup: name, time, weight, address, plate preview."""
+    return {**gcode.summary(lines, cfg), "name": name, "address": client.address, "thumbnail": gcode.thumbnail(lines)}
 
-        def slicing_cancelled():
+
+def setup_extras(options, view, host):
+    """Printer line, linked Spoolman spool names and the "Remember these options" default for the print setup.
+    Spool names come from what the U1 Control tab already read (no network); none while it isn't running."""
+    with _service_lock:
+        svc = _service
+    try:
+        spools = svc.spool_names(host) if svc is not None else {}
+    except Exception as e:
+        log("spool names not read: %r" % e)
+        spools = {}
+    return {"printer": {"name": settings.printer_label(clean(options.get("printer_name"))),
+                        "busy": u1.machine_busy(view), "address": host},
+            "spools": spools, "remember": bool(options["remember_print_options"])}
+
+
+def remember_choice(store, options, choice):
+    """"Remember these options" ticked: the next print setup starts from these options."""
+    if choice.get("remember"):
+        store.update({"prefs": choice["prefs"],
+                      **({"purifier": choice["purifier"]} if options["mode"] == settings.EXPERT else {})})
+
+
+def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client, extras=None, language="auto"):
+    """Show the U1 print setup window and wait for the answer (call from a worker thread, never the UI thread:
+    the window itself is created on the UI thread by OrcaSlicer). cancelled() -> True closes it.
+    Returns {"map", "prefs", "purifier", "heads", "remember"}; raises Cancelled, or PrinterError (timeout, window
+    never shown, warnings not acknowledged for the toolheads shown last)."""
+    extras = extras or {}
+    ui = orca.host.ui
+    data = {
+        "job": job, "filaments": filaments, "heads": heads, "map": {str(k): v for k, v in mapping.items()},
+        "prefs": prefs, "labels": {p[0]: p[2] for p in u1.PREFERENCES},
+        "purifier": purifier, "auto_purifier": u1.purifier_mode(filaments),
+        "printer": extras.get("printer"), "spools": extras.get("spools") or {},
+        "remember": bool(extras.get("remember", True)),
+    }
+    html = page_html("setup", data, language=language)
+    done, ready, wanted, stop = (threading.Event() for _ in range(4))
+    result = {}
+    window_box = []
+    shown = [heads]   # the toolheads the window shows now; the choice is checked against them
+
+    def refresher():   # one long-lived thread; refresh requests that arrive while it is busy coalesce
+        while not stop.is_set():
+            if not wanted.wait(0.5):
+                continue
+            wanted.clear()
             try:
-                return bool(cancel() if callable(cancel) else cancel)
-            except Exception:
-                return False
+                view = u1.summarize(client.query(u1.STATUS_OBJECTS))
+                fresh = view["heads"]
+                shown.append(fresh)
+                window_box[0].post({"heads": fresh, "busy": u1.machine_busy(view),
+                                    "map": {str(k): v for k, v in u1.auto_map(filaments, fresh).items()}})
+            except Exception as e:
+                log("refresh failed: %s" % e)
 
-        window = ui.create_window(html, title=tr("U1 print setup"), width=720, height=640, on_message=on_message,
-                                  on_close=done.set, on_submit=on_submit, style=ui.WINDOW_MODAL)
-        window_box.append(window)
-        threading.Thread(target=refresher, name="u1control-refresh", daemon=True).start()
-        started = time.monotonic()
+    def on_message(msg):
+        if not isinstance(msg, dict):
+            return
+        if msg.get("ready"):
+            ready.set()
+        if msg.get("refresh") and window_box:
+            wanted.set()
+
+    def on_submit(msg):
+        result["data"] = msg
+        done.set()
+
+    def asked_to_stop():
         try:
-            while not done.wait(0.25):  # UI from a slicing hook: give up if the UI thread never shows it
-                waited = time.monotonic() - started
-                if slicing_cancelled():
-                    window.close()
-                    raise Cancelled()
-                if waited > SETUP_TIMEOUT:
-                    window.close()
-                    raise PrinterError(tr("print setup timed out; nothing was sent"))
-                if not window.is_open():
-                    break
-                if not ready.is_set() and waited > 20:
-                    window.close()
-                    raise PrinterError(tr("the print setup window didn't open (OrcaSlicer was busy); nothing was sent"))
-        finally:
-            stop.set()
-        answer = result.get("data")
-        if not isinstance(answer, dict) or answer.get("cancelled"):
-            raise Cancelled()
-        chosen = {}
-        for f, t in (answer.get("map") or {}).items():
-            if str(f).isdigit() and isinstance(t, int) and not isinstance(t, bool) and 0 <= t < u1.TOOLHEADS \
-                    and int(f) in mapping:
-                chosen[int(f)] = t
-        final = {**mapping, **chosen}
-        warned = u1.warning_ids(filaments, shown[-1], final)
-        acked = answer.get("acknowledged")
-        if warned and (not isinstance(acked, list) or sorted(str(x) for x in acked) != sorted(warned)):
-            raise PrinterError(tr("the print setup has warnings (%s) that weren't confirmed for these toolheads; "
-                               "nothing was sent") % "; ".join(u1.mapping_warnings(filaments, shown[-1], final)))
-        picked = answer.get("prefs") or {}
-        purifier = answer.get("purifier") if answer.get("purifier") in ("auto", "off", *u1.PURIFIER) else "auto"
-        return {"map": final, "prefs": {k: bool(picked.get(k, v)) for k, v in prefs.items()},
-                "purifier": purifier, "heads": shown[-1]}
+            return bool(cancelled and cancelled())
+        except Exception:
+            return False
+
+    window = ui.create_window(html, title=tr("U1 print setup"), width=720, height=640, on_message=on_message,
+                              on_close=done.set, on_submit=on_submit, style=ui.WINDOW_MODAL)
+    window_box.append(window)
+    threading.Thread(target=refresher, name="u1control-refresh", daemon=True).start()
+    started = time.monotonic()
+    try:
+        while not done.wait(0.25):  # never wait forever on a window the UI thread never shows
+            waited = time.monotonic() - started
+            if asked_to_stop():
+                window.close()
+                raise Cancelled()
+            if waited > SETUP_TIMEOUT:
+                window.close()
+                raise PrinterError(tr("print setup timed out; nothing was sent"))
+            if not window.is_open():
+                break
+            if not ready.is_set() and waited > 20:
+                window.close()
+                raise PrinterError(tr("the print setup window didn't open (OrcaSlicer was busy); nothing was sent"))
+    finally:
+        stop.set()
+    answer = result.get("data")
+    if not isinstance(answer, dict) or answer.get("cancelled"):
+        raise Cancelled()
+    chosen = {}
+    for f, t in (answer.get("map") or {}).items():
+        if str(f).isdigit() and isinstance(t, int) and not isinstance(t, bool) and 0 <= t < u1.TOOLHEADS \
+                and int(f) in mapping:
+            chosen[int(f)] = t
+    final = {**mapping, **chosen}
+    warned = u1.warning_ids(filaments, shown[-1], final)
+    acked = answer.get("acknowledged")
+    if warned and (not isinstance(acked, list) or sorted(str(x) for x in acked) != sorted(warned)):
+        raise PrinterError(tr("the print setup has warnings (%s) that weren't confirmed for these toolheads; "
+                              "nothing was sent") % "; ".join(u1.mapping_warnings(filaments, shown[-1], final)))
+    picked = answer.get("prefs") or {}
+    purifier = answer.get("purifier") if answer.get("purifier") in ("auto", "off", *u1.PURIFIER) else "auto"
+    remember = answer.get("remember")
+    return {"map": final, "prefs": {k: bool(picked.get(k, v)) for k, v in prefs.items()},
+            "purifier": purifier, "heads": shown[-1],
+            "remember": remember if isinstance(remember, bool) else data["remember"]}
 
 
 HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")
@@ -1060,10 +1108,12 @@ class U1Agent(pa.PrinterAgentBase):
             task = {"bed_leveling": getattr(params, "task_bed_leveling", False),
                     "flow_cali": getattr(params, "task_flow_cali", False),
                     "timelapse": getattr(params, "task_record_timelapse", False)}
-            job = agent.run_job(client, self._job_path(params), clean(params.project_name) or clean(params.task_name),
+            name = clean(params.project_name) or clean(params.task_name)
+            job = agent.run_job(client, self._job_path(params), name,
                                 getattr(params, "plate_index", 1), getattr(params, "ams_mapping", ""), options,
                                 lambda view: U1PrintSetup._offered_prefs(options, view["options"]), task, VERSION,
-                                self._work_dir(), self._progress(update_fn), cancel_fn, on_stage)
+                                self._work_dir(), self._progress(update_fn), cancel_fn, on_stage,
+                                self._chooser(options, host, name, client, cancel_fn))
         except agent.Cancelled:
             return ERR_CANCELED
         except Exception as e:
@@ -1081,6 +1131,19 @@ class U1Agent(pa.PrinterAgentBase):
         if update_fn:
             update_fn(STAGE_FINISHED, 100, tr("Print started"))
         return OK
+
+    def _chooser(self, options, host, name, client, cancel_fn):
+        """prepare_gcode's choose: U1 print setup after OrcaSlicer's Print dialog, on this job thread, starting
+        from the dialog's slots and options; the print setup setting (always / auto / never) decides when."""
+        def choose(view, filaments, mapping, prefs, lines, cfg):
+            if not wants_setup(options, filaments, view, mapping):
+                return None
+            choice = ask_setup(setup_job(lines, cfg, name, client), cancel_fn, filaments, view["heads"], mapping,
+                               prefs, options["purifier"], client, setup_extras(options, view, host),
+                               options["ui_language"])
+            remember_choice(self._settings(), options, choice)
+            return choice
+        return choose
 
     def start_local_print_with_record(self, params, update_fn, cancel_fn, wait_fn):
         return self.start_local_print(params, update_fn, cancel_fn)

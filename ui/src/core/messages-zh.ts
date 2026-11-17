@@ -573,6 +573,11 @@ export const zhCN: Record<MessageKey, string> = {
   'setup.thumb': '盘预览',
   'setup.to': '发往 {address}',
   'setup.live': '工具头信息由打印机实时更新。',
+  'setup.ready': '就绪',
+  'setup.headBtnSpool': '耗材 {f} 使用 T{n}，{type}，料盘 {spool}',
+  'setup.colourDiffers': '耗材 {f}：T{n} 的颜色不同',
+  'setup.remember': '记住这些选项',
+  'setup.rememberHint': '下次打印设置将以此为起点。',
 
   // interface 4: app bar, hero, banners, toolhead cards
   'bar.none': '无打印机',

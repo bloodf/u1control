@@ -9,11 +9,12 @@ import { clipboard, printer, toolhead, upload, wind } from '../../shared/src/ico
 import * as bridge from '../core/bridge';
 import { boot } from '../core/boot';
 import { t, tn, tMaybe } from '../core/i18n';
-import { setupWarnings, warningKey, type SetupFilament, type SetupHead } from '../core/logic';
+import { colourFar, family, setupWarnings, warningKey, type SetupFilament, type SetupHead } from '../core/logic';
 
 interface Data { job: { name?: string; time?: string; weight?: number; plate?: string | number; address?: string; thumbnail?: string };
   filaments: SetupFilament[]; heads: SetupHead[]; map: Record<string, number>; prefs: Record<string, boolean>;
-  labels: Record<string, string>; purifier: string; auto_purifier: string }
+  labels: Record<string, string>; purifier: string; auto_purifier: string;
+  printer?: { name: string; busy: boolean; address: string } | null; spools?: Record<string, string>; remember?: boolean }
 const D = boot.data as Data;
 const heads = ref<SetupHead[]>(D.heads);
 const map = reactive<Record<string, number>>({ ...D.map });
@@ -21,6 +22,12 @@ const touched = new Set<string>();
 const prefs = reactive<Record<string, boolean>>({ ...D.prefs });
 const purifier = ref(D.purifier);
 const sent = ref(false);
+const busy = ref(!!D.printer?.busy);
+const remember = ref(D.remember !== false);
+const spool = (h: number) => D.spools?.[String(h)] ?? '';
+// A soft hint, no acknowledgement: same material family on a loaded head, but a clearly different colour.
+const colourHint = (f: SetupFilament) => { const h = heads.value[map[String(f.index)]];
+  return !!h && h.loaded && family(h.type) === family(f.type) && colourFar(f.colour, h.colour) ? h.index : -1; };
 
 const warnings = computed(() => setupWarnings(D.filaments, heads.value, map));
 // The acknowledgement belongs to one exact set of warnings: a new mapping or a live toolhead change clears it (U04).
@@ -37,11 +44,13 @@ function pick(f: number, h: number) { map[String(f)] = h; touched.add(String(f))
 function send() {
   if (!canSend.value) return;
   sent.value = true;
-  bridge.submit({ map: { ...map }, prefs: { ...prefs }, purifier: purifier.value, acknowledged: warnings.value.map(w => w.id) });
+  bridge.submit({ map: { ...map }, prefs: { ...prefs }, purifier: purifier.value, acknowledged: warnings.value.map(w => w.id),
+    remember: remember.value });
 }
 const cancel = () => bridge.submit({ cancelled: true });
 const purOptions = computed(() => ['auto', 'strong', 'weak', 'keep-warm', 'off'].map(v => ({ value: v, label: t(`purifier.${v}` as any) })));
-const meta = computed(() => [D.job.time, D.job.weight && t('setup.grams', { g: D.job.weight }), D.job.plate, D.job.address && t('setup.to', { address: D.job.address })].filter(Boolean).join(' · '));
+const meta = computed(() => [D.job.time, D.job.weight && t('setup.grams', { g: D.job.weight }), D.job.plate,
+  !D.printer && D.job.address && t('setup.to', { address: D.job.address })].filter(Boolean).join(' · '));
 const prefLabel = (k: string) => tMaybe(`pref.${k}`, D.labels[k] || k);
 
 function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && !e.defaultPrevented && !document.querySelector('.p-select-overlay')) cancel(); }
@@ -59,6 +68,7 @@ onMounted(() => {
   bridge.onMessage(m => {   // live toolhead refresh: a spool changed on the touchscreen shows up here; keyed rows keep focus
     if (!m || !Array.isArray(m.heads)) return;
     heads.value = m.heads;
+    if (typeof m.busy === 'boolean') busy.value = m.busy;
     for (const [f, h] of Object.entries(m.map || {})) if (!touched.has(f)) map[f] = h as number;
   });
   document.addEventListener('keydown', onKey);
@@ -81,7 +91,10 @@ onBeforeUnmount(() => {
     <!-- The page's hero: the print that is about to be sent. -->
     <header class="oui-hero oui-on-band su-job">
       <OuiThumb :src="D.job.thumbnail ? 'data:image/png;base64,' + D.job.thumbnail : null" :alt="t('setup.thumb')" :size="72" :icon="printer" />
-      <div class="su-job-id"><h1 class="su-job-name">{{ D.job.name || t('setup.title') }}</h1><p class="su-job-meta oui-num">{{ meta }}</p></div>
+      <div class="su-job-id"><h1 class="su-job-name">{{ D.job.name || t('setup.title') }}</h1><p class="su-job-meta oui-num">{{ meta }}</p>
+        <p v-if="D.printer" class="su-printer" data-test="printer"><span class="oui-strong">{{ D.printer.name }}</span>
+          <OuiStatus :state="busy ? 'busy' : 'ok'" role="status">{{ busy ? t('bar.busy') : t('setup.ready') }}</OuiStatus>
+          <span class="oui-num">{{ D.printer.address }}</span></p></div>
     </header>
 
     <OuiPanel :icon="toolhead" tone="magenta" flush aria-labelledby="su-map">
@@ -94,12 +107,15 @@ onBeforeUnmount(() => {
           <div class="su-heads">
             <Button v-for="h in heads" :key="h.index" :severity="map[f.index] === h.index ? undefined : 'secondary'"
                     :aria-pressed="map[f.index] === h.index" :data-f="f.index" :data-t="h.index" class="su-head"
-                    :aria-label="t('setup.headBtn', { f: f.index + 1, n: h.index + 1, type: h.loaded ? h.type : t('setup.empty') })"
+                    :aria-label="spool(h.index) ? t('setup.headBtnSpool', { f: f.index + 1, n: h.index + 1, type: h.loaded ? h.type : t('setup.empty'), spool: spool(h.index) })
+                                 : t('setup.headBtn', { f: f.index + 1, n: h.index + 1, type: h.loaded ? h.type : t('setup.empty') })"
                     :title="[h.vendor, h.sub_type].filter(Boolean).join(' ')" @click="pick(f.index, h.index)">
-              <span class="u1-tool" :data-tool="h.index + 1">T{{ h.index + 1 }}</span><OuiSwatch :color="h.loaded ? h.colour : null" :size="14" />
-              <span class="oui-strong"><em v-if="!h.loaded" class="su-empty">{{ t('setup.empty') }}</em><template v-else>{{ h.type }}</template></span>
+              <span class="su-head-in"><span class="su-head-top"><span class="u1-tool" :data-tool="h.index + 1">T{{ h.index + 1 }}</span><OuiSwatch :color="h.loaded ? h.colour : null" :size="14" />
+                <span class="oui-strong"><em v-if="!h.loaded" class="su-empty">{{ t('setup.empty') }}</em><template v-else>{{ h.type }}</template></span></span>
+                <span v-if="spool(h.index)" class="su-spool" data-test="spool">{{ spool(h.index) }}</span></span>
             </Button>
           </div>
+          <p v-if="colourHint(f) >= 0" class="u1-note su-hint" data-test="colour-hint">{{ t('setup.colourDiffers', { f: f.index + 1, n: colourHint(f) + 1 }) }}</p>
         </div>
       </div>
     </OuiPanel>
@@ -118,6 +134,8 @@ onBeforeUnmount(() => {
         <OuiFormRow :label="t('setup.coverMode')" :hint="t('setup.autoPicks', { mode: t(`purifier.${D.auto_purifier}` as any) })">
           <Select v-model="purifier" :options="purOptions" option-label="label" option-value="value" :aria-label="t('setup.coverMode')" />
         </OuiFormRow>
+        <label class="su-ack su-remember" for="su-remember"><Checkbox v-model="remember" input-id="su-remember" binary data-test="remember" aria-describedby="su-remember-hint" />
+          <span>{{ t('setup.remember') }} <span id="su-remember-hint" class="oui-muted su-remember-hint">{{ t('setup.rememberHint') }}</span></span></label>
       </div>
     </OuiPanel>
   </main>
@@ -146,6 +164,13 @@ html { scroll-padding-bottom: calc(var(--u1-setup-footer-height, 0px) + 16px); }
 .su-heads { display: flex; flex-wrap: wrap; gap: 6px; }
 .su-head.p-button { gap: 6px; padding-inline: 8px 12px; }
 .su-empty { font-style: normal; text-decoration: underline dotted; }
+.su-head-in { display: grid; gap: 2px; justify-items: start; text-align: start; min-width: 0; }
+.su-head-top { display: inline-flex; align-items: center; gap: 6px; }
+.su-spool { font-size: var(--oui-text-sm); font-weight: 500; opacity: .85; max-width: 16ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.su-hint { grid-column: 1 / -1; margin: 0; }
+.su-printer { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--oui-s2); font-size: var(--oui-text-sm); }
+.su-rows > .su-remember { display: flex; padding: var(--oui-s2) var(--oui-s4); font-weight: 600; }
+.su-remember-hint { display: block; font-weight: 400; font-size: var(--oui-text-sm); }
 .su-ack { display: inline-flex; align-items: center; gap: var(--oui-s2); font-weight: 600; }
 .su-bar { position: sticky; bottom: 0; z-index: 5; background: var(--oui-surface); border-top: 1px solid var(--oui-border); box-shadow: 0 -6px 16px rgb(0 0 0 / .12); }
 .su-bar-in { display: flex; flex-wrap: wrap; gap: var(--oui-s2); align-items: center; max-width: 900px; margin: 0 auto; padding: var(--oui-s2) var(--oui-s4); }

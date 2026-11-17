@@ -11,7 +11,8 @@ const OUT = process.env.OUT; const page = await readFile(process.env.PAGE, 'utf8
 const SETUP = { job: { name: 'Desk organiser — plate 1', time: '2h 04m', weight: 86, plate: 'Plate 1', address: '192.168.1.40' }, purifier: 'auto', auto_purifier: 'weak',
   filaments: [{ index: 0, type: 'PLA', colour: '#e5484d', weight: 50 }, { index: 1, type: 'PETG', colour: '#3e63dd', weight: 36 }],
   heads: [0, 1, 2, 3].map(i => ({ index: i, loaded: i !== 2, type: i === 2 ? '' : 'PLA', vendor: 'Generic', sub_type: 'Basic', colour: ['#e5484d', '#f4cf78', '#888', '#78cfd5'][i] })),
-  map: { 0: 0, 1: 1 }, prefs: { bed_level: true, flow_calibrate: true, time_lapse_camera: false }, labels: {} };
+  map: { 0: 0, 1: 1 }, prefs: { bed_level: true, flow_calibrate: true, time_lapse_camera: false }, labels: {},
+  printer: { name: 'Bench U1', busy: false, address: '192.168.1.40' }, spools: { 0: 'Generic Matte Red', 3: 'Acme Teal' }, remember: true };
 const STATE = `
 await until(() => __t.sent.find(m => m.type === 'hello'));
 const hello = __t.sent.find(m => m.type === 'hello');
@@ -48,6 +49,7 @@ const SCENES = [
   ['notarget', 'light', 'pt_BR', 1280, 1], ['notarget', 'dark', 'en', 720, 1], ['dialog', 'dark', 'pt_BR', 720, 1], ['dialog', 'light', 'en', 640, 2],
   ['settings', 'light', 'en', 1280, 1], ['settings', 'dark', 'pt_BR', 720, 1], ['files', 'light', 'pt_BR', 1280, 1], ['files', 'dark', 'en', 640, 2],
   ['console', 'dark', 'en', 1280, 1], ['setup', 'light', 'pt_BR', 720, 1], ['setup', 'dark', 'en', 1280, 1], ['setup', 'light', 'en', 360, 2],
+  ['setup', 'light', 'en', 1280, 1], ['setup', 'dark', 'en', 380, 1], ['setup', 'light', 'en', 380, 1],
 ];
 // LANGS=de_DE,zh_CN,...: every scene in those languages instead, wide light and narrow dark (and the reverse).
 if (process.env.LANGS) SCENES.splice(0, SCENES.length, ...process.env.LANGS.split(',').flatMap(lang =>

@@ -47,6 +47,15 @@ export function setupWarnings(filaments: SetupFilament[], heads: SetupHead[], ma
   return out;
 }
 
+/** Same 'redmean' distance as u1.colour_distance; unknown colours never count as different (nothing to compare). */
+export function colourFar(a: unknown, b: unknown, limit = 150): boolean {
+  const rgb = (c: unknown) => { const m = /^#?([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(String(c ?? '').trim()); return m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+  const x = rgb(a), y = rgb(b);
+  if (!x || !y) return false;
+  const rm = (x[0] + y[0]) / 2;
+  return Math.sqrt((2 + rm / 256) * (x[0] - y[0]) ** 2 + 4 * (x[1] - y[1]) ** 2 + (2 + (255 - rm) / 256) * (x[2] - y[2]) ** 2) > limit;
+}
+
 export const warningKey = (w: SetupWarning[]): string => w.map(x => x.id).join(',');
 
 /** Folder choices for "Move": every folder but the current one, the item itself and its subfolders. */
