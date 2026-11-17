@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 UI = ROOT / "src" / "u1control" / "ui"
-MAX_BUILT_BYTES = 450_000   # the wheel measures ~407 kB with the print setup window (Popover, Dialog, Slider, SelectButton)
+MAX_BUILT_BYTES = 550_000   # ~450 kB with the photo spool's 15 WebP layers (foundation 4.1.0), plus the print setup window
 
 
 class UiAssets(unittest.TestCase):

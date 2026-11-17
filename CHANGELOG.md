@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+### Added
+
 - **U1 Control — print setup**, redesigned. The window shows the print at the top: plate picture, name, time, weight, layers and tool changes, all read from the sliced G-code. Next to it are the printer's name, address and Ready/Busy state. Each filament has a card with its colour, material and grams, a U1 toolhead drawing whose filament strand takes the mapped spool's colour (Spoolman's colour first, then the printer's), the head it prints from, and that head's material and Spoolman spool. Click a card, or press Enter on it, to choose another head. A small top view of the print shows every filament in its head's colour.
 - **Refresh** reads the toolheads again, **Auto mapping** matches every filament by material and colour again, and **Heads settings** edits each head's filament and Spoolman spool in place, with the same commands as the Dashboard.
 - The options sit in one row: auto bed leveling, dynamic flow calibration (**…** picks the heads to calibrate), time-lapse, and the top cover (**…** holds the mode and the exhaust and recirculation fans, each Auto, Off or a set speed). The exhaust fan stays off while the cover keeps the chamber warm. **Print preferences** holds spaghetti detection and the foreign object check (low or high), air printing detection, which is the firmware's tangle detection (low, medium or high), auto-refill, refill from any colour, unload when done and light off when done. A control appears only when the printer's command list has its command.
@@ -10,6 +12,36 @@
 - Printing through OrcaSlicer's own Print dialog (printer agent `u1control`) opens this window too, after OrcaSlicer's dialog and before anything is sent. It starts from the slots and options picked there, and what you leave in the window is exactly what is sent. **Don't send**, or cancelling the job in OrcaSlicer, sends nothing, and after 15 minutes the window gives up. OrcaSlicer always opens its own Print dialog first: no plugin hook can replace it, so U1 Control's window is the second step.
 - The setting is now **Show print setup before sending**, on or off and on by default. With it off, OrcaSlicer's choice is sent as is, but a different material, an empty toolhead or a busy U1 is still refused. An Expert setting stored as "never" reads as off.
 - **Remember these options** decides whether the options chosen become the next print's defaults.
+- **Settings > Requirements** lists what some features need that U1 Control can't install by itself, whether each one is there, what it is for and how to get it, with **Check again**:
+  - **Spoolman** and the **Spooler** plugin rows that 4.2 added under Settings > Spoolman now live here too, so there is one Requirements section.
+  - **OrcaSlicer printer agents** (only for OrcaSlicer's own Print dialog and Device tab): **On** once OrcaSlicer connects to the U1 through the u1control agent or reports it as the selected printer's agent, else **Not detected** with the steps (Preferences > Developer > Experimental Features > Use printer agents instead of print hosts, restart, Printer Agent = u1control in a copy of the printer preset). Plugins can't read the preference itself, so nothing is turned off because of it.
+  - **U1 Extended Firmware**: from the printer's firmware check, unknown until a U1 answers; when it is the official firmware, how to install it (project page, Advanced Mode, `firmware_config: true` under `[web]`).
+  - **Spoolman**: set (an address in Settings, or the printer's own Moonraker `[spoolman]`), not set, or not known yet. No extra network check: it comes from the Spoolman link u1control already makes.
+- The checks run only when the tab asks, never while OrcaSlicer loads the plugin.
+- On the official firmware the printer screen card stays on the Dashboard, off, with "Needs the U1 Extended Firmware" instead of disappearing.
+- With no Spoolman anywhere (the printer says it has none and no address is set), linking a spool from Spooler's stock is off with the reason. A printer that doesn't answer leaves Spoolman as not known yet, never "not set".
+- When Spoolman can't be read, the automatic spool follow waits before trying again (30 s, doubling up to 5 min, back to normal once it works) and says so once, instead of retrying and warning on every filament change. The change it missed is tried again after the wait.
+- Docs: the printer agent steps now name Preferences > Developer > Experimental Features, the restart and the copy of the printer preset.
+
+### Changed
+- Spools are drawn with the photo spool again.
+- The page fills the whole tab at every height, also after the window is resized: no more grey under a short page.
+- Settings are tabs: one section at a time, and the save bar stays on screen at any window height.
+- Notifications appear bottom-left and each one can be closed; warnings and notices on the page can be dismissed.
+- Settings lists what the Spoolman features need (Spoolman and the Spooler plugin), whether each was found, and how to install it, with a Check again button (now in Settings > Requirements).
+- Notifications wait while OrcaSlicer is in another tab or app; errors stay until closed. A closed warning stays closed
+  (also after a reload) until its problem goes away, and shows again when it comes back. The power-loss notice, which
+  holds Resume and Discard, can no longer be closed. Check again for Spooler gives up after 10 s and says so.
+
+### Fixed
+
+- OrcaSlicer could close by itself at start-up, or while the Device tab was open, if one of the status updates
+  U1 Control hands to it failed. Such a failure is now written to the log and OrcaSlicer keeps running.
+- U1 Control now reads OrcaSlicer's presets only on OrcaSlicer's own UI thread when it adds "U1 print setup" to a
+  process preset, syncs the toolheads to the project filaments (from the tab or Plugins > Run), checks the U1
+  connection, and applies Snapmaker Orca's U1 process tuning. Before, it read them from a thread of its own while
+  OrcaSlicer might be changing them. The preset changes themselves are still made off the UI thread, as OrcaSlicer
+  requires. If OrcaSlicer is too busy to answer within a few seconds, these actions say so and can be tried again.
 
 ## [0.12.0] - 2026-11-16
 

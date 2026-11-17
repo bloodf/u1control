@@ -49,9 +49,16 @@ Control tab says whether your process preset runs it.
 With OrcaSlicer's printer agents, u1control can be the U1's agent instead, so OrcaSlicer's own Print
 dialog and Device tab work with the U1:
 
-1. In OrcaSlicer, open **Preferences** and turn on **Use printer agents instead of print hosts**.
-2. Open your U1 printer preset, set **Printer Agent** to `u1control` and its host to the U1's IP
-   address. Save the preset.
+1. In OrcaSlicer, open **Preferences** (macOS: the OrcaSlicer menu; Windows and Linux: the main menu),
+   go to the **Developer** tab, and under **Experimental Features** tick **Use printer agents instead of
+   print hosts**.
+2. Restart OrcaSlicer.
+3. In a copy of your U1 printer preset (system presets can't be changed), set **Printer Agent** to
+   `u1control` and its host to the U1's IP address. Save the preset.
+
+OrcaSlicer doesn't let plugins read this preference. **Settings > Requirements** in the U1 Control tab
+shows **On** once OrcaSlicer connects to the U1 through the u1control agent (or reports it as the
+selected printer's agent), and **Not detected** before that, with these steps.
 
 Then **Print** in OrcaSlicer opens its own print dialog:
 
@@ -89,9 +96,12 @@ When the plugin loads, OrcaSlicer asks once to let u1control read the sliced job
 <details>
 <summary>Em português: usar o u1control como agente de impressora</summary>
 
-1. No OrcaSlicer, abra **Preferências** e ligue **Use printer agents instead of print hosts**.
-2. Abra o perfil de impressora da U1, defina **Printer Agent** como `u1control` e o host como o IP da
-   U1. Salve o perfil.
+1. No OrcaSlicer, abra **Preferências** (macOS: menu OrcaSlicer; Windows e Linux: o menu principal),
+   vá à aba **Developer** e, em **Experimental Features**, marque **Use printer agents instead of print
+   hosts**.
+2. Reinicie o OrcaSlicer.
+3. Numa cópia do perfil de impressora da U1 (perfis do sistema não podem ser alterados), defina
+   **Printer Agent** como `u1control` e o host como o IP da U1. Salve o perfil.
 
 A janela **Imprimir** do próprio OrcaSlicer passa a mostrar as quatro cabeças como quatro slots, com
 filamento e cor. As caixas **Auto Bed Leveling**, **Flow Dynamics Calibration** e **Timelapse** já vêm
@@ -151,7 +161,9 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
     **Delete** asks first, then removes the video and its cover pictures from the printer. Both work
     while the U1 prints.
 - **Console:** send G-code and see the printer's replies; `M112` runs the E-stop.
-- **Settings:** Automagic or Expert, Spoolman, the printer's print options, bed mesh, input shaper
+- **Settings:** Automagic or Expert, **Requirements** (OrcaSlicer's printer agents, the Extended
+  Firmware and Spoolman: whether each is there, what needs it and how to get it; what needs a missing one
+  stays off and says why), Spoolman, the printer's print options, bed mesh, input shaper
   and flow calibration, the Extended Firmware's settings (web UI, camera, RFID system, Spoolman, Remote
   Screen, SSH and more) with restart Klipper, restart Moonraker and reboot, Spooler, and the connection.
   While a print runs, firmware settings that restart Klipper or reboot the printer, Restart Klipper and

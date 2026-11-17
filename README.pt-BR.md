@@ -122,7 +122,7 @@ Os detalhes estão em [docs/features.md](docs/features.md) e todos os ajustes em
 
 Automágico é o modo padrão: tudo o que pode rodar sozinho roda, e a janela só abre na primeira impressão, com uma cabeça vazia, com outro material, com dois filamentos para a mesma cabeça ou sem material exatamente igual. O modo Especialista transforma cada etapa em um ajuste, e as suas escolhas ficam guardadas enquanto o Automágico está ligado.
 
-Para usar a janela Imprimir do próprio OrcaSlicer, ligue **Use printer agents instead of print hosts** em **Preferências** e defina **Printer Agent** como `u1control` no perfil de impressora da U1. A janela Preparar impressão na U1 abre em seguida, já com os slots escolhidos lá. [Os passos e o que cada caixa faz](docs/features.md#printer-agent).
+Para usar a janela Imprimir do próprio OrcaSlicer, marque **Use printer agents instead of print hosts** em **Preferências > Developer > Experimental Features**, reinicie o OrcaSlicer e defina **Printer Agent** como `u1control` numa cópia do perfil de impressora da U1. **Ajustes > Requisitos** na aba U1 Control mostra se o OrcaSlicer usa o agente. O preparo da impressão do U1 Control abre em seguida, já com os slots escolhidos lá. [Os passos e o que cada caixa faz](docs/features.md#printer-agent).
 
 ## 🔒 Privacidade e segurança
 

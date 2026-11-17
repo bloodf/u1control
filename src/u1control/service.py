@@ -59,6 +59,7 @@ STALE = "the selected printer changed; nothing was sent to it"
 HOTEND_MAX = 320                  # °C: what cmd_temperature clamps to (the page shows and validates the same)
 BED_MAX = 110
 NO_U1 = "no U1 selected: choose a Snapmaker U1 printer with an address"
+FOLLOW_RETRY, FOLLOW_RETRY_MAX = 30.0, 300.0   # s: spool follow back-off after a failed Spoolman read (doubling)
 FIRMWARE_RETRY = 30.0             # s between firmware checks while the Firmware Config API gave no clear answer
 
 
@@ -123,6 +124,10 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.firmware_retry_at = 0.0
         self.gcode_cmds = frozenset()   # the printer's command list, read at connect (GET /printer/gcode/help)
         self.spoolman, self.spoolman_gen = None, None
+        # How the last Spoolman connect went: "moonraker" / "direct", "none" (no URL and no Spoolman on the printer),
+        # "" (not tried). Requirements read it; no probe of its own.
+        self.spoolman_link = ""
+        self.follow_wait, self.follow_retry_at = 0.0, 0.0   # spool follow back-off after a failed Spoolman read
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
         self.last_frame_at = 0.0
@@ -462,10 +467,19 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             if self.spoolman is not None and self.spoolman_gen == gen:
                 return self.spoolman
         smc = sm.Spoolman(target.spoolman_url, client)
-        smc.connect()
+        try:
+            smc.connect()
+        except sm.SpoolmanError:
+            # "none" only on the printer's clear answer; no answer leaves it unknown.
+            if not target.spoolman_url and smc.printer_spoolman is False:
+                with self.lock:
+                    if gen == self.generation:
+                        self.spoolman_link = "none"
+            raise
         with self.lock:
             if gen == self.generation:
                 self.spoolman, self.spoolman_gen = smc, gen
+                self.spoolman_link = "moonraker" if smc.via_moonraker else "direct"
         return smc
 
     def _spoolman_follow(self, view, gen):
@@ -474,8 +488,11 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         with self.lock:
             if gen != self.generation:
                 return
-            previous, self.last_heads = self.last_heads, heads
             target, kind = self.target, self.firmware["kind"]
+            if self.last_heads is not None and time.monotonic() < self.follow_retry_at and not (
+                    kind == "extended" and isinstance(view.get("spool_ids"), list)):
+                return  # backing off after a failure: the change stays pending (last_heads kept) for the retry
+            previous, self.last_heads = self.last_heads, heads
             if not target or (not target.spoolman_url and kind != "extended"):
                 return
             if kind == "extended" and isinstance(view.get("spool_ids"), list):
@@ -505,8 +522,19 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 if pick:
                     self._bind(t, pick)
                     self._notice(tr("T%d now uses Spoolman spool #%d (%s %s)") % (t + 1, pick["id"], pick["vendor"], pick["name"]), gen)
+            with self.lock:
+                if gen == self.generation:
+                    self.follow_wait, self.follow_retry_at = 0.0, 0.0   # works again: next failure is said again
         except (PrinterError, sm.SpoolmanError) as e:
-            self._notice("Spoolman: %s" % e, gen)
+            with self.lock:
+                if gen != self.generation:
+                    return
+                self.last_heads = previous   # retry this change once the back-off is over
+                first = not self.follow_wait
+                self.follow_wait = min(FOLLOW_RETRY_MAX, self.follow_wait * 2 or FOLLOW_RETRY)
+                self.follow_retry_at = time.monotonic() + self.follow_wait
+            if first:   # said once; later failures of the same outage stay quiet until it works again
+                self._notice("Spoolman: %s" % e, gen)
 
     def _is_own_write(self, head, state):   # caller holds self.lock
         """True once (and clears the mark) when the head now shows what _bind just wrote to it."""

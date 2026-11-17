@@ -3,7 +3,7 @@ import * as bridge from '../core/bridge';
 import { Tracker, message, type RunOptions } from '../core/tracker';
 import { t } from '../core/i18n';
 import { ask, cancelDialog } from '../core/dialog';
-import type { Config, Heater, Info, Spool, Status, StockView, UsageView } from './types';
+import type { Config, Heater, Info, Requirement, Spool, Status, StockView, UsageView } from './types';
 
 export type Phase = 'connecting' | 'connected' | 'noTarget' | 'unreachable';
 export const LIMITS = { hotend: 320, bed: 110 };
@@ -43,6 +43,8 @@ export const s = reactive({
   stockLoading: false,
   usage: null as UsageView | null,
   usageError: '',
+  requirements: [] as Requirement[],
+  reqChecking: false,
 });
 
 export const tracker = new Tracker(
@@ -74,6 +76,27 @@ export async function estop(): Promise<void> {
     yes: t('confirm.estop.yes'), no: t('common.goBack'), danger: true })) return;
   await run({ key: 'estop', label: t('act.estop'), cmd: 'emergency_stop', okText: t('ok.estop'), timeoutMs: 10000, allowRepeat: true });
 }
+/** A requirement's status as last told by the plugin; 'unknown' until it answered. */
+export const reqStatus = (id: Requirement['id']) => s.requirements.find(r => r.id === id)?.status ?? 'unknown';
+/** Ask the plugin which requirements are there (no printer I/O); recheck = "Check again" (asks OrcaSlicer anew). */
+export function loadRequirements(recheck = false): void { bridge.post({ type: 'requirements', recheck }); }
+/** "Check again": the plugin looks again (OrcaSlicer's agent, Spooler), plus what only the printer can tell (its
+ *  Spoolman link) when one is known. Rows show "Checking…" until the plugin answers; without an answer within
+ *  REQ_TIMEOUT_MS they stop and say so. */
+export const REQ_TIMEOUT_MS = 10000;
+let reqTimer: ReturnType<typeof setTimeout> | undefined;
+export async function checkRequirements(): Promise<void> {
+  if (s.reqChecking) return;
+  s.reqChecking = true;
+  clearTimeout(reqTimer);
+  reqTimer = setTimeout(() => {
+    if (!s.reqChecking) return;
+    s.reqChecking = false;
+    tracker.notify('error', t('req.noAnswer', { seconds: REQ_TIMEOUT_MS / 1000 }));
+  }, REQ_TIMEOUT_MS);
+  loadRequirements(true);
+  if (targetKnown.value) await loadSpools(true);
+}
 /** Why the guided toolhead commands (Edit, Load, Unload) are off, or ''. */
 export const guidedWhy = computed(() => controlsOff.value || (busy.value ? t('reason.busy') : ''));
 
@@ -104,7 +127,7 @@ export async function hello(): Promise<void> {
     s.error = message(e);
   } finally {
     helloInFlight = false;
-    if (epoch === s.epoch) { void loadStock(false); void loadUsage(); }
+    if (epoch === s.epoch) { void loadStock(false); void loadUsage(); loadRequirements(); }
   }
 }
 
@@ -123,6 +146,7 @@ export async function loadSpools(quiet: boolean): Promise<void> {
     s.spoolsError = r.error ?? t('common.unknown');
     if (!quiet) tracker.notify('error', t('msg.failed', { action: t('act.spools'), error: s.spoolsError }));
   }
+  loadRequirements();   // the load is what tells whether Spoolman is there (directly or through the printer)
 }
 
 let stockSeq = 0;
@@ -171,7 +195,7 @@ function onMessage(m: any): void {
       if (m.data?.bindings) s.bindings = m.data.bindings;
       // The plugin checks the firmware again when its first answer was unclear (or after the printer was away).
       if (s.info && m.data?.firmware?.kind && (m.data.firmware.kind !== s.info.firmware.kind
-        || (m.data.firmware.version ?? '') !== (s.info.firmware.version ?? ''))) s.info = { ...s.info, firmware: m.data.firmware };
+        || (m.data.firmware.version ?? '') !== (s.info.firmware.version ?? ''))) { s.info = { ...s.info, firmware: m.data.firmware }; loadRequirements(); }
       if (s.phase === 'unreachable' && !helloInFlight) void hello();   // it answers again: fetch its generation
       break;
     case 'offline': s.offline = String(m.error ?? ''); break;
@@ -179,6 +203,7 @@ function onMessage(m: any): void {
     case 'camera_error': if (s.camOn) { s.camError = String(m.error ?? ''); s.frame = ''; } break;
     case 'screen': s.screen = m.image; s.screenError = ''; break;
     case 'screen_error': if (s.scrOn) { s.screen = ''; s.screenError = String(m.error ?? ''); } break;
+    case 'requirements': if (Array.isArray(m.items)) { s.requirements = m.items; s.reqChecking = false; clearTimeout(reqTimer); } break;
     case 'notice': tracker.notify('info', String(m.text ?? '')); break;
     case 'config': configHandlers.forEach(h => h(m)); break;
     case 'rfid': rfidHandlers.forEach(h => h(m)); break;
