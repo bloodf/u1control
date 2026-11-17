@@ -409,13 +409,13 @@ test('stock: many spools scroll inside the table; the reel never sets the row he
   eq(stockRows().length, 55, 'all spools listed');
   // OrcaSlicer's WebKit did not resolve the reel images' height: 100% in a table cell and used their 160 px source
   // height, which grew the reel to 40 x 160 and each row to ~177 px. Force that height: the box must not follow.
-  // The reel is now a vector (OuiSpool, width/height attributes), with no picture whose source height could leak.
+  // The reel is the foundation's photo spool (OuiSpool): a fixed px box with its pictures contained in it.
   await settle();
   const figs = qa('.sc-wrap .oui-spool').map(e => e.getBoundingClientRect());
   assert(figs.every(r => Math.round(r.width) === 40 && Math.round(r.height) === 40), 'reel is a fixed 40 px square: ' + JSON.stringify(figs.slice(0, 2)));
   const tall = qa('.sc-wrap tbody tr').map(r => r.getBoundingClientRect().height).filter(h => h > 80);
   eq(tall.length, 0, 'no row taller than its text needs');
-  eq(q('.sc-wrap .oui-spool').getAttribute('viewBox'), '0 0 48 48', 'reel drawn from its square viewBox, undistorted');
+  assert(qa('.sc-wrap .oui-spool img').every(e => Math.round(e.getBoundingClientRect().height) <= 40), 'reel pictures contained in their 40 px box');
   const wrap = q('.sc-wrap');
   assert(wrap.scrollHeight > wrap.clientHeight + 100 && getComputedStyle(wrap).overflowY === 'auto', 'long list scrolls inside the table');
   const after = q('[data-test="stock-card"] .oui-panel-foot');
