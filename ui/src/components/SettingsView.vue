@@ -1,20 +1,21 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
 import ToggleSwitch from 'primevue/toggleswitch';
 import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiSettings, OuiStatus, type OuiSettingsSection } from '../../shared/src/components';
-import { clipboard, info, languages, plug, printer, refresh, save as saveIcon, spoolman, target, wrench, zap } from '../../shared/src/icons';
+import { circleCheck, clipboard, info, languages, plug, printer, refresh, save as saveIcon, spoolman, target, wrench, zap } from '../../shared/src/icons';
 import FirmwareCard from './FirmwareCard.vue';
 import SpoolerHint from './SpoolerHint.vue';
-import { s, run, tracker, controlsOff, busy, loadSpools, printerName } from '../app/store';
+import RequirementRow from './RequirementRow.vue';
+import { s, run, tracker, controlsOff, busy, loadSpools, printerName, loadRequirements, checkRequirements } from '../app/store';
 import { config, form, dirty, saving, save, discard, valueOf } from '../app/settings';
 import { ask } from '../core/dialog';
 import { t, tMaybe, langPref, setLangPref, autoLocale, fmt } from '../core/i18n';
 import { LOCALES } from '../core/i18n-core';
-import type { Automation } from '../app/types';
+import type { Automation, Requirement } from '../app/types';
 import type { LangPref } from '../core/i18n-core';
 import { boot } from '../core/boot';
 
@@ -49,6 +50,32 @@ const dialogRule = computed(() => tMaybe(`ps.dialog.${config.value?.settings.pri
 const langOptions = computed(() => [
   { value: 'auto', label: t('lang.auto', { current: t(`lang.${autoLocale.value}`) }) },
   ...LOCALES.map(value => ({ value, label: t(`lang.${value}`) }))]);
+// Settings > Requirements: what some features need and the plugin can't install; the plugin says which are there.
+const EXT_URL = 'https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware';
+const AGENT_DOCS = 'https://github.com/bloodf/u1control/blob/main/docs/features.md#printer-agent';
+const SPOOLMAN_URL = 'https://github.com/Donkie/Spoolman';
+const STATE = { ok: 'ok', missing: 'warn', unknown: 'idle' } as const;
+const reqs = computed(() => {
+  const by = (id: Requirement['id']) => s.requirements.find(r => r.id === id) ?? { id, status: 'unknown' as const, details: {} };
+  const agents = by('printer_agents'), ext = by('extended_firmware'), sm = by('spoolman');
+  return [
+    { id: agents.id, name: t('req.agents.name'), why: t('req.agents.why'), state: agents.status === 'ok' ? 'ok' as const : 'warn' as const,
+      status: agents.status === 'ok' ? t('req.agents.on') : t('req.agents.unknown'), detail: agents.status === 'ok' ? '' : t('req.agents.note'),
+      steps: agents.status === 'ok' ? [] : [t('req.agents.step1'), t('req.agents.step2'), t('req.agents.step3'), t('req.agents.step4')],
+      link: { href: AGENT_DOCS, label: t('req.agents.link') } },
+    { id: ext.id, name: t('req.ext.name'), why: t('req.ext.why'), state: STATE[ext.status],
+      status: ext.status === 'ok' ? t('req.status.ok') : ext.status === 'missing' ? t('req.ext.missing') : t('req.status.unknown'),
+      detail: ext.status === 'unknown' ? t('req.ext.unknown') : ext.details.version ? t('req.ext.version', { version: ext.details.version }) : '',
+      steps: ext.status === 'missing' ? [t('req.ext.step1'), t('req.ext.step2'), t('req.ext.step3'), t('req.ext.step4')] : [],
+      link: { href: EXT_URL, label: t('ext.link') } },
+    { id: sm.id, name: t('req.sm.name'), why: t('req.sm.why'), state: STATE[sm.status],
+      status: sm.status === 'ok' ? t('req.sm.set') : sm.status === 'missing' ? t('req.sm.missing') : t('req.status.unknown'),
+      detail: sm.details.url ? t('req.sm.direct', { url: sm.details.url }) : sm.details.via === 'printer' ? t('req.sm.printer') : sm.status === 'unknown' ? t('req.sm.unknown') : '',
+      steps: sm.status === 'ok' ? [] : [t('req.sm.step1'), t('req.sm.step2'), t('req.sm.step3')],
+      link: { href: SPOOLMAN_URL, label: t('req.sm.link') } },
+  ];
+});
+onMounted(() => loadRequirements());
 const sections = computed<OuiSettingsSection[]>(() => [
   { id: 'mode', label: t('mode.title'), icon: zap },
   { id: 'print-setup', label: t('ps.title'), icon: printer, ...(pipe.value && !pipe.value.on ? { state: 'warn' as const } : {}) },
@@ -57,6 +84,7 @@ const sections = computed<OuiSettingsSection[]>(() => [
   { id: 'connection', label: t('conn.title'), icon: plug },
   { id: 'spoolman', label: t('sm.title'), icon: spoolman },
   { id: 'firmware', label: t('ext.title'), icon: wrench },
+  { id: 'requirements', label: t('req.title'), icon: circleCheck },
   { id: 'language', label: t('lang.title'), icon: languages },
   { id: 'about', label: t('about.title'), icon: info },
 ]);
@@ -143,6 +171,14 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
       </OuiFormSection>
 
       <FirmwareCard />
+
+      <OuiFormSection id="requirements" :icon="circleCheck" tone="neutral" :title="t('req.title')" :aria-label="t('req.title')" :description="t('req.help')" data-test="requirements">
+        <template #actions>
+          <Button severity="secondary" size="small" :label="t('req.check')" :loading="tracker.isBusy('spools')" data-test="req-check" @click="checkRequirements()">
+            <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
+        </template>
+        <RequirementRow v-for="r in reqs" :key="r.id" v-bind="r" />
+      </OuiFormSection>
 
       <OuiFormSection id="language" :icon="languages" tone="neutral" :title="t('lang.title')" :aria-label="t('lang.title')">
         <OuiFormRow :label="t('lang.label')" :hint="t('lang.help')">

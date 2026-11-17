@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+- **Settings > Requirements** lists what some features need that U1 Control can't install by itself, whether each one is there, what it is for and how to get it, with **Check again**:
+  - **OrcaSlicer printer agents** (only for OrcaSlicer's own Print dialog and Device tab): **On** once OrcaSlicer connects to the U1 through the u1control agent or reports it as the selected printer's agent, else **Not detected** with the steps (Preferences > Developer > Experimental Features > Use printer agents instead of print hosts, restart, Printer Agent = u1control in a copy of the printer preset). Plugins can't read the preference itself, so nothing is turned off because of it.
+  - **U1 Extended Firmware**: from the printer's firmware check, unknown until a U1 answers; when it is the official firmware, how to install it (project page, Advanced Mode, `firmware_config: true` under `[web]`).
+  - **Spoolman**: set (an address in Settings, or the printer's own Moonraker `[spoolman]`), not set, or not known yet. No extra network check: it comes from the Spoolman link u1control already makes.
+- The checks run only when the tab asks, never while OrcaSlicer loads the plugin.
+- On the official firmware the printer screen card stays on the Dashboard, off, with "Needs the U1 Extended Firmware" instead of disappearing.
+- With no Spoolman anywhere, linking a spool from Spooler's stock is off with the reason, and the automatic spool follow no longer retries Spoolman on every filament change.
+- Docs: the printer agent steps now name Preferences > Developer > Experimental Features, the restart and the copy of the printer preset.
+
 ## [0.12.0] - 2026-11-16
 
 - U1 Control now speaks Spanish, German and Simplified Chinese as well as English and Portuguese: the U1 Control tab (Dashboard, Files with Time-lapses, Console, Settings), the U1 print setup window, confirmations, empty states, notices and errors, and the progress and error messages u1control shows in OrcaSlicer's Print dialog.

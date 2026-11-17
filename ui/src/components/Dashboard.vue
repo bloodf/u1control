@@ -59,7 +59,7 @@ async function powerDiscard() {
       <JobCard />
       <BedCard />
       <CameraCard />
-      <ScreenCard v-if="s.info?.firmware.kind === 'extended'" />
+      <ScreenCard />
     </div>
     <div class="oui-stack">
       <SpoolerHint where="dash" />

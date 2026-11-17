@@ -122,6 +122,9 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.firmware_sure = False      # the kind came from a clear answer; else checked again every FIRMWARE_RETRY
         self.firmware_retry_at = 0.0
         self.spoolman, self.spoolman_gen = None, None
+        # How the last Spoolman connect went: "moonraker" / "direct", "none" (no URL and no Spoolman on the printer),
+        # "" (not tried). Requirements read it; no probe of its own.
+        self.spoolman_link = ""
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
         self.last_frame_at = 0.0
@@ -460,10 +463,18 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             if self.spoolman is not None and self.spoolman_gen == gen:
                 return self.spoolman
         smc = sm.Spoolman(target.spoolman_url, client)
-        smc.connect()
+        try:
+            smc.connect()
+        except sm.SpoolmanError:
+            if not target.spoolman_url:
+                with self.lock:
+                    if gen == self.generation:
+                        self.spoolman_link = "none"
+            raise
         with self.lock:
             if gen == self.generation:
                 self.spoolman, self.spoolman_gen = smc, gen
+                self.spoolman_link = "moonraker" if smc.via_moonraker else "direct"
         return smc
 
     def _spoolman_follow(self, view, gen):
@@ -479,6 +490,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             if kind == "extended" and isinstance(view.get("spool_ids"), list):
                 self.bindings = {t: sid for t, sid in enumerate(view["spool_ids"]) if sid}
                 return  # SpoolLink owns the binding on extended firmware
+            if not target.spoolman_url and self.spoolman_link == "none":
+                return  # no Spoolman anywhere: don't retry (and report) on every head change
             if previous is None or not target.spoolman_auto:
                 return
             changed = [t for t in range(u1.TOOLHEADS) if sm.head_changed(previous[t], heads[t])
