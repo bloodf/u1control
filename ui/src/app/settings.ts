@@ -10,6 +10,12 @@ import type { Config } from './types';
 export const config = ref<Config | null>(null);
 export const form = reactive({ mode: 'automagic', host: '', apiKey: '', name: 'Snapmaker U1', spoolman: '', draft: {} as Record<string, unknown> });
 export const saving = ref(false);
+/** Settings' "Check again" for Spooler: the plugin looks for it again and sends a new config message. */
+export const rechecking = ref(false);
+export async function recheck(): Promise<void> {
+  rechecking.value = true;
+  try { await bridge.request({ type: 'get_config' }); } catch (e) { tracker.notify('error', t('msg.plugin', { error: message(e) })); } finally { rechecking.value = false; }
+}
 let rfidAuto = false;
 
 const savedExpert = (k: string) => (config.value ? (k in config.value.stored ? config.value.stored[k] : config.value.settings[k]) : undefined);

@@ -11,6 +11,7 @@ import { s, run, tracker, loadStock, loadSpools, busy, controlsOff, targetKnown,
 import { ask } from '../core/dialog';
 import { t, tMaybe, fmt } from '../core/i18n';
 import { family, boundHeads } from '../core/logic';
+import { since } from '../core/since';
 import type { Spool } from '../app/types';
 
 const q = ref('');
@@ -31,6 +32,7 @@ const blocker = computed<{ state: 'error' | 'loading' | 'offline' | 'empty'; tex
   return { state: k.state === 'error' ? 'error' : k.state === 'missing' ? 'empty' : 'offline', text };
 });
 const otherSpoolman = computed(() => !!usable.value && s.stock!.same_spoolman === false);
+const otherSince = since(() => otherSpoolman.value);
 const isStale = computed(() => !!usable.value && sk.value!.state === 'stale');
 /** Plain information, not a warning: a quiet line, not a bordered box. */
 const viaPrinter = computed(() => usable.value && s.stock!.same_spoolman == null);
@@ -80,7 +82,7 @@ async function link(r: Spool) {
 
     <div role="status" aria-live="polite" class="sc-notes">
       <OuiEmpty v-if="blocker" compact :state="blocker.state" :icon="boxes" tone="lime" :title="blocker.text" />
-      <OuiBanner v-if="otherSpoolman" id="stock-why" role="none" data-test="stock-why" tone="error" :title="t('stock.blocked', { reason: t('stock.why.spoolman') })">{{ t('stock.otherSpoolman') }}</OuiBanner>
+      <OuiBanner v-if="otherSpoolman" id="stock-why" role="none" data-test="stock-why" tone="error" dismissible :dismiss-key="`other-spoolman:${otherSince}`" :close-label="t('common.close')" :title="t('stock.blocked', { reason: t('stock.why.spoolman') })">{{ t('stock.otherSpoolman') }}</OuiBanner>
     </div>
     <template v-if="usable">
       <OuiToolbar class="sc-bar" :summary="t('stock.count', { shown: shown.length, n: rows.length })" :label="t('stock.searchLabel')">

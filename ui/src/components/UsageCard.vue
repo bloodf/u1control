@@ -36,11 +36,12 @@ async function ack(e: UsageEntry) {
 <template>
   <div v-if="show" class="oui-stack" data-test="usage-card">
     <div role="alert" class="u1-live uc-alerts">
-      <OuiBanner v-if="s.usageError" role="none" tone="error" :title="t('usage.loadError', { error: s.usageError })" />
-      <OuiBanner v-if="u?.save_error" role="none" tone="error" :title="t('usage.saveError', { error: u.save_error })" />
-      <OuiBanner v-if="u?.restore_notice" role="none" tone="warn" :title="t('usage.notice', { text: u.restore_notice })" />
+      <OuiBanner v-if="s.usageError" role="none" tone="error" :title="t('usage.loadError', { error: s.usageError })" dismissible :dismiss-key="`usage-load:${s.usageError}`" :close-label="t('common.close')" />
+      <OuiBanner v-if="u?.save_error" role="none" tone="error" :title="t('usage.saveError', { error: u.save_error })" dismissible :dismiss-key="`usage-save:${u.save_error}`" :close-label="t('common.close')" />
+      <OuiBanner v-if="u?.restore_notice" role="none" tone="warn" :title="t('usage.notice', { text: u.restore_notice })" dismissible :dismiss-key="`usage-restore:${u.restore_notice}`" :close-label="t('common.close')" />
     </div>
-    <OuiBanner v-if="list.length" role="note" tone="warn" :title="tn('usage.banner', list.length)">
+    <OuiBanner v-if="list.length" role="note" tone="warn" :title="tn('usage.banner', list.length)" data-test="usage-banner"
+               dismissible :dismiss-key="`unconfirmed:${list.map(e => e.id).join(',')}`" :close-label="t('common.close')">
       {{ first }}
       <template #actions>
         <Button size="small" severity="secondary" :label="open ? t('usage.hide') : t('usage.review')" :aria-expanded="open" aria-controls="usage-list" data-focus-key="usage-review" data-test="usage-review" @click="open = !open">

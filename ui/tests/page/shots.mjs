@@ -37,14 +37,17 @@ ans('usage', {pending: [], unconfirmed: [{id: 'a', at: null, spool: 7, grams: 12
 __t.handler({type: 'config', mode: 'expert', stored: {}, version: '0.5.0', spooler: {installed: true}, settings: {mode: 'expert', host: '', api_key: '••••', printer_name: 'Bench U1', spoolman_url: 'http://192.168.1.10:7912', rfid_auto_sync: true, purifier: 'auto'},
   automations: [{key: 'rfid_auto_sync', label: 'Apply RFID tags', help: 'When a toolhead reads a new tag.', automagic: true, choices: null}, {key: 'purifier', label: 'Top cover', help: 'auto follows the rule.', automagic: 'auto', choices: ['auto','strong','off']}]});
 await settle();
+// Toasts (bottom-left): what a command answered, one that leaves and an error that stays.
+if (SCN === 'dash') { __t.handler({type: 'notice', text: 'Project filaments updated: T1 PLA, T2 PETG'}); __t.handler({type: 'reply', id: 424242, error: 'Spoolman timed out'}); }
 if (SCN === 'settings' || SCN === 'files' || SCN === 'console') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
+if (SCN === 'settings') { document.querySelector('.oui-settings-link[data-section="spoolman"]').click(); await sleep(100); }
 if (SCN === 'files') { ans('files', {path: 'gcodes', dirs: [{name: 'archive'}], files: [{name: 'desk_organiser_plate_1.gcode', size: 4200000, modified: Date.now()/1000 - 3600, time: 7440}, {name: 'benchy.gcode', size: 900000, modified: Date.now()/1000 - 86400, time: 2700}], disk: {free: 5.2e9}}); }
 if (SCN === 'console') { const i = document.querySelector('#console-cmd'); i.value = 'M105'; i.dispatchEvent(new Event('input')); }
 if (SCN === 'dialog') { document.querySelector('[data-test="cancel"]').focus(); document.querySelector('[data-test="cancel"]').click(); await until(() => document.querySelector('.p-dialog')); }
 await sleep(400);
 `;
 const SCENES = [
-  ['dash', 'light', 'en', 1280, 1], ['dash', 'dark', 'pt_BR', 1280, 1], ['dash', 'light', 'pt_BR', 720, 1], ['dash', 'dark', 'en', 640, 2],
+  ['dash', 'light', 'en', 1280, 1], ['dash', 'dark', 'pt_BR', 1280, 1], ['dash', 'light', 'pt_BR', 720, 1], ['dash', 'dark', 'en', 640, 2], ['dash', 'light', 'en', 380, 1],
   ['notarget', 'light', 'pt_BR', 1280, 1], ['notarget', 'dark', 'en', 720, 1], ['dialog', 'dark', 'pt_BR', 720, 1], ['dialog', 'light', 'en', 640, 2],
   ['settings', 'light', 'en', 1280, 1], ['settings', 'dark', 'pt_BR', 720, 1], ['files', 'light', 'pt_BR', 1280, 1], ['files', 'dark', 'en', 640, 2],
   ['console', 'dark', 'en', 1280, 1], ['setup', 'light', 'pt_BR', 720, 1], ['setup', 'dark', 'en', 1280, 1], ['setup', 'light', 'en', 360, 2],

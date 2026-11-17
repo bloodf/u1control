@@ -2,38 +2,45 @@
 import { computed } from 'vue';
 import Button from 'primevue/button';
 import { OuiBanner, OuiIcon } from '../../shared/src/components';
-import { refresh, settings, x } from '../../shared/src/icons';
+import { refresh, settings } from '../../shared/src/icons';
 import { s, tracker, hello, printerName, statusAge, controlsOff, busy, STALE_STATUS_S } from '../app/store';
 import { t, fmt } from '../core/i18n';
+import { split } from '../core/tracker';
+import { since } from '../core/since';
 
 // What the whole page has to say, once, under the app bar on every tab: why the printer's controls are off (no
-// printer, offline, still connecting, busy) and what each command answered. Controls that are off for one of
-// these reasons point at it (#heads-why) instead of repeating it.
-// Live regions are the persistent wrappers below (polite, alert, status): they are in the page before anything is
-// added, so additions are announced. Each banner inside drops its own role (role="none") so nothing is announced twice.
-// foundation-gap: OuiBanner (4.0.1) always sets role alert/status; 4.0.2 should add `live: false` (and use role="note"
-// for static banners itself). Until then the role is overridden here and on static banners (role="note").
+// printer, offline, still connecting, busy) and which commands are still waiting for an answer. What a command
+// answered is a toast (App.vue's OuiToastHost). Controls that are off for one of these reasons point at it
+// (#heads-why) instead of repeating it.
+// Every banner can be closed; its dismissKey names the moment its condition started (since()), so a closed banner
+// stays closed through every poll and comes back the next time the printer goes offline, gets busy, and so on.
+// Live regions are the persistent wrappers below (polite, assertive, status): they are in the page before anything
+// is added, so additions are announced. Each banner inside drops its own role (role="none") so nothing is announced
+// twice.
+// foundation-gap: OuiBanner (4.2.0) still always sets role alert/status; it should take `live: false` (and use
+// role="note" for static banners itself). Until then the role is overridden here and on static banners (role="note").
 const offline = computed(() => s.phase === 'unreachable' || !!s.offline);
 const firstRun = computed(() => s.phase === 'noTarget' && s.tab === 'dash');   // the Dashboard says it itself, with the way out
-const TONE = { error: 'error', unknown: 'warn', success: 'success', info: 'info' } as const;
-const lasting = computed(() => tracker.notices.filter(n => n.kind === 'error' || n.kind === 'unknown'));
-const passing = computed(() => tracker.notices.filter(n => n.kind === 'success' || n.kind === 'info'));
 const waiting = computed(() => [...tracker.pending.values()].filter(p => p.key !== 'spools'));
-/** "Pause failed: timeout" reads as a title and its detail (Chinese writes the colon as "："). */
-const split = (text: string) => { const m = /: |：/.exec(text); return m ? [text.slice(0, m.index + 1), text.slice(m.index + m[0].length)] : [text, '']; };
+const at = {
+  offline: since(() => offline.value), none: since(() => s.phase === 'noTarget'), connecting: since(() => s.phase === 'connecting'),
+  noStatus: since(() => s.phase === 'connected' && !s.status), stale: since(() => !!s.status && statusAge.value > STALE_STATUS_S),
+  busy: since(() => !controlsOff.value && busy.value),
+};
+const close = computed(() => t('common.close'));
 </script>
 <template>
   <div class="u1-top">
     <!-- Why the controls are off. Offline and unreachable are announced at once (assertive), as before 0.9.0; the
          other reasons politely. Both regions stay in the page so what appears in them is announced. -->
     <div class="u1-live" aria-live="assertive" data-test="target-alert">
-      <OuiBanner v-if="offline" id="heads-why" role="none" data-test="heads-why" tone="error" :title="t('target.offline.title')">
+      <OuiBanner v-if="offline" id="heads-why" role="none" data-test="heads-why" tone="error" dismissible :dismiss-key="`offline:${at.offline.value}`" :close-label="close" :title="t('target.offline.title')">
         {{ t('target.offline.body', { printer: printerName, error: s.offline || s.error }) }}
         <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
       </OuiBanner>
     </div>
     <div class="u1-live" aria-live="polite" :data-test="firstRun ? undefined : 'target-banner'">
-      <OuiBanner v-if="s.phase === 'noTarget' && !firstRun" id="heads-why" role="none" tone="warn" :title="t('target.none.title')">
+      <OuiBanner v-if="s.phase === 'noTarget' && !firstRun" id="heads-why" role="none" tone="warn" dismissible :dismiss-key="`no-target:${at.none.value}`" :close-label="close" :title="t('target.none.title')">
         {{ t('target.none.body') }}
         <template #actions>
           <Button v-if="s.tab !== 'settings'" size="small" severity="secondary" :label="t('common.openSettings')" @click="s.tab = 'settings'"><template #icon><OuiIcon :icon="settings" :size="14" /></template></Button>
@@ -41,28 +48,22 @@ const split = (text: string) => { const m = /: |：/.exec(text); return m ? [tex
         </template>
       </OuiBanner>
       <template v-else-if="!offline">
-        <OuiBanner v-if="s.phase === 'connecting'" id="heads-why" role="none" tone="neutral" :title="t('target.connecting')" />
-        <OuiBanner v-else-if="s.phase === 'connected' && !s.status" id="heads-why" role="none" tone="neutral" :title="t('reason.waiting')" />
+        <OuiBanner v-if="s.phase === 'connecting'" id="heads-why" role="none" tone="neutral" :title="t('target.connecting')"
+                   dismissible :dismiss-key="`connecting:${at.connecting.value}`" :close-label="close" />
+        <OuiBanner v-else-if="s.phase === 'connected' && !s.status" id="heads-why" role="none" tone="neutral" :title="t('reason.waiting')"
+                   dismissible :dismiss-key="`no-status:${at.noStatus.value}`" :close-label="close" />
         <!-- The age ticks every second: it is kept out of the announcement (the app bar's state says it too). -->
-        <OuiBanner v-else-if="s.status && statusAge > STALE_STATUS_S" role="none" tone="warn" :title="t('target.staleTitle')" data-test="stale">
+        <OuiBanner v-else-if="s.status && statusAge > STALE_STATUS_S" role="none" tone="warn" :title="t('target.staleTitle')" data-test="stale"
+                   dismissible :dismiss-key="`stale:${at.stale.value}`" :close-label="close">
           <span class="u1-stale-age" aria-hidden="true">{{ t('target.staleAge', { age: fmt.ago(s.statusAt / 1000, s.now / 1000) }) }}</span></OuiBanner>
-        <OuiBanner v-if="!controlsOff && busy" id="heads-why" role="none" data-test="heads-why" tone="info" :title="t('reason.busy') + t('common.period')">{{ t('busy.body') }}</OuiBanner>
+        <OuiBanner v-if="!controlsOff && busy" id="heads-why" role="none" data-test="heads-why" tone="info" dismissible :dismiss-key="`busy:${at.busy.value}`" :close-label="close" :title="t('reason.busy') + t('common.period')">{{ t('busy.body') }}</OuiBanner>
       </template>
     </div>
     <section class="notices" :aria-label="t('msg.region')">
-      <!-- Errors and unknown outcomes stay until dismissed and are announced at once. -->
-      <div role="alert" class="u1-live">
-        <OuiBanner v-for="n in lasting" :key="n.id" role="none" :tone="TONE[n.kind]" :title="split(n.text)[0]">
-          {{ split(n.text)[1] }} <span class="oui-meta">{{ fmt.time(n.at / 1000) }}</span>
-          <template #actions><Button text severity="secondary" size="small" :label="t('common.dismiss')" @click="tracker.dismiss(n.id)"><template #icon><OuiIcon :icon="x" :size="14" /></template></Button></template>
-        </OuiBanner>
-      </div>
+      <!-- Commands still waiting for the printer; what they answer is a toast. -->
       <div role="status" aria-live="polite" class="u1-live">
-        <OuiBanner v-for="p in waiting" :key="'p-' + p.key" role="none" tone="neutral" :title="split(t('msg.waiting', { action: p.label }))[0]">{{ split(t('msg.waiting', { action: p.label }))[1] }}</OuiBanner>
-        <OuiBanner v-for="n in passing" :key="n.id" role="none" :tone="TONE[n.kind]" :title="split(n.text)[0]">
-          {{ split(n.text)[1] }}
-          <template #actions><Button text severity="secondary" size="small" :label="t('common.dismiss')" @click="tracker.dismiss(n.id)"><template #icon><OuiIcon :icon="x" :size="14" /></template></Button></template>
-        </OuiBanner>
+        <OuiBanner v-for="p in waiting" :key="'p-' + p.key" role="none" tone="neutral" :title="split(t('msg.waiting', { action: p.label }))[0]"
+                   dismissible :dismiss-key="`waiting:${p.key}:${p.startedAt}`" :close-label="close">{{ split(t('msg.waiting', { action: p.label }))[1] }}</OuiBanner>
       </div>
     </section>
   </div>

@@ -40,7 +40,11 @@ async function pick(root, label) {
   assert(opt, 'option ' + label + ' in ' + qa('.p-select-overlay [role=option]').map(text).join('|'));
   await mouse(opt); await until(() => !q('.p-select-overlay'), 'overlay closed'); await settle();
 }
-const alerts = () => qa('[role=alert] .oui-banner').map(text).join(' | ');
+// Command results are toasts (bottom-left, shared OuiToastHost); the print setup pop-up's warnings are banners.
+// A toast that was closed stays in the page for its leave transition: it no longer counts.
+const toastText = t => [q('strong', t), q('.oui-toast-body', t)].filter(Boolean).map(text).join(' ');
+const toasts = () => qa('.oui-toast:not(.oui-toast-leave-active)').map(toastText).join(' | ');
+const alerts = () => [...qa('[role=alert] .oui-banner').map(text), toasts()].filter(Boolean).join(' | ');
 const ROWS = [{id: 7, filament_id: 70, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', colours: [], remaining: 500, low: false, use_first: false, location: 'Shelf A'},
   {id: 11, filament_id: 110, name: 'White', vendor: 'Acme', material: 'PETG', colour: '#FAFAFA', colours: [], remaining: 40, low: true, use_first: true, location: ''}];
 const SP = state => ({state, text: state === 'active' ? 'Spooler is running' : 'Spooler was unloaded or disabled.', detail: '', version: '0.21.0', origin: 'http://box:7912'});
@@ -598,7 +602,7 @@ test('B-04/B-05: one command per action, visible waiting, unknown after timeout,
   await reply(cmds('pause')[0], true);
   assert(!alerts().includes('no answer after'), 'late answer replaces the unknown notice');
   assert(document.body.textContent.includes('answered late'), 'late answer reported');
-  const dismiss = qa('[role=alert] .oui-banner').find(m => text(m).includes('Emergency stop failed')).querySelector('button');
+  const dismiss = qa('.oui-toast').find(m => text(m).includes('Emergency stop failed')).querySelector('.oui-toast-close');
   await click(dismiss);
   assert(!alerts().includes('Emergency stop failed'), 'dismissed by the user');
 `, { slow: true });
@@ -931,7 +935,7 @@ test('time-lapses: one row per video with its cover; saving says where the file 
   assert(btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'no delete while that video is being saved');
   assert(!btn('Delete the time-lapse vase_20261115080000.mp4').disabled && !btn('Save the time-lapse vase_20261115080000.mp4').disabled, 'the other rows stay usable');
   await reply(last('cmd', 'download'), '/home/u/Downloads/u1control/benchy_20261116130921.mp4');
-  await until(() => text(q('.notices [role=status]')).includes('Saved to /home/u/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
+  await until(() => toasts().includes('Saved to /home/u/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
   assert(!btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'delete is back');
   await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
   assert(!btn('Save the time-lapse vase_20261115080000.mp4').disabled && !btn('Delete the time-lapse vase_20261115080000.mp4').disabled, 'saving and deleting stay on while printing');
@@ -960,7 +964,7 @@ test('time-lapses: delete asks first, names both answers, takes the video and ke
   eq(qa('[data-timelapse]', panel).map(r => r.dataset.timelapse), ['timelapse/vase_20261115080000.mp4', 'timelapse/no cover.mp4'], 'the row is gone');
   assert(text(panel).includes('2 videos'), 'count follows');
   await until(() => document.activeElement === byTest('tl-refresh'), 'focus goes to Refresh, not to the top of the page');
-  assert(text(q('.notices [role=status]')).includes('Deleted'), 'success is said');
+  assert(toasts().includes('Deleted'), 'success is said');
   btn('Delete the time-lapse no cover.mp4').focus();
   await click(btn('Delete the time-lapse no cover.mp4'));
   await yes();
@@ -1034,7 +1038,7 @@ test('camera: save the picture on screen', `
   const cmd = last('cmd', 'snapshot');
   eq(cmd.args, {}, 'asks the plugin to save its last picture');
   await reply(cmd, '/home/u/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
-  await until(() => text(q('.notices [role=status]')).includes('Saved to'), 'says where it was saved');
+  await until(() => toasts().includes('Saved to'), 'says where it was saved');
 `);
 
 test('camera: frame rate choice starts at the stored rate, is sent to the plugin and says its limits', `
@@ -1093,6 +1097,85 @@ for (const [lang, shown] of [['de_DE', '2,5'], ['es_ES', '2,5'], ['pt_BR', '2,5'
     if ('${shown}' === '2,5') { await type(field, '2,5'); eq(field.value, '2,5', 'the locale sign still works'); }
   `, { lang });
 }
+
+// ------------------------------------------------------------------ foundation 4.2.0: toasts, dismissible notices, requirements
+test('toasts: bottom-left, each with a Close button, gone once closed', `
+  await connect();
+  await post({type: 'notice', text: 'Project filaments updated'});
+  await until(() => q('.oui-toast'), 'toast shown');
+  const host = q('.oui-toasts');
+  eq(qa('.oui-toasts').length, 1, 'one toast host on the page');
+  const toast = q('.oui-toast'), r = toast.getBoundingClientRect();
+  assert(r.left <= 20 && innerHeight - r.bottom <= 20 && r.bottom <= innerHeight, 'bottom-left: ' + JSON.stringify(r));
+  eq(toast.getAttribute('role'), 'status', 'an info toast is polite');
+  assert(toasts().includes('Project filaments updated'), 'text shown: ' + toasts());
+  const close = q('.oui-toast-close', toast);
+  eq(close && close.getAttribute('aria-label'), 'Close', 'Close button named');
+  await click(close);
+  await until(() => !toasts().includes('Project filaments updated'), 'toast closed');
+  await post({type: 'reply', id: 99999, error: 'boom'});
+  const err = qa('.oui-toast').find(t => text(t).includes('boom'));
+  assert(err && err.getAttribute('role') === 'alert', 'an error toast is an alert');
+  assert(err.parentElement.closest('.oui-toasts') === host, 'in the same host');
+`);
+
+test('notices: a closed banner stays closed while its condition holds and comes back when it starts again', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  const busyBanner = () => qa('.oui-banner').find(b => text(b).includes('busy'));
+  assert(busyBanner(), 'busy banner shown');
+  const close = q('.oui-banner-close', busyBanner());
+  eq(close && close.getAttribute('aria-label'), 'Close', 'Close button named');
+  await click(close);
+  assert(!busyBanner(), 'closed');
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, progress: 0.5})});
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, progress: 0.6})});
+  assert(!busyBanner(), 'stays closed across polls with the same condition');
+  await post({type: 'status', data: VIEW()});
+  await sleep(5);
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  assert(busyBanner(), 'back when the printer is busy again');
+  // unconfirmed filament use: keyed on the entries
+  const entry = id => ({id, at: null, spool: 7, grams: 1, head: 0, file: 'a.gcode', error: 'x', printer: 'u1:80', printer_name: 'Bench U1'});
+  const usage = list => ({pending: [], unconfirmed: list, acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: ''});
+  await until(() => last('cmd', 'usage'), 'usage asked');
+  await reply(last('cmd', 'usage'), usage([entry('a')]));
+  await until(() => byTest('usage-banner'), 'usage banner');
+  await click(q('.oui-banner-close', byTest('usage-banner')));
+  assert(!byTest('usage-banner'), 'usage banner closed');
+  await post({type: 'status', data: VIEW({progress: 0.1})});
+  assert(!byTest('usage-banner'), 'same entries: stays closed across a poll');
+`);
+
+test('settings: requirements say what was found; Check again asks again', `
+  await connect();
+  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: false, url: 'https://example.invalid/spooler'},
+    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}, automations: []});
+  await tab('settings');
+  await click(q('.oui-settings-link[data-section="spoolman"]'));
+  const sp = byTest('req-spooler'), sm = byTest('req-spoolman');
+  assert(sp && sm, 'two requirement rows');
+  eq(sp.dataset.status, 'missing', 'Spooler not found');
+  assert(text(sp).includes('Not found') && text(sp).includes('Install Spooler'), 'says so and how to get it: ' + text(sp));
+  eq(q('.oui-req-link', sp).getAttribute('href'), 'https://example.invalid/spooler', 'install link');
+  await click(q('.oui-req-check', sp));
+  const ask = last('get_config');
+  assert(ask, 'Check again asks the plugin to look again');
+  eq(sp.dataset.status, 'checking', 'checking while it looks');
+  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: true, url: 'https://example.invalid/spooler'},
+    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}, automations: []});
+  await reply(ask, true);
+  eq(byTest('req-spooler').dataset.status, 'found', 'found after installing');
+  assert(text(byTest('req-spooler')).includes('Found') && !q('.oui-req-link', byTest('req-spooler')), 'no install link once found');
+  await reply(last('cmd', 'spools'), {spools: ROWS, bindings: {}, via: 'direct'});
+  eq(byTest('req-spoolman').dataset.status, 'found', 'Spoolman reached');
+  const before = cmds('spools').length;
+  await click(q('.oui-req-check', byTest('req-spoolman')));
+  eq(cmds('spools').length, before + 1, 'Check again loads the spools again');
+  await fail(last('cmd', 'spools'), 'connection refused');
+  eq(byTest('req-spoolman').dataset.status, 'missing', 'Spoolman not reached');
+  assert(text(byTest('req-spoolman')).includes('connection refused'), 'says why');
+`);
 
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);

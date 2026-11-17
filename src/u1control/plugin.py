@@ -326,6 +326,9 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                         self.post_message({"type": "notice", "text": text})
                     if not self._background(job):
                         self.post_message({"type": "notice", "text": tr("Another preset update is running; try again in a moment.")})
+            elif kind == "get_config":    # Settings' "Check again": look for Spooler again; the printer is not touched
+                self.post_message(self._config_message())
+                self.post_message({"type": "reply", "id": data.get("id"), "result": True})
             elif kind == "ui_language":   # the page's language choice; nothing else is touched
                 self._settings().update({"ui_language": data.get("value")})
                 use_language(self)

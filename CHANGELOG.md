@@ -6,6 +6,8 @@
 - Spools are drawn with the photo spool again.
 - The page fills the whole tab at every height, also after the window is resized: no more grey under a short page.
 - Settings are tabs: one section at a time, and the save bar stays on screen at any window height.
+- Notifications appear bottom-left and each one can be closed; warnings and notices on the page can be dismissed.
+- Settings > Spoolman lists what the Spoolman features need (Spoolman and the Spooler plugin), whether each was found, and how to install it, with a Check again button.
 
 ## [0.12.0] - 2026-11-16
 
