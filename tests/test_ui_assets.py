@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 UI = ROOT / "src" / "u1control" / "ui"
-MAX_BUILT_BYTES = 480_000   # ~438 kB with the Dashboard printer photo (~50 kB of WebP that does not compress further)
+MAX_BUILT_BYTES = 580_000   # ~450 kB with the photo spool's 15 WebP layers (foundation 4.1.0), ~50 kB more with the Dashboard printer photo
 
 
 class UiAssets(unittest.TestCase):

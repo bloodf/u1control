@@ -5,12 +5,11 @@ import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
 import ToggleSwitch from 'primevue/toggleswitch';
-import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiSettings, OuiStatus, type OuiSettingsSection } from '../../shared/src/components';
-import { clipboard, info, languages, plug, printer, refresh, save as saveIcon, spoolman, target, wrench, zap } from '../../shared/src/icons';
+import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiRequirement, OuiSettings, OuiStatus, type OuiSettingsSection } from '../../shared/src/components';
+import { clipboard, info, languages, plug, printer, save as saveIcon, spoolman, target, wrench, zap } from '../../shared/src/icons';
 import FirmwareCard from './FirmwareCard.vue';
-import SpoolerHint from './SpoolerHint.vue';
-import { s, run, tracker, controlsOff, busy, loadSpools, printerName } from '../app/store';
-import { config, form, dirty, saving, save, discard, valueOf } from '../app/settings';
+import { s, run, tracker, controlsOff, busy, loadSpools, printerName, targetKnown } from '../app/store';
+import { config, form, dirty, saving, save, discard, valueOf, recheck, rechecking } from '../app/settings';
 import { ask } from '../core/dialog';
 import { t, tMaybe, langPref, setLangPref, autoLocale, fmt } from '../core/i18n';
 import { LOCALES } from '../core/i18n-core';
@@ -26,6 +25,15 @@ const showKey = ref(false);
 
 const smInfo = computed(() => s.spoolsError || (s.spoolsLoaded
   ? (s.spoolsVia === 'moonraker' ? t('heads.source.printer', { n: s.spools.length }) : t('heads.source.direct', { n: s.spools.length })) : t('sm.notLoaded')));
+// What the Spoolman features need, and whether this computer has it: Spoolman (reached directly or through the
+// printer; "Check again" loads the spools again) and the Spooler plugin ("Check again" asks the plugin to look again).
+const SPOOLMAN_URL = 'https://github.com/Donkie/Spoolman';
+const REQ_LABEL = { found: 'req.found', missing: 'req.missing', checking: 'req.checking', unknown: 'req.unknown' } as const;
+const smStatus = computed<keyof typeof REQ_LABEL>(() => (tracker.isBusy('spools') ? 'checking' : s.spoolsError ? 'missing' : s.spoolsLoaded ? 'found' : 'unknown'));
+const spStatus = computed<keyof typeof REQ_LABEL>(() => (rechecking.value ? 'checking' : !config.value ? 'unknown' : config.value.spooler.installed ? 'found' : 'missing'));
+const smLabel = computed(() => t(REQ_LABEL[smStatus.value]));
+const spLabel = computed(() => t(REQ_LABEL[spStatus.value]));
+const spDetail = computed(() => (config.value?.spooler.installed ? t('spooler.installed') : undefined));
 
 const PREFS = ['bed_level', 'flow_calibrate', 'time_lapse_camera', 'auto_refill', 'refill_any_colour', 'tangle_detect', 'unload_when_done', 'light_off_when_done'];
 const prefs = computed(() => Object.entries(s.status?.options ?? {}));
@@ -93,9 +101,10 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
 
       <OuiFormSection v-if="config" id="print-setup" :icon="printer" :title="t('ps.title')" :aria-label="t('ps.title')" data-test="print-setup">
         <div class="oui-stack u1-pad">
-          <OuiBanner v-if="pipe && !pipe.on" role="note" tone="warn" :title="t('ps.off', { preset: pipe.preset })" data-test="ps-off">
+          <OuiBanner :show="!!pipe && !pipe.on" role="note" tone="warn" :title="t('ps.off', { preset: pipe?.preset ?? '' })" data-test="ps-off"
+                     dismissible :dismiss-key="`ps-off:${pipe?.preset ?? ''}`" :close-label="t('common.close')">
             {{ config.settings.auto_add_pipeline ? t('ps.offAuto') : t('ps.offManual') }}</OuiBanner>
-          <p v-else-if="pipe" data-test="ps-on">{{ t('ps.on', { preset: pipe.preset }) }}</p>
+          <p v-if="pipe?.on" data-test="ps-on">{{ t('ps.on', { preset: pipe.preset }) }}</p>
           <p v-if="dialogRule" data-test="ps-rule">{{ dialogRule }}</p>
           <p class="oui-meta">{{ t('ps.how') }}</p>
           <p class="oui-meta" data-test="ps-agent">{{ t('ps.agent') }}</p>
@@ -132,13 +141,14 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
       </OuiFormSection>
 
       <OuiFormSection id="spoolman" :icon="spoolman" tone="magenta" :title="t('sm.title')" :aria-label="t('sm.title')">
-        <template #actions>
-          <Button severity="secondary" size="small" :label="t('sm.refresh')" :disabled="!!controlsOff" :aria-describedby="controlsOff ? 'heads-why' : undefined" :loading="tracker.isBusy('spools')" @click="loadSpools(false)">
-            <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
-        </template>
-        <div class="oui-stack u1-pad">
-          <p role="status" :class="{ 'u1-note': !!s.spoolsError }" :data-tone="s.spoolsError ? 'danger' : undefined">{{ smInfo }}</p>
-          <SpoolerHint where="settings" />
+        <p class="oui-meta u1-pad">{{ t('req.intro') }}</p>
+        <div role="status" data-test="requirements">
+          <OuiRequirement :name="t('sm.title')" :why="t('req.spoolman.why')" :status="smStatus" :status-label="smLabel" :detail="smInfo"
+                          :install-text="t('req.spoolman.install')" :install-url="SPOOLMAN_URL" :check-label="t('req.check')"
+                          :disabled="!targetKnown || !!controlsOff" data-test="req-spoolman" @check="loadSpools(false)" />
+          <OuiRequirement :name="t('spooler.title')" :why="t('req.spooler.why')" :status="spStatus" :status-label="spLabel" :detail="spDetail"
+                          :install-text="t('spooler.suggest')" :install-url="config?.spooler.url" :check-label="t('req.check')"
+                          data-test="req-spooler" @check="recheck" />
         </div>
       </OuiFormSection>
 

@@ -1,6 +1,5 @@
 /* U1 Control's own layout on top of the shared foundation (ui/shared): the page grid, rows inside a panel, the plain
    tables and the printer drawing. Colours are the foundation's --oui-* roles only; nothing here defines a colour. */
-html, body, #app { min-height: 100%; }
 
 /* Narrow bar: the tabs wrap under Emergency stop. Keep a clear gap so a tab press never lands on it. */
 @container oui-appbar (max-width: 760px) { .oui-appbar-actions { padding-bottom: var(--oui-s3); } }

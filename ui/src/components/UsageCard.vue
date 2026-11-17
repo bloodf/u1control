@@ -34,13 +34,15 @@ async function ack(e: UsageEntry) {
 }
 </script>
 <template>
-  <div v-if="show" class="oui-stack" data-test="usage-card">
+  <!-- v-show, not v-if: its banners stay mounted, so each one sees its condition clear and forgets a dismissal. -->
+  <div v-show="show" class="oui-stack" data-test="usage-card">
     <div role="alert" class="u1-live uc-alerts">
-      <OuiBanner v-if="s.usageError" role="none" tone="error" :title="t('usage.loadError', { error: s.usageError })" />
-      <OuiBanner v-if="u?.save_error" role="none" tone="error" :title="t('usage.saveError', { error: u.save_error })" />
-      <OuiBanner v-if="u?.restore_notice" role="none" tone="warn" :title="t('usage.notice', { text: u.restore_notice })" />
+      <OuiBanner :show="!!s.usageError" role="none" tone="error" :title="t('usage.loadError', { error: s.usageError })" dismissible :dismiss-key="`usage-load:${s.usageError}`" :close-label="t('common.close')" />
+      <OuiBanner :show="!!u?.save_error" role="none" tone="error" :title="t('usage.saveError', { error: u?.save_error })" dismissible :dismiss-key="`usage-save:${u?.save_error}`" :close-label="t('common.close')" />
+      <OuiBanner :show="!!u?.restore_notice" role="none" tone="warn" :title="t('usage.notice', { text: u?.restore_notice })" dismissible :dismiss-key="`usage-restore:${u?.restore_notice}`" :close-label="t('common.close')" />
     </div>
-    <OuiBanner v-if="list.length" role="note" tone="warn" :title="tn('usage.banner', list.length)">
+    <OuiBanner :show="list.length > 0" role="note" tone="warn" :title="tn('usage.banner', list.length)" data-test="usage-banner"
+               dismissible :dismiss-key="`unconfirmed:${list.map(e => e.id).join(',')}`" :close-label="t('common.close')">
       {{ first }}
       <template #actions>
         <Button size="small" severity="secondary" :label="open ? t('usage.hide') : t('usage.review')" :aria-expanded="open" aria-controls="usage-list" data-focus-key="usage-review" data-test="usage-review" @click="open = !open">

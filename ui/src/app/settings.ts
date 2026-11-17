@@ -10,6 +10,20 @@ import type { Config } from './types';
 export const config = ref<Config | null>(null);
 export const form = reactive({ mode: 'automagic', host: '', apiKey: '', name: 'Snapmaker U1', spoolman: '', draft: {} as Record<string, unknown> });
 export const saving = ref(false);
+/** Settings' "Check again" for Spooler: the plugin looks for it again and sends a new config message. A plugin that
+ *  does not answer within RECHECK_TIMEOUT_MS ends "Checking…" and says so. */
+export const rechecking = ref(false);
+export const RECHECK_TIMEOUT_MS = 10000;
+const LATE = Symbol('late');
+export async function recheck(): Promise<void> {
+  if (rechecking.value) return;
+  rechecking.value = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const late = new Promise<typeof LATE>(r => { timer = setTimeout(() => r(LATE), RECHECK_TIMEOUT_MS); });
+  try {
+    if (await Promise.race([bridge.request({ type: 'get_config' }), late]) === LATE) tracker.notify('error', t('req.noAnswer', { seconds: RECHECK_TIMEOUT_MS / 1000 }));
+  } catch (e) { tracker.notify('error', t('msg.plugin', { error: message(e) })); } finally { clearTimeout(timer); rechecking.value = false; }
+}
 let rfidAuto = false;
 
 const savedExpert = (k: string) => (config.value ? (k in config.value.stored ? config.value.stored[k] : config.value.settings[k]) : undefined);

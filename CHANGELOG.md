@@ -2,7 +2,26 @@
 
 ## [Unreleased]
 
+### Changed
 - The Dashboard's status card now shows the U1 itself, as a photo, in place of the small printer icon. The four spools on its side holders (T1 and T2 on the left, T3 and T4 on the right) take the colour of the Spoolman spool linked to each toolhead (every colour of a multi-colour spool, side by side), else the colour the printer reports; an empty holder shows a faded grey reel. The wound strands and the light of the photo stay, only the colour changes. While printing, the active toolhead's spool is softly lit. Screen readers hear what each toolhead holds ("T1 orange PLA, T2 empty…"). Printer photo: Snapmaker product image (see NOTICE.md).
+- Spools are drawn with the photo spool again.
+- The page fills the whole tab at every height, also after the window is resized: no more grey under a short page.
+- Settings are tabs: one section at a time, and the save bar stays on screen at any window height.
+- Notifications appear bottom-left and each one can be closed; warnings and notices on the page can be dismissed.
+- Settings > Spoolman lists what the Spoolman features need (Spoolman and the Spooler plugin), whether each was found, and how to install it, with a Check again button.
+- Notifications wait while OrcaSlicer is in another tab or app; errors stay until closed. A closed warning stays closed
+  (also after a reload) until its problem goes away, and shows again when it comes back. The power-loss notice, which
+  holds Resume and Discard, can no longer be closed. Check again for Spooler gives up after 10 s and says so.
+
+### Fixed
+
+- OrcaSlicer could close by itself at start-up, or while the Device tab was open, if one of the status updates
+  U1 Control hands to it failed. Such a failure is now written to the log and OrcaSlicer keeps running.
+- U1 Control now reads OrcaSlicer's presets only on OrcaSlicer's own UI thread when it adds "U1 print setup" to a
+  process preset, syncs the toolheads to the project filaments (from the tab or Plugins > Run), checks the U1
+  connection, and applies Snapmaker Orca's U1 process tuning. Before, it read them from a thread of its own while
+  OrcaSlicer might be changing them. The preset changes themselves are still made off the UI thread, as OrcaSlicer
+  requires. If OrcaSlicer is too busy to answer within a few seconds, these actions say so and can be tried again.
 
 ## [0.12.0] - 2026-11-16
 
