@@ -9,6 +9,7 @@ to get it (Settings > Requirements), and turns off what needs a missing one.
 PRINTER_AGENTS = "printer_agents"   # OrcaSlicer's "Use printer agents instead of print hosts" + u1control as agent
 EXTENDED = "extended_firmware"      # paxx12's U1 Extended Firmware (Advanced Mode, [web] firmware_config: true)
 SPOOLMAN = "spoolman"               # a Spoolman URL in Settings, or the printer's own Moonraker [spoolman]
+SPOOLER = "spooler"                 # the Spooler plugin (Spoolman spools as OrcaSlicer filament profiles, the stock list)
 
 
 def _item(rid, status, **details):
@@ -37,5 +38,12 @@ def spoolman(url, link):
     return _item(SPOOLMAN, "missing" if link == "none" else "unknown")
 
 
-def check(agent_on, firmware, spoolman_url, spoolman_link):
-    return [printer_agents(agent_on), extended_firmware(firmware), spoolman(spoolman_url, spoolman_link)]
+def spooler(state):
+    """state: plugin.spooler_state() ({"installed", "url", ...}): its bundle, presets or settings file seen."""
+    state = state or {}
+    return _item(SPOOLER, "ok" if state.get("installed") else "missing", url=state.get("url"))
+
+
+def check(agent_on, firmware, spoolman_url, spoolman_link, spooler_state=None):
+    return [printer_agents(agent_on), extended_firmware(firmware), spoolman(spoolman_url, spoolman_link),
+            spooler(spooler_state)]

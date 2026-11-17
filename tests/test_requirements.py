@@ -56,8 +56,13 @@ class CheckTests(unittest.TestCase):
         self.assertEqual(req.spoolman("", "none")["status"], "missing")
         self.assertEqual(req.spoolman("", "")["status"], "unknown")   # not tried yet: no probe of its own
 
-    def test_check_lists_all_three(self):
-        self.assertEqual([i["id"] for i in req.check(False, None, "", "")], [req.PRINTER_AGENTS, req.EXTENDED, req.SPOOLMAN])
+    def test_spooler(self):
+        self.assertEqual(req.spooler({"installed": True, "url": "https://x"}), {"id": req.SPOOLER, "status": "ok", "details": {"url": "https://x"}})
+        self.assertEqual(req.spooler({"installed": False})["status"], "missing")
+        self.assertEqual(req.spooler(None)["status"], "missing")
+
+    def test_check_lists_all_four(self):
+        self.assertEqual([i["id"] for i in req.check(False, None, "", "")], [req.PRINTER_AGENTS, req.EXTENDED, req.SPOOLMAN, req.SPOOLER])
 
 
 class PrinterAgentDetectionTests(unittest.TestCase):
@@ -119,6 +124,9 @@ class PageMessageTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         page.on_message({"type": "requirements", "recheck": True})
         self.assertEqual(len(calls), 2)
+        self.assertEqual(page.posted[-1]["type"], "config")   # a recheck also refreshes the Spooler hints
+        self.assertEqual(status(page.posted[-2]["items"], req.SPOOLER)["status"], "missing")
+        self.assertFalse(any(m.get("type") == "config" for m in page.posted[:-1]))   # a plain ask posts no config
 
     def test_spoolman_url_in_settings_is_enough(self):
         _, plugin = fresh_plugin(lambda: None)

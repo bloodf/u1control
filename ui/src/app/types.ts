@@ -29,5 +29,5 @@ export interface Config { settings: Record<string, any>; automations: Automation
   /** Whether the selected U1 process preset runs "U1 print setup"; null when no U1 is selected. */
   pipeline?: { preset: string; on: boolean } | null }
 /** What the plugin needs and can't install (requirements.py): ok, missing, or unknown (not known yet / can't be read). */
-export interface Requirement { id: 'printer_agents' | 'extended_firmware' | 'spoolman'; status: 'ok' | 'missing' | 'unknown';
+export interface Requirement { id: 'printer_agents' | 'extended_firmware' | 'spoolman' | 'spooler'; status: 'ok' | 'missing' | 'unknown';
   details: { version?: string; url?: string; via?: string } }

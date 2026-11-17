@@ -82,8 +82,8 @@ async function link(r: Spool) {
 
     <div role="status" aria-live="polite" class="sc-notes">
       <OuiEmpty v-if="blocker" compact :state="blocker.state" :icon="boxes" tone="lime" :title="blocker.text" />
-      <OuiBanner v-if="otherSpoolman" id="stock-why" role="none" data-test="stock-why" tone="error" :title="t('stock.blocked', { reason: t('stock.why.spoolman') })">{{ t('stock.otherSpoolman') }}</OuiBanner>
-      <OuiBanner v-if="noSpoolman" id="stock-why" role="none" data-test="stock-why" tone="warn" :title="t('stock.blocked', { reason: t('stock.why.noSpoolman') })">{{ t('stock.noSpoolman') }}</OuiBanner>
+      <OuiBanner :show="otherSpoolman" id="stock-why" role="none" data-test="stock-why" tone="error" dismissible dismiss-key="other-spoolman" :close-label="t('common.close')" :title="t('stock.blocked', { reason: t('stock.why.spoolman') })">{{ t('stock.otherSpoolman') }}</OuiBanner>
+      <OuiBanner :show="noSpoolman" id="stock-why" role="none" data-test="stock-why" tone="warn" dismissible dismiss-key="no-spoolman" :close-label="t('common.close')" :title="t('stock.blocked', { reason: t('stock.why.noSpoolman') })">{{ t('stock.noSpoolman') }}</OuiBanner>
     </div>
     <template v-if="usable">
       <OuiToolbar class="sc-bar" :summary="t('stock.count', { shown: shown.length, n: rows.length })" :label="t('stock.searchLabel')">

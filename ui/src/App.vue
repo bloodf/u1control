@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, watch } from 'vue';
 import Button from 'primevue/button';
-import { OuiAppBar, OuiIcon, OuiStatus, type OuiState } from '../shared/src/components';
+import { OuiAppBar, OuiIcon, OuiStatus, OuiToastHost, type OuiState } from '../shared/src/components';
 import { dashboard, files, power, settings, terminal } from '../shared/src/icons';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import PageMessages from './components/PageMessages.vue';
@@ -71,6 +71,7 @@ const VIEWS = [['dash', Dashboard], ['files', FilesView], ['console', ConsoleVie
   </main>
   <main v-show="s.tab === 'settings'" role="tabpanel" aria-labelledby="oui-tab-settings"><SettingsView /></main>
   <ConfirmDialog />
+  <OuiToastHost :close-label="t('common.close')" :label="t('msg.region')" />
 </template>
 
 <style>
