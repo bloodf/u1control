@@ -70,6 +70,8 @@ def dist_info(project, files):
     meta = {k: v.encode("utf-8") for k, v in meta.items()}
     # the Vue page bundles Vue, PrimeVue, PrimeUIX, Lucide icons (MIT, ISC) and the Manrope font (OFL): their notices travel with the wheel, next to our LICENSE
     meta[di + "licenses/LICENSE"] = (ROOT / "LICENSE").read_bytes()
+    # the Dashboard's printer photo is Snapmaker's product image: its credit travels too
+    meta[di + "licenses/NOTICE.md"] = (ROOT / "NOTICE.md").read_bytes()
     for lic in sorted((ROOT / "ui" / "shared" / "licenses").glob("*.txt")):
         meta[di + "licenses/" + lic.name] = lic.read_bytes()
     record = []

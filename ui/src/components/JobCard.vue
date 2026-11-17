@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import Button from 'primevue/button';
 import { OuiEmpty, OuiIcon, OuiJob, OuiPanel, OuiReadout, OuiStatus, type OuiState } from '../../shared/src/components';
 import { calendar, clock, hourglass, pause as pauseIcon, play, x } from '../../shared/src/icons';
-import PrinterU1 from './PrinterU1.vue';
+import PrinterFigure from './PrinterFigure.vue';
 import { s, run, tracker, controlsOff, printing, printerName, stale } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, tMaybe, fmt } from '../core/i18n';
@@ -45,10 +45,10 @@ async function cancel() {
 </script>
 
 <template>
-  <OuiPanel flush :aria-label="t('status.title')" data-test="job-card">
+  <OuiPanel class="u1-job" flush :aria-label="t('status.title')" data-test="job-card">
     <OuiEmpty v-if="!st" compact :state="s.phase === 'unreachable' ? 'offline' : 'loading'" :title="t('status.noStatus')" />
     <OuiJob v-else-if="job" hero :stale="stale" :name="st.filename || stateName" :progress="pct" :progress-label="t('status.progress')" :detail="detail">
-      <template #thumb><PrinterU1 :active="active" :progress="pct ?? 0" :size="96" :stale="stale" /></template>
+      <template #thumb><div class="u1-figure"><PrinterFigure :active="active" :stale="stale" /></div></template>
       <template #status>
         <OuiStatus v-if="stale" state="stale">{{ lastKnown }}</OuiStatus>
         <OuiStatus v-else :state="chip" data-test="state">{{ stateName }}</OuiStatus>
@@ -60,7 +60,7 @@ async function cancel() {
       </template>
     </OuiJob>
     <div v-else class="oui-hero u1-idle" :class="{ 'oui-on-band': !stale }" :data-tone="stale ? 'neutral' : undefined">
-      <PrinterU1 :size="96" :stale="stale" />
+      <div class="u1-figure"><PrinterFigure :stale="stale" /></div>
       <div class="u1-idle-id">
         <OuiStatus v-if="stale" state="stale">{{ lastKnown }}</OuiStatus>
         <OuiStatus v-else :state="chip" data-test="state">{{ stateName }}</OuiStatus>
@@ -82,7 +82,11 @@ async function cancel() {
 </template>
 
 <style>
-.u1-idle { display: flex; align-items: center; gap: var(--oui-s3); border-radius: var(--oui-radius-lg) var(--oui-radius-lg) 0 0; }
+.u1-idle { display: flex; flex-direction: column; gap: var(--oui-s3); border-radius: var(--oui-radius-lg) var(--oui-radius-lg) 0 0; }
+.u1-figure { width: min(100%, 248px); margin-inline: auto; padding-block: var(--oui-s1) var(--oui-s2); }
+/* The printer photo gets its own row over the job's name and figure. */
+.u1-job .oui-job-head { flex-wrap: wrap; }
+.u1-job .oui-job-thumb { flex: 1 0 100%; }
 .u1-idle-id { display: grid; gap: 2px; min-width: 0; }
 .u1-idle-id > .oui-status { margin-bottom: 4px; }
 .u1-idle-name { font-size: var(--oui-text-lg); font-weight: 700; line-height: 1.3; }
