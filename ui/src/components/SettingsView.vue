@@ -147,7 +147,7 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
         <div role="status" data-test="requirements">
           <OuiRequirement :name="t('sm.title')" :why="t('req.spoolman.why')" :status="smStatus" :status-label="smLabel" :detail="smInfo"
                           :install-text="t('req.spoolman.install')" :install-url="SPOOLMAN_URL" :check-label="t('req.check')"
-                          :checking="!targetKnown" data-test="req-spoolman" @check="loadSpools(false)" />
+                          :disabled="!targetKnown" data-test="req-spoolman" @check="loadSpools(false)" />
           <OuiRequirement :name="t('spooler.title')" :why="t('req.spooler.why')" :status="spStatus" :status-label="spLabel" :detail="spDetail"
                           :install-text="t('spooler.suggest')" :install-url="config?.spooler.url" :check-label="t('req.check')"
                           data-test="req-spooler" @check="recheck" />
