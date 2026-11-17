@@ -462,6 +462,56 @@ class PluginAgentTests(unittest.TestCase):
         self.ns["_service"].target.host = "10.9.9.9"   # another U1 in the tab: the agent's own links
         self.assertEqual(list(self.agent._bound_spools()), [0])
 
+    def test_toolhead_linked_to_a_standalone_user_preset_reports_its_id(self):
+        """orca_filament_preset naming a standalone user preset: its filament_id (from its file), which OrcaSlicer's
+        sync from AMS loads. One that inherits has its parent's id, so the sync can't load it: the usual id. Presets
+        are read on OrcaSlicer's UI thread only (here: the test's main thread, or a queue_on_main task)."""
+        import threading
+        folder = tempfile.mkdtemp()
+        standalone = os.path.join(folder, "My PLA.json")
+        with open(standalone, "w", encoding="utf-8") as f:
+            json.dump({"name": "My PLA", "inherits": "", "filament_id": "P1a2b3c"}, f)
+        mine = [{"name": "My PLA", "file": standalone, "inherits": ""},
+                {"name": "Child PETG", "file": standalone, "inherits": "Generic PETG @System"}]
+        queued, off_ui = [], []
+
+        def user_presets():
+            if threading.current_thread() is not threading.main_thread() and not queued:
+                off_ui.append(threading.current_thread().name)
+            return mine
+        self.ns["user_presets"] = user_presets
+        self.ns["filament_catalog"] = lambda: ([], "Snapmaker U1")
+        self.ns["spooler_bridge"].read_json = lambda folder, name: {}
+
+        def extra(name):
+            return {"orca_filament_preset": json.dumps(name)}
+        spools = [{"id": 5, "location": "U1 T1", "extra": extra("my pla"), "filament": {"id": 1, "material": "PLA"}},
+                  {"id": 6, "location": "U1 T2", "filament": {"id": 2, "material": "PETG", "extra": extra("Child PETG")}},
+                  {"id": 7, "location": "U1 T4", "extra": extra("Ghost"), "filament": {"id": 3, "material": "PLA"}}]
+
+        class FakeSpoolman:
+            def __init__(self, url, client):
+                pass
+
+            def connect(self):
+                return {}
+
+            def spools(self):
+                return spools
+        self.ns["sm"].Spoolman = FakeSpoolman
+        self.ns["get_store"](self.agent).update({"printer_name": "U1", "spoolman_url": "http://sm:7912"})
+        messages = []
+        self.agent.set_on_local_message_fn(lambda dev, text: messages.append(json.loads(text)))
+        self.agent.set_queue_on_main_fn(lambda task: (queued.append(1), task(), queued.pop()))
+        self.connect()
+        self.assertTrue(wait_for(lambda: self.agent._links[1]))
+        messages.clear()
+        self.agent._wake.set()
+        self.assertTrue(wait_for(lambda: messages))
+        trays = messages[-1]["print"]["ams"][0]["tray"]
+        self.assertEqual([t["tray_info_idx"] for t in trays], ["P1a2b3c", "OFYPdQJh", "", "OFmY0l6t"])
+        self.assertEqual(off_ui, [])
+
     def connect(self, **kw):
         conn = self.orca.printer_agent.PrinterConnectionParams(**{"dev_id": "u1", "host": self.fake.host, **kw})
         self.assertEqual(self.agent.connect_printer(conn), 0)

@@ -4,6 +4,7 @@
 
 ### Added
 
+- A Spoolman spool can name your own OrcaSlicer filament preset in the extra field `orca_filament_preset` (on the spool, else on its filament): **Apply to project filaments** picks that preset for its toolhead, so tuned values are kept. It must be a user preset compatible with the selected printer; otherwise the usual preset is used and U1 Control says so once per name. OrcaSlicer's **Sync filaments** loads it too when it is a standalone preset with its own `filament_id`; a preset that inherits a parent can't be loaded that way (OrcaSlicer loads the parent), so those toolheads report what they did before. [#11](https://github.com/bloodf/u1control/issues/11)
 - **Settings > Requirements** lists what some features need that U1 Control can't install by itself, whether each one is there, what it is for and how to get it, with **Check again**:
   - **Spoolman** and the **Spooler** plugin rows that 4.2 added under Settings > Spoolman now live here too, so there is one Requirements section.
   - **OrcaSlicer printer agents** (only for OrcaSlicer's own Print dialog and Device tab): **On** once OrcaSlicer connects to the U1 through the u1control agent or reports it as the selected printer's agent, else **Not detected** with the steps (Preferences > Developer > Experimental Features > Use printer agents instead of print hosts, restart, Printer Agent = u1control in a copy of the printer preset). Plugins can't read the preference itself, so nothing is turned off because of it.

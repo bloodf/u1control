@@ -44,6 +44,18 @@ whose values are preset names; any other version or shape is ignored (logged) as
 missing. Without the file, or without a linked spool, it falls back to the
 nearest colour among Spooler's profiles, then to its own matcher.
 
+### The user's own preset: `orca_filament_preset`
+
+A Spoolman extra field `orca_filament_preset` (Text, on the spool and/or the filament) names one of the user's
+own OrcaSlicer filament presets. Spooler registers both fields and lets the user pick the preset in its spool
+editor; u1control only reads them. Spoolman stores the value JSON-encoded (`"\"My PETG @Snapmaker U1\""`); a
+value that isn't JSON is taken as it is. The spool's value wins; empty, the filament's is used. It counts only
+when it names a user preset (`is_user()`, not `_local/`) compatible with the selected printer: the exact name,
+else the only case-insensitive match. Then it beats Spooler's preset, both when u1control puts filament
+profiles into the project and, for a standalone preset (`"inherits": ""`) with a `filament_id` in its file,
+as the tray's `tray_info_idx`. A preset that inherits shares its parent's id, so "sync from AMS" would load the
+parent: such a toolhead reports what it would without the link.
+
 ## Keep Slots Synced
 
 While Spooler's "Keep Slots Synced" runs, Spooler refreshes
