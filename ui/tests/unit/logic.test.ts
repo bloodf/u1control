@@ -46,6 +46,8 @@ test('locale: explicit choice, then host (pt_BR), then browser, then English', (
   assert.equal(normalizeLocale('pt_BR'), 'pt-BR'); assert.equal(normalizeLocale('pt'), 'pt-BR'); assert.equal(normalizeLocale('fr_FR'), null);
   assert.equal(normalizeLocale('de_DE'), 'de'); assert.equal(normalizeLocale('es'), 'es'); assert.equal(normalizeLocale('es-MX'), 'es');
   assert.equal(normalizeLocale('zh_CN'), 'zh-CN'); assert.equal(normalizeLocale('zh_TW'), 'zh-CN'); assert.equal(normalizeLocale('zh-Hant-TW'), 'zh-CN');
+  assert.equal(normalizeLocale('pl_PL'), 'pl'); assert.equal(normalizeLocale('pl-PL'), 'pl'); assert.equal(normalizeLocale('PL'), 'pl');
+  assert.equal(resolveLocale('auto', 'pl_PL', ['en-US']), 'pl'); assert.equal(resolveLocale('pl', 'de', []), 'pl');
   assert.equal(normalizeLocale('ESP'), null); assert.equal(normalizeLocale(''), null); assert.equal(normalizeLocale(undefined), null);
   assert.equal(resolveLocale('en', 'pt_BR', ['pt-BR']), 'en');
   assert.equal(resolveLocale('de', 'zh_CN', ['es']), 'de'); assert.equal(resolveLocale('zh-CN', 'de', []), 'zh-CN');

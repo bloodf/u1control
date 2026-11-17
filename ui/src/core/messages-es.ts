@@ -557,6 +557,7 @@ export const es: Record<MessageKey, string> = {
   'lang.es': 'Español',
   'lang.de': 'Deutsch',
   'lang.zh-CN': '简体中文',
+  'lang.pl': 'Polski',
   'lang.help': 'Automático sigue el idioma de OrcaSlicer y después el del sistema. Su elección se guarda solo en este OrcaSlicer.',
   'about.text': 'U1 Control {version} · Proyecto independiente, no creado por Snapmaker.',
 

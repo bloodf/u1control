@@ -3,11 +3,12 @@ import { en, ptBR, type MessageKey } from './messages';
 import { es } from './messages-es';
 import { de } from './messages-de';
 import { zhCN } from './messages-zh';
+import { pl } from './messages-pl';
 import { formats, interpolate, isLocale, pluralKey, resolveLocale, type LangPref, type Locale } from './i18n-core';
 import { boot } from './boot';
 
 const PREF_KEY = 'u1control.lang';
-const dicts: Record<Locale, Record<MessageKey, string>> = { en, 'pt-BR': ptBR, es, de, 'zh-CN': zhCN };
+const dicts: Record<Locale, Record<MessageKey, string>> = { en, 'pt-BR': ptBR, es, de, 'zh-CN': zhCN, pl };
 
 // The explicit choice lives in the plugin's settings (boot "pref"); localStorage is only a fallback cache.
 let persist: (value: LangPref) => void = () => {};
@@ -37,9 +38,9 @@ export function setLangPref(value: LangPref): void {
 export function t(key: MessageKey, params?: Record<string, unknown>): string {
   return interpolate(dicts[locale.value][key] ?? en[key] ?? key, params);
 }
-/** Plural keys come in pairs "<base>_one" / "<base>_other". */
+/** Plural keys come in pairs "<base>_one" / "<base>_other"; Polish adds "_few" and "_many". */
 export function tn(base: string, n: number, params?: Record<string, unknown>): string {
-  return t(pluralKey(locale.value, base, n) as MessageKey, { n, ...params });
+  return t(pluralKey(locale.value, base, n, dicts[locale.value]) as MessageKey, { n, ...params });
 }
 /** A message key when it exists (state names, codes from Python); otherwise the raw value. */
 export function tMaybe(key: string, fallback: string, params?: Record<string, unknown>): string {

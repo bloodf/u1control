@@ -31,6 +31,14 @@ const OWN: Partial<Record<Locale, Partial<PrimeLocale>>> = {
     aria: { close: '关闭', previous: '上一个', next: '下一个', firstPageLabel: '第一页', lastPageLabel: '最后一页',
       nextPageLabel: '下一页', prevPageLabel: '上一页', selectRow: '选择行', unselectRow: '取消选择行' },
   },
+  pl: {
+    accept: 'Potwierdź', reject: 'Wróć', choose: 'Wybierz', upload: 'Wyślij', cancel: 'Anuluj',
+    emptyMessage: 'Brak elementów', emptyFilterMessage: 'Brak wyników dla tych filtrów',
+    emptySearchMessage: 'Nie znaleziono wyników', searchMessage: 'Znalezione wyniki: {0}',
+    selectionMessage: 'Zaznaczone elementy: {0}', emptySelectionMessage: 'Nie zaznaczono żadnego elementu',
+    aria: { close: 'Zamknij', previous: 'Poprzedni', next: 'Następny', firstPageLabel: 'Pierwsza strona', lastPageLabel: 'Ostatnia strona',
+      nextPageLabel: 'Następna strona', prevPageLabel: 'Poprzednia strona', selectRow: 'Zaznacz wiersz', unselectRow: 'Odznacz wiersz' },
+  },
 };
 
 /** The labels PrimeVue should use for a page language; undefined keeps its built-in English. */
