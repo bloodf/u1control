@@ -16,6 +16,7 @@ import extended as ext
 import gcode
 import i18n
 import peers
+import requirements
 import settings
 import spooler_bridge
 import u1
@@ -328,9 +329,11 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                         self.post_message({"type": "notice", "text": text})
                     if not self._background(job):
                         self.post_message({"type": "notice", "text": tr("Another preset update is running; try again in a moment.")})
-            elif kind == "get_config":    # Settings' "Check again": look for Spooler again; the printer is not touched
-                self.post_message(self._config_message())
-                self.post_message({"type": "reply", "id": data.get("id"), "result": True})
+            elif kind == "requirements":   # Settings > Requirements; recheck: its "Check again" (also looks for Spooler again)
+                recheck = bool(data.get("recheck"))
+                self.post_message({"type": "requirements", "items": requirements_state(svc, self._config(), recheck)})
+                if recheck:   # the Spooler hints elsewhere on the page read the config message
+                    self.post_message(self._config_message())
             elif kind == "ui_language":   # the page's language choice; nothing else is touched
                 self._settings().update({"ui_language": data.get("value")})
                 use_language(self)
@@ -440,6 +443,52 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
             if _service is not None:
                 _service.close()
                 _service = None
+
+
+# ====================================================================== requirements
+
+_agent_used = False      # OrcaSlicer connected a printer through U1Agent this session
+_agent_selected = None   # cached answer of orca.host.selected_printer(); None = not asked yet
+
+
+def _field(obj, name):
+    return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
+
+
+def _selected_agent_is_ours():
+    """Whether OrcaSlicer's selected printer runs through our agent. Host call: UI thread (page message) only.
+    OrcaSlicer.conf can't be read from a plugin, so this and _agent_used are the only signs of the preference."""
+    try:
+        printer = orca.host.selected_printer()
+    except Exception as e:   # older OrcaSlicer without the call, or not allowed here
+        log("selected printer not readable (%r)" % e)
+        return False
+    agent_id = _field(printer, "agent") if printer is not None else None
+    if agent_id is not None and not isinstance(agent_id, str):
+        agent_id = _field(agent_id, "id")
+    return clean(agent_id) in (AGENT_ID, AGENT_NAME)
+
+
+def _agent_seen():
+    global _agent_used
+    _agent_used = True
+
+
+def printer_agents_on(recheck=False):
+    global _agent_selected
+    if _agent_used:
+        return True
+    if recheck or _agent_selected is None:
+        _agent_selected = _selected_agent_is_ours()
+    return _agent_selected
+
+
+def requirements_state(svc, cfg, recheck=False):
+    """[{id, status, details}] for Settings > Requirements, from what the plugin already knows (no printer I/O).
+    Only asked from a page message, never at import or while OrcaSlicer registers the plugin."""
+    with svc.lock:
+        firmware, link = dict(svc.firmware), svc.spoolman_link
+    return requirements.check(printer_agents_on(recheck), firmware, clean(cfg.get("spoolman_url")), link, spooler_state())
 
 
 # ====================================================================== print setup
@@ -867,6 +916,7 @@ class U1Agent(pa.PrinterAgentBase):
         if not host or not getattr(params, "dev_id", ""):
             return ERR_INVALID_HANDLE
         self.disconnect_printer()
+        _agent_seen()   # OrcaSlicer uses us as the printer agent: its "Use printer agents" preference is on
         key = clean(getattr(params, "password", ""))
         base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
         client = Moonraker(base, key, timeout=5)

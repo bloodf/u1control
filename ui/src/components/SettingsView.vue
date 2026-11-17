@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
 import ToggleSwitch from 'primevue/toggleswitch';
 import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiRequirement, OuiSettings, OuiStatus, type OuiSettingsSection } from '../../shared/src/components';
-import { clipboard, info, languages, plug, printer, save as saveIcon, spoolman, target, wrench, zap } from '../../shared/src/icons';
+import { circleCheck, clipboard, info, languages, plug, printer, save as saveIcon, target, wrench, zap } from '../../shared/src/icons';
 import FirmwareCard from './FirmwareCard.vue';
-import { s, run, tracker, controlsOff, busy, loadSpools, printerName, targetKnown } from '../app/store';
-import { config, form, dirty, saving, save, discard, valueOf, recheck, rechecking } from '../app/settings';
+import { s, run, tracker, controlsOff, busy, loadSpools, printerName, targetKnown, loadRequirements, checkRequirements } from '../app/store';
+import { config, form, dirty, saving, save, discard, valueOf } from '../app/settings';
 import { ask } from '../core/dialog';
 import { t, tMaybe, langPref, setLangPref, autoLocale, fmt } from '../core/i18n';
 import { LOCALES } from '../core/i18n-core';
-import type { Automation } from '../app/types';
+import type { Automation, Requirement } from '../app/types';
 import type { LangPref } from '../core/i18n-core';
 import { boot } from '../core/boot';
 
@@ -25,15 +25,6 @@ const showKey = ref(false);
 
 const smInfo = computed(() => s.spoolsError || (s.spoolsLoaded
   ? (s.spoolsVia === 'moonraker' ? t('heads.source.printer', { n: s.spools.length }) : t('heads.source.direct', { n: s.spools.length })) : t('sm.notLoaded')));
-// What the Spoolman features need, and whether this computer has it: Spoolman (reached directly or through the
-// printer; "Check again" loads the spools again) and the Spooler plugin ("Check again" asks the plugin to look again).
-const SPOOLMAN_URL = 'https://github.com/Donkie/Spoolman';
-const REQ_LABEL = { found: 'req.found', missing: 'req.missing', checking: 'req.checking', unknown: 'req.unknown' } as const;
-const smStatus = computed<keyof typeof REQ_LABEL>(() => (tracker.isBusy('spools') ? 'checking' : s.spoolsError ? 'missing' : s.spoolsLoaded ? 'found' : 'unknown'));
-const spStatus = computed<keyof typeof REQ_LABEL>(() => (rechecking.value ? 'checking' : !config.value ? 'unknown' : config.value.spooler.installed ? 'found' : 'missing'));
-const smLabel = computed(() => t(REQ_LABEL[smStatus.value]));
-const spLabel = computed(() => t(REQ_LABEL[spStatus.value]));
-const spDetail = computed(() => (config.value?.spooler.installed ? t('spooler.installed') : undefined));
 
 const PREFS = ['bed_level', 'flow_calibrate', 'time_lapse_camera', 'auto_refill', 'refill_any_colour', 'tangle_detect', 'unload_when_done', 'light_off_when_done'];
 const prefs = computed(() => Object.entries(s.status?.options ?? {}));
@@ -57,14 +48,52 @@ const dialogRule = computed(() => tMaybe(`ps.dialog.${config.value?.settings.pri
 const langOptions = computed(() => [
   { value: 'auto', label: t('lang.auto', { current: t(`lang.${autoLocale.value}`) }) },
   ...LOCALES.map(value => ({ value, label: t(`lang.${value}`) }))]);
+// Settings > Requirements: what some features need and the plugin can't install. The plugin's check
+// (requirements.py, the "requirements" message) is the one source; each row is ui-foundation's OuiRequirement.
+const EXT_URL = 'https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware';
+const AGENT_DOCS = 'https://github.com/bloodf/u1control/blob/main/docs/features.md#printer-agent';
+const SPOOLMAN_URL = 'https://github.com/Donkie/Spoolman';
+type ReqStatus = 'found' | 'missing' | 'checking' | 'unknown';
+const FOUND = { ok: 'found', missing: 'missing', unknown: 'unknown' } as const;
+const reqs = computed(() => {
+  const by = (id: Requirement['id']): Requirement => s.requirements.find(r => r.id === id) ?? { id, status: 'unknown', details: {} };
+  const agents = by('printer_agents'), ext = by('extended_firmware'), sm = by('spoolman'), sp = by('spooler');
+  const asked = (st: ReqStatus): ReqStatus => (s.reqChecking ? 'checking' : st);
+  // Spoolman: the plugin says whether one is set; a failed spool load (the live answer) says it isn't reachable.
+  const smState: ReqStatus = tracker.isBusy('spools') ? 'checking' : s.spoolsError && targetKnown.value ? 'missing' : FOUND[sm.status];
+  const smWhere = sm.details.url ? t('req.sm.direct', { url: sm.details.url }) : sm.details.via === 'printer' ? t('req.sm.printer') : sm.status === 'unknown' ? t('req.sm.unknown') : '';
+  const lines = (...keys: string[]) => keys.map(k => t(k as any)).join('\n');
+  return [
+    { key: 'agents', test: 'req-agents', name: t('req.agents.name'), why: t('req.agents.why'),
+      // Plugins can't read the preference: "not detected" is shown as missing (a warning) with the steps, never an error.
+      status: asked(agents.status === 'ok' ? 'found' : 'missing'), label: agents.status === 'ok' ? t('req.agents.on') : t('req.agents.unknown'),
+      detail: agents.status === 'ok' ? '' : t('req.agents.note'), install: lines('req.agents.step1', 'req.agents.step2', 'req.agents.step3', 'req.agents.step4'),
+      url: AGENT_DOCS, urlLabel: t('req.agents.link'), check: checkRequirements },
+    { key: 'ext', test: 'req-ext', name: t('req.ext.name'), why: t('req.ext.why'), status: asked(FOUND[ext.status]),
+      label: ext.status === 'ok' ? t('req.found') : ext.status === 'missing' ? t('req.ext.missing') : t('req.unknown'),
+      detail: ext.status === 'unknown' ? t('req.ext.unknown') : ext.details.version ? t('req.ext.version', { version: ext.details.version }) : '',
+      install: lines('req.ext.step1', 'req.ext.step2', 'req.ext.step3', 'req.ext.step4'), url: EXT_URL, urlLabel: t('ext.link'), check: checkRequirements },
+    { key: 'spoolman', test: 'req-spoolman', name: t('sm.title'), why: t('req.sm.why'), status: smState,
+      label: smState === 'checking' ? t('req.checking') : smState === 'missing' ? (sm.status === 'missing' ? t('req.sm.missing') : t('req.missing'))
+        : sm.status === 'ok' ? t('req.sm.set') : t('req.unknown'),
+      detail: [smWhere, s.spoolsLoaded || s.spoolsError ? smInfo.value : ''].filter(Boolean).join(' · '),
+      install: lines('req.sm.step1', 'req.sm.step2', 'req.sm.step3'), url: SPOOLMAN_URL, urlLabel: t('req.sm.link'),
+      // Check again loads the spools again (the live answer), which also asks the plugin again; needs a printer that answers.
+      disabled: !targetKnown.value || !!controlsOff.value, check: () => loadSpools(false) },
+    { key: 'spooler', test: 'req-spooler', name: t('spooler.title'), why: t('req.spooler.why'), status: asked(FOUND[sp.status]),
+      label: s.reqChecking ? t('req.checking') : sp.status === 'ok' ? t('req.found') : sp.status === 'missing' ? t('req.missing') : t('req.unknown'),
+      detail: sp.status === 'ok' ? t('spooler.installed') : '', install: t('spooler.suggest'), url: sp.details.url, urlLabel: undefined, check: checkRequirements },
+  ];
+});
+onMounted(() => loadRequirements());
 const sections = computed<OuiSettingsSection[]>(() => [
   { id: 'mode', label: t('mode.title'), icon: zap },
   { id: 'print-setup', label: t('ps.title'), icon: printer, ...(pipe.value && !pipe.value.on ? { state: 'warn' as const } : {}) },
   { id: 'options', label: t('prefs.title'), icon: clipboard },
   { id: 'calibration', label: t('cal.title'), icon: target },
   { id: 'connection', label: t('conn.title'), icon: plug },
-  { id: 'spoolman', label: t('sm.title'), icon: spoolman },
   { id: 'firmware', label: t('ext.title'), icon: wrench },
+  { id: 'requirements', label: t('req.title'), icon: circleCheck },
   { id: 'language', label: t('lang.title'), icon: languages },
   { id: 'about', label: t('about.title'), icon: info },
 ]);
@@ -140,19 +169,16 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
         </form>
       </OuiFormSection>
 
-      <OuiFormSection id="spoolman" :icon="spoolman" tone="magenta" :title="t('sm.title')" :aria-label="t('sm.title')">
-        <p class="oui-meta u1-pad">{{ t('req.intro') }}</p>
-        <div role="status" data-test="requirements">
-          <OuiRequirement :name="t('sm.title')" :why="t('req.spoolman.why')" :status="smStatus" :status-label="smLabel" :detail="smInfo"
-                          :install-text="t('req.spoolman.install')" :install-url="SPOOLMAN_URL" :check-label="t('req.check')"
-                          :disabled="!targetKnown || !!controlsOff" data-test="req-spoolman" @check="loadSpools(false)" />
-          <OuiRequirement :name="t('spooler.title')" :why="t('req.spooler.why')" :status="spStatus" :status-label="spLabel" :detail="spDetail"
-                          :install-text="t('spooler.suggest')" :install-url="config?.spooler.url" :check-label="t('req.check')"
-                          data-test="req-spooler" @check="recheck" />
-        </div>
-      </OuiFormSection>
 
       <FirmwareCard />
+
+      <OuiFormSection id="requirements" :icon="circleCheck" tone="neutral" :title="t('req.title')" :aria-label="t('req.title')" :description="t('req.help')">
+        <div role="status" class="u1-reqs" data-test="requirements">
+          <OuiRequirement v-for="r in reqs" :key="r.key" :name="r.name" :why="r.why" :status="r.status" :status-label="r.label" :detail="r.detail || undefined"
+                          :install-text="r.install" :install-url="r.url" :install-label="r.urlLabel" :check-label="t('req.check')" :disabled="r.disabled"
+                          :data-test="r.test" @check="r.check()" />
+        </div>
+      </OuiFormSection>
 
       <OuiFormSection id="language" :icon="languages" tone="neutral" :title="t('lang.title')" :aria-label="t('lang.title')">
         <OuiFormRow :label="t('lang.label')" :hint="t('lang.help')">
@@ -174,3 +200,8 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
     </template>
   </OuiSettings>
 </template>
+<style>
+/* The install steps are one line each (per step, per OS). */
+.u1-reqs .oui-req-install > span { flex-basis: 100%; white-space: pre-line; }
+.u1-reqs .oui-req + .oui-req { border-top: 1px solid var(--oui-border); }
+</style>

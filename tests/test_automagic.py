@@ -268,15 +268,16 @@ class PipelineTests(PluginBase):
         self.assertTrue(wait_for(lambda: any("U1 print setup added" in m.get("text", "") for m in page.posted)))
         ns["service"]().close()
 
-    def test_get_config_checks_spooler_again(self):
+    def test_requirements_check_again_looks_for_spooler_again(self):
         orca, ns, page = self.page({"slicing_pipeline_plugin": ""})
         self.addCleanup(lambda: ns["service"]().close())
-        page.on_message({"type": "get_config", "id": 5})
+        page.on_message({"type": "requirements", "recheck": True})
         config = [m for m in page.posted if m["type"] == "config"]
         self.assertEqual(len(config), 1)
         self.assertFalse(config[0]["spooler"]["installed"])
-        self.assertEqual(page.posted[-1], {"type": "reply", "id": 5, "result": True})
-        self.assertFalse([m for m in page.posted if m["type"] == "cmd"])
+        items = next(m for m in page.posted if m["type"] == "requirements")["items"]
+        self.assertEqual(next(i for i in items if i["id"] == "spooler")["status"], "missing")
+        self.assertFalse([m for m in page.posted if m["type"] == "cmd"])   # the printer is not touched
 
     def test_camera_fps_message_paces_frames(self):
         _, ns, page = self.page({"slicing_pipeline_plugin": ""})

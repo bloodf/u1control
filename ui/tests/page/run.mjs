@@ -51,6 +51,13 @@ const SP = state => ({state, text: state === 'active' ? 'Spooler is running' : '
 const STOCK = extra => ({spooler: SP('active'), stock: {state: 'ok', code: 'ok', text: '', rows: ROWS, key: 's1:3', ts: Date.now() / 1000, origin: 'http://box:7912'},
   same_spoolman: true, usage: 'u1control', bindings: {}, ...extra});
 const stockRows = () => qa('[data-stock]');
+const REQS = (agents, ext, sm, spooler = 'ok') => [{id: 'printer_agents', status: agents, details: {}},
+  {id: 'extended_firmware', status: ext, details: ext === 'unknown' ? {} : {version: '1.0'}},
+  {id: 'spoolman', status: sm, details: sm === 'ok' ? {url: 'http://box:7912', via: 'direct'} : {}},
+  {id: 'spooler', status: spooler, details: {url: 'https://example.invalid/spooler'}}];
+const reqRow = name => byTest('req-' + name);
+const reqStatus = name => text(q('.oui-status', reqRow(name)));
+const reqSteps = name => { const el = q('.oui-req-install > span', reqRow(name)); return el ? el.textContent.split('\\n').map(x => x.trim()).filter(Boolean) : []; };
 `;
 
 const SETUP_DATA = {
@@ -1130,6 +1137,67 @@ for (const [lang, shown] of [['de_DE', '2,5'], ['es_ES', '2,5'], ['pt_BR', '2,5'
   `, { lang });
 }
 
+// ------------------------------------------------------------------ requirements (Settings > Requirements)
+
+test('requirements: one section; each row says status, why and how; Check again asks anew', `
+  await connect('stock');
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'spools'));
+  await reply(last('cmd', 'spools'), {spools: [], bindings: {}, via: 'direct'});
+  await tab('settings');
+  await until(() => last('requirements'), 'the page asks which requirements are there');
+  eq(last('requirements').recheck, false, 'a plain ask, not a recheck');
+  await post({type: 'requirements', items: REQS('unknown', 'missing', 'missing', 'missing')});
+  eq(qa('[data-test="requirements"]').length, 1, 'one Requirements section');
+  eq(qa('[data-test="requirements"] .oui-req').map(r => r.dataset.test), ['req-agents', 'req-ext', 'req-spoolman', 'req-spooler'], 'four rows');
+  eq(reqStatus('agents'), 'Not detected', 'agents: not detected');
+  eq(q('.oui-status', reqRow('agents')).dataset.state, 'warn', 'a warning, not an error');
+  assert(reqSteps('agents').some(x => x.includes('Developer tab > Experimental Features') && x.includes('Use printer agents instead of print hosts')), 'names the exact preference: ' + reqSteps('agents'));
+  assert(reqSteps('agents').some(x => x.includes('Restart OrcaSlicer')), 'says to restart');
+  eq(reqStatus('ext'), 'Official firmware', 'stock firmware');
+  assert(reqSteps('ext').some(x => x.includes('firmware_config: true')), 'how to install the Extended Firmware');
+  assert(q('a[href*="SnapmakerU1-Extended-Firmware"]', reqRow('ext')), 'links the project');
+  eq(reqStatus('spoolman'), 'Not set', 'no Spoolman');
+  assert(reqSteps('spoolman').some(x => x.startsWith('macOS')) && reqSteps('spoolman').some(x => x.startsWith('Linux')), 'one line per OS: ' + reqSteps('spoolman'));
+  assert(q('a[href="https://github.com/Donkie/Spoolman"]', reqRow('spoolman')), 'official Spoolman link');
+  eq(reqRow('spooler').dataset.status, 'missing', 'Spooler from the plugin check');
+  eq(q('.oui-req-link', reqRow('spooler')).getAttribute('href'), 'https://example.invalid/spooler', 'Spooler install link');
+  await post({type: 'requirements', items: REQS('ok', 'ok', 'ok')});
+  eq(reqStatus('agents'), 'On', 'agents on');
+  eq(reqStatus('spoolman'), 'Set', 'Spoolman set');
+  assert(text(reqRow('spoolman')).includes('http://box:7912'), 'shows the address');
+  eq(qa('[data-test="requirements"] .oui-req-install').length, 0, 'nothing to install: no steps');
+  const before = cmds('spools').length;
+  await click(q('.oui-req-check', reqRow('agents')));
+  assert(sent().some(m => m.type === 'requirements' && m.recheck === true), 'Check again rechecks');
+  assert(cmds('spools').length > before, 'and asks the printer for its Spoolman link again');
+`);
+
+test('requirements: printer screen stays on stock firmware, off, with its reason', `
+  await connect('stock');
+  await post({type: 'status', data: VIEW()});
+  assert(byTest('screen-card'), 'the card is not hidden on stock firmware');
+  assert(byTest('screen-show').disabled, 'Show screen is off');
+  assert(text(byTest('screen-card')).includes('Needs the U1 Extended Firmware'), 'one-line reason: ' + text(byTest('screen-card')));
+  await post({type: 'selection_changed'});
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  assert(!byTest('screen-show').disabled, 'on the Extended Firmware it can be shown');
+`);
+
+test('requirements: no Spoolman turns stock links off with the reason', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), STOCK({same_spoolman: null}));
+  assert(stockRows().length && stockRows().every(b => !b.disabled), 'links on while Spoolman is not known missing');
+  await post({type: 'requirements', items: REQS('unknown', 'missing', 'missing')});
+  assert(stockRows().every(b => b.disabled && b.getAttribute('aria-describedby') === 'stock-why'), 'links off, pointing at the reason');
+  assert(text(byTest('stock-why')).includes('no Spoolman'), 'visible reason: ' + text(byTest('stock-why')));
+  await post({type: 'requirements', items: REQS('unknown', 'missing', 'ok')});
+  assert(stockRows().every(b => !b.disabled) && !byTest('stock-why'), 'Spoolman set: links on again');
+`);
+
 // ------------------------------------------------------------------ foundation 4.2.0: toasts, dismissible notices, requirements
 test('toasts: bottom-left, each with a Close button, gone once closed', `
   await connect();
@@ -1181,25 +1249,22 @@ test('notices: a closed banner stays closed while its condition holds and comes 
 
 test('settings: requirements say what was found; Check again asks again', `
   await connect();
-  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: false, url: 'https://example.invalid/spooler'},
-    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}, automations: []});
   await tab('settings');
-  await click(q('.oui-settings-link[data-section="spoolman"]'));
+  await click(q('.oui-settings-link[data-section="requirements"]'));
+  await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
   const sp = byTest('req-spooler'), sm = byTest('req-spoolman');
-  assert(sp && sm, 'two requirement rows');
+  assert(sp && sm, 'Spoolman and Spooler rows');
   eq(sp.dataset.status, 'missing', 'Spooler not found');
   assert(text(sp).includes('Not found') && text(sp).includes('Install Spooler'), 'says so and how to get it: ' + text(sp));
-  eq(q('.oui-req-link', sp).getAttribute('href'), 'https://example.invalid/spooler', 'install link');
   await click(q('.oui-req-check', sp));
-  const ask = last('get_config');
+  const ask = [...sent()].reverse().find(m => m.type === 'requirements' && m.recheck === true);
   assert(ask, 'Check again asks the plugin to look again');
-  eq(sp.dataset.status, 'checking', 'checking while it looks');
-  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: true, url: 'https://example.invalid/spooler'},
-    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}, automations: []});
-  await reply(ask, true);
+  eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
+  await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'ok')});
   eq(byTest('req-spooler').dataset.status, 'found', 'found after installing');
   assert(text(byTest('req-spooler')).includes('Found') && !q('.oui-req-link', byTest('req-spooler')), 'no install link once found');
   await reply(last('cmd', 'spools'), {spools: ROWS, bindings: {}, via: 'direct'});
+  await post({type: 'requirements', items: REQS('unknown', 'unknown', 'ok', 'ok')});
   eq(byTest('req-spoolman').dataset.status, 'found', 'Spoolman reached');
   assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'Spoolman Check again off while the printer has sent no status');
   await post({type: 'status', data: VIEW()});
@@ -1215,12 +1280,11 @@ test('settings: requirements say what was found; Check again asks again', `
   assert(text(byTest('req-spoolman')).includes('connection refused'), 'says why');
 `);
 
-test('settings: Spooler Check again stops after 10 s without an answer and says so', `
+test('settings: requirements Check again stops after 10 s without an answer and says so', `
   await connect();
-  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: false, url: 'https://example.invalid/spooler'},
-    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}, automations: []});
   await tab('settings');
-  await click(q('.oui-settings-link[data-section="spoolman"]'));
+  await click(q('.oui-settings-link[data-section="requirements"]'));
+  await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
   await click(q('.oui-req-check', byTest('req-spooler')));
   eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
   await sleep(10500);
