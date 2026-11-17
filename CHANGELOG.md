@@ -2,12 +2,40 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Settings > Requirements** lists what some features need that U1 Control can't install by itself, whether each one is there, what it is for and how to get it, with **Check again**:
+  - **Spoolman** and the **Spooler** plugin rows that 4.2 added under Settings > Spoolman now live here too, so there is one Requirements section.
+  - **OrcaSlicer printer agents** (only for OrcaSlicer's own Print dialog and Device tab): **On** once OrcaSlicer connects to the U1 through the u1control agent or reports it as the selected printer's agent, else **Not detected** with the steps (Preferences > Developer > Experimental Features > Use printer agents instead of print hosts, restart, Printer Agent = u1control in a copy of the printer preset). Plugins can't read the preference itself, so nothing is turned off because of it.
+  - **U1 Extended Firmware**: from the printer's firmware check, unknown until a U1 answers; when it is the official firmware, how to install it (project page, Advanced Mode, `firmware_config: true` under `[web]`).
+  - **Spoolman**: set (an address in Settings, or the printer's own Moonraker `[spoolman]`), not set, or not known yet. No extra network check: it comes from the Spoolman link u1control already makes.
+- The checks run only when the tab asks, never while OrcaSlicer loads the plugin.
+- On the official firmware the printer screen card stays on the Dashboard, off, with "Needs the U1 Extended Firmware" instead of disappearing.
+- With no Spoolman anywhere (the printer says it has none and no address is set), linking a spool from Spooler's stock is off with the reason. A printer that doesn't answer leaves Spoolman as not known yet, never "not set".
+- When Spoolman can't be read, the automatic spool follow waits before trying again (30 s, doubling up to 5 min, back to normal once it works) and says so once, instead of retrying and warning on every filament change. The change it missed is tried again after the wait.
+- Docs: the printer agent steps now name Preferences > Developer > Experimental Features, the restart and the copy of the printer preset.
+
+### Changed
+- Spools are drawn with the photo spool again.
+- The page fills the whole tab at every height, also after the window is resized: no more grey under a short page.
+- Settings are tabs: one section at a time, and the save bar stays on screen at any window height.
+- Notifications appear bottom-left and each one can be closed; warnings and notices on the page can be dismissed.
+- Settings lists what the Spoolman features need (Spoolman and the Spooler plugin), whether each was found, and how to install it, with a Check again button (now in Settings > Requirements).
+- Notifications wait while OrcaSlicer is in another tab or app; errors stay until closed. A closed warning stays closed
+  (also after a reload) until its problem goes away, and shows again when it comes back. The power-loss notice, which
+  holds Resume and Discard, can no longer be closed. Check again for Spooler gives up after 10 s and says so.
+
 ### Fixed
 
 - OrcaSlicer's "sync from AMS" no longer turns every toolhead into "Generic PLA". The Device tab sent an empty filament id for every tray, because OrcaSlicer's plugin API doesn't show a preset's `filament_id`, and OrcaSlicer reads an empty id as Generic PLA. A toolhead linked to a Spoolman spool now reports the id of that spool's Spooler preset (from Spooler's `profiles.json`; Spooler's presets are standalone copies now, which OrcaSlicer's sync can load), so sync loads that preset. Any other loaded toolhead reports the Generic preset of its real material, also for materials such as "PLA WOOD", "PETG-CF". The links are read from Spoolman when the printer connects, so this works without opening the tab.
 - "Apply to project filaments" uses the spool's own Spooler preset when Spooler makes presets per spool, instead of the preset of the filament's lowest-numbered spool.
 - OrcaSlicer could close by itself at start-up, or while the Device tab was open, if one of the status updates
   U1 Control hands to it failed. Such a failure is now written to the log and OrcaSlicer keeps running.
+- U1 Control now reads OrcaSlicer's presets only on OrcaSlicer's own UI thread when it adds "U1 print setup" to a
+  process preset, syncs the toolheads to the project filaments (from the tab or Plugins > Run), checks the U1
+  connection, and applies Snapmaker Orca's U1 process tuning. Before, it read them from a thread of its own while
+  OrcaSlicer might be changing them. The preset changes themselves are still made off the UI thread, as OrcaSlicer
+  requires. If OrcaSlicer is too busy to answer within a few seconds, these actions say so and can be tried again.
 
 ## [0.12.0] - 2026-11-16
 

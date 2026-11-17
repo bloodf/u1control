@@ -37,17 +37,22 @@ class Spoolman:
         self.timeout = timeout
         self._open = (opener or _NO_PROXY).open
         self.via_moonraker = False
+        # What the printer said about its own Spoolman: True / False (a clear answer: spoolman_connected, or a 404
+        # because Moonraker has no [spoolman]), None (no answer: offline, timeout, 5xx).
+        self.printer_spoolman = None
 
     def connect(self):
         """Prefer the printer's own Spoolman link; fall back to the configured URL."""
         if self.mr is not None:
             try:
                 status = self.mr.request("GET", "/server/spoolman/status", timeout=3) or {}
-                if status.get("spoolman_connected"):
+                self.printer_spoolman = bool(status.get("spoolman_connected"))
+                if self.printer_spoolman:
                     self.via_moonraker = True
                     return {"via": "moonraker", "active_spool": status.get("spool_id")}
-            except PrinterError:
-                pass
+            except PrinterError as e:
+                if e.status == 404:
+                    self.printer_spoolman = False
         if not self.url:
             raise SpoolmanError(tr("Spoolman not configured: set its URL in u1control settings"))
         self.via_moonraker = False

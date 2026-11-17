@@ -1,10 +1,11 @@
 import { markRaw, reactive } from 'vue';
+import { dismissToast, showToast, type OuiToastTone } from '../../shared/src/components/toast.ts';
 
 // Every printer command goes through one tracker: one in flight per action key (double clicks send once), a
 // visible "waiting" state, a UI timeout that reports an UNKNOWN outcome (never success, never an automatic retry)
 // and errors that stay until dismissed (B-04, B-05, U11). Results are returned, never thrown (B-12).
+// What a command answered is a toast on the page's one toast host (foundation 4.2.0).
 export type NoticeKind = 'error' | 'unknown' | 'success' | 'info';
-export interface Notice { id: number; kind: NoticeKind; text: string; at: number; key?: string }
 export interface Pending { key: string; label: string; startedAt: number }
 export type RunResult<T = any> =
   | { ok: true; result: T }
@@ -26,12 +27,16 @@ type Text = (key: 'msg.unknown' | 'msg.lateOk' | 'msg.lateError' | 'msg.failed',
 interface Clock { now: () => number; setTimeout: (fn: () => void, ms: number) => unknown }
 
 export const DEFAULT_TIMEOUT_MS = 20_000;
-export const SUCCESS_MS = 6_000;
+const TONE: Record<NoticeKind, OuiToastTone> = { error: 'error', unknown: 'warn', success: 'success', info: 'info' };
+
+/** "Pause failed: timeout" reads as a title and its detail (Chinese writes the colon as "："). */
+export function split(text: string): [string, string] {
+  const m = /: |：/.exec(text);
+  return m ? [text.slice(0, m.index + 1), text.slice(m.index + m[0].length)] : [text, ''];
+}
 
 export class Tracker {
   readonly pending = reactive(new Map<string, Pending>());
-  readonly notices = reactive<Notice[]>([]);
-  private nextId = 0;
 
   private readonly send: (cmd: string, args: Record<string, unknown>) => Promise<any>;
   private readonly text: Text;
@@ -44,21 +49,13 @@ export class Tracker {
 
   isBusy(key: string): boolean { return this.pending.has(key); }
 
-  notify(kind: NoticeKind, text: string, key?: string): number {
-    const id = ++this.nextId;
-    this.notices.push({ id, kind, text, at: this.clock.now(), key });
-    if (kind === 'success') this.clock.setTimeout(() => this.dismiss(id), SUCCESS_MS);
-    return id;
+  /** A toast; an unknown outcome stays until closed or answered late, like an error (B-05). */
+  notify(kind: NoticeKind, text: string): number {
+    const [title, body] = split(text);
+    return showToast({ tone: TONE[kind], title, body: body || undefined, ...(kind === 'unknown' ? { timeout: 0 } : {}) });
   }
 
-  dismiss(id: number): void {
-    const i = this.notices.findIndex(n => n.id === id);
-    if (i >= 0) this.notices.splice(i, 1);
-  }
-
-  clearSuccess(): void {
-    for (const n of this.notices.filter(n => n.kind === 'success')) this.dismiss(n.id);
-  }
+  dismiss(id: number): void { dismissToast(id); }
 
   async run<T = any>(o: RunOptions): Promise<RunResult<T>> {
     if (this.pending.has(o.key) && !o.allowRepeat) return { ok: false, reason: 'busy' };
@@ -75,21 +72,21 @@ export class Tracker {
       if (first === 'timeout') {
         timedOut = true;
         done();
-        unknownId = this.notify('unknown', this.text('msg.unknown', { action: o.label, seconds: Math.round(timeoutMs / 1000) }), o.key);
+        unknownId = this.notify('unknown', this.text('msg.unknown', { action: o.label, seconds: Math.round(timeoutMs / 1000) }));
         sent.then(
-          () => { this.dismiss(unknownId); this.notify('info', this.text('msg.lateOk', { action: o.label }), o.key); },
-          e => { this.dismiss(unknownId); this.notify('error', this.text('msg.lateError', { action: o.label, error: message(e) }), o.key); },
+          () => { this.dismiss(unknownId); this.notify('info', this.text('msg.lateOk', { action: o.label })); },
+          e => { this.dismiss(unknownId); this.notify('error', this.text('msg.lateError', { action: o.label, error: message(e) })); },
         );
         return { ok: false, reason: 'timeout' };
       }
       done();
-      if (o.okText) this.notify('success', o.okText, o.key);
+      if (o.okText) this.notify('success', o.okText);
       return { ok: true, result: first.r as T };
     } catch (e) {
       if (timedOut) return { ok: false, reason: 'timeout' };
       done();
       const error = message(e);
-      if (!o.quiet) this.notify('error', this.text('msg.failed', { action: o.label, error }), o.key);
+      if (!o.quiet) this.notify('error', this.text('msg.failed', { action: o.label, error }));
       return { ok: false, reason: 'error', error };
     }
   }

@@ -103,10 +103,11 @@ const facts = computed(() => Object.entries(status.value).map(([label, v]) => ({
       <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="load"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
     </OuiEmpty>
     <template v-else-if="state === 'ok'">
-      <div v-if="facts.length || printing" class="oui-stack u1-pad">
+      <div v-show="facts.length || printing" class="oui-stack u1-pad">
         <OuiKeyValue v-if="facts.length" :items="facts" />
         <!-- Said once for this panel; the Apply buttons and actions it turns off point here. -->
-        <OuiBanner v-if="printing" id="ext-print-why" role="note" tone="info" :title="t('ext.printWhy')" data-test="ext-print-why" />
+        <OuiBanner :show="printing" id="ext-print-why" role="note" tone="info" :title="t('ext.printWhy')" data-test="ext-print-why"
+                   dismissible :dismiss-key="`ext-print-why:${s.status?.filename ?? ''}`" :close-label="t('common.close')" />
       </div>
       <div class="oui-formsection-rows fw-rows">
         <template v-for="g in groups" :key="g.id">
