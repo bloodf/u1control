@@ -115,7 +115,7 @@ def preset_link(obj):
         value = json.loads(raw)
     except ValueError:
         value = raw
-    return (value if isinstance(value, str) else raw).strip()
+    return value.strip() if isinstance(value, str) else ""   # null, true, numbers, lists, objects: no name
 
 
 def spool_view(spool):

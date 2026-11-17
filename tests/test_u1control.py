@@ -222,7 +222,9 @@ class SpoolmanMatchTests(unittest.TestCase):
         self.assertEqual(link({"orca_filament_preset": '"  "'}, {"orca_filament_preset": '"Fil"'}), "Fil")   # empty spool
         self.assertEqual(link({}, {"orca_filament_preset": '"Fil"'}), "Fil")
         self.assertEqual(link({"orca_filament_preset": '"Spool"'}, {"orca_filament_preset": '"Fil"'}), "Spool")
-        self.assertEqual(link({"orca_filament_preset": "42"}), "42")                               # JSON, not text
+        for value in ("42", "null", "true", "false", "[\"A\"]", '{"a": "A"}'):              # JSON, not text
+            self.assertEqual(link({"orca_filament_preset": value}), "", value)
+        self.assertEqual(link({"orca_filament_preset": "null"}, {"orca_filament_preset": '"Fil"'}), "Fil")
         self.assertEqual(link({"orca_filament_preset": None}, "junk"), "")
         self.assertEqual(sm.spool_view({"id": 1})["orca_preset"], "")
 
@@ -513,6 +515,43 @@ class PluginTests(unittest.TestCase):
         self.assertIn('"Other printer"', ns["sync_project"](heads, [], {}, bound=bound)[1][0])
         self.assertEqual(reads, [True] * 3)   # presets read through on_ui_thread only
         self.assertIsNone(ns["linked_preset"]("_local/spooler/Acme PLA @U1", ns["user_presets"]()))
+
+    def test_ambiguous_link_and_unreadable_presets(self):
+        meta = {"My PLA": {"is_user": True}, "MY PLA": {"is_user": True}}
+        orca = fakes.install_orca(filament_names=["Generic PLA @U1", *meta], filament_meta=meta)
+        ns = fakes.load_wheel(self.artifact)
+        heads = u1.summarize(self.fake.status())["heads"]
+        bound = lambda i: {"id": i, "orca_preset": "my pla"} if i == 0 else None   # noqa: E731
+        done, problems = ns["sync_project"](heads, [], {}, bound=bound)
+        self.assertIn('several user presets match "my pla"', problems[0])
+        self.assertNotEqual(orca.filament_calls[0][1], "My PLA")
+        logs = []
+        ns["log"] = logs.append
+        ns["user_presets"] = lambda: 1 / 0   # OrcaSlicer won't answer: no links, the rest still works, logged once
+        self.assertEqual((ns["_user_presets_safe"](), ns["_user_presets_safe"]()), ([], []))
+        self.assertEqual(len(logs), 1)
+        self.assertEqual(len(ns["sync_project"](heads, [], {}, bound=bound)[0]), 3)
+
+    def test_linked_filament_id_reads_each_file_version_once(self):
+        orca, ns = self.load()
+        folder = tempfile.mkdtemp()
+        path = os.path.join(folder, "My PLA.json")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("{broken")
+        logs = []
+        ns["log"] = logs.append
+        mine = [{"name": "My PLA", "file": path, "inherits": ""}]
+        spool = {"orca_preset": "My PLA"}
+        self.assertEqual([ns["linked_filament_id"](spool, mine) for _ in range(3)], ["", "", ""])
+        self.assertEqual(len(logs), 1)   # a bad file is logged once
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"filament_id": "P1"}, f)
+        os.utime(path, (1, 1))   # a new version of the file is read again
+        opened = []
+        real_open = open
+        ns["open"] = lambda *a, **k: (opened.append(1), real_open(*a, **k))[1]
+        self.assertEqual([ns["linked_filament_id"](spool, mine) for _ in range(3)], ["P1", "P1", "P1"])
+        self.assertEqual(len(opened), 1)
 
     def test_page_sync_project_message(self):
         orca, ns = self.load(filament_names=["Generic PETG @U1"])

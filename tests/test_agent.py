@@ -511,6 +511,12 @@ class PluginAgentTests(unittest.TestCase):
         trays = messages[-1]["print"]["ams"][0]["tray"]
         self.assertEqual([t["tray_info_idx"] for t in trays], ["P1a2b3c", "OFYPdQJh", "", "OFmY0l6t"])
         self.assertEqual(off_ui, [])
+        ghost = [n for n in self.orca.notifications if '"Ghost"' in n]   # AMS sync says it too, once per name
+        self.assertEqual(len(ghost), 1)
+        self.assertIn("T4: no compatible user preset", ghost[0])
+        self.agent._wake.set()
+        self.assertTrue(wait_for(lambda: len(messages) > 1))
+        self.assertEqual(len([n for n in self.orca.notifications if '"Ghost"' in n]), 1)
 
     def connect(self, **kw):
         conn = self.orca.printer_agent.PrinterConnectionParams(**{"dev_id": "u1", "host": self.fake.host, **kw})

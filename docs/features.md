@@ -201,8 +201,9 @@ volumetric speed, temperatures, cooling) are kept.
 **Apply to project filaments** (and **Sync U1 toolheads to project filaments**) then picks that preset
 for the toolhead holding the spool. The name must match exactly (or, failing that, one preset regardless
 of upper/lower case), and the preset must be your own user preset (not a system preset or one a
-plugin made) compatible with the selected printer. If it isn't, U1 Control picks a preset as it always
-did and says so once per name. Colour and the spool link work as before, so Spoolman usage is
+plugin made) compatible with the selected printer. If it isn't, or if several presets match it only
+ignoring case, U1 Control picks a preset as it always did and says so once per name (in the Apply result,
+or as an OrcaSlicer notification when the Device tab's sync finds it first). Colour and the spool link work as before, so Spoolman usage is
 unaffected.
 
 OrcaSlicer's **Sync filaments** (Device tab, printer agent) loads the preset whose `filament_id` the

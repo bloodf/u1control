@@ -165,6 +165,11 @@ MESSAGES = {
         "T%d: no hay ningún perfil de usuario compatible «%s» en OrcaSlicer, así que se usa el perfil habitual",
         "T%d: kein kompatibles Benutzerprofil „%s“ in OrcaSlicer, daher wird das übliche Profil verwendet",
         "T%d：OrcaSlicer 中没有兼容的用户预设“%s”，因此使用常规预设"),
+    "T%d: several user presets match \"%s\" ignoring case; write the exact name. The usual preset is used": _m(
+        "T%d: vários perfis de usuário correspondem a “%s” sem diferenciar maiúsculas; escreva o nome exato. Foi usado o perfil de sempre",
+        "T%d: varios perfiles de usuario coinciden con «%s» sin distinguir mayúsculas; escriba el nombre exacto. Se usa el perfil habitual",
+        "T%d: mehrere Benutzerprofile passen zu „%s“, wenn man Groß-/Kleinschreibung ignoriert; geben Sie den genauen Namen ein. Das übliche Profil wird verwendet",
+        "T%d：有多个用户预设在忽略大小写时与“%s”匹配；请填写准确名称。将使用常规预设"),
 
     # ------------------------------------------------------------ helper scripts
     "Select your Snapmaker U1 printer and set its IP (Wi-Fi icon next to the printer).": _m(
