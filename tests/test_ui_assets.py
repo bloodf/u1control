@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 UI = ROOT / "src" / "u1control" / "ui"
-MAX_BUILT_BYTES = 500_000   # the wheel measures ~450 kB with the photo spool's 15 WebP layers (foundation 4.1.0)
+MAX_BUILT_BYTES = 580_000   # ~450 kB with the photo spool's 15 WebP layers (foundation 4.1.0), ~50 kB more with the Dashboard printer photo
 
 
 class UiAssets(unittest.TestCase):
@@ -68,6 +68,13 @@ class UiAssets(unittest.TestCase):
         self.assertEqual(len(re.findall(r'fill="#FEFEFE"', svg)), 5)
         self.assertIn('viewBox="0 0 256 256"', svg)
         self.assertNotIn("currentColor", svg)
+
+    def test_printer_photo_credit_ships(self):
+        """The Dashboard's printer photo is Snapmaker's product image: NOTICE.md (its credit) is in the wheel."""
+        with zipfile.ZipFile(self.artifact) as z:
+            notice = [n for n in z.namelist() if n.endswith(".dist-info/licenses/NOTICE.md")]
+            self.assertEqual(len(notice), 1)
+            self.assertIn("Printer photo: Snapmaker product image", z.read(notice[0]).decode("utf-8"))
 
     def test_built_size_reasonable(self):
         size = self.artifact.stat().st_size

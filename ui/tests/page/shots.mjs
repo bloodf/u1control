@@ -15,11 +15,12 @@ const SETUP = { job: { name: 'Desk organiser — plate 1', time: '2h 04m', weigh
 const STATE = `
 await until(() => __t.sent.find(m => m.type === 'hello'));
 const hello = __t.sent.find(m => m.type === 'hello');
-const VIEW = {state: 'printing', message: '', filename: 'desk_organiser_plate_1.gcode', progress: 0.37, layer: 142, total_layers: 380, print_duration: 4100, total_duration: 4500,
+const IDLE = SCN === 'idle';
+const VIEW = {state: IDLE ? 'standby' : 'printing', message: '', filename: IDLE ? '' : 'desk_organiser_plate_1.gcode', progress: IDLE ? 0 : 0.37, layer: IDLE ? 0 : 142, total_layers: IDLE ? 0 : 380, print_duration: 4100, total_duration: 4500,
   extruders: [0,1,2,3].map(i => ({temp: i === 0 ? 219.6 : 25, target: i === 0 ? 220 : 0, active: i === 0})), bed: {temp: 59.8, target: 60},
   heads: ['PLA','PETG','','PLA'].map((t, i) => ({loaded: !!t, type: t, vendor: t ? 'Generic' : '', sub_type: t ? 'Basic' : '', colour: ['#e5484d','#3e63dd','','#78cfd5'][i], official: i === 0})),
   rfid: [{vendor: 'Snapmaker', type: 'PLA', uid: '04A1', official: true}, null, null, null], options: {bed_level: true, flow_calibrate: true, time_lapse_camera: false, unload_when_done: false},
-  purifier: {fitted: true}, feed: [{state: 'loaded'},{state: 'loaded'},{state: 'empty'},{state: 'loaded'}], busy: true, machine_state: 'PRINTING', bindings: {'0': 7}, light: true, speed_factor: 1};
+  purifier: {fitted: true}, feed: [{state: 'loaded'},{state: 'loaded'},{state: 'empty'},{state: 'loaded'}], busy: !IDLE, machine_state: IDLE ? 'IDLE' : 'PRINTING', bindings: {'0': 7}, light: true, speed_factor: 1};
 if (SCN !== 'notarget') {
   __t.handler({type: 'reply', id: hello.id, result: {firmware: {kind: 'stock', version: '2.0.0.205'}, address: '192.168.1.40', printer: 'Bench U1', generation: 1, limits: {hotend: 320, bed: 110}}});
   __t.handler({type: 'status', data: VIEW});
@@ -27,7 +28,8 @@ if (SCN !== 'notarget') {
 await settle();
 const ans = (cmd, r) => { const m = [...__t.sent].reverse().find(x => x.type === 'cmd' && x.cmd === cmd); if (m) __t.handler({type: 'reply', id: m.id, result: r}); };
 await sleep(50);
-ans('spools', {spools: [{id: 7, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', remaining: 640, initial: 1000}, {id: 11, name: 'Cobalt Blue', vendor: 'Acme', material: 'PETG', colour: '#2850a8', remaining: 40, initial: 1000}], bindings: {'0': 7}, via: 'direct'});
+ans('spools', {spools: [{id: 7, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', remaining: 640, initial: 1000}, {id: 11, name: 'Cobalt Blue', vendor: 'Acme', material: 'PETG', colour: '#2850a8', remaining: 40, initial: 1000},
+  {id: 12, name: 'Tricolour Silk', vendor: 'Acme', material: 'PLA', colour: '#e5484d', colours: ['#e5484d', '#f5d90a', '#3e63dd'], remaining: 310, initial: 1000}], bindings: {'0': 7, '3': 12}, via: 'direct'});
 ans('stock', {spooler: {state: 'active', text: '', version: '0.20.1'}, stock: {state: 'stale', code: 'stale', text: '', key: 's:1', ts: Date.now() / 1000 - 300,
   rows: [{id: 7, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', colours: [], remaining: 640, initial: 1000, low: false, use_first: true, location: 'Shelf A'},
          {id: 11, name: 'Cobalt Blue', vendor: 'Acme', material: 'PETG', colour: '#2850a8', colours: [], remaining: 40, initial: 1000, low: true, use_first: false, location: 'Dry box'}]},
@@ -50,12 +52,15 @@ const SCENES = [
   ['dash', 'light', 'en', 1280, 1], ['dash', 'dark', 'pt_BR', 1280, 1], ['dash', 'light', 'pt_BR', 720, 1], ['dash', 'dark', 'en', 640, 2], ['dash', 'light', 'en', 380, 1],
   ['notarget', 'light', 'pt_BR', 1280, 1], ['notarget', 'dark', 'en', 720, 1], ['dialog', 'dark', 'pt_BR', 720, 1], ['dialog', 'light', 'en', 640, 2],
   ['settings', 'light', 'en', 1280, 1], ['settings', 'dark', 'pt_BR', 720, 1], ['files', 'light', 'pt_BR', 1280, 1], ['files', 'dark', 'en', 640, 2],
-  ['console', 'dark', 'en', 1280, 1], ['setup', 'light', 'pt_BR', 720, 1], ['setup', 'dark', 'en', 1280, 1], ['setup', 'light', 'en', 360, 2],
+  ['console', 'dark', 'en', 1280, 1], ['dash', 'light', 'en', 380, 1], ['dash', 'dark', 'en', 380, 1],
+  ['idle', 'light', 'en', 1280, 1], ['idle', 'dark', 'en', 1280, 1], ['idle', 'light', 'pt_BR', 380, 1], ['idle', 'dark', 'en', 380, 1], ['setup', 'light', 'pt_BR', 720, 1], ['setup', 'dark', 'en', 1280, 1], ['setup', 'light', 'en', 360, 2],
 ];
 // LANGS=de_DE,zh_CN,...: every scene in those languages instead, wide light and narrow dark (and the reverse).
 if (process.env.LANGS) SCENES.splice(0, SCENES.length, ...process.env.LANGS.split(',').flatMap(lang =>
   ['dash', 'notarget', 'dialog', 'settings', 'files', 'console', 'setup'].flatMap(scn =>
     [[scn, 'light', lang, 1280, 1], [scn, 'dark', lang, 400, 1], [scn, 'dark', lang, 1280, 1], [scn, 'light', lang, 400, 1]])));
+// ONLY=dash,idle: just those scenes.
+if (process.env.ONLY) { const only = process.env.ONLY.split(','); SCENES.splice(0, SCENES.length, ...SCENES.filter(x => only.includes(x[0]))); }
 const dir = await mkdtemp(join(tmpdir(), 'u1-shots-'));
 const browser = await launch();
 const metrics = [];

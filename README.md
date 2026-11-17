@@ -186,7 +186,7 @@ For an RFID tag, yes: in Expert mode `profile_overrides` picks an exact filament
 <details>
 <summary>Is U1 Control made by Snapmaker?</summary>
 
-No. It is an independent project, not made or supported by Snapmaker, built from Snapmaker's public sources and the U1 Extended Firmware. [Credits](docs/credits.md).
+No. It is an independent project, not made or supported by Snapmaker, built from Snapmaker's public sources and the U1 Extended Firmware. [Credits](docs/credits.md). Printer photo: Snapmaker product image ([NOTICE.md](NOTICE.md)).
 </details>
 
 ## 🌍 Languages
