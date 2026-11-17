@@ -8,6 +8,7 @@ import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { OuiSwatch } from '../../shared/src/components';
 import * as bridge from '../core/bridge';
+import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
 import type { SetupHead } from '../core/logic';
 
@@ -29,18 +30,27 @@ onMounted(async () => {
   } catch (e) { say(-1, false, String((e as Error).message ?? e), true); }
 });
 
+// An official (RFID) spool's tag data is only overwritten after the same confirmation as on the Dashboard
+// (HeadCard.vue): force is sent only after that yes.
 async function save(i: number) {
+  const f = forms[i], h = props.heads[i], n = i + 1, force = !!h.official;
+  if (force && !await ask({ title: t('edit.title', { n }), text: t('confirm.overwrite.text', { n, kind: t('edit.official') }),
+    yes: t('confirm.overwrite.yes'), no: t('common.goBack'), danger: true })) return;
   say(i, true);
   try {
-    const f = forms[i], h = props.heads[i];
-    await bridge.command('set_filament', { head: i, vendor: f.vendor, type: f.type, colour: f.colour, sub_type: h.sub_type || 'Basic', force: !!h.official });
+    await bridge.command('set_filament', { head: i, vendor: f.vendor, type: f.type, colour: f.colour, sub_type: h.sub_type || 'Basic', force });
     say(i, false, t('setup.headSaved', { n: i + 1 }));
   } catch (e) { say(i, false, String((e as Error).message ?? e), true); }
 }
 async function link(i: number, id: number) {
+  const n = i + 1, force = !!props.heads[i].official;
+  if (id && !await ask({ title: t('act.bind', { n }), text: force ? t('confirm.bind.force', { n, id }) : t('confirm.bind.text', { n, id }),
+    yes: t('confirm.bind.yes', { n }), no: t('common.goBack'), danger: force })) return;
+  if (!id && bindings.value[String(i)] != null && !await ask({ title: t('act.unbind', { n }),
+    text: t('confirm.unbind.text', { id: bindings.value[String(i)], n }), yes: t('confirm.unbind.yes'), no: t('common.goBack') })) return;
   say(i, true);
   try {
-    const r = id ? await bridge.command('bind_spool', { head: i, spool_id: id, force: !!props.heads[i].official })
+    const r = id ? await bridge.command('bind_spool', { head: i, spool_id: id, force })
       : await bridge.command('unbind_spool', { head: i });
     bindings.value = r?.bindings ?? bindings.value;
     say(i, false, t('setup.headSaved', { n: i + 1 }));

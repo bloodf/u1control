@@ -18,6 +18,7 @@ import * as bridge from '../core/bridge';
 import { boot } from '../core/boot';
 import { t, tn, tMaybe } from '../core/i18n';
 import { colourFar, family, setupWarnings, warningKey, type SetupFilament, type SetupHead } from '../core/logic';
+import ConfirmDialog from '../components/ConfirmDialog.vue';
 import HeadPicture from './HeadPicture.vue';
 import HeadsSettings from './HeadsSettings.vue';
 import PathPreview, { type PathData } from './PathPreview.vue';
@@ -105,10 +106,15 @@ const purOptions = computed(() => ['auto', 'strong', 'weak', 'keep-warm', 'off']
 const coverMode = computed(() => purifier.value === 'auto' ? D.auto_purifier : purifier.value);
 const recirculating = computed(() => coverMode.value === 'keep-warm');
 const FAN_AUTO = 60;   // u1.COVER_FAN_DEFAULT: Snapmaker's start G-code speed
-// Auto / Off / a set speed, as one value per fan: Auto sends Snapmaker's default speed, Off sends 0.
-const fanMode = (k: string) => computed({ get: () => prefs[k] === 0 ? 'off' : prefs[k] === FAN_AUTO ? 'auto' : 'set',
-  set: (v: string) => { prefs[k] = v === 'off' ? 0 : v === 'auto' ? FAN_AUTO : 50; } });
-const exhaustMode = fanMode('exhaust_fan'), innerMode = fanMode('inner_fan');
+// Auto / Off / a set speed per fan, kept as its own choice (a set speed of exactly 60 % stays "Set"): Auto sends
+// Snapmaker's default speed, Off sends 0.
+const startMode = (k: string) => prefs[k] === 0 ? 'off' : prefs[k] === FAN_AUTO ? 'auto' : 'set';
+const exhaustMode = ref(startMode('exhaust_fan')), innerMode = ref(startMode('inner_fan'));
+function followMode(k: string, mode: { value: string }) {
+  watch(() => mode.value, v => { prefs[k] = v === 'off' ? 0 : v === 'auto' ? FAN_AUTO : (prefs[k] === 0 || prefs[k] === FAN_AUTO ? 50 : prefs[k]); });
+}
+followMode('exhaust_fan', exhaustMode);
+followMode('inner_fan', innerMode);
 const fanModes = computed(() => [{ value: 'auto', label: t('setup.fan.auto') }, { value: 'off', label: t('setup.fan.off') }, { value: 'set', label: t('setup.fan.set') }]);
 const showExhaust = computed(() => has('exhaust_fan') && ['strong', 'weak', 'keep-warm'].includes(coverMode.value));
 const showInner = computed(() => has('inner_fan') && recirculating.value);
@@ -134,7 +140,7 @@ const cancel = () => { if (!sent.value) bridge.submit({ cancelled: true }); };
 const openSettings = () => bridge.post({ open_settings: true });
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && !document.querySelector('.p-select-overlay, .p-popover, .p-dialog')) cancel();
+  if (e.key === 'Escape' && !document.querySelector('.p-select-overlay, .p-popover, .p-dialog, .p-dialog-mask')) cancel();
 }
 let timer = 0;
 onMounted(() => {
@@ -305,6 +311,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
     </div>
     <template #footer><Button :label="t('common.close')" @click="prefsOpen = false" /></template>
   </Dialog>
+  <ConfirmDialog />
 </template>
 
 <style>

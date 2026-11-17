@@ -389,6 +389,34 @@ test('setup: auto mapping, plugin settings, print preferences and the top-cover 
   eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan], ['high', 0], 'chosen preferences sent');
 `, { mode: 'setup', data: SETUP_FULL });
 
+test('setup: Heads settings ask before overwriting an official spool; a set fan speed of 60 % stays set', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  await click(byTest('heads'));
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [{id: 7, vendor: 'Generic', name: 'Matte Black', material: 'PLA', colour: '#111111'}], bindings: {}});
+  await click(q('[data-head="1"] button[type="submit"]'));     // T2 holds an official spool
+  await until(dialogOpen, 'asks first');
+  eq(cmds('set_filament'), [], 'nothing sent before the answer');
+  await no();
+  eq(cmds('set_filament'), [], 'nothing sent on Go back');
+  await click(q('[data-head="1"] button[type="submit"]'));
+  await until(dialogOpen, 'asks again');
+  await yes();
+  await until(() => cmds('set_filament').length, 'sent after yes');
+  eq(cmds('set_filament')[0].args.force, true, 'force only after the confirmation');
+  await click(q('[data-head="0"] button[type="submit"]'));     // not official: no question, no force
+  await until(() => cmds('set_filament').length === 2, 'second save');
+  eq(cmds('set_filament')[1].args.force, false, 'no force');
+  await click(byTest('cover-more')); await until(() => byTest('exhaust-mode'));
+  await click([...qa('[data-test="exhaust-mode"] button')].find(b => text(b) === 'Set'));
+  assert(q('.su-slider'), 'slider shown');
+  const range = q('.su-slider input[type=range]');
+  assert(range, 'the slider is a native range input (keyboard and screen readers)');
+  range.value = '60'; range.dispatchEvent(new Event('input', {bubbles: true}));
+  await settle();
+  assert(q('.su-slider') && text(q('.su-slider')).includes('60'), 'still Set at 60 %: ' + text(q('.su-slider') || document.body));
+`, { mode: 'setup', data: SETUP_FULL });
+
 test('setup: keep warm hides the exhaust fan and never sends it', `
   await until(() => sent().some(m => m.ready), 'ready posted');
   await click(byTest('cover-more')); await until(() => byTest('cover-pop'));
