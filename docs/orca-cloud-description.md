@@ -83,7 +83,7 @@ Quando você aperta **Imprimir**, cada filamento é relacionado a uma das quatro
 
 O Painel mostra o status, as temperaturas e a câmera, com pausar, retomar, cancelar e parada de emergência.
 
-![O Painel: temperatura da mesa, velocidade, tampa superior, luz da câmara e a imagem da câmera](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-02-dashboard-pt-BR.png){align=center}
+![O Painel: temperatura da mesa, velocidade, tampa superior, luz da câmera e a imagem da câmera](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-02-dashboard-pt-BR.png){align=center}
 
 Cada cabeça mostra o filamento, a etiqueta RFID e a bobina do Spoolman com as gramas restantes.
 
