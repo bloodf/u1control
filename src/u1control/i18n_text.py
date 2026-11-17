@@ -264,6 +264,11 @@ MESSAGES = {
         "Descargar al terminar se elige en cada impresión, por cabezal, en la ventana de preparación de impresión de la U1",
         "Entladen nach dem Druck wird für jeden Druck je Werkzeugkopf im Fenster der U1-Druckvorbereitung gewählt",
         "“完成后退料”需在 U1 打印准备窗口中按每次打印、每个工具头选择"),
+    "The exhaust fan stays off while the top cover recirculates (keep warm)": _m(
+        "O exaustor fica desligado enquanto a tampa superior recircula o ar (manter aquecido)",
+        "El extractor se queda apagado mientras la cubierta superior recircula el aire (mantener caliente)",
+        "Der Abluftlüfter bleibt aus, solange die obere Abdeckung die Luft umwälzt (warm halten)",
+        "顶盖内循环（保温）时排风扇保持关闭"),
     "nothing to change": _m("nada a alterar", "nada que cambiar", "nichts zu ändern", "没有可更改的内容"),
     "touch outside the screen": _m("toque fora da tela", "el toque está fuera de la pantalla",
                                    "Berührung außerhalb des Bildschirms", "点击位置超出屏幕"),

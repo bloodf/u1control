@@ -43,6 +43,10 @@ COVER_FANS = ("exhaust_fan", "inner_fan")
 PURIFIER_FAN = {"keep-warm": "inner_fan", "weak": "exhaust_fan", "strong": "exhaust_fan"}
 COVER_FAN_DEFAULT = 60   # FAN_SPEED=0.6 in Snapmaker's U1 start G-code
 COVER_FAN_LIVE = {"exhaust": "exhaust_fan", "inner": "inner_fan"}   # SET_PURIFIER FAN=<name> SPEED=0..1
+# Recirculation (keep-warm) holds the chamber heat with the inner fan and the exhaust off (purifier.py modes 2
+# MODE_PREHEAT_CHAMBER and 3 MODE_HOT_CHAMBER); Snapmaker's app refuses the exhaust fan then. So do we.
+RECIRCULATION_MODES = (2, 3, "keep-warm")
+EXHAUST_BLOCKED = "The exhaust fan stays off while the top cover recirculates (keep warm)"
 # The command each extra pref needs. It is offered and sent only when the printer's own command list
 # (Moonraker GET /printer/gcode/help) has that command: an older firmware just hides the control.
 FEATURE_COMMANDS = {
@@ -305,14 +309,21 @@ def preference_commands(prefs, used=()):
     return lines
 
 
-def cover_fan_command(fan, percent):
+def exhaust_blocked(mode):
+    """True in recirculation: the purifier status mode 2/3, or the print's "keep-warm" mode."""
+    return not isinstance(mode, bool) and mode in RECIRCULATION_MODES
+
+
+def cover_fan_command(fan, percent, mode=None):
     """SET_PURIFIER for one top-cover fan now (purifier.py cmd_SET_PURIFIER: FAN=exhaust|inner, SPEED 0..1;
-    0 turns it off after the firmware's delay)."""
+    0 turns it off after the firmware's delay). mode: the purifier's current mode (exhaust refused in recirculation)."""
     if fan not in COVER_FAN_LIVE:
         raise ValueError(tr("bad purifier mode"))
     pct = clean_prefs({COVER_FAN_LIVE[fan]: percent}).get(COVER_FAN_LIVE[fan])
     if pct is None:
         raise ValueError(tr("nothing to change"))
+    if fan == "exhaust" and pct > 0 and exhaust_blocked(mode):
+        raise ValueError(tr(EXHAUST_BLOCKED))
     return "SET_PURIFIER FAN=%s SPEED=%.2f" % (fan, pct / 100)
 
 
@@ -355,7 +366,8 @@ def summarize(status):
         "options": printer_options(task, status.get("defect_detection")),
         "tuning": printer_tuning(task, status.get("defect_detection")),
         "light": bool(led[0][3]) if led and led[0] and len(led[0]) > 3 else None,
-        "purifier": {"fitted": purifier.get("power_detected"), "mode": purifier.get("mode")},
+        "purifier": {"fitted": purifier.get("power_detected"), "mode": purifier.get("mode"),
+                     "recirculating": exhaust_blocked(purifier.get("mode"))},
         "fan": (status.get("fan") or {}).get("speed"),
         "feed": feed_states(status),
         "rfid": rfid_tags(status.get("filament_detect")),

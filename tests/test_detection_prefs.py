@@ -147,6 +147,23 @@ class Features(unittest.TestCase):
         self.assertIn("SET_PURIFIER", svc.gcode_cmds)
 
 
+class ExhaustBlock(unittest.TestCase):
+    def test_recirculation_modes(self):
+        for mode in (2, 3, "keep-warm"):
+            self.assertTrue(u1.exhaust_blocked(mode), mode)
+        for mode in (0, 1, "weak", "strong", None, True):
+            self.assertFalse(u1.exhaust_blocked(mode), mode)
+        self.assertTrue(u1.summarize({"purifier": {"mode": 2}})["purifier"]["recirculating"])
+
+    def test_live_command(self):
+        with self.assertRaises(ValueError):
+            u1.cover_fan_command("exhaust", 30, 2)
+        self.assertEqual(u1.cover_fan_command("exhaust", 30, 1), "SET_PURIFIER FAN=exhaust SPEED=0.30")
+
+    def test_keep_warm_print_never_takes_the_exhaust_speed(self):
+        self.assertEqual(u1.purifier_command("keep-warm", {"exhaust_fan": 90}), u1.PURIFIER["keep-warm"])
+
+
 class Offering(unittest.TestCase):
     VIEW = {"options": {"tangle_detect": False, "spaghetti_detect": True, "bed_check": False, "bed_level": True},
             "tuning": {"spaghetti_level": "low", "bed_check_level": "high", "flow_calibrate_heads": [0, 1, 2, 3]},
@@ -219,6 +236,16 @@ class ServicePreferences(unittest.TestCase):
         self.assertEqual(self.fake.scripts[-1], "SET_PURIFIER FAN=inner SPEED=0.00")
         with self.assertRaises(ValueError):
             self.svc.cmd_cover_fan("side", 50)
+
+    def test_exhaust_refused_while_the_cover_recirculates(self):
+        base = self.fake.status
+        self.fake.status = lambda: {**base(), "purifier": {"power_detected": True, "mode": 3}}
+        with self.assertRaises(ValueError) as e:
+            self.svc.cmd_cover_fan("exhaust", 50)
+        self.assertIn("recirculates", str(e.exception))
+        self.svc.cmd_cover_fan("exhaust", 0)    # turning it off is fine
+        self.svc.cmd_cover_fan("inner", 40)     # the recirculation fan itself is fine
+        self.assertEqual(self.fake.scripts, ["SET_PURIFIER FAN=exhaust SPEED=0.00", "SET_PURIFIER FAN=inner SPEED=0.40"])
 
     def test_cover_fan_needs_the_command_and_an_idle_printer(self):
         del self.fake.commands["SET_PURIFIER"]
