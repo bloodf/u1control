@@ -47,6 +47,14 @@ class PushTests(unittest.TestCase):
         self.assertEqual([t["tray_info_idx"] for t in block["ams"][0]["tray"]],
                          ["OFDSrzZ8", "SPL00000000AB", "", "OFmY0l6t"])   # Generic PLA, Spooler's, empty, Generic PLA Matte
 
+    def test_generic_ids_match_orcas_library(self):
+        """GENERIC_IDS against OrcaFilamentLibrary at the commit in tests/fixtures/orca_generic_ids.json (made by
+        scripts/generic_ids.py): a family missing from the library, or an id that differs, fails here."""
+        with open(os.path.join(ROOT, "tests", "fixtures", "orca_generic_ids.json"), encoding="utf-8") as f:
+            pinned = json.load(f)
+        self.assertRegex(pinned["commit"], r"^[0-9a-f]{40}$")
+        self.assertEqual({k: pinned["ids"].get(k) for k in agent.GENERIC_IDS}, agent.GENERIC_IDS)
+
     def test_generic_id_by_the_real_material(self):
         self.assertEqual(agent.generic_filament_id("PETG"), "OFYPdQJh")
         self.assertEqual(agent.material_family("PLA WOOD"), "PLA")   # not in the table: by word
