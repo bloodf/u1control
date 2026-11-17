@@ -90,9 +90,9 @@ class WindowTests(unittest.TestCase):   # noqa: D101
 
     def test_marked_gcode_skips_the_window_and_the_fixes(self):
         windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
-        with open(self.path, "a") as f:
+        with open(self.path, "a", newline="") as f:   # "\n" as the rest of the file, on Windows too
             f.write("\n; u1control: print setup done\n")
-        with open(self.path) as f:
+        with open(self.path, newline="") as f:
             before = f.read()
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
         self.assertEqual(windows, [])

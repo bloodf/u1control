@@ -24,11 +24,22 @@ Spooler writes `<OrcaSlicer data folder>/spooler/profiles.json`:
 
 ```json
 {"version": 1, "updated": 1794300000,
- "filaments": {"42": {"Snapmaker U1": "_local/spooler/Polymaker PLA Matte Black @Snapmaker U1"}}}
+ "filaments": {"42": {"Snapmaker U1": "_local/spooler/Polymaker PLA Matte Black @Snapmaker U1"}},
+ "spools": {"7": {"Snapmaker U1": "_local/spooler/Polymaker PLA Matte Black #7 @Snapmaker U1"}},
+ "ids": {"_local/spooler/Polymaker PLA Matte Black @Snapmaker U1": "SPL3F2A9C01B7"}}
 ```
 
+`"spools"` is there only when Spooler makes presets per spool: each spool's own preset, which wins over
+the filament's. `"ids"` gives the `filament_id` of each Spooler preset. Spooler writes its presets as
+standalone copies of their parent (`"inherits": ""`, a `filament_id` of their own starting with `SPL`),
+refreshed on every rewrite and on Sync Presets, because OrcaSlicer's "sync from AMS" only loads
+standalone presets, and OrcaSlicer's plugin API doesn't show a preset's `filament_id`.
+
 When u1control puts filament profiles into the project, it uses that file to pick the exact Spooler
-profile for each linked spool. It reads only `"version": 1` with `filaments` as an object of objects
+profile for each linked spool. The printer agent uses it too: a toolhead linked to a spool reports
+that profile's id from `"ids"` as the tray's `tray_info_idx`, which OrcaSlicer's "sync from AMS" matches
+presets on, so the sync loads that Spooler profile. The agent reads the links from Spoolman when the
+printer connects, so this works before the tab is opened. It reads only `"version": 1` with `filaments` as an object of objects
 whose values are preset names; any other version or shape is ignored (logged) as if the file were
 missing. Without the file, or without a linked spool, it falls back to the
 nearest colour among Spooler's profiles, then to its own matcher.
