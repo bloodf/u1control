@@ -522,7 +522,9 @@ class PluginAgentTests(unittest.TestCase):
         profiles = {"version": 1, "filaments": {}, "spools": {"5": {"Snapmaker U1": name}}, "ids": {name: "SPL00000005AA"}}
         self.ns["spooler_bridge"].read_json = lambda folder, name: profiles   # the wheel's own module object
         spool = {"id": 5, "location": "U1 T1", "filament": {"id": 9, "vendor": {"name": "Acme"}, "material": "PLA",
-                                                              "color_hex": "FF0000"}}
+                                                              "color_hex": "FF0000"},
+                 "extra": {"orca_filament_preset": '"My PLA"'}}
+        self.ns["user_presets"] = lambda: 1 / 0   # OrcaSlicer won't list user presets: the link is ignored
         seen = []
 
         class FakeSpoolman:

@@ -1611,7 +1611,9 @@ def filament_catalog():
     presets = []
     for i in range(collection.size()):
         preset = collection.preset(i)
-        if (getattr(preset, "bundle_id", "") or "") != spooler_bridge.BUNDLE_ID or not getattr(preset, "is_compatible", True):
+        # is_compatible defaults to False here and in user_presets: OrcaSlicer 2.5 binds it, and a host that doesn't
+        # can't say a preset suits the printer, which sync from AMS (is_compatible) and a link both need.
+        if (getattr(preset, "bundle_id", "") or "") != spooler_bridge.BUNDLE_ID or not getattr(preset, "is_compatible", False):
             continue
         first = lambda key: (spooler_bridge.as_list(preset.config_value(key)) or [""])[0]   # noqa: E731
         presets.append({"name": preset.name, "bundle_id": spooler_bridge.BUNDLE_ID, "vendor": first("filament_vendor"),
@@ -1626,7 +1628,7 @@ def user_presets():
     out = []
     for i in range(collection.size()):
         preset = collection.preset(i)
-        if preset.name.startswith("_local/") or not getattr(preset, "is_compatible", False) or not preset.is_user():
+        if preset.name.startswith("_local/") or not getattr(preset, "is_compatible", False) or not preset.is_user():   # default: filament_catalog
             continue
         out.append({"name": preset.name, "file": getattr(preset, "file", "") or "",
                     "inherits": clean(preset.config_value("inherits"))})
@@ -1683,7 +1685,12 @@ def linked_filament_id(spool, presets):
 def link_notice(slot, name, presets):
     """The notice for a toolhead whose orca_filament_preset names no usable preset, once per name per session
     (Apply and AMS sync share it); "" when it is fine or was said already."""
-    if not name or linked_preset(name, presets) or name in _links_warned:
+    if not name:
+        return ""
+    if linked_preset(name, presets):
+        _links_warned.discard(name)   # fixed: if it breaks again, say so again
+        return ""
+    if name in _links_warned:
         return ""
     _links_warned.add(name)
     if sum(p["name"].casefold() == name.casefold() for p in presets) > 1:

@@ -561,7 +561,24 @@ class PluginTests(unittest.TestCase):
         ns["user_presets"] = lambda: 1 / 0   # OrcaSlicer won't answer: no links, the rest still works, logged once
         self.assertEqual((ns["_user_presets_safe"](), ns["_user_presets_safe"]()), ([], []))
         self.assertEqual(len(logs), 1)
+        orca.filament_calls.clear()
         self.assertEqual(len(ns["sync_project"](heads, [], {}, bound=bound)[0]), 3)
+        linked_run = list(orca.filament_calls)
+        orca.filament_calls.clear()
+        ns["sync_project"](heads, [], {})
+        self.assertEqual(linked_run, orca.filament_calls)   # the usual presets, as with no link at all
+
+    def test_a_fixed_link_that_breaks_again_is_said_again(self):
+        meta = {"My PLA": {"is_user": True}}
+        fakes.install_orca(filament_names=["Generic PLA @U1", *meta], filament_meta=meta)
+        ns = fakes.load_wheel(self.artifact)
+        mine = [{"name": "My PLA", "file": "", "inherits": ""}]
+        self.assertIn("no compatible user preset", ns["link_notice"](1, "My PLA", []))
+        self.assertEqual(ns["link_notice"](1, "My PLA", []), "")      # once
+        self.assertEqual(ns["link_notice"](1, "My PLA", mine), "")    # fixed
+        self.assertIn("no compatible user preset", ns["link_notice"](1, "My PLA", []))   # broken again: said again
+        two = [{"name": "My PLA", "file": "", "inherits": ""}, {"name": "my pla", "file": "", "inherits": ""}]
+        self.assertIn("several user presets match", ns["link_notice"](2, "MY PLA", two))
 
     def test_linked_filament_id_reads_each_file_version_once(self):
         orca, ns = self.load()
@@ -583,6 +600,10 @@ class PluginTests(unittest.TestCase):
         ns["open"] = lambda *a, **k: (opened.append(1), real_open(*a, **k))[1]
         self.assertEqual([ns["linked_filament_id"](spool, mine) for _ in range(3)], ["P1", "P1", "P1"])
         self.assertEqual(len(opened), 1)
+        os.remove(path)   # gone before the next refresh: the usual id, logged once
+        logs.clear()
+        self.assertEqual([ns["linked_filament_id"](spool, mine) for _ in range(3)], ["", "", ""])
+        self.assertEqual(len(logs), 1)
 
     def test_page_sync_project_message(self):
         orca, ns = self.load(filament_names=["Generic PETG @U1"])
