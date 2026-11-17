@@ -69,6 +69,13 @@ class UiAssets(unittest.TestCase):
         self.assertIn('viewBox="0 0 256 256"', svg)
         self.assertNotIn("currentColor", svg)
 
+    def test_printer_photo_credit_ships(self):
+        """The Dashboard's printer photo is Snapmaker's product image: NOTICE.md (its credit) is in the wheel."""
+        with zipfile.ZipFile(self.artifact) as z:
+            notice = [n for n in z.namelist() if n.endswith(".dist-info/licenses/NOTICE.md")]
+            self.assertEqual(len(notice), 1)
+            self.assertIn("Printer photo: Snapmaker product image", z.read(notice[0]).decode("utf-8"))
+
     def test_built_size_reasonable(self):
         size = self.artifact.stat().st_size
         print("built size: %d bytes" % size)

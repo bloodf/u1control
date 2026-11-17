@@ -45,18 +45,18 @@ export function colourName(value: string | null | undefined): ColourName | null 
 export function figureSpools(heads: Head[] | undefined, bindings: Record<string, number>, spools: Spool[]): FigureSpool[] {
   return [0, 1, 2, 3].map(i => {
     const head = heads?.[i];
+    // Nothing in the toolhead: an empty reel, whatever spool is still linked to it.
+    if (!head?.loaded) return { n: i + 1, empty: true, colour: null, colours: null, fraction: null, material: '', name: null, source: 'none' };
     const id = bindings[String(i)];
     const linked = id != null ? spools.find(x => x.id === id) ?? null : null;
-    if (linked && (linked.colour || linked.colours?.length)) {
-      const colours = linked.colours && linked.colours.length > 1 ? linked.colours : null;
-      const fraction = spoolFraction(linked.remaining, linked.initial);
-      return { n: i + 1, empty: fraction === 0, colour: linked.colour || colours?.[0] || null, colours, fraction,
-        material: linked.material || head?.type || '', name: colours ? 'multi' : colourName(linked.colour), source: 'spoolman' };
+    const valid = (linked?.colours ?? []).filter(c => parseHex(c));
+    const own = parseHex(linked?.colour) ? linked!.colour! : null;
+    if (linked && (own || valid.length)) {
+      const colours = valid.length > 1 ? valid : null;
+      return { n: i + 1, empty: false, colour: own || valid[0], colours, fraction: spoolFraction(linked.remaining, linked.initial),
+        material: linked.material || head.type || '', name: colours ? 'multi' : colourName(own || valid[0]), source: 'spoolman' };
     }
-    if (head?.loaded) {
-      return { n: i + 1, empty: false, colour: parseHex(head.colour) ? head.colour : null, colours: null, fraction: null,
-        material: head.type || '', name: colourName(head.colour), source: 'printer' };
-    }
-    return { n: i + 1, empty: true, colour: null, colours: null, fraction: null, material: '', name: null, source: 'none' };
+    return { n: i + 1, empty: false, colour: parseHex(head.colour) ? head.colour : null, colours: null, fraction: null,
+      material: head.type || '', name: colourName(head.colour), source: 'printer' };
   });
 }

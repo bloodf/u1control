@@ -175,6 +175,10 @@ test('the printer photo: spools in the Spoolman colour, else the printer colour,
   assert(qa('img', fig).every(i => i.complete && i.naturalWidth > 0), 'photo and light maps load');
   eq(fig.getAttribute('role'), 'img');
   eq(fig.getAttribute('aria-label'), 'Printer and spools: T1 orange PETG, T2 blue PETG (in use), T3 empty, T4 multicolour PLA', 'says what each toolhead holds');
+  await post({type: 'offline', error: 'timed out'});
+  await until(() => q('[data-test="printer-figure"][data-stale]'), 'last known values');
+  const old = q('[data-test="printer-figure"]');
+  assert(!old.querySelector('.pf-halo') && !old.getAttribute('aria-label').includes('(in use)'), 'stale: no spool lit, nothing said in use');
   await post({type: 'status', data: VIEW()});
   await settle();
   const idle = q('[data-test="job-card"] [data-test="printer-figure"]');

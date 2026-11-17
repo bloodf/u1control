@@ -31,7 +31,8 @@ const pct = (v: number) => `${v}%`;
 
 const state = computed(() => s.status?.state ?? '');
 const spools = computed(() => figureSpools(s.status?.heads, s.bindings, s.spools));
-const working = computed(() => !!props.active && (state.value === 'printing' || state.value === 'paused'));
+// Last known values (stale) light nothing and say nothing is in use.
+const working = computed(() => !props.stale && !!props.active && (state.value === 'printing' || state.value === 'paused'));
 
 /** The paint under a reel's light map: one colour, or the colours of a multi-colour spool side by side. */
 function paint(sp: FigureSpool): string {

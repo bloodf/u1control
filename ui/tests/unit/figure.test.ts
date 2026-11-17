@@ -31,16 +31,30 @@ test('a link to a spool that is gone, or has no colour, falls back to the printe
 });
 
 test('multi-colour spools keep every colour, painted side by side', () => {
-  const [, , , t4] = figureSpools([], { 3: 12 }, [spool(12, { colour: '#e5484d', colours: ['#e5484d', '#f5d90a', '#3e63dd'], remaining: null })]);
+  const four = [head('PLA'), head('PLA'), head('PLA'), head('PLA')];
+  const [, , , t4] = figureSpools(four, { 3: 12 }, [spool(12, { colour: '#e5484d', colours: ['#e5484d', '#f5d90a', '#3e63dd'], remaining: null })]);
   assert.deepEqual(t4.colours, ['#e5484d', '#f5d90a', '#3e63dd']);
   assert.equal(t4.name, 'multi'); assert.equal(t4.fraction, null); assert.equal(t4.empty, false);
-  const [one] = figureSpools([], { 0: 3 }, [spool(3, { colours: ['#3e63dd'] })]);
+  const [one] = figureSpools(four, { 0: 3 }, [spool(3, { colours: ['#3e63dd'] })]);
   assert.equal(one.colours, null, 'a one-colour list is a plain colour');
 });
 
-test('a used-up linked spool is drawn empty', () => {
+test('a 0 g linked spool on a loaded head is still loaded, in its colour', () => {
   const [t1] = figureSpools([head('PLA')], { 0: 7 }, [spool(7, { remaining: 0 })]);
-  assert.equal(t1.empty, true); assert.equal(t1.fraction, 0);
+  assert.equal(t1.empty, false); assert.equal(t1.fraction, 0); assert.equal(t1.colour, '#ff7a00');
+});
+
+test('a spool still linked to an unloaded head is not painted: empty reel', () => {
+  const [t1] = figureSpools([head('')], { 0: 7 }, [spool(7)]);
+  assert.equal(t1.empty, true); assert.equal(t1.colour, null); assert.equal(t1.source, 'none');
+});
+
+test('invalid Spoolman colours are dropped', () => {
+  const [t1, t2, t3] = figureSpools([head('PLA'), head('PLA', '#3e63dd'), head('PLA')], { 0: 1, 1: 2, 2: 3 },
+    [spool(1, { colour: 'not a colour', colours: ['#e5484d', 'nope', '#3e63dd'] }), spool(2, { colour: 'url(x)', colours: ['junk'] }), spool(3, { colour: 'red; x', colours: ['#30a46c'] })]);
+  assert.deepEqual(t1.colours, ['#e5484d', '#3e63dd']); assert.equal(t1.colour, '#e5484d'); assert.equal(t1.name, 'multi');
+  assert.equal(t2.source, 'printer', 'nothing valid on the spool: the printer colour'); assert.equal(t2.colour, '#3e63dd');
+  assert.equal(t3.colour, '#30a46c'); assert.equal(t3.colours, null); assert.equal(t3.name, 'green');
 });
 
 test('the printer colour must be a colour', () => {
