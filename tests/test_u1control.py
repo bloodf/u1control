@@ -390,6 +390,37 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(data["map"], {"0": 0, "1": 1})
         self.assertTrue(ns["get_store"](cap).effective()["prefs"]["bed_level"])  # remembered
 
+    def test_print_setup_runs_once_per_gcode(self):
+        """A G-code that already went through print setup (its marker line) shows no second window and sends no
+        second pre-print script."""
+        orca, ns = self.load(answer={"map": {}, "prefs": {}, "purifier": "auto", "acknowledged": ["material:1:1"]})
+        cap = ns["U1PrintSetup"]()
+        self.assertEqual(cap.execute(self.ctx("OctoPrint")).status, "success")
+        with open(self.path) as f:
+            first = f.read()
+        self.assertTrue(first.rstrip().endswith("; u1control: print setup done"))
+        windows, scripts = len(orca.windows), len(self.fake.scripts)
+        result = cap.execute(self.ctx("OctoPrint"))
+        self.assertEqual(result.status, "success")
+        self.assertIn("already done", result.message)
+        self.assertEqual((len(orca.windows), len(self.fake.scripts)), (windows, scripts))
+        with open(self.path) as f:
+            self.assertEqual(f.read(), first)   # nothing inserted twice
+
+    def test_refused_send_remembers_nothing(self):
+        orca, ns = self.load(answer={"map": {}, "prefs": {"bed_level": False}, "purifier": "auto", "remember": True,
+                                     "acknowledged": ["material:1:1"]})
+        cap = ns["U1PrintSetup"]()
+        self.fake.order.clear()
+        real = ns["_still_valid"]
+
+        def refuse(*a):
+            raise ns["PrinterError"]("the U1 became busy")
+        ns["_still_valid"] = refuse
+        self.addCleanup(ns.__setitem__, "_still_valid", real)
+        self.assertEqual(cap.execute(self.ctx("OctoPrint")).status, "failure")
+        self.assertNotIn("bed_level", ns["get_store"](cap).effective()["prefs"])
+
     def test_print_setup_with_unconfirmed_warning_sends_nothing(self):
         for acked in (None, [], ["material:1:2"], "material:1:3"):   # missing, empty, other toolhead, not a list
             with self.subTest(acked=acked):

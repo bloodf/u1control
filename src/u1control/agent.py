@@ -301,10 +301,11 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
         if not gcode.is_u1(cfg):
             raise JobError(tr("this G-code was not sliced for a Snapmaker U1"))
         mapping, filaments, heads, choice = None, gcode.filaments(lines, cfg), None, None
+        done = setup_done(lines)
         if view is not None:
             heads = view["heads"]
             mapping = job_mapping(ams_mapping, filaments, heads)
-            choice = choose(view, filaments, mapping, prefs, lines, cfg) if choose else None
+            choice = choose(view, filaments, mapping, prefs, lines, cfg) if choose and not done else None
             if choice:
                 mapping, heads = choice["map"], choice.get("heads") or heads
                 fans = {k: choice["prefs"][k] for k in u1.COVER_FANS if k in choice["prefs"]}
@@ -313,8 +314,9 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
                 problems = u1.mapping_warnings(filaments, heads, mapping)
                 if problems:
                     raise JobError(tr("%s. Pick other slots in the print dialog, or load the filament.") % "; ".join(problems))
-        lines, _ = gcode.process(lines, cfg, options, mapping, heads, version)
-        gcode.write(tmp, lines, newline)
+        if not done:
+            lines, _ = gcode.process(lines, cfg, options, mapping, heads, version)
+            gcode.write(tmp, lines + ([SETUP_DONE] if choice else []), newline)
         return tmp, mapping, filaments, choice
     except BaseException:
         _remove(tmp)
@@ -322,6 +324,13 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
 
 
 HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")   # as plugin._still_valid
+SETUP_DONE = gcode.MARK + " print setup done"   # last line of G-code that went through print setup
+
+
+def setup_done(lines):
+    """True when this G-code already went through U1 print setup (the slicing pipeline or the printer agent):
+    a second pass shows no window, sends no second pre-print script and changes nothing in it."""
+    return any(line.strip() == SETUP_DONE for line in lines[-50:])
 
 
 def _busy_reason(view):
@@ -384,6 +393,6 @@ def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs
         if cancelled and cancelled():
             raise Cancelled()
         client.print_start(filename)
-        return {"filename": filename, "mapping": mapping, "filaments": filaments, "script": script}
+        return {"filename": filename, "mapping": mapping, "filaments": filaments, "script": script, "choice": choice}
     finally:
         _remove(tmp)

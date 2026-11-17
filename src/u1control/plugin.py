@@ -434,7 +434,10 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
     def on_load(self):
         # OrcaSlicer calls this when the plugin loads, whether or not the tab is enabled or shown.
         global _page_ref
-        _page_ref = weakref.ref(self)   # the print setup's "Plugin settings" opens this tab's Settings
+        try:
+            _page_ref = weakref.ref(self)   # the print setup's "Plugin settings" opens this tab's Settings
+        except TypeError as e:   # a host base class without weak references: no "Plugin settings" switch
+            log("Plugin settings link off: %r" % e)
         _storage()  # a plugin callback: the one place storage() is sure to answer
         use_language()
         try:
@@ -615,11 +618,13 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
         if u1.machine_busy(view):
             raise PrinterError(tr("the U1 is busy (%s); wait for it to finish first")
                                % (view["machine_state"] or view["state"]).lower())
+        if agent.setup_done(lines):   # this G-code went through print setup already: no second window or script
+            return tr("U1 print setup already done for this G-code; nothing sent again")
         filaments = gcode.filaments(lines, cfg)
         heads = view["heads"]
         mapping = u1.auto_map(filaments, heads)
         prefs = self._offered_prefs(options, view["options"])
-        purifier, commands = options["purifier"], False
+        purifier, commands, choice = options["purifier"], False, None
         if options["print_dialog"]:
             cancel = getattr(ctx, "cancelled", None) or getattr(ctx, "canceled", None)
 
@@ -639,9 +644,11 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
         _still_valid(ctx, host, client, heads, mapping)
         lines, mode = gcode.process(lines, cfg, {**options, **cover_fans(prefs), "purifier": purifier}, mapping, heads,
                                     VERSION)
-        gcode.write(ctx.gcode_path, lines, newline)
+        gcode.write(ctx.gcode_path, lines + [agent.SETUP_DONE], newline)
         script = u1.preprint_script(mapping, prefs, commands)
         run_off_thread(lambda: client.gcode(script))
+        if choice:
+            remember_choice(store, options, choice)
         store.update({"printed_before": True})
         filename = clean(getattr(ctx, "output_name", "")) or os.path.basename(ctx.gcode_path)
         service().remember_job(filename, mapping, filaments, host=host, api_key=key, options={
@@ -677,7 +684,7 @@ def printer_commands(client):
     """The printer's command list (GET /printer/gcode/help), read once per print setup; empty when unreadable,
     which offers only the original options."""
     try:
-        return client.gcode_commands()
+        return run_off_thread(client.gcode_commands, timeout=10)   # never on the slicing or UI thread
     except Exception as e:
         log("command list not read (%s); only the basic print options are offered" % e)
         return frozenset()
@@ -712,7 +719,7 @@ def remember_choice(store, options, choice):
 def open_setup(store, options, view, host, client, lines, cfg, filaments, mapping, prefs, name, cancelled):
     """Everything the print setup needs, then the window (job thread). prefs: the basic options as offered so far;
     the extra ones are offered only when the printer has their command. Returns ask_setup's answer plus
-    "commands", and remembers the options when asked to."""
+    "commands". The caller remembers the options (remember_choice) only after the send went through."""
     commands = printer_commands(client)
     saved = options["prefs"] if options["remember_print_options"] else {}
     offered = {**prefs, **u1.offered_extras(saved, view, commands)}
@@ -722,14 +729,16 @@ def open_setup(store, options, view, host, client, lines, cfg, filaments, mappin
               "features": u1.features(commands)}
     choice = ask_setup(setup_job(lines, cfg, name, client), cancelled, filaments, view["heads"], mapping, offered,
                        options["purifier"], client, extras, options["ui_language"], host)
-    remember_choice(store, options, choice)
-    return {**choice, "commands": commands}
+    return {**choice, "commands": commands}   # remembered by the caller once the print was accepted
 
 
-def _run_setup_command(window, host, msg, refresh):
+def _run_setup_command(window, host, msg, refresh, stop):
     """Heads settings in the print setup: the Dashboard's own commands, run by the U1 Control service when it
-    follows this printer. Replies {"type": "reply", "id", "result" | "error"} to the window."""
+    follows this printer. Replies {"type": "reply", "id", "result" | "error"} to the window. Nothing runs once the
+    window was answered or closed (stop set)."""
     cmd, rid, args = msg.get("cmd"), msg.get("id"), msg.get("args") or {}
+    if stop.is_set():
+        return
     try:
         with _service_lock:
             svc = _service
@@ -740,16 +749,24 @@ def _run_setup_command(window, host, msg, refresh):
         reply = {"type": "reply", "id": rid, "result": getattr(svc, "cmd_" + cmd)(**args)}
     except Exception as e:
         reply = {"type": "reply", "id": rid, "error": str(e)}
-    window.post(reply)
+    if stop.is_set():
+        return
+    try:
+        window.post(reply)
+    except Exception as e:   # the window closed meanwhile
+        log("print setup reply not shown: %r" % e)
     refresh()
 
 
 def show_settings_tab():
     """The print setup's "Plugin settings": the U1 Control tab opens its Settings (no host call can bring a tab
-    forward; it shows there once this window is closed)."""
-    page = _page_ref()
-    if page is not None:
-        page.post_message({"type": "show_tab", "tab": "settings"})
+    forward; it shows there once this window is closed). Runs in a host UI callback: never raises."""
+    try:
+        page = _page_ref()
+        if page is not None:
+            page.post_message({"type": "show_tab", "tab": "settings"})
+    except Exception as e:
+        log("Plugin settings not opened: %r" % e)
 
 
 def _clean_answer(answer, filaments, mapping, shown, prefs, purifier, remember_default):
@@ -822,7 +839,7 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
         if msg.get("refresh") and window_box:
             wanted.set()
         if msg.get("type") == "cmd" and window_box:
-            threading.Thread(target=_run_setup_command, args=(window_box[0], host, msg, wanted.set),
+            threading.Thread(target=_run_setup_command, args=(window_box[0], host, msg, wanted.set, stop),
                              name="u1control-setup-cmd", daemon=True).start()
         if msg.get("open_settings"):
             show_settings_tab()
@@ -1285,6 +1302,8 @@ class U1Agent(pa.PrinterAgentBase):
         except Exception as e:
             return self._fail(update_fn, ERR_LP_UPLOAD if stage[0] == "upload" else ERR_LP_PUBLISH, e)
         log("agent: sent %s to %s: %s" % (job["filename"], host, job["script"].replace("\n", " | ")))
+        if job.get("choice"):
+            remember_choice(self._settings(), options, job["choice"])
         self._settings().update({"printed_before": True})
         try:
             service().remember_job(job["filename"], job["mapping"], job["filaments"], host=host, api_key=key, options={

@@ -88,6 +88,30 @@ class WindowTests(unittest.TestCase):   # noqa: D101
         code = self.agent.start_local_print(self.params(ams_mapping="[1, 0]"), self.update, None)   # PETG on PLA
         self.assertEqual((code, windows, self.fake.order), (self.ns["ERR_LP_PUBLISH"], [], []))
 
+    def test_marked_gcode_skips_the_window_and_the_fixes(self):
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        with open(self.path, "a") as f:
+            f.write("\n; u1control: print setup done\n")
+        with open(self.path) as f:
+            before = f.read()
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertEqual(windows, [])
+        self.assertEqual(self.fake.uploads["part.gcode"].decode(), before)   # uploaded unchanged
+        self.assertEqual(len([s for s in self.fake.scripts if "SET_PRINT_EXTRUDER_MAP" in s]), 1)   # one script
+
+    def test_agent_marks_what_it_set_up(self):
+        self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertTrue(self.fake.uploads["part.gcode"].decode().rstrip().endswith("; u1control: print setup done"))
+
+    def test_plugin_settings_never_raises(self):
+        class Gone:
+            def post_message(self, m):
+                raise RuntimeError("webview gone")
+        self.ns["_page_ref"] = lambda: Gone()
+        self.addCleanup(self.ns.__setitem__, "_page_ref", lambda: None)
+        self.ns["show_settings_tab"]()   # logged, no raise
+
     def test_title_and_plugin_settings_link(self):
         posted = []
         page = type("P", (), {"post_message": lambda self, m: posted.append(m)})()
