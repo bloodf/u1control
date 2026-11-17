@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+- Printing through OrcaSlicer's own Print dialog (printer agent `u1control`) now opens the **U1 print setup** window after it, before anything is sent, under the same **Print setup pop-up** setting (always, auto, never). It starts from the slots and options picked in OrcaSlicer's dialog; what you choose there is exactly what is sent. **Don't send**, or cancelling the job in OrcaSlicer, closes it and sends nothing. A busy U1 is refused before it opens.
+- The U1 print setup window shows the printer's name, state (ready or busy, live) and address, the linked Spoolman spool under each toolhead, and a hint when a toolhead with the right material holds another colour.
+- **Remember these options** in the window decides whether the options chosen become the next print's defaults (it starts as the **Remember print options** setting).
+- The window fits a 380 px wide window: one column, buttons wrap.
+
 ## [0.12.0] - 2026-11-16
 
 - U1 Control now speaks Spanish, German and Simplified Chinese as well as English and Portuguese: the U1 Control tab (Dashboard, Files with Time-lapses, Console, Settings), the U1 print setup window, confirmations, empty states, notices and errors, and the progress and error messages u1control shows in OrcaSlicer's Print dialog.

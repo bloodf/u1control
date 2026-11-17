@@ -283,6 +283,26 @@ test('setup without warnings keeps the plain flow; empty toolhead is labelled, n
   eq(__t.submits[0].acknowledged, [], 'nothing to acknowledge');
 `, { mode: 'setup' });
 
+const SETUP_PRINTER = { ...SETUP_DATA, printer: { name: 'Bench U1', busy: false, address: '10.0.0.9' }, spools: { 1: 'Acme Cobalt Blue' }, remember: false,
+  filaments: [{ index: 0, type: 'PLA', colour: '#E5484D' }, { index: 1, type: 'PETG', colour: '#000' }],
+  heads: SETUP_DATA.heads.map(h => h.index === 3 ? { ...h, type: 'PETG' } : h), map: { 0: 0, 1: 3 } };
+test('setup shows the printer, linked spools, a colour hint and remembers on request', `
+  const line = byTest('printer');
+  assert(line && text(line).includes('Bench U1') && text(line).includes('Ready') && text(line).includes('10.0.0.9'), 'printer line: ' + text(line));
+  const t2 = q('button[data-f="0"][data-t="1"]');
+  assert(text(t2).includes('Acme Cobalt Blue') && t2.getAttribute('aria-label').includes('Acme Cobalt Blue'), 'spool named on T2: ' + t2.getAttribute('aria-label'));
+  eq(qa('[data-test="spool"]').length, 2, 'one spool line per filament row for T2 only');
+  assert(text(byTest('colour-hint')).includes('T1 holds another colour'), 'colour hint for filament 1');
+  assert(!alerts() && !byTest('send').disabled, 'a colour hint needs no acknowledgement');
+  await post({heads: HEADS.map(h => h.index === 3 ? {...h, type: 'PETG'} : h.index === 0 ? {...h, colour: '#E5484D'} : h), busy: true, map: {}});
+  assert(!byTest('colour-hint'), 'hint gone once the colours match');
+  assert(text(byTest('printer')).includes('Busy'), 'live busy state');
+  assert(!q('#su-remember').checked, 'remember starts as the setting says');
+  await click(q('#su-remember'));
+  await click(byTest('send'));
+  eq(__t.submits.map(m => m.remember), [true], 'sends the remember choice');
+`, { mode: 'setup', data: SETUP_PRINTER });
+
 test('setup keeps focus on the chosen button across clicks and refreshes', `
   const b = q('button[data-f="0"][data-t="3"]');
   b.focus();
@@ -1108,7 +1128,7 @@ try {
   await Promise.all(Array.from({ length: Math.min(workers, chosen.length) }, async (_, worker) => {
     for (let k = worker; k < chosen.length; k += workers) {
       const sc = chosen[k];
-      const boot = sc.mode === 'setup' ? { mode: 'setup', version: 'test', lang: sc.lang ?? 'en', data: SETUP_DATA }
+      const boot = sc.mode === 'setup' ? { mode: 'setup', version: 'test', lang: sc.lang ?? 'en', data: sc.data ?? SETUP_DATA }
         : { mode: 'app', version: 'test', lang: sc.lang ?? 'en', pref: sc.pref ?? 'auto' };
       const file = join(dir, `p${k}.html`);
       await writeFile(file, preparePage(page, boot));

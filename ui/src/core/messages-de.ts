@@ -588,6 +588,11 @@ export const de: Record<MessageKey, string> = {
   'setup.thumb': 'Plattenvorschau',
   'setup.to': 'an {address}',
   'setup.live': 'Die Werkzeugköpfe werden live vom Drucker aktualisiert.',
+  'setup.ready': 'Bereit',
+  'setup.headBtnSpool': 'Filament {f} auf T{n}, {type}, Spule {spool}',
+  'setup.colourDiffers': 'Filament {f}: T{n} hat eine andere Farbe',
+  'setup.remember': 'Diese Optionen merken',
+  'setup.rememberHint': 'Die nächste Druckvorbereitung beginnt damit.',
 
   // interface 4: app bar, hero, banners, toolhead cards
   'bar.none': 'Kein Drucker',

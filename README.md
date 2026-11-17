@@ -122,7 +122,7 @@ Every detail is in [docs/features.md](docs/features.md), and every setting in [d
 
 Automagic is the default mode: everything that can run by itself does, and the window opens only for the first print, an empty toolhead, another material, two filaments for one toolhead, or no exact material match. Expert turns each step into a setting, and your Expert choices are kept while Automagic is on.
 
-To use OrcaSlicer's own Print dialog instead, turn on **Use printer agents instead of print hosts** in **Preferences**, then set **Printer Agent** to `u1control` in your U1 printer preset. [The steps and what each box does](docs/features.md#printer-agent).
+To use OrcaSlicer's own Print dialog instead, turn on **Use printer agents instead of print hosts** in **Preferences**, then set **Printer Agent** to `u1control` in your U1 printer preset. The U1 print setup window then opens after OrcaSlicer's dialog, starting from the slots you picked there. [The steps and what each box does](docs/features.md#printer-agent).
 
 ## 🔒 Privacy and safety
 

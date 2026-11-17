@@ -587,6 +587,11 @@ export const es: Record<MessageKey, string> = {
   'setup.thumb': 'Previsualización de la cama',
   'setup.to': 'a {address}',
   'setup.live': 'Los cabezales se actualizan en directo desde la impresora.',
+  'setup.ready': 'Lista',
+  'setup.headBtnSpool': 'Filamento {f} en T{n}, {type}, bobina {spool}',
+  'setup.colourDiffers': 'Filamento {f}: T{n} tiene otro color',
+  'setup.remember': 'Recordar estas opciones',
+  'setup.rememberHint': 'La próxima preparación empieza con ellas.',
 
   // interface 4: app bar, hero, banners, toolhead cards
   'bar.none': 'Sin impresora',

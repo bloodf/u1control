@@ -586,6 +586,11 @@ export const en = {
   'setup.thumb': 'Plate preview',
   'setup.to': 'to {address}',
   'setup.live': 'Toolheads update live from the printer.',
+  'setup.ready': 'Ready',
+  'setup.headBtnSpool': 'Filament {f} on T{n}, {type}, spool {spool}',
+  'setup.colourDiffers': 'Filament {f}: T{n} holds another colour',
+  'setup.remember': 'Remember these options',
+  'setup.rememberHint': 'The next print setup starts from them.',
 
   // interface 4: app bar, hero, banners, toolhead cards
   'bar.none': 'No printer',
@@ -1214,6 +1219,11 @@ export const ptBR: Record<MessageKey, string> = {
   'setup.thumb': 'Prévia da placa',
   'setup.to': 'para {address}',
   'setup.live': 'As cabeças são atualizadas ao vivo pela impressora.',
+  'setup.ready': 'Pronta',
+  'setup.headBtnSpool': 'Filamento {f} em T{n}, {type}, carretel {spool}',
+  'setup.colourDiffers': 'Filamento {f}: T{n} tem outra cor',
+  'setup.remember': 'Lembrar estas opções',
+  'setup.rememberHint': 'A próxima preparação começa com elas.',
 
   'bar.none': 'Sem impressora',
   'bar.busy': 'Ocupada',

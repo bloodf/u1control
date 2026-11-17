@@ -59,10 +59,18 @@ Then **Print** in OrcaSlicer opens its own print dialog:
   Unticking a box turns that option off. OrcaSlicer remembers the box; tick it again to go back to
   U1 Control's setting. Auto-refill, tangle detection, unload when done and
   light off when done come from the U1 Control settings (the options you last chose), or the printer's own.
+- Then U1 Control's own **U1 print setup** window opens on top, before anything is sent, under the same
+  **Settings > Print setup pop-up** rule as the print-host path (always; auto: only when something needs a
+  decision, such as the first print, an empty toolhead, another material or two filaments on one toolhead;
+  never). It starts from the slots and options picked in OrcaSlicer's dialog and shows the printer and
+  its state, each toolhead's material, colour and linked Spoolman spool, and a hint when a toolhead holds
+  another colour. Change any slot or option there; **Remember these options** keeps them for the next
+  print. **Don't send**, or cancelling the job in OrcaSlicer, sends nothing.
 - u1control applies the same G-code fixes as below, then uploads the file, sends the toolhead map and
   options, and starts the print.
-- A busy U1 (printing, loading, calibrating, updating), an empty toolhead or another material in a picked
-  slot stops the print before anything is sent, with the reason in OrcaSlicer's dialog. Both are checked
+- A busy U1 (printing, loading, calibrating, updating) stops the print before the window opens. An empty
+  toolhead or another material in a picked slot needs the window's "send anyway" check (without the window,
+  it stops the print) before anything is sent, with the reason in OrcaSlicer's dialog. Both are checked
   again after the upload; if something changed, the file stays on the U1 and the print isn't started.
 
 **Send** uploads the fixed G-code without starting it, and refuses the name of the file the U1 is printing. The Device tab shows status, temperatures, the
@@ -87,6 +95,9 @@ marcadas, então as opções de impressão do U1 Control decidem: uma opção s�
 ligada no U1 Control (por padrão nivelamento e calibração de fluxo ligados, time-lapse desligado); desmarcar
 a caixa a desliga. O OrcaSlicer lembra a caixa; marque-a de novo para voltar ao ajuste do U1 Control. Reabastecimento automático, detecção de
 emaranhado, descarregar ao terminar e apagar a luz ao terminar vêm dos ajustes do U1 Control. O u1control
+abre em seguida a janela **Preparar impressão na U1** (mesma regra de **Ajustes > Janela de preparo**),
+já com os slots e opções escolhidos, a impressora, o carretel do Spoolman de cada cabeça e um aviso quando a
+cor é outra; **Lembrar estas opções** guarda as escolhas e **Não enviar** não envia nada. O u1control
 aplica as mesmas correções de G-code, envia o arquivo, o mapa das cabeças e as opções, e inicia a
 impressão. Uma U1 ocupada, uma cabeça vazia ou outro material no slot escolhido impedem o envio, com o
 motivo na janela do OrcaSlicer. O caminho pelo host de impressão (preparo de impressão da U1) continua
