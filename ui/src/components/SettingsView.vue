@@ -27,7 +27,7 @@ const showKey = ref(false);
 const smInfo = computed(() => s.spoolsError || (s.spoolsLoaded
   ? (s.spoolsVia === 'moonraker' ? t('heads.source.printer', { n: s.spools.length }) : t('heads.source.direct', { n: s.spools.length })) : t('sm.notLoaded')));
 
-const PREFS = ['bed_level', 'flow_calibrate', 'time_lapse_camera', 'auto_refill', 'refill_any_colour', 'tangle_detect', 'unload_when_done', 'light_off_when_done'];
+const PREFS = ['bed_level', 'flow_calibrate', 'time_lapse_camera', 'auto_refill', 'refill_any_colour', 'tangle_detect', 'unload_when_done', 'light_off_when_done', 'spaghetti_detect', 'bed_check'];
 const prefs = computed(() => Object.entries(s.status?.options ?? {}));
 const prefLabel = (k: string) => (PREFS.includes(k) ? t(`pref.${k}` as any) : k);
 async function setPref(k: string, v: boolean) {
