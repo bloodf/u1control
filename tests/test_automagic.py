@@ -31,13 +31,13 @@ class SettingsTests(unittest.TestCase):
     def test_modes(self):
         st, d = self.store()
         eff = st.effective()
-        self.assertEqual((eff["mode"], eff["print_dialog"], eff["printer_name"]), ("automagic", "auto", "Snapmaker U1"))
-        st.update({"print_dialog": "never", "chamber_wait": False, "host": "1.2.3.4", "bogus": 1, "purifier": "nope"})
+        self.assertEqual((eff["mode"], eff["print_dialog"], eff["printer_name"]), ("automagic", True, "Snapmaker U1"))
+        st.update({"print_dialog": False, "chamber_wait": False, "host": "1.2.3.4", "bogus": 1, "purifier": "nope"})
         eff = st.effective()
-        self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["host"]), ("auto", True, "1.2.3.4"))  # ignored
+        self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["host"]), (True, True, "1.2.3.4"))  # ignored
         st.update({"mode": "expert"})
         eff = st.effective()
-        self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["purifier"]), ("never", False, "auto"))
+        self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["purifier"]), (False, False, "auto"))
         self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective(), eff)  # persisted
 
     def test_camera_fps(self):
@@ -63,27 +63,6 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.with_pipeline(["Other"]), 'Other;"U1 print setup"')
         self.assertIsNone(settings.with_pipeline('"U1 print setup"'))
         self.assertEqual(settings.parse_strings('a;"b c";"d\\"e"'), ["a", "b c", 'd"e'])
-
-
-class DialogTests(unittest.TestCase):
-    def setUp(self):
-        self.heads = u1.describe_toolheads(fakes.task_config())
-        self.fils = [{"index": 0, "type": "PLA", "colour": "#FF0000"}, {"index": 1, "type": "PETG", "colour": "#FFFFFF"}]
-        self.mapping = u1.auto_map(self.fils, self.heads)
-
-    def nd(self, fils=None, mapping=None, known=True, first=False):
-        fils = fils or self.fils
-        return u1.needs_dialog(fils, self.heads, mapping or u1.auto_map(fils, self.heads), known, first)
-
-    def test_cases(self):
-        self.assertFalse(self.nd())
-        self.assertTrue(self.nd(first=True))
-        self.assertTrue(self.nd(known=False))
-        self.assertTrue(self.nd(mapping={0: 2, 1: 1}))  # empty head -> warning
-        self.assertTrue(self.nd(fils=[{"index": 0, "type": "ABS", "colour": "#FF0000"}]))  # no head with ABS
-        self.assertTrue(self.nd(fils=[{"index": 0, "type": "PLA+", "colour": "#FF0000"}]))  # family only
-        both = [{"index": 0, "type": "PETG", "colour": "#FFFFFF"}, {"index": 1, "type": "PETG", "colour": "#EEEEEE"}]
-        self.assertTrue(self.nd(fils=both))  # two filaments want the single PETG head
 
 
 class PluginBase(unittest.TestCase):
@@ -129,6 +108,111 @@ class PipelineTests(PluginBase):
         configs = [m for m in getattr(page, "posted", []) if m["type"] == "config"]
         self.assertEqual(configs[-1]["pipeline"], {"preset": "Now selected", "on": True})
 
+    def test_presets_are_read_on_the_ui_thread_and_written_off_it(self):
+        """_auto_pipeline runs on the UI thread (page messages, lifecycle events): it reads the presets there and
+        only the write (begin_update, which blocks until the UI thread applies it) runs on a plugin thread."""
+        import threading
+        orca, ns, page = self.page({"slicing_pipeline_plugin": ["Other"], "name": "My process"})
+        readers, real = [], orca.host.preset_bundle
+
+        def bundle():
+            readers.append(threading.current_thread().name)
+            return real()
+        orca.host.preset_bundle = bundle
+        page._auto_pipeline()
+        self.assertTrue(wait_for(lambda: any(m["type"] == "config" for m in getattr(page, "posted", []))))
+        self.assertEqual(len(orca.process_calls), 1)
+        self.assertTrue(readers)
+        self.assertEqual(set(readers), {threading.current_thread().name})
+        config = [m for m in page.posted if m["type"] == "config"][-1]
+        self.assertEqual(config["pipeline"], {"preset": "My process", "on": True})
+
+    def test_busy_lock_leaves_the_preset_to_offer_again(self):
+        _, ns, page = self.page({"slicing_pipeline_plugin": ["Other"], "name": "My process"})
+        lock = ns["_presets_lock"]
+        self.assertTrue(lock.acquire(blocking=False))
+        try:
+            page._auto_pipeline()
+        finally:
+            lock.release()
+        self.assertEqual(ns["ensure_pipeline"](page._config()), "My process")
+
+    def off_main(self, fn):
+        """fn() on a worker thread, as OrcaSlicer runs scripts and preset jobs; its result or exception."""
+        import threading
+        box = {}
+
+        def run():
+            try:
+                box["value"] = fn()
+            except BaseException as e:
+                box["error"] = e
+        t = threading.Thread(target=run, name="worker")
+        t.start()
+        t.join(10)
+        if "error" in box:
+            raise box["error"]
+        return box.get("value")
+
+    def with_ui_queue(self, orca, ns):
+        """queue_on_main that runs tasks on a thread named "ui"; records the thread of every preset read and write."""
+        import threading
+        seen = []
+
+        def queue(task):
+            threading.Thread(target=task, name="ui").start()
+        ns["U1Agent"]().set_queue_on_main_fn(queue)
+        self.addCleanup(ns.__setitem__, "_queue_on_main", None)
+        real_bundle, filament, process = orca.host.preset_bundle, orca.host.preset.filament, orca.host.preset.process
+
+        def bundle():
+            seen.append(("read", threading.current_thread().name))
+            return real_bundle()
+
+        def update(real):
+            def begin(*a):
+                seen.append(("write", threading.current_thread().name))
+                return real(*a)
+            return begin
+        orca.host.preset_bundle = bundle
+        filament.begin_update, process.begin_update = update(filament.begin_update), update(process.begin_update)
+        return seen
+
+    def test_scripts_read_presets_on_the_ui_thread(self):
+        """Scripts run on a worker thread: on_ui_thread has queue_on_main run the read on the UI thread and waits."""
+        import threading
+        orca, ns, _ = self.page({})
+        self.with_ui_queue(orca, ns)
+        ran = []
+        self.assertEqual(self.off_main(lambda: ns["on_ui_thread"](lambda: ran.append(threading.current_thread().name) or 7)), 7)
+        self.assertEqual(ran, ["ui"])
+        self.assertEqual(ns["on_ui_thread"](lambda: threading.current_thread().name), threading.current_thread().name)  # on it already
+
+        def no_address():
+            raise ValueError("no address")
+        with self.assertRaises(ValueError):
+            self.off_main(lambda: ns["on_ui_thread"](no_address))
+        ns["_queue_on_main"], ns["UI_WAIT"] = (lambda task: None), 0.05   # the UI thread does not answer in time
+        with self.assertRaises(TimeoutError):
+            self.off_main(lambda: ns["on_ui_thread"](lambda: 1))
+
+    def test_sync_project_reads_on_the_ui_thread_and_writes_off_it(self):
+        meta = {"Generic PLA @Snapmaker U1": {"default_filament_colour": ["#0000FF"]}}
+        orca, ns = self.load(filament_names=list(meta), filament_meta=meta)
+        seen = self.with_ui_queue(orca, ns)
+        heads = [{"index": 0, "loaded": True, "type": "PLA", "vendor": "Generic", "colour": "#0000FF", "sub_type": ""}]
+        spool = {"id": 5, "filament_id": 1, "vendor": "Generic", "material": "PLA", "name": "x", "colour": "#0000FF"}
+        done, problems = self.off_main(lambda: ns["sync_project"](heads, [], {}, bound=lambda i: spool))
+        self.assertEqual((len(done), problems), (1, []))
+        self.assertEqual(sorted(set(seen)), [("read", "ui"), ("write", "worker")])
+
+    def test_process_tuning_reads_on_the_ui_thread_and_writes_off_it(self):
+        orca, ns, _ = self.page({"name": "0.20 Standard @Snapmaker U1", "wall_generator": "arachne"})
+        seen = self.with_ui_queue(orca, ns)
+        result = self.off_main(lambda: ns["ApplyForkTuning"]().execute())
+        self.assertIn("Updated", result.message)
+        self.assertEqual(sorted(set(seen)), [("read", "ui"), ("write", "worker")])
+
     def test_skips(self):
         orca, ns, page = self.page({"slicing_pipeline_plugin": '"U1 print setup"'})
         self.assertIsNone(ns["ensure_pipeline"](page._config()))
@@ -155,13 +239,24 @@ class PipelineTests(PluginBase):
         orca, ns, page = self.page({"slicing_pipeline_plugin": ""})
         msg = page._config_message()
         self.assertEqual(msg["mode"], "automagic")
-        self.assertTrue(any(a["key"] == "print_dialog" and a["choices"] for a in msg["automations"]))
+        self.assertTrue(any(a["key"] == "print_dialog" and a["choices"] is None for a in msg["automations"]))
         self.assertFalse(msg["spooler"]["installed"])
         page.on_message({"type": "save_settings", "settings": {"spooler_hint_dismissed": True, "api_key": "••••", "host": "127.0.0.1:1"}})
         config = [m for m in page.posted if m["type"] == "config"][-1]
         self.assertTrue(config["spooler"]["dismissed"])
         self.assertTrue(wait_for(lambda: any("U1 print setup added" in m.get("text", "") for m in page.posted)))
         ns["service"]().close()
+
+    def test_requirements_check_again_looks_for_spooler_again(self):
+        orca, ns, page = self.page({"slicing_pipeline_plugin": ""})
+        self.addCleanup(lambda: ns["service"]().close())
+        page.on_message({"type": "requirements", "recheck": True})
+        config = [m for m in page.posted if m["type"] == "config"]
+        self.assertEqual(len(config), 1)
+        self.assertFalse(config[0]["spooler"]["installed"])
+        items = next(m for m in page.posted if m["type"] == "requirements")["items"]
+        self.assertEqual(next(i for i in items if i["id"] == "spooler")["status"], "missing")
+        self.assertFalse([m for m in page.posted if m["type"] == "cmd"])   # the printer is not touched
 
     def test_camera_fps_message_paces_frames(self):
         _, ns, page = self.page({"slicing_pipeline_plugin": ""})
@@ -176,7 +271,7 @@ class PipelineTests(PluginBase):
 
 
 class DialogFlowTests(PluginBase):
-    def test_second_print_skips_dialog(self):
+    def test_every_print_shows_the_setup(self):
         fake = fakes.FakePrinter()
         self.addCleanup(fake.close)
         fd, path = tempfile.mkstemp(suffix=".gcode")
@@ -191,8 +286,7 @@ class DialogFlowTests(PluginBase):
         write(path, SAMPLE)
         fake.task["filament_type"] = ["PLA", "PETG", "NONE", "PLA"]
         self.assertEqual(cap.execute(ctx).status, "success")
-        # second print: options known, mapping clean -> auto mode sends without the pop-up
-        self.assertEqual(len(orca.windows), 1)
+        self.assertEqual(len(orca.windows), 2)   # shown before every print while the setting is on
 
 
 class SpoolerTests(PluginBase):

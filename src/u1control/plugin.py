@@ -8,6 +8,8 @@ import sys
 import tempfile
 import threading
 import time
+import urllib.parse
+import weakref
 
 import orca
 
@@ -16,9 +18,13 @@ import extended as ext
 import gcode
 import i18n
 import peers
+import requirements
 import settings
+import spoolman as sm
 import spooler_bridge
+import preview
 import u1
+import usage
 from i18n import tr
 from moonraker import Moonraker, PrinterError
 from service import Service, Target
@@ -31,8 +37,11 @@ _link = None             # peers.SpoolerLink while the plugin is loaded (U1Contr
 LEDGER_FILE = "usage_ledger.json"
 _store = None
 _store_lock = threading.Lock()
+_page_ref = lambda: None   # the U1 Control tab once loaded (weakref)
 _pipeline_done = set()   # process presets U1 print setup was already offered for this session
 _presets_lock = threading.Lock()   # preset edits (begin_update/commit) run one at a time, off the UI thread
+_queue_on_main = None    # OrcaSlicer's queue_on_main, once it hands it to the printer agent
+UI_WAIT = 5.0            # seconds a script's worker thread waits for the UI thread to read the presets
 SETUP_TIMEOUT = 15 * 60  # seconds the print setup window may stay open before the send is abandoned
 
 
@@ -332,6 +341,11 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                         self.post_message({"type": "notice", "text": text})
                     if not self._background(job):
                         self.post_message({"type": "notice", "text": tr("Another preset update is running; try again in a moment.")})
+            elif kind == "requirements":   # Settings > Requirements; recheck: its "Check again" (also looks for Spooler again)
+                recheck = bool(data.get("recheck"))
+                self.post_message({"type": "requirements", "items": requirements_state(svc, self._config(), recheck)})
+                if recheck:   # the Spooler hints elsewhere on the page read the config message
+                    self.post_message(self._config_message())
             elif kind == "ui_language":   # the page's language choice; nothing else is touched
                 self._settings().update({"ui_language": data.get("value")})
                 use_language(self)
@@ -393,18 +407,28 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
         return True
 
     def _auto_pipeline(self):
-        cfg = self._config()
+        """UI thread (page messages, lifecycle events): presets are read here, only the write runs on a plugin
+        thread."""
+        try:
+            plan = pipeline_plan(self._config())
+        except Exception as e:
+            log("auto-add U1 print setup failed: %r" % e)
+            plan = None
+        message = self._config_message()   # the Settings page says whether this preset runs it
 
         def job():
             try:
-                name = ensure_pipeline(cfg)
+                name = apply_pipeline(plan)
                 if name:
+                    message["pipeline"] = {"preset": name, "on": True}
                     self.post_message({"type": "notice", "text": tr("U1 print setup added to %s; save the preset to keep it") % name})
             except Exception as e:
                 log("auto-add U1 print setup failed: %r" % e)
-            self.post_message(self._config_message())   # the Settings page says whether this preset runs it
+            self.post_message(message)
         if not self._background(job):   # another preset edit is running: still say which preset is selected now
-            self.post_message(self._config_message())
+            if plan is not None:
+                _pipeline_done.discard(plan[0])   # not written: offered again on the next event
+            self.post_message(message)
 
     def on_lifecycle_event(self, event, ctx):
         kind = getattr(ctx, "msg", "")
@@ -417,6 +441,11 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
 
     def on_load(self):
         # OrcaSlicer calls this when the plugin loads, whether or not the tab is enabled or shown.
+        global _page_ref
+        try:
+            _page_ref = weakref.ref(self)   # the print setup's "Plugin settings" opens this tab's Settings
+        except TypeError as e:   # a host base class without weak references: no "Plugin settings" switch
+            log("Plugin settings link off: %r" % e)
         _storage()  # a plugin callback: the one place storage() is sure to answer
         use_language()
         try:
@@ -433,13 +462,63 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                 _service = None
 
 
+# ====================================================================== requirements
+
+_agent_used = False      # OrcaSlicer connected a printer through U1Agent this session
+_agent_selected = None   # cached answer of orca.host.selected_printer(); None = not asked yet
+
+
+def _field(obj, name):
+    return obj.get(name) if isinstance(obj, dict) else getattr(obj, name, None)
+
+
+def _selected_agent_is_ours():
+    """Whether OrcaSlicer's selected printer runs through our agent. Host call: UI thread (page message) only.
+    OrcaSlicer.conf can't be read from a plugin, so this and _agent_used are the only signs of the preference."""
+    try:
+        printer = orca.host.selected_printer()
+    except Exception as e:   # older OrcaSlicer without the call, or not allowed here
+        log("selected printer not readable (%r)" % e)
+        return False
+    agent_id = _field(printer, "agent") if printer is not None else None
+    if agent_id is not None and not isinstance(agent_id, str):
+        agent_id = _field(agent_id, "id")
+    return clean(agent_id) in (AGENT_ID, AGENT_NAME)
+
+
+def _agent_seen():
+    global _agent_used
+    _agent_used = True
+
+
+def printer_agents_on(recheck=False):
+    global _agent_selected
+    if _agent_used:
+        return True
+    if recheck or _agent_selected is None:
+        _agent_selected = _selected_agent_is_ours()
+    return _agent_selected
+
+
+def requirements_state(svc, cfg, recheck=False):
+    """[{id, status, details}] for Settings > Requirements, from what the plugin already knows (no printer I/O).
+    Only asked from a page message, never at import or while OrcaSlicer registers the plugin."""
+    with svc.lock:
+        firmware, link = dict(svc.firmware), svc.spoolman_link
+    return requirements.check(printer_agents_on(recheck), firmware, clean(cfg.get("spoolman_url")), link, spooler_state())
+
+
 # ====================================================================== print setup
 
 def ensure_pipeline(cfg):
-    """Add "U1 print setup" to the selected U1 process preset's Slicing Pipeline Plugin, once per
-    preset name per session. Call from a plugin thread or the Script worker, never the UI thread
-    (begin_update blocks until the UI thread has applied the change).
-    Returns the preset name when it was added."""
+    """pipeline_plan then apply_pipeline, on one thread (tests and callers that are already off the UI thread)."""
+    return apply_pipeline(pipeline_plan(cfg))
+
+
+def pipeline_plan(cfg):
+    """UI thread: (process preset name, new slicing_pipeline_plugin value) when "U1 print setup" should be added to
+    the selected U1 process preset (once per preset name per session), else None. Only reads presets: OrcaSlicer's
+    preset bundle is read on the UI thread, never on a plugin thread."""
     if not cfg.get("auto_add_pipeline"):
         return None
     bundle = orca.host.preset_bundle()
@@ -453,6 +532,15 @@ def ensure_pipeline(cfg):
     value = settings.with_pipeline(bundle.full_config_value("slicing_pipeline_plugin"))
     if value is None:
         return None
+    return name, value
+
+
+def apply_pipeline(plan):
+    """Plugin thread, never the UI thread (begin_update blocks until the UI thread has applied the change): write a
+    pipeline_plan. Returns the preset name when it was added."""
+    if plan is None:
+        return None
+    name, value = plan
     tx = orca.host.preset.process.begin_update("")
     tx.set("slicing_pipeline_plugin", value)
     tx.commit()
@@ -480,8 +568,7 @@ def pipeline_state():
         return None
 
 
-class Cancelled(Exception):
-    pass
+Cancelled = agent.Cancelled   # one "the user said no" for the pipeline and the agent (nothing is sent)
 
 
 COVER_TEXT = {"off": "left as sliced", "keep-warm": "keep warm", "weak": "weak cooling", "strong": "strong cooling"}
@@ -539,28 +626,37 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
         if u1.machine_busy(view):
             raise PrinterError(tr("the U1 is busy (%s); wait for it to finish first")
                                % (view["machine_state"] or view["state"]).lower())
+        if agent.setup_done(lines):   # this G-code went through print setup already: no second window or script
+            return tr("U1 print setup already done for this G-code; nothing sent again")
         filaments = gcode.filaments(lines, cfg)
         heads = view["heads"]
         mapping = u1.auto_map(filaments, heads)
         prefs = self._offered_prefs(options, view["options"])
-        purifier = options["purifier"]
-        dialog = options["print_dialog"]
-        if dialog == "always" or (dialog == "auto" and u1.needs_dialog(
-                filaments, heads, mapping, bool(view["options"]), not options["printed_before"])):
-            choice = self._ask(ctx, lines, cfg, filaments, heads, mapping, prefs, purifier, client)
-            mapping, prefs, purifier = choice["map"], choice["prefs"], choice["purifier"]
+        purifier, commands, choice = options["purifier"], False, None
+        if options["print_dialog"]:
+            cancel = getattr(ctx, "cancelled", None) or getattr(ctx, "canceled", None)
+
+            def slicing_cancelled():
+                try:
+                    return bool(cancel() if callable(cancel) else cancel)
+                except Exception:
+                    return False
+            choice = open_setup(store, options, view, host, client, lines, cfg, filaments, mapping, prefs,
+                                clean(getattr(ctx, "output_name", "")), slicing_cancelled)
+            mapping, prefs, purifier, commands = choice["map"], choice["prefs"], choice["purifier"], choice["commands"]
             heads = choice.get("heads") or heads
-            if options["remember_print_options"]:
-                store.update({"prefs": prefs, **({"purifier": purifier} if options["mode"] == settings.EXPERT else {})})
         else:
             problems = u1.mapping_warnings(filaments, heads, mapping)
             if problems:
-                raise PrinterError(tr("%s. Set the print setup pop-up to auto or always to choose toolheads.") % "; ".join(problems))
+                raise PrinterError(tr("%s. Turn on \"Show print setup before sending\" to choose toolheads.") % "; ".join(problems))
         _still_valid(ctx, host, client, heads, mapping)
-        lines, mode = gcode.process(lines, cfg, {**options, "purifier": purifier}, mapping, heads, VERSION)
-        gcode.write(ctx.gcode_path, lines, newline)
-        script = u1.preprint_script(mapping, prefs)
+        lines, mode = gcode.process(lines, cfg, {**options, **cover_fans(prefs), "purifier": purifier}, mapping, heads,
+                                    VERSION)
+        gcode.write(ctx.gcode_path, lines + [agent.SETUP_DONE], newline)
+        script = u1.preprint_script(mapping, prefs, commands)
         run_off_thread(lambda: client.gcode(script))
+        if choice:
+            remember_choice(store, options, choice)
         store.update({"printed_before": True})
         filename = clean(getattr(ctx, "output_name", "")) or os.path.basename(ctx.gcode_path)
         service().remember_job(filename, mapping, filaments, host=host, api_key=key, options={
@@ -580,93 +676,220 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
                 prefs[key] = bool(saved[key]) if key in saved else printer_opts[key]
         return prefs
 
-    def _ask(self, ctx, lines, cfg, filaments, heads, mapping, prefs, purifier, client):
-        ui = orca.host.ui
-        data = {
-            "job": {**gcode.summary(lines, cfg), "name": clean(getattr(ctx, "output_name", "")),
-                    "address": client.address, "thumbnail": gcode.thumbnail(lines)},
-            "filaments": filaments, "heads": heads, "map": {str(k): v for k, v in mapping.items()},
-            "prefs": prefs, "labels": {p[0]: p[2] for p in u1.PREFERENCES},
-            "purifier": purifier, "auto_purifier": u1.purifier_mode(filaments),
-        }
-        html = page_html("setup", data, language=self._settings().effective()["ui_language"])
-        done, ready, wanted, stop = (threading.Event() for _ in range(4))
-        result = {}
-        window_box = []
-        shown = [heads]   # the toolheads the window shows now; the choice is checked against them
 
-        def refresher():   # one long-lived thread; refresh requests that arrive while it is busy coalesce
-            while not stop.is_set():
-                if not wanted.wait(0.5):
-                    continue
-                wanted.clear()
-                try:
-                    fresh = u1.summarize(client.query(u1.STATUS_OBJECTS))["heads"]
-                    shown.append(fresh)
-                    window_box[0].post({"heads": fresh, "map": {str(k): v for k, v in
-                                                                u1.auto_map(filaments, fresh).items()}})
-                except Exception as e:
-                    log("refresh failed: %s" % e)
 
-        def on_message(msg):
-            if not isinstance(msg, dict):
-                return
-            if msg.get("ready"):
-                ready.set()
-            if msg.get("refresh") and window_box:
-                wanted.set()
 
-        def on_submit(msg):
-            result["data"] = msg
-            done.set()
 
-        cancel = getattr(ctx, "cancelled", None) or getattr(ctx, "canceled", None)
+SETUP_COMMANDS = ("spools", "set_filament", "bind_spool", "unbind_spool")   # Heads settings in the print setup
 
-        def slicing_cancelled():
+
+def cover_fans(prefs):
+    """The top-cover fan speeds chosen in the print setup, for gcode.process."""
+    return {k: prefs[k] for k in u1.COVER_FANS if k in prefs}
+
+
+def printer_commands(client):
+    """The printer's command list (GET /printer/gcode/help), read once per print setup; empty when unreadable,
+    which offers only the original options."""
+    try:
+        return run_off_thread(client.gcode_commands, timeout=10)   # never on the slicing or UI thread
+    except Exception as e:
+        log("command list not read (%s); only the basic print options are offered" % e)
+        return frozenset()
+
+
+def setup_job(lines, cfg, name, client):
+    """The print shown at the top of the print setup, from the sliced G-code only: name, time, weight, layers,
+    tool changes, plate preview and the top-down path preview."""
+    return {**gcode.summary(lines, cfg), "name": name, "address": client.address, "thumbnail": gcode.thumbnail(lines),
+            "tool_changes": preview.tool_changes(lines), "preview": preview.paths(lines)}
+
+
+def rfid_flags(view):
+    """[bool] per toolhead: it read an RFID tag. With "official", what the Dashboard calls a tagged head."""
+    return [bool(tag) for tag in (view.get("rfid") or [])]
+
+
+def setup_spools(host):
+    """{"<toolhead>": {"name", "colour"}} for the heads linked to a Spoolman spool, from what the U1 Control tab
+    already read (no network); {} while it isn't running or follows another printer."""
+    with _service_lock:
+        svc = _service
+    try:
+        return svc.spool_names(host) if svc is not None else {}
+    except Exception as e:
+        log("spool names not read: %r" % e)
+        return {}
+
+
+def remember_choice(store, options, choice):
+    """"Remember these options" ticked: the next print setup starts from these options."""
+    if choice.get("remember"):
+        store.update({"prefs": choice["prefs"],
+                      **({"purifier": choice["purifier"]} if options["mode"] == settings.EXPERT else {})})
+
+
+def open_setup(store, options, view, host, client, lines, cfg, filaments, mapping, prefs, name, cancelled):
+    """Everything the print setup needs, then the window (job thread). prefs: the basic options as offered so far;
+    the extra ones are offered only when the printer has their command. Returns ask_setup's answer plus
+    "commands". The caller remembers the options (remember_choice) only after the send went through."""
+    commands = printer_commands(client)
+    saved = options["prefs"] if options["remember_print_options"] else {}
+    offered = {**prefs, **u1.offered_extras(saved, view, commands)}
+    extras = {"printer": {"name": settings.printer_label(clean(options.get("printer_name"))),
+                          "busy": u1.machine_busy(view), "address": host},
+              "spools": setup_spools(host), "remember": bool(options["remember_print_options"]),
+              "features": u1.features(commands), "tags": rfid_flags(view)}
+    choice = ask_setup(setup_job(lines, cfg, name, client), cancelled, filaments, view["heads"], mapping, offered,
+                       options["purifier"], client, extras, options["ui_language"], host)
+    return {**choice, "commands": commands}   # remembered by the caller once the print was accepted
+
+
+def _run_setup_command(window, host, msg, refresh, stop):
+    """Heads settings in the print setup: the Dashboard's own commands, run by the U1 Control service when it
+    follows this printer. Replies {"type": "reply", "id", "result" | "error"} to the window. Nothing runs once the
+    window was answered or closed (stop set)."""
+    cmd, rid, args = msg.get("cmd"), msg.get("id"), msg.get("args") or {}
+    if stop.is_set():
+        return
+    try:
+        with _service_lock:
+            svc = _service
+        if cmd not in SETUP_COMMANDS or not isinstance(args, dict):
+            raise ValueError(tr("unknown command"))
+        if svc is None or svc.target is None or svc.target.ident != usage.printer_ident(host):
+            raise PrinterError(tr("open the U1 Control tab for this printer to change its toolheads"))
+        reply = {"type": "reply", "id": rid, "result": getattr(svc, "cmd_" + cmd)(**args)}
+    except Exception as e:
+        reply = {"type": "reply", "id": rid, "error": str(e)}
+    if stop.is_set():
+        return
+    try:
+        window.post(reply)
+    except Exception as e:   # the window closed meanwhile
+        log("print setup reply not shown: %r" % e)
+    refresh()
+
+
+def show_settings_tab():
+    """The print setup's "Plugin settings": the U1 Control tab opens its Settings (no host call can bring a tab
+    forward; it shows there once this window is closed). Runs in a host UI callback: never raises."""
+    try:
+        page = _page_ref()
+        if page is not None:
+            page.post_message({"type": "show_tab", "tab": "settings"})
+    except Exception as e:
+        log("Plugin settings not opened: %r" % e)
+
+
+def _clean_answer(answer, filaments, mapping, shown, prefs, purifier, remember_default):
+    """The window's answer, checked: toolheads in range, warnings acknowledged for the toolheads shown last,
+    only offered options (u1.pick_prefs), the exhaust fan left out while the cover recirculates."""
+    if not isinstance(answer, dict) or answer.get("cancelled"):
+        raise Cancelled()
+    chosen = {}
+    for f, t in (answer.get("map") or {}).items():
+        if str(f).isdigit() and isinstance(t, int) and not isinstance(t, bool) and 0 <= t < u1.TOOLHEADS \
+                and int(f) in mapping:
+            chosen[int(f)] = t
+    final = {**mapping, **chosen}
+    warned = u1.warning_ids(filaments, shown, final)
+    acked = answer.get("acknowledged")
+    if warned and (not isinstance(acked, list) or sorted(str(x) for x in acked) != sorted(warned)):
+        raise PrinterError(tr("the print setup has warnings (%s) that weren't confirmed for these toolheads; "
+                              "nothing was sent") % "; ".join(u1.mapping_warnings(filaments, shown, final)))
+    purifier = answer.get("purifier") if answer.get("purifier") in ("auto", "off", *u1.PURIFIER) else purifier
+    picked = u1.pick_prefs(prefs, answer.get("prefs") if isinstance(answer.get("prefs"), dict) else {})
+    mode = u1.purifier_mode(filaments) if purifier == "auto" else purifier
+    if u1.exhaust_blocked(mode):
+        picked.pop("exhaust_fan", None)
+    remember = answer.get("remember")
+    return {"map": final, "prefs": picked, "purifier": purifier, "heads": shown,
+            "remember": remember if isinstance(remember, bool) else remember_default}
+
+
+def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client, extras=None, language="auto",
+              host=""):
+    """Show the U1 print setup window and wait for the answer (call from a worker thread, never the UI thread:
+    the window itself is created on the UI thread by OrcaSlicer). cancelled() -> True closes it.
+    Returns {"map", "prefs", "purifier", "heads", "remember"}; raises Cancelled, or PrinterError (timeout, window
+    never shown, warnings not acknowledged for the toolheads shown last)."""
+    extras = extras or {}
+    ui = orca.host.ui
+    data = {
+        "job": job, "filaments": filaments, "heads": heads, "map": {str(k): v for k, v in mapping.items()},
+        "prefs": prefs, "labels": {p[0]: p[2] for p in u1.PREFERENCES},
+        "levels": {k: list(v) for k, v in u1.LEVELS.items()}, "features": extras.get("features") or [],
+        "purifier": purifier, "auto_purifier": u1.purifier_mode(filaments),
+        "printer": extras.get("printer"), "spools": extras.get("spools") or {},
+        "remember": bool(extras.get("remember", True)), "tags": extras.get("tags") or [],
+    }
+    html = page_html("setup", data, language=language)
+    done, ready, wanted, stop = (threading.Event() for _ in range(4))
+    result = {}
+    window_box = []
+    shown = [heads]   # the toolheads the window shows now; the choice is checked against them
+
+    def refresher():   # one long-lived thread; refresh requests that arrive while it is busy coalesce
+        while not stop.is_set():
+            if not wanted.wait(0.5):
+                continue
+            wanted.clear()
             try:
-                return bool(cancel() if callable(cancel) else cancel)
-            except Exception:
-                return False
+                view = u1.summarize(client.query(u1.STATUS_OBJECTS))
+                fresh = view["heads"]
+                shown.append(fresh)
+                window_box[0].post({"heads": fresh, "busy": u1.machine_busy(view), "spools": setup_spools(host),
+                                    "tags": rfid_flags(view),
+                                    "map": {str(k): v for k, v in u1.auto_map(filaments, fresh).items()}})
+            except Exception as e:
+                log("refresh failed: %s" % e)
 
-        window = ui.create_window(html, title=tr("U1 print setup"), width=720, height=640, on_message=on_message,
-                                  on_close=done.set, on_submit=on_submit, style=ui.WINDOW_MODAL)
-        window_box.append(window)
-        threading.Thread(target=refresher, name="u1control-refresh", daemon=True).start()
-        started = time.monotonic()
+    def on_message(msg):
+        if not isinstance(msg, dict):
+            return
+        if msg.get("ready"):
+            ready.set()
+        if msg.get("refresh") and window_box:
+            wanted.set()
+        if msg.get("type") == "cmd" and window_box:
+            threading.Thread(target=_run_setup_command, args=(window_box[0], host, msg, wanted.set, stop),
+                             name="u1control-setup-cmd", daemon=True).start()
+        if msg.get("open_settings"):
+            show_settings_tab()
+
+    def on_submit(msg):
+        result["data"] = msg
+        done.set()
+
+    def asked_to_stop():
         try:
-            while not done.wait(0.25):  # UI from a slicing hook: give up if the UI thread never shows it
-                waited = time.monotonic() - started
-                if slicing_cancelled():
-                    window.close()
-                    raise Cancelled()
-                if waited > SETUP_TIMEOUT:
-                    window.close()
-                    raise PrinterError(tr("print setup timed out; nothing was sent"))
-                if not window.is_open():
-                    break
-                if not ready.is_set() and waited > 20:
-                    window.close()
-                    raise PrinterError(tr("the print setup window didn't open (OrcaSlicer was busy); nothing was sent"))
-        finally:
-            stop.set()
-        answer = result.get("data")
-        if not isinstance(answer, dict) or answer.get("cancelled"):
-            raise Cancelled()
-        chosen = {}
-        for f, t in (answer.get("map") or {}).items():
-            if str(f).isdigit() and isinstance(t, int) and not isinstance(t, bool) and 0 <= t < u1.TOOLHEADS \
-                    and int(f) in mapping:
-                chosen[int(f)] = t
-        final = {**mapping, **chosen}
-        warned = u1.warning_ids(filaments, shown[-1], final)
-        acked = answer.get("acknowledged")
-        if warned and (not isinstance(acked, list) or sorted(str(x) for x in acked) != sorted(warned)):
-            raise PrinterError(tr("the print setup has warnings (%s) that weren't confirmed for these toolheads; "
-                               "nothing was sent") % "; ".join(u1.mapping_warnings(filaments, shown[-1], final)))
-        picked = answer.get("prefs") or {}
-        purifier = answer.get("purifier") if answer.get("purifier") in ("auto", "off", *u1.PURIFIER) else "auto"
-        return {"map": final, "prefs": {k: bool(picked.get(k, v)) for k, v in prefs.items()},
-                "purifier": purifier, "heads": shown[-1]}
+            return bool(cancelled and cancelled())
+        except Exception:
+            return False
+
+    window = ui.create_window(html, title=tr("U1 Control — print setup"), width=900, height=820,
+                              on_message=on_message, on_close=done.set, on_submit=on_submit, style=ui.WINDOW_MODAL)
+    window_box.append(window)
+    threading.Thread(target=refresher, name="u1control-refresh", daemon=True).start()
+    started = time.monotonic()
+    try:
+        while not done.wait(0.25):  # never wait forever on a window the UI thread never shows
+            waited = time.monotonic() - started
+            if asked_to_stop():
+                window.close()
+                raise Cancelled()
+            if waited > SETUP_TIMEOUT:
+                window.close()
+                raise PrinterError(tr("print setup timed out; nothing was sent"))
+            if not window.is_open():
+                break
+            if not ready.is_set() and waited > 20:
+                window.close()
+                raise PrinterError(tr("the print setup window didn't open (OrcaSlicer was busy); nothing was sent"))
+    finally:
+        stop.set()
+    return _clean_answer(result.get("data"), filaments, mapping, shown[-1], prefs, purifier, data["remember"])
 
 
 HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")
@@ -697,6 +920,7 @@ OK, ERR_INVALID_HANDLE, ERR_CANCELED, ERR_INVALID_RESULT = 0, -1, -18, -19
 ERR_LP_UPLOAD, ERR_LP_PUBLISH, ERR_SG_UPLOAD, ERR_CONNECT = -4020, -4030, -5010, -6010
 STAGE_CREATE, STAGE_UPLOAD, STAGE_SENDING, STAGE_FINISHED, STAGE_ERROR = 0, 1, 3, 6, 7
 AGENT_POLL = 2.0         # s between status queries while OrcaSlicer is connected to the U1
+CATALOG_EVERY = 30.0     # s between re-reads of Spooler's presets, profiles.json and the Spoolman links for tray ids
 
 
 URGENT_KINDS = ("pause", "resume", "stop")   # Device tab commands sent at once, on their own thread
@@ -706,6 +930,12 @@ DEVICE_GCODE_TIMEOUT = 600   # s: a Device tab G-code line may run long (homing,
 def host_of(address):
     """'http://192.168.1.5:7125/x' -> '192.168.1.5:7125' (scheme and path stripped; Moonraker keeps the port)."""
     return clean(address).split("://", 1)[-1].split("/", 1)[0]
+
+
+def _hostname(address):
+    """The host name alone: 'http://192.168.1.5:7125/x' and '192.168.1.5' are the same U1."""
+    address = clean(address)
+    return urllib.parse.urlsplit(address if "://" in address else "http://" + address).hostname or ""
 
 
 def base_url(host, port="", use_ssl=False):
@@ -733,6 +963,18 @@ def job_read_grants():
     return out
 
 
+def call_safely(key, fn, *args):
+    """Run a host callback queued to OrcaSlicer's UI thread. Nothing may escape: an exception leaving a queued call
+    ends OrcaSlicer (GUI_App::OnExceptionInMainLoop returns false)."""
+    try:
+        fn(*args)
+    except Exception as e:   # pybind's error_already_set arrives as an Exception too; never re-raised
+        try:
+            log("host callback %s failed: %r" % (key, e))
+        except Exception:
+            pass
+
+
 class U1Agent(pa.PrinterAgentBase):
     """Printer agent `u1control`: OrcaSlicer's Print / Send dialog and Device tab for the U1, with the same toolhead
     map, print options and G-code fixes as U1 print setup. Printer I/O runs on the agent's own threads."""
@@ -746,7 +988,11 @@ class U1Agent(pa.PrinterAgentBase):
         self.client = None
         self.view = None
         self.firmware = ""
-        self._filament_ids = {}
+        self._catalog = ([], "", None)       # (Spooler presets, printer label, Spooler's profiles.json) for tray ids
+        self._catalog_at = 0.0
+        self._mine = []                      # user_presets(), for spools linked to one of them (orca_filament_preset)
+        self._links = ([], {})               # (spools, {toolhead: spool id}) the agent read from Spoolman itself
+        self._links_busy = threading.Lock()
         self.base = ""
         self._wake = threading.Event()
         self._stop = threading.Event()
@@ -777,7 +1023,10 @@ class U1Agent(pa.PrinterAgentBase):
     def set_on_printer_connected_fn(self, fn): return self._store_cb("printer_connected", fn)
     def set_on_subscribe_failure_fn(self, fn): return self._store_cb("subscribe_failure", fn)
     def set_server_callback(self, fn): return self._store_cb("server_error", fn)
-    def set_queue_on_main_fn(self, fn): return self._store_cb("queue_on_main", fn)
+    def set_queue_on_main_fn(self, fn):
+        global _queue_on_main
+        _queue_on_main = fn   # also for the scripts' preset reads (on_ui_thread)
+        return self._store_cb("queue_on_main", fn)
 
     def _emit(self, key, *args):
         """Call a host callback the way MoonrakerPrinterAgent dispatches: through queue_on_main when set."""
@@ -787,7 +1036,7 @@ class U1Agent(pa.PrinterAgentBase):
             return
         try:
             if queue is not None:
-                queue(lambda: fn(*args))
+                queue(lambda: call_safely(key, fn, *args))
             else:
                 fn(*args)
         except Exception as e:
@@ -830,16 +1079,19 @@ class U1Agent(pa.PrinterAgentBase):
         if not host or not getattr(params, "dev_id", ""):
             return ERR_INVALID_HANDLE
         self.disconnect_printer()
+        _agent_seen()   # OrcaSlicer uses us as the printer agent: its "Use printer agents" preference is on
         key = clean(getattr(params, "password", ""))
         base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
         client = Moonraker(base, key, timeout=5)
-        self._filament_ids = self._generic_ids()
+        self._catalog_at = 0.0   # the first push re-reads Spooler's profiles.json
         with self._lock:   # one step: a reader under the lock never sees the new printer with the old one's id
             self.dev_id, self.host, self.api_key, self.base = params.dev_id, host, key, base
             self.firmware = ""   # another printer, or the same one updated meanwhile
             self.client = client
             self._stop = threading.Event()
             stop = self._stop
+        self._links = ([], {})   # another printer's links never reach this one's trays
+        self._refresh_catalog()
         threading.Thread(target=self._poll, args=(stop, client), name="u1control-agent", daemon=True).start()
         return OK
 
@@ -873,21 +1125,73 @@ class U1Agent(pa.PrinterAgentBase):
                 self._commands.put(None)
             self._worker = None
 
-    def _generic_ids(self):
-        """{"Generic <family> @System": filament_id} from the loaded system presets (UI thread, no I/O)."""
-        wanted = {agent.generic_preset_name(m) for m in agent.FILAMENT_FAMILIES}
-        out = {}
+    def _refresh_catalog(self, profiles=None):
+        """UI thread, no I/O: re-read Spooler's presets (it adds its own at any time), then the toolheads' links
+        from Spoolman on a thread of their own, so sync from AMS knows them without the tab ever opening."""
         try:
-            collection = orca.host.preset_bundle().filaments
-            for i in range(collection.size()):
-                preset = collection.preset(i)
-                if preset.name in wanted:
-                    fid = getattr(preset, "filament_id", "") or clean(preset.config_value("filament_id"))
-                    if fid:
-                        out[preset.name] = fid
+            presets, label = filament_catalog()
+            mine = _user_presets_safe()
+            cfg = self._settings().effective()
         except Exception as e:
-            log("agent: filament presets not readable (%s); trays show no preset" % e)
-        return out
+            log("agent: filament presets not readable (%s); trays show generic presets" % e)
+            return
+        self._mine = mine
+        self._catalog = (presets, label, profiles if profiles is not None else self._catalog[2])
+        args = (clean(cfg.get("spoolman_url")), settings.printer_label(clean(cfg.get("printer_name"))))
+        threading.Thread(target=self._load_links, args=args, name="u1control-links", daemon=True).start()
+
+    def _load_links(self, url, printer_name):
+        """Spools and links by Spoolman location ("<printer name> T<n>"), through the U1's own Spoolman link
+        when it has one, else url."""
+        with self._lock:
+            client = self.client
+        if client is None or not self._links_busy.acquire(blocking=False):
+            return   # not connected, or the last read is still running
+        try:
+            smc = sm.Spoolman(url, client)
+            smc.connect()
+            spools = [sm.spool_view(s) for s in smc.spools()]
+            self._links = (spools, sm.bindings_from_locations(spools, printer_name))
+        except Exception as e:   # no Spoolman, or it is down: keep the last links
+            log("agent: Spoolman links for the Device tab not read (%s)" % e)
+        finally:
+            self._links_busy.release()
+
+    def _bound_spools(self):
+        """{toolhead index: Spoolman spool} for this U1's toolheads linked to spools: the tab's (up to date with
+        every link made there, Extended Firmware's too) when it shows this U1, else the agent's own read."""
+        svc = _service
+        spools, bindings = self._links
+        if svc is not None:
+            with svc.lock:
+                if svc.target and _hostname(svc.target.host) == _hostname(self.host) and svc.spools:
+                    spools, bindings = list(svc.spools), dict(svc.bindings)
+        by_id = {s["id"]: s for s in spools}
+        return {h: by_id[sid] for h, sid in bindings.items() if sid in by_id}
+
+    def _preferred(self):
+        """preferred(head) for agent.push_status: the filament_id of the head's spool's preset, or ""."""
+        with self._lock:
+            on_main = self._cb.get("queue_on_main")
+        if time.time() - self._catalog_at >= CATALOG_EVERY:   # this thread may read files, not presets
+            self._catalog_at = time.time()
+            profiles = spooler_bridge.read_json(spooler_dir(), spooler_bridge.PROFILES_FILE)
+            if on_main is not None:
+                on_main(lambda: self._refresh_catalog(profiles or {}))
+        bound = self._bound_spools()
+        presets, label, profiles = self._catalog
+        mine = self._mine
+
+        if mine and on_main is not None:   # ponytail: no readable user preset at all -> no notice; Apply gives one
+            for index, spool in bound.items():
+                text = link_notice(index + 1, spool.get("orca_preset"), mine)
+                if text:
+                    on_main(lambda text=text: call_safely("notice", notify, text))
+
+        def preferred(head):   # a linked standalone user preset first, else the Spooler preset
+            spool = bound.get(head["index"])
+            return linked_filament_id(spool, mine) or spooler_bridge.tray_filament_id(spool, presets, profiles, label)
+        return preferred
 
     def _poll(self, stop, client):
         connected = False
@@ -909,7 +1213,7 @@ class U1Agent(pa.PrinterAgentBase):
                     dev_id = self._dev_id()
                     self._emit("local_connect", 0, dev_id, "0")
                     self._emit("printer_connected", dev_id)
-                self._message(agent.push_status(view, self._filament_ids.get))
+                self._message(agent.push_status(view, self._preferred()))
             except Exception as e:
                 if connected:
                     log("agent: the U1 stopped answering (%s)" % e)
@@ -1066,15 +1370,19 @@ class U1Agent(pa.PrinterAgentBase):
             task = {"bed_leveling": getattr(params, "task_bed_leveling", False),
                     "flow_cali": getattr(params, "task_flow_cali", False),
                     "timelapse": getattr(params, "task_record_timelapse", False)}
-            job = agent.run_job(client, self._job_path(params), clean(params.project_name) or clean(params.task_name),
+            name = clean(params.project_name) or clean(params.task_name)
+            job = agent.run_job(client, self._job_path(params), name,
                                 getattr(params, "plate_index", 1), getattr(params, "ams_mapping", ""), options,
                                 lambda view: U1PrintSetup._offered_prefs(options, view["options"]), task, VERSION,
-                                self._work_dir(), self._progress(update_fn), cancel_fn, on_stage)
+                                self._work_dir(), self._progress(update_fn), cancel_fn, on_stage,
+                                self._chooser(options, host, name, client, cancel_fn))
         except agent.Cancelled:
             return ERR_CANCELED
         except Exception as e:
             return self._fail(update_fn, ERR_LP_UPLOAD if stage[0] == "upload" else ERR_LP_PUBLISH, e)
         log("agent: sent %s to %s: %s" % (job["filename"], host, job["script"].replace("\n", " | ")))
+        if job.get("choice"):
+            remember_choice(self._settings(), options, job["choice"])
         self._settings().update({"printed_before": True})
         try:
             service().remember_job(job["filename"], job["mapping"], job["filaments"], host=host, api_key=key, options={
@@ -1087,6 +1395,16 @@ class U1Agent(pa.PrinterAgentBase):
         if update_fn:
             update_fn(STAGE_FINISHED, 100, tr("Print started"))
         return OK
+
+    def _chooser(self, options, host, name, client, cancel_fn):
+        """prepare_gcode's choose: U1 print setup after OrcaSlicer's Print dialog, on this job thread, starting
+        from the dialog's slots and options. None (OrcaSlicer's choice as is) when the setting is off."""
+        def choose(view, filaments, mapping, prefs, lines, cfg):
+            if not options["print_dialog"]:
+                return None
+            return open_setup(self._settings(), options, view, host, client, lines, cfg, filaments, mapping, prefs,
+                              name, cancel_fn)
+        return choose
 
     def start_local_print_with_record(self, params, update_fn, cancel_fn, wait_fn):
         return self.start_local_print(params, update_fn, cancel_fn)
@@ -1141,6 +1459,31 @@ def _selected_u1():
     return Moonraker(host, key, timeout=5)
 
 
+def on_ui_thread(fn):
+    """fn() run on OrcaSlicer's UI thread through queue_on_main, from a worker thread (a script, a preset job); its
+    result, or its exception raised here. Waits at most UI_WAIT seconds; on the main thread fn runs at once. Without queue_on_main (OrcaSlicer hands it only to a
+    printer agent it has created) fn runs here: after start-up the presets are loaded, so this is the old behaviour,
+    not the load-time race."""
+    queue = _queue_on_main
+    if queue is None or threading.current_thread() is threading.main_thread():   # already on it: never wait on itself
+        return fn()
+    box, done = {}, threading.Event()
+
+    def task():
+        try:
+            box["value"] = fn()
+        except Exception as e:   # handed back to the worker
+            box["error"] = e
+        finally:
+            done.set()
+    queue(lambda: call_safely("script", task))
+    if not done.wait(UI_WAIT):
+        raise TimeoutError(tr("OrcaSlicer did not answer in time; try again"))
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
 class CheckConnection(orca.script.ScriptPluginCapabilityBase):
     def get_name(self):
         return "Check U1 connection"
@@ -1148,7 +1491,7 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
     def execute(self):
         use_language()
         try:
-            client = _selected_u1()
+            client = on_ui_thread(_selected_u1)
             info, ext_status = run_off_thread(lambda: (client.info(), ext.Extended(client).status()))
             heads = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS))["heads"])
         except Exception as e:
@@ -1264,6 +1607,114 @@ def filament_meta(full=True):
     return out
 
 
+def filament_catalog():
+    """(Spooler presets, printer label) for the Device tab's tray ids; UI thread, no I/O. Presets: the Spooler
+    presets OrcaSlicer counts as compatible with the selected printer, the only ones its sync from AMS loads, as
+    spooler_bridge.tray_filament_id meta."""
+    bundle = orca.host.preset_bundle()
+    printer = bundle.current_printer_preset()
+    collection = bundle.filaments
+    presets = []
+    for i in range(collection.size()):
+        preset = collection.preset(i)
+        # is_compatible defaults to False here and in user_presets: OrcaSlicer 2.5 binds it, and a host that doesn't
+        # can't say a preset suits the printer, which sync from AMS (is_compatible) and a link both need.
+        if (getattr(preset, "bundle_id", "") or "") != spooler_bridge.BUNDLE_ID or not getattr(preset, "is_compatible", False):
+            continue
+        first = lambda key: (spooler_bridge.as_list(preset.config_value(key)) or [""])[0]   # noqa: E731
+        presets.append({"name": preset.name, "bundle_id": spooler_bridge.BUNDLE_ID, "vendor": first("filament_vendor"),
+                        "colour": first("default_filament_colour") or first("filament_colour")})
+    return presets, clean(printer.config_value("printer_model")) or printer.name
+
+
+def user_presets():
+    """UI thread, no I/O: the filament presets a Spoolman preset link may name, the user's own (not system or
+    default, not a plugin's `_local/` one) and compatible with the selected printer: [{"name", "file", "inherits"}]."""
+    collection = orca.host.preset_bundle().filaments
+    out = []
+    for i in range(collection.size()):
+        preset = collection.preset(i)
+        if preset.name.startswith("_local/") or not getattr(preset, "is_compatible", False) or not preset.is_user():   # default: filament_catalog
+            continue
+        out.append({"name": preset.name, "file": getattr(preset, "file", "") or "",
+                    "inherits": clean(preset.config_value("inherits"))})
+    return out
+
+
+def _user_presets_safe():
+    """user_presets(), or [] when OrcaSlicer won't answer (logged once): a link problem never stops the rest."""
+    try:
+        return user_presets()
+    except Exception as e:
+        if "user_presets" not in _logged_once:
+            _logged_once.add("user_presets")
+            log("user filament presets not readable (%r); Spoolman preset links are ignored" % e)
+        return []
+
+
+def linked_preset(name, presets):
+    """The user_presets() entry a spool's orca_filament_preset names: the exact name, else the only one equal
+    ignoring case; None when there is none."""
+    if not name:
+        return None
+    exact = [p for p in presets if p["name"] == name]
+    loose = exact or [p for p in presets if p["name"].casefold() == name.casefold()]
+    return loose[0] if len(loose) == 1 else None
+
+
+def linked_filament_id(spool, presets):
+    """filament_id a tray reports for a spool linked to a standalone user preset, or "". OrcaSlicer's sync from AMS
+    (PresetBundle::sync_ams_list) loads only a preset that is its own base: one that inherits has its parent's id
+    and the sync would load the parent. Reads the preset's file (OrcaSlicer's API doesn't show filament_id)."""
+    preset = linked_preset((spool or {}).get("orca_preset"), presets)
+    if not preset or preset["inherits"] or not preset["file"]:
+        return ""
+    path = preset["file"]
+    try:
+        mtime = os.stat(path).st_mtime
+    except OSError:
+        mtime = None
+    cached = _file_ids.get(path)
+    if cached and cached[0] == mtime:
+        return cached[1]
+    try:
+        with open(path, encoding="utf-8") as f:
+            fid = json.load(f).get("filament_id")
+        fid = fid.strip() if isinstance(fid, str) else ""
+    except (OSError, ValueError, AttributeError) as e:
+        log("agent: %s not readable (%s); the tray keeps its usual id" % (path, e))   # once per file version
+        fid = ""
+    _file_ids[path] = (mtime, fid)
+    return fid
+
+
+def link_notice(slot, name, presets):
+    """The notice for a toolhead whose orca_filament_preset names no usable preset, once per name per session
+    (Apply and AMS sync share it); "" when it is fine or was said already."""
+    if not name:
+        return ""
+    if linked_preset(name, presets):
+        _links_warned.discard(name)   # fixed: if it breaks again, say so again
+        return ""
+    if name in _links_warned:
+        return ""
+    _links_warned.add(name)
+    if sum(p["name"].casefold() == name.casefold() for p in presets) > 1:
+        return tr("T%d: several user presets match \"%s\" ignoring case; write the exact name. The usual preset is used") % (slot, name)
+    return tr("T%d: no compatible user preset \"%s\" in OrcaSlicer, so the usual preset is used") % (slot, name)
+
+
+def notify(text):
+    """UI thread: an OrcaSlicer notification."""
+    ui = orca.host.ui
+    ui.push_notification(ui.NotificationLevel.RegularNotificationLevel, text)
+
+
+_links_warned = set()   # orca_filament_preset names already given a notice, this session
+_file_ids = {}          # preset file -> (mtime, filament_id) for linked_filament_id
+_logged_once = set()
+
+
 def spooler_state():
     """{"installed", "presets", "url"}: is the Spooler plugin around (its bundle, presets or settings file)?"""
     try:
@@ -1302,26 +1753,41 @@ def spooler_preference(presets, bound, printer_label=""):
     return prefer
 
 
+def _sync_reads(with_printer):
+    """UI thread: what sync_project needs from the presets, as plain data (filament_meta, the selected printer's
+    name, inherits and model when with_printer, and user_presets)."""
+    meta = filament_meta()
+    if not with_printer:
+        return meta, None, _user_presets_safe()
+    printer = orca.host.preset_bundle().current_printer_preset()
+    return meta, {"name": printer.name, "inherits": clean(printer.config_value("inherits")),
+                  "model": clean(printer.config_value("printer_model"))}, _user_presets_safe()
+
+
 def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None):
     """Apply each loaded toolhead's best filament preset and colour to project slot n+1.
-    Spooler's presets are preferred for heads with a bound spool (bound: head index -> spool).
-    Returns (done, problems) as lists of strings."""
-    meta = filament_meta()
+    A bound spool's orca_filament_preset (a user preset) comes first, then Spooler's presets for heads with a bound
+    spool (bound: head index -> spool). Returns (done, problems) as lists of strings."""
+    meta, printer, mine = on_ui_thread(lambda: _sync_reads(preset_preference is None and bool(bound)))
     names = [m["name"] for m in meta]
     colours = {m["name"]: m["colour"] for m in meta}
-    if preset_preference is None and bound:
-        printer = orca.host.preset_bundle().current_printer_preset()
-        presets = spooler_bridge.spooler_presets(meta, (printer.name, clean(printer.config_value("inherits"))))
+    if printer is not None:
+        presets = spooler_bridge.spooler_presets(meta, (printer["name"], printer["inherits"]))
         if presets:
-            preset_preference = spooler_preference(presets, bound,
-                                                   clean(printer.config_value("printer_model")) or printer.name)
+            preset_preference = spooler_preference(presets, bound, printer["model"] or printer["name"])
     done, problems = [], []
     for head in heads:
         tag = (tags[head["index"]] if head["index"] < len(tags or []) else None) or None
         if not head["loaded"] and not tag:
             continue
         slot = head["index"] + 1
-        preset_name = pick_filament_preset(names, head, tag, overrides, preference=preset_preference, colours=colours)
+        link = ((bound(head["index"]) if bound else None) or {}).get("orca_preset")
+        linked = linked_preset(link, mine)
+        notice = link_notice(slot, link, mine)
+        if notice:
+            problems.append(notice)
+        preset_name = linked["name"] if linked else pick_filament_preset(
+            names, head, tag, overrides, preference=preset_preference, colours=colours)
         colour = (tag or {}).get("colour") or head["colour"]
         try:
             tx = orca.host.preset.filament.begin_update(slot, preset_name)
@@ -1346,7 +1812,7 @@ class SyncHeadsToProject(orca.script.ScriptPluginCapabilityBase):
     def execute(self):
         use_language(self)
         try:
-            client = _selected_u1()
+            client = on_ui_thread(_selected_u1)
             view = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS)))
         except Exception as e:
             return orca.ExecutionResult.skipped(tr("Couldn't reach the U1: %s") % e)
@@ -1373,24 +1839,34 @@ def tuning_changes(preset_name, current):
     return changes
 
 
+def _tuning_reads():
+    """UI thread: (process preset name, tuning_changes) for the selected U1, or (None, []) when it is not a U1."""
+    bundle = orca.host.preset_bundle()
+    printer = bundle.current_printer_preset()
+    if not is_u1_name(printer.config_value("printer_model"), printer.name, printer.config_value("inherits")):
+        return None, []
+    process = bundle.current_process_preset()
+    keys = [k for k, _ in FORK_PROCESS_TUNING] + ["layer_height"]
+    return process.name, tuning_changes(process.name, {k: bundle.full_config_value(k) for k in keys})
+
+
 class ApplyForkTuning(orca.script.ScriptPluginCapabilityBase):
     def get_name(self):
         return "Apply Snapmaker Orca U1 process tuning"
 
     def execute(self):
         use_language()
-        bundle = orca.host.preset_bundle()
-        printer = bundle.current_printer_preset()
-        if not is_u1_name(printer.config_value("printer_model"), printer.name, printer.config_value("inherits")):
+        try:
+            name, changes = on_ui_thread(_tuning_reads)   # the presets are read on the UI thread; the write below not
+        except TimeoutError as e:
+            return orca.ExecutionResult.skipped(str(e))
+        if name is None:
             return orca.ExecutionResult.skipped(tr("Select a Snapmaker U1 printer first."))
-        process = bundle.current_process_preset()
-        keys = [k for k, _ in FORK_PROCESS_TUNING] + ["layer_height"]
-        changes = tuning_changes(process.name, {k: bundle.full_config_value(k) for k in keys})
         if not changes:
-            return orca.ExecutionResult.success(tr("\"%s\" already matches Snapmaker Orca.") % process.name)
+            return orca.ExecutionResult.success(tr("\"%s\" already matches Snapmaker Orca.") % name)
         listing = "\n".join("  %s: %s -> %s" % c for c in changes)
         if orca.host.ui.message(tr("Change the process preset \"%s\" to Snapmaker Orca's U1 values?\n\n%s\n\n"
-                                "The preset stays unsaved until you save it.") % (process.name, listing),
+                                "The preset stays unsaved until you save it.") % (name, listing),
                                 title="U1 Control", buttons="yes_no", icon="question") != "yes":
             return orca.ExecutionResult.skipped(tr("No changes made."))
         tx = orca.host.preset.process.begin_update("")

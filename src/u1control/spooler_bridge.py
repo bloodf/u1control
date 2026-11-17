@@ -15,7 +15,9 @@ URL = "https://github.com/bloodf/spooler"
 NAME_PREFIX = "_local/spooler/"
 DATA_SUBDIR = "spooler"                  # <Orca data dir>/spooler/, the data dir being the parent of orca_plugins
 SETTINGS_FILE = "spooler_settings.json"
-PROFILES_FILE = "profiles.json"          # {"version": 1, "filaments": {"<filament id>": {"<printer label>": "<preset>"}}}
+PROFILES_FILE = "profiles.json"          # {"version": 1, "filaments": {"<filament id>": {"<printer label>": "<preset>"}},
+                                         #  "spools": {"<spool id>": {...}}, "ids": {"<preset>": "<filament_id>"}};
+                                         #  "spools" only with presets per spool
 KEEP_SLOTS_FILE = "keep_slots.json"      # {"active": true, "printer": "<label>", "ts": <unix s>}, refreshed ~5 s
 KEEP_SLOTS_FRESH = 30.0                  # seconds
 PROFILES_VERSION = 1
@@ -82,12 +84,21 @@ def profiles_problem(profiles):
     return ""
 
 
-def profile_lookup(profiles, filament_id, printer_label):
-    """Preset name Spooler published for a Spoolman filament on the printer with this label, or None
-    (also for a file of another version or shape)."""
-    if not isinstance(profiles, dict) or filament_id is None or profiles_problem(profiles):
+def profile_lookup(profiles, filament_id, printer_label, spool_id=None):
+    """Preset name Spooler published for a Spoolman spool (its own preset, made when Spooler has presets per
+    spool) or else its filament, on the printer with this label; None when there is none (also for a file of
+    another version or shape)."""
+    if not isinstance(profiles, dict) or profiles_problem(profiles):
         return None
-    entry = profiles["filaments"].get(str(filament_id))
+    spools = profiles.get("spools") if isinstance(profiles.get("spools"), dict) else {}
+    for table, key in ((spools, spool_id), (profiles["filaments"], filament_id)):
+        name = _label_lookup(table.get(str(key)), printer_label) if key is not None else None
+        if name:
+            return name
+    return None
+
+
+def _label_lookup(entry, printer_label):
     if not isinstance(entry, dict) or not entry:
         return None
     label = str(printer_label or "").casefold()
@@ -131,7 +142,7 @@ def _bare(name):
 def preset_for_spool(presets, spool, profiles=None, printer_label=""):
     """Name of the Spooler preset for a bound spool: Spooler's published profiles.json entry, else the
     nearest colour of the same vendor + material."""
-    published = profile_lookup(profiles, spool.get("filament_id"), printer_label)
+    published = profile_lookup(profiles, spool.get("filament_id"), printer_label, spool.get("id"))
     if published:
         by_bare = {_bare(p["name"]).casefold(): p["name"] for p in presets}
         if _bare(published).casefold() in by_bare:
@@ -145,3 +156,16 @@ def preset_for_spool(presets, spool, profiles=None, printer_label=""):
             near.append((u1.colour_distance(spool.get("colour"), p.get("colour")), len(p["name"]), p["name"]))
     near.sort()
     return near[0][2] if near and near[0][0] <= COLOUR_CAP else None
+
+
+def tray_filament_id(spool, presets, profiles=None, printer_label=""):
+    """The filament_id a printer agent reports for a tray holding this Spoolman spool (tray_info_idx), or "".
+    OrcaSlicer's sync from AMS (PresetBundle::sync_ams_list) loads the compatible base preset carrying that
+    id; Spooler's presets are standalone ones with ids of their own, which only profiles.json "ids" tells
+    (OrcaSlicer's plugin API doesn't show a preset's filament_id). presets: Spooler's preset meta
+    {"name", "bundle_id", "colour", "vendor"} usable with this printer. "" leaves it to the Generic id."""
+    if not spool or not isinstance(profiles, dict) or not isinstance(profiles.get("ids"), dict):
+        return ""
+    name = preset_for_spool(presets, spool, profiles, printer_label)
+    ids = {_bare(str(k)).casefold(): v for k, v in profiles["ids"].items() if isinstance(v, str)}
+    return ids.get(_bare(name).casefold(), "") if name else ""

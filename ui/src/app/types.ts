@@ -5,7 +5,7 @@ export interface Tag { vendor?: string; manufacturer?: string; type?: string; su
 export interface Status {
   state: string; message?: string; filename?: string; progress?: number; layer?: number; total_layers?: number;
   print_duration?: number; total_duration?: number; extruders: Heater[]; bed: Heater; heads: Head[];
-  rfid?: (Tag | null)[]; options?: Record<string, boolean>; purifier?: { fitted?: boolean; mode?: string };
+  rfid?: (Tag | null)[]; options?: Record<string, boolean>; features?: string[]; purifier?: { fitted?: boolean; mode?: string | number; recirculating?: boolean };
   feed?: { state?: string; detected?: boolean }[]; busy?: boolean; machine_state?: string; bindings?: Record<string, number>;
   light?: boolean | null; speed_factor?: number; power_loss?: boolean; reprint?: unknown; exceptions?: unknown[];
   firmware?: { kind: string; version?: string };
@@ -28,3 +28,6 @@ export interface Config { settings: Record<string, any>; automations: Automation
   spooler: { installed?: boolean; url?: string; dismissed?: boolean }; version: string;
   /** Whether the selected U1 process preset runs "U1 print setup"; null when no U1 is selected. */
   pipeline?: { preset: string; on: boolean } | null }
+/** What the plugin needs and can't install (requirements.py): ok, missing, or unknown (not known yet / can't be read). */
+export interface Requirement { id: 'printer_agents' | 'extended_firmware' | 'spoolman' | 'spooler'; status: 'ok' | 'missing' | 'unknown';
+  details: { version?: string; url?: string; via?: string } }

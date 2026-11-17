@@ -18,7 +18,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "u1control"
-MODULES = ("i18n_text", "i18n", "moonraker", "u1", "gcode", "agent", "extended", "spoolman", "settings", "spooler_bridge", "peers", "usage", "files", "stockview", "service")  # dependency order
+MODULES = ("i18n_text_pl", "i18n_text", "i18n", "moonraker", "u1", "gcode", "preview", "agent", "extended", "spoolman", "settings", "spooler_bridge", "peers", "usage", "files", "stockview", "requirements", "service")  # dependency order
 ASSETS = {"APP_HTML": "app.html"}   # app.html: the compiled Vue page (ui/, npm run build)
 def page_html(name):
     """ui/<name> as shipped: the compiled page draws its icons from the shared foundation (no icon map to inject)."""
@@ -71,6 +71,8 @@ def dist_info(project, files):
     meta = {k: v.encode("utf-8") for k, v in meta.items()}
     # the Vue page bundles Vue, PrimeVue, PrimeUIX, Lucide icons (MIT, ISC) and the Manrope font (OFL): their notices travel with the wheel, next to our LICENSE
     meta[di + "licenses/LICENSE"] = (ROOT / "LICENSE").read_bytes()
+    # the Dashboard's printer photo is Snapmaker's product image: its credit travels too
+    meta[di + "licenses/NOTICE.md"] = (ROOT / "NOTICE.md").read_bytes()
     for lic in sorted((ROOT / "ui" / "shared" / "licenses").glob("*.txt")):
         meta[di + "licenses/" + lic.name] = lic.read_bytes()
     record = []

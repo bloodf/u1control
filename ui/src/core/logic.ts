@@ -30,7 +30,7 @@ export function parseSpeed(raw: unknown): number | null {
 export const family = (t: unknown): string => ((String(t ?? '').match(/[A-Za-z]+/) || [''])[0]).toUpperCase();
 
 export interface SetupFilament { index: number; type: string; colour?: string; weight?: number }
-export interface SetupHead { index: number; loaded: boolean; type: string; vendor?: string; sub_type?: string; colour?: string }
+export interface SetupHead { index: number; loaded: boolean; type: string; vendor?: string; sub_type?: string; colour?: string; official?: boolean }
 export type SetupWarning =
   | { id: string; kind: 'empty'; f: number; h: number }
   | { id: string; kind: 'material'; f: number; h: number; a: string; b: string };
@@ -45,6 +45,15 @@ export function setupWarnings(filaments: SetupFilament[], heads: SetupHead[], ma
     else if (family(h.type) !== family(f.type)) out.push({ id: `material:${f.index}:${h.index}`, kind: 'material', f: f.index, h: h.index, a: f.type, b: h.type });
   }
   return out;
+}
+
+/** Same 'redmean' distance as u1.colour_distance; unknown colours never count as different (nothing to compare). */
+export function colourFar(a: unknown, b: unknown, limit = 150): boolean {
+  const rgb = (c: unknown) => { const m = /^#?([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(String(c ?? '').trim()); return m ? [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+  const x = rgb(a), y = rgb(b);
+  if (!x || !y) return false;
+  const rm = (x[0] + y[0]) / 2;
+  return Math.sqrt((2 + rm / 256) * (x[0] - y[0]) ** 2 + 4 * (x[1] - y[1]) ** 2 + (2 + (255 - rm) / 256) * (x[2] - y[2]) ** 2) > limit;
 }
 
 export const warningKey = (w: SetupWarning[]): string => w.map(x => x.id).join(',');

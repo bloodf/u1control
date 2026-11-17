@@ -1,6 +1,5 @@
 /* U1 Control's own layout on top of the shared foundation (ui/shared): the page grid, rows inside a panel, the plain
    tables and the printer drawing. Colours are the foundation's --oui-* roles only; nothing here defines a colour. */
-html, body, #app { min-height: 100%; }
 
 /* Narrow bar: the tabs wrap under Emergency stop. Keep a clear gap so a tab press never lands on it. */
 @container oui-appbar (max-width: 760px) { .oui-appbar-actions { padding-bottom: var(--oui-s3); } }
@@ -62,12 +61,3 @@ html, body, #app { min-height: 100%; }
 .u1-table :is(th, td).oui-num, .u1-table :is(th, td).oui-end { text-align: end; }
 .u1-scroll { overflow: auto; }
 
-/* The printer, drawn (DESIGN.md, Imagery): flat shapes on the palette, 1.5 px outlines, no text. */
-.art-printer { flex: none; display: block; }
-.art-body { fill: var(--oui-raised); stroke: var(--oui-control-border); stroke-width: 1.5; }
-.art-well { fill: var(--oui-inset); }
-.art-line { fill: none; stroke: var(--oui-control-border); stroke-width: 1.5; stroke-linecap: round; }
-.art-tool { stroke: none; }
-.art-print { fill: var(--oui-primary); }
-.art-bed { fill: var(--oui-control-border); }
-.art-printer[data-stale] :is(.art-print, .art-tool) { fill: var(--oui-control-border) !important; }

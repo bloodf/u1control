@@ -2,6 +2,7 @@
 Fakes only (FakePrinter on 127.0.0.1); nothing here talks to a real U1."""
 
 import json
+import re
 import os
 import pathlib
 import sys
@@ -13,6 +14,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [os.path.join(ROOT, "src", "u1control"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "scripts")]
 
 import agent  # noqa: E402
+import spooler_bridge as sb  # noqa: E402
 import fakes  # noqa: E402
 import u1  # noqa: E402
 from moonraker import Moonraker, UploadCancelled  # noqa: E402
@@ -41,15 +43,36 @@ class PushTests(unittest.TestCase):
         self.assertEqual(p["home_flag"] >> 8 & 3, agent.HAS_SDCARD_NORMAL)
         self.assertEqual(p["gcode_state"], "IDLE")
 
+    def test_tray_ids_prefer_the_linked_spools_preset_then_generic_by_material(self):
+        block = agent.push_status(view(), lambda h: {1: "SPL00000000AB"}.get(h["index"], ""))["print"]
+        self.assertEqual([t["tray_info_idx"] for t in block["ams"][0]["tray"]],
+                         ["OFDSrzZ8", "SPL00000000AB", "", "OFmY0l6t"])   # Generic PLA, Spooler's, empty, Generic PLA Matte
+
+    def test_generic_ids_match_orcas_library(self):
+        """GENERIC_IDS against OrcaFilamentLibrary at the commit in tests/fixtures/orca_generic_ids.json (made by
+        scripts/generic_ids.py): a family missing from the library, or an id that differs, fails here."""
+        with open(os.path.join(ROOT, "tests", "fixtures", "orca_generic_ids.json"), encoding="utf-8") as f:
+            pinned = json.load(f)
+        self.assertRegex(pinned["commit"], r"^[0-9a-f]{40}$")
+        self.assertEqual({k: pinned["ids"].get(k) for k in agent.GENERIC_IDS}, agent.GENERIC_IDS)
+
+    def test_generic_id_by_the_real_material(self):
+        self.assertEqual(agent.generic_filament_id("PETG"), "OFYPdQJh")
+        self.assertEqual(agent.material_family("PLA WOOD"), "PLA")   # not in the table: by word
+        self.assertEqual(agent.material_family("PETG-CF"), "PETG")
+        self.assertEqual(agent.material_family("PLA-CF MATTE"), "PLA-CF")   # longest family
+        self.assertEqual(agent.generic_filament_id("WEIRD"), "")
+        self.assertTrue(set(agent.FILAMENT_FAMILIES.values()) <= set(agent.GENERIC_IDS))   # an id for every family
+
     def test_four_toolheads_are_one_four_tray_unit(self):
-        block = agent.push_status(view(), {"Generic PLA @System": "GFL99"}.get)["print"]
+        block = agent.push_status(view())["print"]
         self.assertEqual(block["ams_exist_bits"], "1")
         self.assertEqual(block["tray_exist_bits"], "B")   # heads 1, 2 and 4 loaded; 3 empty
         unit, = block["ams"]
         self.assertEqual(unit["id"], "0")
         trays = unit["tray"]
         self.assertEqual([t["id"] for t in trays], ["0", "1", "2", "3"])
-        self.assertEqual((trays[0]["tray_type"], trays[0]["tray_color"], trays[0]["tray_info_idx"]), ("PLA", "FF0000FF", "GFL99"))
+        self.assertEqual((trays[0]["tray_type"], trays[0]["tray_color"], trays[0]["tray_info_idx"]), ("PLA", "FF0000FF", "OFDSrzZ8"))
         self.assertEqual(trays[1]["tray_type"], "PETG")
         self.assertEqual(trays[2]["tray_slot_placeholder"], "1")
         self.assertEqual(trays[3]["tray_type"], "PLA MATTE")
@@ -284,6 +307,50 @@ class PluginAgentTests(unittest.TestCase):
         reads = self.orca.permission_requests[0]["fs_read"]
         self.assertTrue(reads and all(r.endswith("/*") for r in reads))
 
+    def test_raising_queued_callback_is_caught(self):
+        """A callback queued to OrcaSlicer's UI thread that raises must not escape: OnExceptionInMainLoop would end
+        OrcaSlicer."""
+        queued, logged = [], []
+        self.agent.set_queue_on_main_fn(queued.append)
+
+        def boom(*args):
+            raise RuntimeError("host gone")
+        self.agent.set_on_printer_connected_fn(boom)
+        self.agent._emit("printer_connected", "dev")
+        old_log, self.ns["log"] = self.ns["log"], logged.append
+        try:
+            queued[0]()   # what OrcaSlicer's CallAfter runs later: must return normally
+        finally:
+            self.ns["log"] = old_log
+        self.assertEqual(len(logged), 1)
+        self.assertIn("printer_connected", logged[0])
+        self.assertIn("host gone", logged[0])
+
+    def test_no_preset_read_until_loaded(self):
+        """OrcaSlicer 2.5.1 crashed (SIGSEGV in PresetBundle::full_fff_config on the plugin load thread, under
+        PythonPluginBridge::finalize_plugin_capture) when a plugin read presets while the UI thread was still
+        loading them. Nothing preset-related may run at import, class definition, capability construction,
+        register_capabilities or on_load."""
+        touched = []
+
+        def guard(name):
+            def call(*a, **k):
+                touched.append(name)
+                raise AssertionError("orca.host.%s read during plugin load" % name)
+            return call
+        orca = fakes.install_orca()
+        orca.host.preset_bundle = guard("preset_bundle")
+        orca.host.preset = type("Guard", (), {"__getattr__": lambda self, n: guard("preset." + n)()})()
+        orca.registered.clear()
+        ns = fakes.load_wheel(self.artifact)   # import and class definitions
+        ns["U1Control"]().register_capabilities()
+        for cls in list(orca.registered):
+            cap = cls()
+            if hasattr(cap, "on_load"):
+                cap.on_load()
+                self.addCleanup(cap.on_unload)
+        self.assertEqual(touched, [])
+
     def test_default_settings_with_every_box_ticked(self):
         """OrcaSlicer's dialog starts every box ticked: U1 Control's defaults decide, time-lapse stays off."""
         p = self.params(task_bed_leveling=True, task_flow_cali=True, task_record_timelapse=True)
@@ -291,7 +358,9 @@ class PluginAgentTests(unittest.TestCase):
         self.assertIn("BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=0", self.fake.scripts[-1])
 
     def test_unticked_box_wins_over_the_setting(self):
-        self.ns["get_store"](self.agent).update({"prefs": {"bed_level": True, "flow_calibrate": True,
+        # no print setup here: a remembered pop-up answer would become the next print's setting
+        self.ns["get_store"](self.agent).update({"mode": "expert", "print_dialog": False,
+                                                 "prefs": {"bed_level": True, "flow_calibrate": True,
                                                            "time_lapse_camera": True}})
         p = self.params(task_bed_leveling=False, task_flow_cali=True, task_record_timelapse=False)
         self.assertEqual(self.agent.start_local_print(p, self.update, None), 0)
@@ -323,6 +392,96 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, lambda: True), self.ns["ERR_CANCELED"])
         self.assertEqual(self.fake.order, [])
 
+    # U1 print setup after OrcaSlicer's Print dialog --------------------------------------------------------
+    def answer(self, reply, submit=True):
+        """The print setup window answers `reply` at once (or never, submit=False); returns the windows opened."""
+        windows = []
+
+        class Silent(fakes.FakeWindow):
+            def __init__(self, on_message, on_submit, answer):
+                self.on_message, self.on_submit, self.answer, self.open, self.posted = on_message, on_submit, answer, True, []
+                on_message({"ready": True})
+
+        def create(html, on_message=None, on_submit=None, **kw):
+            w = (fakes.FakeWindow if submit else Silent)(on_message, on_submit, reply)
+            w.html = html
+            windows.append(w)
+            return w
+        self.orca.host.ui.create_window = create
+        return windows
+
+    def setting(self, **kw):
+        self.ns["get_store"](self.agent).update({"mode": "expert", **kw})
+
+    def test_print_setup_choice_is_what_is_sent(self):
+        windows = self.answer({"map": {"0": 3, "1": 1}, "prefs": {"bed_level": False, "flow_calibrate": True},
+                               "purifier": "auto", "acknowledged": [], "remember": False})
+        p = self.params(task_bed_leveling=True, task_flow_cali=True)
+        self.assertEqual(self.agent.start_local_print(p, self.update, lambda: False), 0)
+        self.assertEqual(len(windows), 1)                                  # first print: auto shows it
+        data = json.loads(re.search(r'id="u1-boot">(.*?)</script>', windows[0].html, re.S).group(1))["data"]
+        self.assertEqual(data["map"], {"0": 0, "1": 1})                    # starts from OrcaSlicer's slots
+        self.assertEqual(data["printer"]["busy"], False)
+        self.assertTrue(data["remember"])
+        script = self.fake.scripts[-1]
+        self.assertIn("CONFIG_EXTRUDER=0 MAP_EXTRUDER=3", script)
+        self.assertIn("BED_LEVEL=0 FLOW_CALIBRATE=1", script)
+        self.assertEqual(self.ns["get_store"](self.agent).effective()["prefs"], {})   # not remembered
+
+    def test_print_setup_remembers_when_ticked(self):
+        self.answer({"map": {}, "prefs": {"bed_level": False}, "purifier": "auto", "remember": True})
+        self.assertEqual(self.agent.start_local_print(self.params(task_bed_leveling=True), self.update, None), 0)
+        self.assertIs(self.ns["get_store"](self.agent).effective()["prefs"]["bed_level"], False)
+
+    def test_print_setup_setting_off_and_on(self):
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.setting(print_dialog=False)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertEqual(windows, [])
+        self.setting(print_dialog=True, printed_before=True)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertEqual(len(windows), 1)
+
+    def test_print_setup_cancel_sends_nothing(self):
+        self.answer({"cancelled": True})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), self.ns["ERR_CANCELED"])
+        self.assertEqual(self.fake.order, [])
+
+    def test_print_setup_warnings_must_be_acknowledged(self):
+        self.answer({"map": {"0": 2}, "prefs": {}, "purifier": "auto", "acknowledged": []})   # T3 is empty
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), self.ns["ERR_LP_PUBLISH"])
+        self.assertIn("weren't confirmed", self.updates[-1][2])
+        self.assertEqual(self.fake.order, [])
+        self.answer({"map": {"0": 2}, "prefs": {}, "purifier": "auto", "acknowledged": ["empty:0:2"]})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertIn("CONFIG_EXTRUDER=0 MAP_EXTRUDER=2", self.fake.scripts[-1])
+
+    def test_busy_u1_is_refused_before_the_print_setup(self):
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.fake.state = "printing"
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), self.ns["ERR_LP_PUBLISH"])
+        self.assertEqual((windows, self.fake.order), ([], []))
+
+    def test_orcaslicer_cancel_closes_the_print_setup(self):
+        windows = self.answer(None, submit=False)
+        code = self.agent.start_local_print(self.params(), self.update, lambda: bool(windows))
+        self.assertEqual(code, self.ns["ERR_CANCELED"])
+        self.assertFalse(windows[0].open)
+        self.assertEqual(self.fake.order, [])
+
+    def test_print_setup_shows_linked_spool_names(self):
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+
+        class Svc:
+            @staticmethod
+            def spool_names(host):
+                return {"1": {"name": "Acme Cobalt", "colour": "#2850A8"}}
+            target = None
+        self.ns["_service"] = Svc()
+        self.addCleanup(self.ns.__setitem__, "_service", None)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertIn('"spools": {"1": {"name": "Acme Cobalt", "colour": "#2850A8"}}', windows[0].html)
+
     def test_send_and_verify(self):
         self.assertEqual(self.agent.start_send_gcode_to_sdcard(self.params(), self.update, None, None), 0)
         self.assertEqual(list(self.fake.uploads), ["part.gcode"])
@@ -350,6 +509,109 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual((reply["sequence_id"], reply["result"]), ("9", "success"))
         self.assertEqual(self.agent.send_message_to_printer("u1", json.dumps({"print": {"command": "calibration"}}), 0, 0),
                          agent.UNSUPPORTED)
+
+    def test_linked_toolhead_reports_its_spooler_preset_id(self):
+        """OrcaSlicer's sync from AMS matches presets on tray_info_idx: a toolhead linked to a Spoolman spool carries
+        the SPL id of the spool's standalone Spooler preset (per spool here, from profiles.json); the others the
+        Generic id of their material. The links come from Spoolman at connect, without the tab."""
+        import threading
+        import types
+        name = "_local/spooler/Acme PLA #5 @Snapmaker U1"
+        mine = {"name": name, "bundle_id": "spooler", "vendor": "Acme", "colour": "#00FF00"}
+        self.ns["filament_catalog"] = lambda: ([mine], "Snapmaker U1")
+        profiles = {"version": 1, "filaments": {}, "spools": {"5": {"Snapmaker U1": name}}, "ids": {name: "SPL00000005AA"}}
+        self.ns["spooler_bridge"].read_json = lambda folder, name: profiles   # the wheel's own module object
+        spool = {"id": 5, "location": "U1 T1", "filament": {"id": 9, "vendor": {"name": "Acme"}, "material": "PLA",
+                                                              "color_hex": "FF0000"},
+                 "extra": {"orca_filament_preset": '"My PLA"'}}
+        self.ns["user_presets"] = lambda: 1 / 0   # OrcaSlicer won't list user presets: the link is ignored
+        seen = []
+
+        class FakeSpoolman:
+            def __init__(self, url, client):
+                seen.append((url, client is not None))
+
+            def connect(self):
+                return {}
+
+            def spools(self):
+                return [spool]
+        self.ns["sm"].Spoolman = FakeSpoolman
+        self.ns["get_store"](self.agent).update({"printer_name": "U1", "spoolman_url": "http://sm:7912"})
+        messages = []
+        self.agent.set_on_local_message_fn(lambda dev, text: messages.append(json.loads(text)))
+        self.agent.set_queue_on_main_fn(lambda task: task())
+        self.connect()
+        self.assertTrue(wait_for(lambda: self.agent._links[1]))
+        self.assertEqual(seen[0], ("http://sm:7912", True))
+        messages.clear()
+        self.agent._wake.set()
+        self.assertTrue(wait_for(lambda: messages))
+        trays = messages[-1]["print"]["ams"][0]["tray"]
+        self.assertEqual((trays[0]["tray_type"], trays[0]["tray_info_idx"]), ("PLA", "SPL00000005AA"))
+        self.assertEqual((trays[1]["tray_type"], trays[1]["tray_info_idx"]), ("PETG", "OFYPdQJh"))
+        self.ns["_service"] = types.SimpleNamespace(   # the tab showing this U1 wins: its links are up to date
+            lock=threading.RLock(), target=types.SimpleNamespace(host="http://%s/" % self.fake.host.split(":")[0]),
+            spools=[{"id": 5, "filament_id": 9}], bindings={2: 5})
+        self.assertEqual(list(self.agent._bound_spools()), [2])
+        self.ns["_service"].target.host = "10.9.9.9"   # another U1 in the tab: the agent's own links
+        self.assertEqual(list(self.agent._bound_spools()), [0])
+
+    def test_toolhead_linked_to_a_standalone_user_preset_reports_its_id(self):
+        """orca_filament_preset naming a standalone user preset: its filament_id (from its file), which OrcaSlicer's
+        sync from AMS loads. One that inherits has its parent's id, so the sync can't load it: the usual id. Presets
+        are read on OrcaSlicer's UI thread only (here: the test's main thread, or a queue_on_main task)."""
+        import threading
+        folder = tempfile.mkdtemp()
+        standalone = os.path.join(folder, "My PLA.json")
+        with open(standalone, "w", encoding="utf-8") as f:
+            json.dump({"name": "My PLA", "inherits": "", "filament_id": "P1a2b3c"}, f)
+        mine = [{"name": "My PLA", "file": standalone, "inherits": ""},
+                {"name": "Child PETG", "file": standalone, "inherits": "Generic PETG @System"}]
+        queued, off_ui = [], []
+
+        def user_presets():
+            if threading.current_thread() is not threading.main_thread() and not queued:
+                off_ui.append(threading.current_thread().name)
+            return mine
+        self.ns["user_presets"] = user_presets
+        self.ns["filament_catalog"] = lambda: ([], "Snapmaker U1")
+        self.ns["spooler_bridge"].read_json = lambda folder, name: {}
+
+        def extra(name):
+            return {"orca_filament_preset": json.dumps(name)}
+        spools = [{"id": 5, "location": "U1 T1", "extra": extra("my pla"), "filament": {"id": 1, "material": "PLA"}},
+                  {"id": 6, "location": "U1 T2", "filament": {"id": 2, "material": "PETG", "extra": extra("Child PETG")}},
+                  {"id": 7, "location": "U1 T4", "extra": extra("Ghost"), "filament": {"id": 3, "material": "PLA"}}]
+
+        class FakeSpoolman:
+            def __init__(self, url, client):
+                pass
+
+            def connect(self):
+                return {}
+
+            def spools(self):
+                return spools
+        self.ns["sm"].Spoolman = FakeSpoolman
+        self.ns["get_store"](self.agent).update({"printer_name": "U1", "spoolman_url": "http://sm:7912"})
+        messages = []
+        self.agent.set_on_local_message_fn(lambda dev, text: messages.append(json.loads(text)))
+        self.agent.set_queue_on_main_fn(lambda task: (queued.append(1), task(), queued.pop()))
+        self.connect()
+        self.assertTrue(wait_for(lambda: self.agent._links[1]))
+        messages.clear()
+        self.agent._wake.set()
+        self.assertTrue(wait_for(lambda: messages))
+        trays = messages[-1]["print"]["ams"][0]["tray"]
+        self.assertEqual([t["tray_info_idx"] for t in trays], ["P1a2b3c", "OFYPdQJh", "", "OFmY0l6t"])
+        self.assertEqual(off_ui, [])
+        ghost = [n for n in self.orca.notifications if '"Ghost"' in n]   # AMS sync says it too, once per name
+        self.assertEqual(len(ghost), 1)
+        self.assertIn("T4: no compatible user preset", ghost[0])
+        self.agent._wake.set()
+        self.assertTrue(wait_for(lambda: len(messages) > 1))
+        self.assertEqual(len([n for n in self.orca.notifications if '"Ghost"' in n]), 1)
 
     def connect(self, **kw):
         conn = self.orca.printer_agent.PrinterConnectionParams(**{"dev_id": "u1", "host": self.fake.host, **kw})
@@ -512,6 +774,48 @@ class PluginAgentTests(unittest.TestCase):
     def test_commands_need_a_connection(self):
         pause = json.dumps({"print": {"command": "pause"}})
         self.assertEqual(self.agent.send_message_to_printer("u1", pause, 0, 0), self.ns["ERR_CONNECT"])
+
+
+def bridge_preset(name, vendor="Generic", colour="#FF0000"):
+    return {"name": sb.NAME_PREFIX + name, "bundle_id": sb.BUNDLE_ID, "compatible_printers": ["Snapmaker U1"],
+            "colour": colour, "vendor": vendor}
+
+
+class TrayIdTests(unittest.TestCase):
+    """tray_filament_id: the SPL id of a linked spool's standalone Spooler preset, from profiles.json "ids"."""
+    LABEL = "Snapmaker U1"
+    SPOOL = {"id": 12, "filament_id": 7, "vendor": "SUNLU", "material": "PLA", "colour": "#101010"}
+    MATTE = "SUNLU PLA Matte Black @Snapmaker U1"
+
+    def presets(self, *names):
+        return [bridge_preset(n, vendor="SUNLU", colour="#101010") for n in names]
+
+    def test_linked_spool_reports_its_spooler_preset_id(self):
+        profiles = {"version": 1, "filaments": {"7": {self.LABEL: "_local/spooler/" + self.MATTE}},
+                    "ids": {"_local/spooler/" + self.MATTE: "SPLAAAA000001"}}
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, self.presets(self.MATTE), profiles, self.LABEL), "SPLAAAA000001")
+        by_colour = {"version": 1, "filaments": {}, "ids": profiles["ids"]}   # not listed: same vendor, material, colour
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, self.presets(self.MATTE), by_colour, self.LABEL), "SPLAAAA000001")
+
+    def test_per_spool_preset_wins_over_the_filament_one(self):
+        three, twelve = "SUNLU PLA #3 @Snapmaker U1", "SUNLU PLA #12 @Snapmaker U1"
+        profiles = {"version": 1, "filaments": {"7": {self.LABEL: "_local/spooler/" + three}},
+                    "spools": {"12": {self.LABEL: "_local/spooler/" + twelve}, "3": {self.LABEL: "_local/spooler/" + three}},
+                    "ids": {"_local/spooler/" + three: "SPL0000000003", "_local/spooler/" + twelve: "SPL0000000012"}}
+        self.assertEqual(sb.profile_lookup(profiles, 7, self.LABEL, 12), "_local/spooler/" + twelve)
+        self.assertEqual(sb.profile_lookup(profiles, 7, self.LABEL, 99), "_local/spooler/" + three)
+        presets = self.presets(three, twelve)
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, presets, profiles, self.LABEL), "SPL0000000012")
+        self.assertEqual(sb.tray_filament_id({**self.SPOOL, "id": 3}, presets, profiles, self.LABEL), "SPL0000000003")
+
+    def test_no_id_leaves_it_to_the_generic_preset(self):
+        listed = {"version": 1, "filaments": {"7": {self.LABEL: "_local/spooler/" + self.MATTE}}}
+        presets = self.presets(self.MATTE)
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, presets, listed, self.LABEL), "")   # an inheriting preset
+        self.assertEqual(sb.tray_filament_id(self.SPOOL, presets, None, self.LABEL), "")     # no profiles.json
+        self.assertEqual(sb.tray_filament_id(None, presets, listed), "")                     # nothing linked
+        ids = {**listed, "ids": {"_local/spooler/" + self.MATTE: "SPLAAAA000001"}}
+        self.assertEqual(sb.tray_filament_id({**self.SPOOL, "id": 1, "filament_id": 1, "material": "ASA"}, presets, ids), "")
 
 
 if __name__ == "__main__":

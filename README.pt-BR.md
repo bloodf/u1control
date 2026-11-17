@@ -122,7 +122,7 @@ Os detalhes estão em [docs/features.md](docs/features.md) e todos os ajustes em
 
 Automágico é o modo padrão: tudo o que pode rodar sozinho roda, e a janela só abre na primeira impressão, com uma cabeça vazia, com outro material, com dois filamentos para a mesma cabeça ou sem material exatamente igual. O modo Especialista transforma cada etapa em um ajuste, e as suas escolhas ficam guardadas enquanto o Automágico está ligado.
 
-Para usar a janela Imprimir do próprio OrcaSlicer, ligue **Use printer agents instead of print hosts** em **Preferências** e defina **Printer Agent** como `u1control` no perfil de impressora da U1. [Os passos e o que cada caixa faz](docs/features.md#printer-agent).
+Para usar a janela Imprimir do próprio OrcaSlicer, marque **Use printer agents instead of print hosts** em **Preferências > Developer > Experimental Features**, reinicie o OrcaSlicer e defina **Printer Agent** como `u1control` numa cópia do perfil de impressora da U1. **Ajustes > Requisitos** na aba U1 Control mostra se o OrcaSlicer usa o agente. O preparo da impressão do U1 Control abre em seguida, já com os slots escolhidos lá. [Os passos e o que cada caixa faz](docs/features.md#printer-agent).
 
 ## 🔒 Privacidade e segurança
 
@@ -148,9 +148,9 @@ Não. O preparo da impressão, a câmera, as cabeças, as etiquetas RFID da Snap
 </details>
 
 <details>
-<summary>A janela Preparar impressão na U1 não abriu. Isso é um problema?</summary>
+<summary>Por que aparecem duas janelas quando clico em Imprimir?</summary>
 
-Não. No Automágico a janela só abre quando é preciso escolher. Nos outros casos o arquivo sai com as cabeças que o U1 Control relacionou. Para ver a janela em toda impressão, mude para Especialista e defina **Janela de preparo da impressão** como **sempre**.
+O OrcaSlicer sempre abre a própria janela Imprimir primeiro, e nenhum plugin pode substituí-la. O preparo da impressão do U1 Control abre em seguida, já preenchido com o que você escolheu, para conferir as cabeças e as opções antes de enviar. Para pular, mude para Especialista e desligue **Mostrar o preparo antes de enviar**; um material diferente ou uma U1 ocupada continuam sendo recusados.
 </details>
 
 <details>
@@ -180,7 +180,9 @@ Não. Os dois plugins concordam sobre qual bobina está em qual cabeça e regist
 <details>
 <summary>Uma bobina pode usar o meu perfil de filamento ajustado?</summary>
 
-Para uma etiqueta RFID, sim: no modo Especialista, `profile_overrides` escolhe um perfil de filamento exato pelo UID da etiqueta, pelo SKU ou por marca e material ([como](docs/settings.md#profile-overrides)). Escolher um perfil por bobina do Spoolman foi pedido na [issue #11](https://github.com/bloodf/u1control/issues/11).
+Sim. Para uma bobina do Spoolman, coloque o nome do perfil no campo extra do Spoolman `orca_filament_preset` (na bobina, ou no filamento para todas as bobinas dele; o valor da bobina vence). **Aplicar aos filamentos do projeto** passa a escolher esse perfil para o cabeçote com a bobina. Ele precisa ser um perfil de usuário seu, compatível com a impressora selecionada; se não for encontrado, o U1 Control avisa uma vez e escolhe um perfil como antes. O **Sincronizar filamentos** da aba Dispositivo do OrcaSlicer só carrega esse perfil se ele for independente (sem perfil pai). Configuração e limites: [docs/features.md](docs/features.md#your-own-filament-preset-for-a-spoolman-spool).
+
+Para uma etiqueta RFID, no modo Especialista, `profile_overrides` escolhe um perfil de filamento exato pelo UID da etiqueta, pelo SKU ou por marca e material ([como](docs/settings.md#profile-overrides)).
 </details>
 
 <details>
@@ -191,7 +193,7 @@ Não. É um projeto independente, não feito nem suportado pela Snapmaker, feito
 
 ## 🌍 Idiomas
 
-Inglês, português do Brasil, espanhol, alemão e chinês simplificado. A página segue o idioma do OrcaSlicer (chinês tradicional mostra o simplificado; outros idiomas, inglês), ou o que você escolher em **Ajustes > Idioma**. Uma tradução para o polonês foi proposta na [issue #20](https://github.com/bloodf/u1control/issues/20).
+Inglês, português do Brasil, espanhol, alemão, chinês simplificado e polonês. A página segue o idioma do OrcaSlicer (chinês tradicional mostra o simplificado; outros idiomas, inglês), ou o que você escolher em **Ajustes > Idioma**. O polonês foi pedido na [issue #20](https://github.com/bloodf/u1control/issues/20).
 
 ## 🧩 Mais plugins do bloodf
 

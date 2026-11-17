@@ -59,6 +59,7 @@ STALE = "the selected printer changed; nothing was sent to it"
 HOTEND_MAX = 320                  # °C: what cmd_temperature clamps to (the page shows and validates the same)
 BED_MAX = 110
 NO_U1 = "no U1 selected: choose a Snapmaker U1 printer with an address"
+FOLLOW_RETRY, FOLLOW_RETRY_MAX = 30.0, 300.0   # s: spool follow back-off after a failed Spoolman read (doubling)
 FIRMWARE_RETRY = 30.0             # s between firmware checks while the Firmware Config API gave no clear answer
 
 
@@ -121,7 +122,12 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.firmware = {"kind": "unknown", "version": ""}
         self.firmware_sure = False      # the kind came from a clear answer; else checked again every FIRMWARE_RETRY
         self.firmware_retry_at = 0.0
+        self.gcode_cmds = frozenset()   # the printer's command list, read at connect (GET /printer/gcode/help)
         self.spoolman, self.spoolman_gen = None, None
+        # How the last Spoolman connect went: "moonraker" / "direct", "none" (no URL and no Spoolman on the printer),
+        # "" (not tried). Requirements read it; no probe of its own.
+        self.spoolman_link = ""
+        self.follow_wait, self.follow_retry_at = 0.0, 0.0   # spool follow back-off after a failed Spoolman read
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
         self.last_frame_at = 0.0
@@ -357,6 +363,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                     return
                 view["bindings"] = {str(k): v for k, v in self.bindings.items()}
                 view["firmware"] = dict(self.firmware)
+                view["features"] = u1.features(self.gcode_cmds)
                 self.last_view, self.last_state = view, view["state"]
             self._rfid_follow(view, gen)
             if self._current(gen):
@@ -460,10 +467,19 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             if self.spoolman is not None and self.spoolman_gen == gen:
                 return self.spoolman
         smc = sm.Spoolman(target.spoolman_url, client)
-        smc.connect()
+        try:
+            smc.connect()
+        except sm.SpoolmanError:
+            # "none" only on the printer's clear answer; no answer leaves it unknown.
+            if not target.spoolman_url and smc.printer_spoolman is False:
+                with self.lock:
+                    if gen == self.generation:
+                        self.spoolman_link = "none"
+            raise
         with self.lock:
             if gen == self.generation:
                 self.spoolman, self.spoolman_gen = smc, gen
+                self.spoolman_link = "moonraker" if smc.via_moonraker else "direct"
         return smc
 
     def _spoolman_follow(self, view, gen):
@@ -472,8 +488,11 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         with self.lock:
             if gen != self.generation:
                 return
-            previous, self.last_heads = self.last_heads, heads
             target, kind = self.target, self.firmware["kind"]
+            if self.last_heads is not None and time.monotonic() < self.follow_retry_at and not (
+                    kind == "extended" and isinstance(view.get("spool_ids"), list)):
+                return  # backing off after a failure: the change stays pending (last_heads kept) for the retry
+            previous, self.last_heads = self.last_heads, heads
             if not target or (not target.spoolman_url and kind != "extended"):
                 return
             if kind == "extended" and isinstance(view.get("spool_ids"), list):
@@ -503,8 +522,19 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 if pick:
                     self._bind(t, pick)
                     self._notice(tr("T%d now uses Spoolman spool #%d (%s %s)") % (t + 1, pick["id"], pick["vendor"], pick["name"]), gen)
+            with self.lock:
+                if gen == self.generation:
+                    self.follow_wait, self.follow_retry_at = 0.0, 0.0   # works again: next failure is said again
         except (PrinterError, sm.SpoolmanError) as e:
-            self._notice("Spoolman: %s" % e, gen)
+            with self.lock:
+                if gen != self.generation:
+                    return
+                self.last_heads = previous   # retry this change once the back-off is over
+                first = not self.follow_wait
+                self.follow_wait = min(FOLLOW_RETRY_MAX, self.follow_wait * 2 or FOLLOW_RETRY)
+                self.follow_retry_at = time.monotonic() + self.follow_wait
+            if first:   # said once; later failures of the same outage stay quiet until it works again
+                self._notice("Spoolman: %s" % e, gen)
 
     def _is_own_write(self, head, state):   # caller holds self.lock
         """True once (and clears the mark) when the head now shows what _bind just wrote to it."""
@@ -575,6 +605,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         info = client.info()
         status, conclusive = ext.Extended(client).probe()
         firmware = u1.detect_firmware(info, status)
+        commands = self._commands(client)
         sure = conclusive or firmware["kind"] == "extended"
         with self.lock:
             if gen != self.generation:
@@ -583,6 +614,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 self.firmware = firmware
             self.firmware_sure = sure or self.firmware["kind"] == "extended"
             self.firmware_retry_at = time.monotonic() + FIRMWARE_RETRY
+            self.gcode_cmds = commands
             firmware = dict(self.firmware)
         return {"address": client.address, "firmware": firmware, "hostname": info.get("hostname"),
                 "klipper_state": info.get("state"), "printer": target.name, "generation": gen,
@@ -656,12 +688,26 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         prefs = prefs or {}
         if "unload_when_done" in prefs:
             raise ValueError(tr("Unload when done is chosen for each print, per toolhead, in the U1 print setup pop-up"))
-        clean = {k: bool(v) for k, v in prefs.items() if k in u1.PREF_KEYS}
-        params = ["%s=%d" % (param, 1 if clean[key] else 0) for key, param, _, _, _ in u1.PREFERENCES if key in clean]
-        if not params:
-            raise ValueError(tr("nothing to change"))
         self._require_idle()
-        return self._gcode("SET_PRINT_PREFERENCES " + " ".join(params))
+        lines = u1.preference_commands(u1.clean_prefs(prefs, self._commands(self._client())))
+        if not lines:
+            raise ValueError(tr("nothing to change"))
+        return self._gcode("\n".join(lines))
+
+    def cmd_cover_fan(self, fan, percent):
+        """Set a top-cover fan (exhaust or inner/recirculation) now, when the printer has SET_PURIFIER."""
+        if "SET_PURIFIER" not in self._commands(self._client()):
+            raise ValueError(tr("not supported by this firmware"))
+        view = self._require_idle()
+        return self._gcode(u1.cover_fan_command(fan, percent, (view.get("purifier") or {}).get("mode")))
+
+    @staticmethod
+    def _commands(client):
+        """The printer's G-code command list; empty when it can't be read, so the extra options stay off."""
+        try:
+            return client.gcode_commands()
+        except PrinterError:
+            return frozenset()
 
     # toolheads -----------------------------------------------------------
 
@@ -738,6 +784,17 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 self.bindings = sm.bindings_from_locations(spools, target.name)
             bindings = {str(k): v for k, v in self.bindings.items()}
         return {"spools": spools, "bindings": bindings, "via": "moonraker" if smc.via_moonraker else "direct"}
+
+    def spool_names(self, host):
+        """{"<toolhead>": {"name": "Vendor Name", "colour": "#RRGGBB" | None}} for the heads linked to a Spoolman
+        spool, from what the tab already read (no I/O); {} unless `host` is the printer the tab follows."""
+        with self.lock:
+            if self.target is None or printer_ident(self.target.host) != printer_ident(host):
+                return {}
+            by_id = {s["id"]: s for s in self.spools}
+            return {str(h): {"name": " ".join(x for x in (by_id[sid]["vendor"], by_id[sid]["name"]) if x),
+                             "colour": by_id[sid].get("colour")}
+                    for h, sid in self.bindings.items() if sid in by_id}
 
     def cmd_bind_spool(self, head, spool_id, force=False):
         """force=True sends FORCE=1 (overrides an official/RFID head); only the page's confirmed manual bind sets it."""

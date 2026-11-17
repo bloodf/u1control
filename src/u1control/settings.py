@@ -11,7 +11,6 @@ import threading
 
 AUTOMAGIC, EXPERT = "automagic", "expert"
 PIPELINE_NAME = "U1 print setup"
-DIALOG_CHOICES = ("auto", "always", "never")
 PURIFIER_CHOICES = ("auto", "keep-warm", "weak", "strong", "off")
 
 # (key, label, help, automagic value, "bool" | tuple of choices)
@@ -20,9 +19,9 @@ AUTOMATIONS = [
      AUTOMAGIC, (AUTOMAGIC, EXPERT)),
     ("auto_add_pipeline", "Add \"U1 print setup\" to U1 process presets",
      "Adds it to the Slicing Pipeline Plugin setting of your U1 process preset (save the preset to keep it).", True, "bool"),
-    ("print_dialog", "Print setup pop-up",
-     "auto: only when something needs a decision (mapping warnings, ambiguous mapping, first print, "
-     "unknown printer options). never: refuses to send when the mapping has warnings.", "auto", DIALOG_CHOICES),
+    ("print_dialog", "Show print setup before sending",
+     "After OrcaSlicer's Print, choose the toolheads and options in U1 Control's window. Off: OrcaSlicer's "
+     "choice is sent as is, and a material mismatch or a busy U1 is still refused.", True, "bool"),
     ("purifier", "Top cover (purifier) mode", "auto follows Snapmaker's softening-temperature rule.", "auto", PURIFIER_CHOICES),
     ("chamber_wait", "Wait for chamber temperature", "Adds WAIT_CHAMBER_TEMP after bed heat-up when missing.", True, "bool"),
     ("whole_bed_mesh", "Whole-bed bed mesh", "11x11 mesh instead of adaptive (the U1 keeps one mesh).", True, "bool"),
@@ -42,7 +41,7 @@ AUTOMATIONS = [
 ]
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
 EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto", "camera_fps": 5}
-UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN")   # "auto": OrcaSlicer's language, then the system's
+UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl")   # "auto": OrcaSlicer's language, then the system's
 CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
 
 
@@ -99,6 +98,8 @@ class Store:
                 if key != "mode":
                     stored = d.get(key, default)
                     out[key] = stored if mode == EXPERT and _valid(kind, stored) else default
+            if mode == EXPERT and d.get("print_dialog") == "never":   # the choice before it became on/off
+                out["print_dialog"] = False
             if out["camera_fps"] not in CAMERA_FPS:
                 out["camera_fps"] = EXTRA["camera_fps"]
             return {k: dict(v) if isinstance(v, dict) else v for k, v in out.items()}

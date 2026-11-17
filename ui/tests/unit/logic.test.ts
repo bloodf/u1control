@@ -1,7 +1,7 @@
 // Pure rules of the page (node --test runs this TypeScript directly).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTarget, parseSpeed, heaterPhase, setupWarnings, warningKey, moveTargets, boundHeads, family, overEnglish } from '../../src/core/logic.ts';
+import { parseTarget, parseSpeed, heaterPhase, setupWarnings, warningKey, moveTargets, boundHeads, family, overEnglish, colourFar } from '../../src/core/logic.ts';
 import { normalizeLocale, resolveLocale, interpolate } from '../../src/core/i18n-core.ts';
 
 test('a blank target is never 0; 0 typed is Off; out of range refused (U02/B-09)', () => {
@@ -46,6 +46,8 @@ test('locale: explicit choice, then host (pt_BR), then browser, then English', (
   assert.equal(normalizeLocale('pt_BR'), 'pt-BR'); assert.equal(normalizeLocale('pt'), 'pt-BR'); assert.equal(normalizeLocale('fr_FR'), null);
   assert.equal(normalizeLocale('de_DE'), 'de'); assert.equal(normalizeLocale('es'), 'es'); assert.equal(normalizeLocale('es-MX'), 'es');
   assert.equal(normalizeLocale('zh_CN'), 'zh-CN'); assert.equal(normalizeLocale('zh_TW'), 'zh-CN'); assert.equal(normalizeLocale('zh-Hant-TW'), 'zh-CN');
+  assert.equal(normalizeLocale('pl_PL'), 'pl'); assert.equal(normalizeLocale('pl-PL'), 'pl'); assert.equal(normalizeLocale('PL'), 'pl');
+  assert.equal(resolveLocale('auto', 'pl_PL', ['en-US']), 'pl'); assert.equal(resolveLocale('pl', 'de', []), 'pl');
   assert.equal(normalizeLocale('ESP'), null); assert.equal(normalizeLocale(''), null); assert.equal(normalizeLocale(undefined), null);
   assert.equal(resolveLocale('en', 'pt_BR', ['pt-BR']), 'en');
   assert.equal(resolveLocale('de', 'zh_CN', ['es']), 'de'); assert.equal(resolveLocale('zh-CN', 'de', []), 'zh-CN');
@@ -63,4 +65,13 @@ test('PrimeVue labels: a language over English keeps English for any aria label 
   assert.deepEqual(merged, { accept: 'Ja', aria: { close: 'Schließen', star: 'Star' } });
   assert.deepEqual(overEnglish(english, undefined), english);
   assert.equal(english.aria.close, 'Close', 'English itself untouched');
+});
+
+test('colourFar: the print setup hints only at clearly different colours', () => {
+  assert.equal(colourFar('#E5484D', '#e5484dff'), false);       // same colour, alpha ignored
+  assert.equal(colourFar('#E5484D', '#D9434A'), false);         // near shade
+  assert.equal(colourFar('#E5484D', '#3E63DD'), true);          // red vs blue
+  assert.equal(colourFar('#FFFFFF', '#000000'), true);
+  assert.equal(colourFar(undefined, '#000000'), false);         // unknown: nothing to compare
+  assert.equal(colourFar('#fff', '#000000'), false);
 });

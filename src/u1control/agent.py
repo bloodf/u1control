@@ -31,13 +31,23 @@ HAS_SDCARD_NORMAL = 1          # DevStorage.h SdcardState
 CHAMBER_LIGHT = "chamber_light"
 LIGHT_ON, LIGHT_OFF = "SET_LED LED=cavity_led WHITE=1 SYNC=0", "SET_LED LED=cavity_led WHITE=0 SYNC=0"
 
-# Material -> OrcaFilamentLibrary family (MRA map_filament_type_to_generic_id). The id comes from the loaded
-# system preset "Generic <family> @System", never hard-coded.
+# Material -> OrcaFilamentLibrary family (MRA map_filament_type_to_generic_id).
 FILAMENT_FAMILIES = {
     "PLA": "PLA", "PLA-CF": "PLA-CF", "PLA SILK": "PLA Silk", "PLA HIGH SPEED": "PLA High Speed",
     "PLA MATTE": "PLA Matte", "ABS": "ABS", "ASA": "ASA", "PETG": "PETG", "PET": "PETG", "PCTG": "PCTG",
     "PA": "PA", "PA-CF": "PA-CF", "PPA-CF": "PPA-CF", "PPA-GF": "PPA-GF", "PC": "PC", "PVA": "PVA",
     "HIPS": "HIPS", "BVOH": "BVOH", "TPU": "TPU",
+}
+# filament_id of each "Generic <family> @System" preset in OrcaSlicer's OrcaFilamentLibrary (resources/profiles/
+# OrcaFilamentLibrary/filament, resolved through "inherits", OrcaSlicer main 32f6db87). OrcaSlicer's plugin API
+# doesn't show a preset's filament_id, so they are listed here. An id OrcaSlicer doesn't know still works: its sync
+# from AMS then takes "Generic <tray_type>" (PresetBundle::sync_ams_list); only an empty one becomes "Generic PLA".
+GENERIC_IDS = {
+    "ABS": "OFY9muEs", "ASA": "OFLPAxz3", "BVOH": "OFo2UF2C", "CoPE": "OFjt9en1", "EVA": "OFCD8qiU",
+    "HIPS": "OFsFon5l", "PA": "OFg8ndtj", "PA-CF": "OFQLcbps", "PC": "OFLakOUI", "PCTG": "OFu1evlr",
+    "PE": "OFPklMI1", "PETG": "OFYPdQJh", "PHA": "OF74KeQR", "PLA": "OFDSrzZ8", "PLA High Speed": "OFmpMwxS",
+    "PLA Matte": "OFmY0l6t", "PLA Silk": "OFesA6rF", "PLA-CF": "OFWbdGsC", "PP": "OF1UNk9P", "PPA-CF": "OF8tPByX",
+    "PPA-GF": "OF8Tlg47", "PVA": "OFDvXujf", "SBS": "OFhQfUQY", "TPU": "OFgbpcy9",
 }
 _SUB_TYPES = {"CF": "-CF", "GF": "-GF", "SNAPSPEED": " HIGH SPEED", "HS": " HIGH SPEED", "SILK": " SILK",
               "WOOD": " WOOD", "MATTE": " MATTE", "MARBLE": " MARBLE"}
@@ -62,9 +72,18 @@ def tray_type(ftype, sub_type=""):
     return base + _SUB_TYPES.get(sub, "")
 
 
-def generic_preset_name(material):
-    family = FILAMENT_FAMILIES.get(" ".join(str(material or "").split()).upper())
-    return "Generic %s @System" % family if family else None
+def material_family(material):
+    """OrcaFilamentLibrary family of a material, or None: the table, else the longest family named in it as a
+    whole word."""
+    text = " ".join(str(material or "").split()).upper()
+    return FILAMENT_FAMILIES.get(text) or next(
+        (FILAMENT_FAMILIES[k] for k in sorted(FILAMENT_FAMILIES, key=len, reverse=True)
+         if re.search(r"(?<![A-Z0-9])%s(?![A-Z0-9])" % re.escape(k), text)), None)
+
+
+def generic_filament_id(material):
+    """filament_id of the material's "Generic <family> @System" preset, or ""."""
+    return GENERIC_IDS.get(material_family(material), "")
 
 
 def _rgba(colour):
@@ -72,20 +91,20 @@ def _rgba(colour):
     return (c[1:] if c else "FFFFFF") + "FF"
 
 
-def ams_block(heads, filament_id=None):
+def ams_block(heads, preferred=None):
     """The four toolheads as one four-tray unit (MRA build_ams_payload: id "0", info "0002"), tray id = toolhead.
-    filament_id(preset name) -> the filament_id of that system preset, or None."""
+    tray_info_idx is what OrcaSlicer's AMS sync matches presets on (filament_id): preferred(head) first (the
+    Spooler preset of the head's Spoolman spool, or ""), else the Generic preset of the head's material."""
     trays, bits = [], 0
     for h in heads[:u1.TOOLHEADS]:
         tray = {"id": str(h["index"]), "tag_uid": "0000000000000000"}
         if h.get("loaded"):
             bits |= 1 << h["index"]
             material = tray_type(h.get("type"), h.get("sub_type"))
-            preset = generic_preset_name(material)
             colour = _rgba(h.get("colour"))
             colours = [_rgba(c) for c in h.get("colours") or []] or [colour]
             tray.update(tray_type=material, tray_color=colour, cols=colours, ctype=1, remain=-1,
-                        tray_info_idx=(filament_id(preset) if filament_id and preset else None) or "")
+                        tray_info_idx=(preferred(h) if preferred else "") or generic_filament_id(material))
         else:
             tray.update(tray_info_idx="", tray_type="", tray_color="00000000", tray_slot_placeholder="1")
         trays.append(tray)
@@ -99,8 +118,8 @@ def _remaining_minutes(view):
     return int(spent * (1 - p) / p // 60)
 
 
-def push_status(view, filament_id=None):
-    """{"print": {...}} for on_local_message_fn, from u1.summarize()."""
+def push_status(view, preferred=None):
+    """{"print": {...}} for on_local_message_fn, from u1.summarize(); preferred as ams_block."""
     state = view.get("state") or "standby"
     gstate = GCODE_STATE.get(state, "RUNNING")
     if gstate == "IDLE" and view.get("machine_state") not in ("", "IDLE", None):
@@ -128,7 +147,7 @@ def push_status(view, filament_id=None):
         "mc_remaining_time": _remaining_minutes(view),
         "layer_num": int(view.get("layer") or 0), "total_layer_num": int(view.get("total_layers") or 0),
         "lights_report": [{"node": CHAMBER_LIGHT, "mode": "on" if view.get("light") else "off"}],
-        **ams_block(view.get("heads") or [], filament_id),
+        **ams_block(view.get("heads") or [], preferred),
     }
     return {"print": p}
 
@@ -287,32 +306,50 @@ def _remove(path):
         pass
 
 
-def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir):
+def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir, prefs=None, choose=None):
     """Read the job, check it against the toolheads and apply u1control's G-code fixes into a temp file.
-    Returns (temp path, mapping, filaments). Raises JobError: not a U1 print, or the mapping has warnings.
-    view=None (Send, no print starts): fixes only, no toolhead check."""
+    Returns (temp path, mapping, filaments, choice). Raises JobError: not a U1 print, or the mapping has warnings.
+    view=None (Send, no print starts): fixes only, no toolhead check.
+    choose(view, filaments, mapping, prefs, lines, cfg) -> None (no print setup shown) or the print setup's answer
+    {"map", "prefs", "purifier", "heads", "commands"} (its warnings already acknowledged and checked; the top-cover
+    fan speeds in prefs go into the G-code); raises Cancelled."""
     tmp = _copy_job(path, plate_index, work_dir)
     try:
         lines, newline = gcode.read(tmp)
         cfg = gcode.settings(lines)
         if not gcode.is_u1(cfg):
             raise JobError(tr("this G-code was not sliced for a Snapmaker U1"))
-        mapping, filaments, heads = None, gcode.filaments(lines, cfg), None
+        mapping, filaments, heads, choice = None, gcode.filaments(lines, cfg), None, None
+        done = setup_done(lines)
         if view is not None:
             heads = view["heads"]
             mapping = job_mapping(ams_mapping, filaments, heads)
-            problems = u1.mapping_warnings(filaments, heads, mapping)
-            if problems:
-                raise JobError(tr("%s. Pick other slots in the print dialog, or load the filament.") % "; ".join(problems))
-        lines, _ = gcode.process(lines, cfg, options, mapping, heads, version)
-        gcode.write(tmp, lines, newline)
-        return tmp, mapping, filaments
+            choice = choose(view, filaments, mapping, prefs, lines, cfg) if choose and not done else None
+            if choice:
+                mapping, heads = choice["map"], choice.get("heads") or heads
+                fans = {k: choice["prefs"][k] for k in u1.COVER_FANS if k in choice["prefs"]}
+                options = {**options, **fans, "purifier": choice["purifier"]}
+            else:
+                problems = u1.mapping_warnings(filaments, heads, mapping)
+                if problems:
+                    raise JobError(tr("%s. Pick other slots in the print dialog, or load the filament.") % "; ".join(problems))
+        if not done:
+            lines, _ = gcode.process(lines, cfg, options, mapping, heads, version)
+            gcode.write(tmp, lines + ([SETUP_DONE] if choice else []), newline)
+        return tmp, mapping, filaments, choice
     except BaseException:
         _remove(tmp)
         raise
 
 
 HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")   # as plugin._still_valid
+SETUP_DONE = gcode.MARK + " print setup done"   # last line of G-code that went through print setup
+
+
+def setup_done(lines):
+    """True when this G-code already went through U1 print setup (the slicing pipeline or the printer agent):
+    a second pass shows no window, sends no second pre-print script and changes nothing in it."""
+    return any(line.strip() == SETUP_DONE for line in lines[-50:])
 
 
 def _busy_reason(view):
@@ -326,7 +363,7 @@ def send_job(client, path, name, plate_index, options, version, work_dir, progre
     view = u1.summarize(client.query(u1.STATUS_OBJECTS))
     if u1.is_busy(view["state"]) and view["filename"].lstrip("/") == filename:
         raise JobError(tr("the U1 is printing %s now; send it under another name or wait") % filename)
-    tmp, _, _ = prepare_gcode(path, plate_index, options, None, None, version, work_dir)
+    tmp, _, _, _ = prepare_gcode(path, plate_index, options, None, None, version, work_dir)
     try:
         client.upload(tmp, filename, progress=progress, cancelled=cancelled)
         return filename
@@ -335,18 +372,27 @@ def send_job(client, path, name, plate_index, options, version, work_dir, progre
 
 
 def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs, task, version, work_dir,
-            progress=None, cancelled=None, stage=None):
-    """Print from the dialog: refuse a busy U1, map and fix the G-code, upload, send the toolhead map and print
-    options (u1.preprint_script), then start the print. task: {"bed_leveling", "flow_cali", "timelapse"}.
-    offered_prefs(view) -> the prefs u1control offers for this printer. Returns {"filename", "mapping",
-    "filaments", "script"}. Raises JobError, Cancelled or moonraker.PrinterError."""
+            progress=None, cancelled=None, stage=None, choose=None):
+    """Print from the dialog: refuse a busy U1, map (and ask, see prepare_gcode's choose) and fix the G-code,
+    upload, send the toolhead map and print options (u1.preprint_script), then start the print.
+    task: {"bed_leveling", "flow_cali", "timelapse"}. offered_prefs(view) -> the prefs u1control offers for this
+    printer. Returns {"filename", "mapping", "filaments", "script"}. Raises JobError, Cancelled or
+    moonraker.PrinterError."""
     view = u1.summarize(client.query(u1.STATUS_OBJECTS))
     if u1.machine_busy(view):
         raise JobError(_busy_reason(view))
-    tmp, mapping, filaments = prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir)
+    prefs = job_prefs(offered_prefs(view), task.get("bed_leveling"), task.get("flow_cali"), task.get("timelapse"))
+    tmp, mapping, filaments, choice = prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir,
+                                                    prefs, choose)
     try:
-        prefs = job_prefs(offered_prefs(view), task.get("bed_leveling"), task.get("flow_cali"), task.get("timelapse"))
-        script = u1.preprint_script(mapping, prefs)
+        if choice:
+            prefs, view = choice["prefs"], {**view, "heads": choice.get("heads") or view["heads"]}
+            if cancelled and cancelled():
+                raise Cancelled()
+            now = u1.summarize(client.query(u1.STATUS_OBJECTS))   # the print setup may have stayed open a while
+            if u1.machine_busy(now):
+                raise JobError(_busy_reason(now))
+        script = u1.preprint_script(mapping, prefs, choice.get("commands", False) if choice else False)
         filename = upload_name(name, path)
         if stage:
             stage("upload")
@@ -366,6 +412,6 @@ def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs
         if cancelled and cancelled():
             raise Cancelled()
         client.print_start(filename)
-        return {"filename": filename, "mapping": mapping, "filaments": filaments, "script": script}
+        return {"filename": filename, "mapping": mapping, "filaments": filaments, "script": script, "choice": choice}
     finally:
         _remove(tmp)

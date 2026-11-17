@@ -1,9 +1,11 @@
 """Translations of the texts Python writes (see i18n.py). Key: the English text, exactly as in the source.
 
-Every entry has all four languages and the same placeholders in the same order as its key. Words for shared terms
-are OrcaSlicer's own (toolhead, nozzle, bed, preset, time-lapse). German is formal ("Sie"), Spanish neutral, Chinese
-uses its own punctuation. Text from the printer, Spoolman or the system fills the placeholders as it came.
+Every entry has all five languages and the same placeholders in the same order as its key (Polish is kept apart, in
+i18n_text_pl.py, and joined in below). Words for shared terms are OrcaSlicer's own (toolhead, nozzle, bed, preset,
+time-lapse). German is formal ("Sie"), Spanish neutral, Chinese uses its own punctuation, Polish informal ("ty"). Text from the printer, Spoolman or the system fills the placeholders as it came.
 """
+
+from i18n_text_pl import PL
 
 
 def _m(pt, es, de, zh):
@@ -11,6 +13,29 @@ def _m(pt, es, de, zh):
 
 
 MESSAGES = {
+    "U1 print setup already done for this G-code; nothing sent again": _m(
+        "o preparo da impressão na U1 já foi feito para este G-code; nada foi enviado de novo",
+        "la preparación de impresión de la U1 ya se hizo para este G-Code; no se envió nada de nuevo",
+        "die U1-Druckvorbereitung wurde für diesen G-Code bereits ausgeführt; es wurde nichts erneut gesendet",
+        "此 G-code 已完成 U1 打印准备；未再次发送任何内容"),
+    "unknown top-cover fan %r": _m("ventilador da tampa superior desconhecido: %r", "ventilador de la tapa superior desconocido: %r",
+                                   "unbekannter Lüfter der oberen Abdeckung: %r", "未知的顶盖风扇：%r"),
+    "not supported by this firmware": _m("não é compatível com este firmware", "no es compatible con este firmware",
+                                         "wird von dieser Firmware nicht unterstützt", "此固件不支持"),
+    # ------------------------------------------------------------ print setup after OrcaSlicer's Print
+    "U1 Control — print setup": _m("U1 Control — preparo da impressão", "U1 Control — preparación de la impresión",
+                                   "U1 Control — Druckvorbereitung", "U1 Control — 打印准备"),
+    '%s. Turn on "Show print setup before sending" to choose toolheads.': _m(
+        '%s. Ligue "Mostrar o preparo antes de enviar" para escolher as cabeças.',
+        '%s. Active "Mostrar la preparación antes de enviar" para elegir los cabezales.',
+        '%s. Schalten Sie „Druckvorbereitung vor dem Senden zeigen“ ein, um die Werkzeugköpfe zu wählen.',
+        '%s。请打开“发送前显示打印准备”以选择工具头。'),
+    "unknown command": _m("comando desconhecido", "comando desconocido", "unbekannter Befehl", "未知命令"),
+    "open the U1 Control tab for this printer to change its toolheads": _m(
+        "abra a aba U1 Control desta impressora para alterar as cabeças",
+        "abra la pestaña U1 Control de esta impresora para cambiar sus cabezales",
+        "öffnen Sie den Tab U1 Control für diesen Drucker, um seine Werkzeugköpfe zu ändern",
+        "请打开此打印机的 U1 Control 标签页以更改工具头"),
     # ------------------------------------------------------------ printer agent (OrcaSlicer's Print dialog)
     "Preparing...": _m("Preparando...", "Preparando...", "Wird vorbereitet...", "正在准备..."),
     "Uploading G-code...": _m("Enviando o G-code...", "Subiendo el G-Code...", "G-Code wird hochgeladen...", "正在上传 G-code..."),
@@ -87,11 +112,6 @@ MESSAGES = {
         "no hay dirección de la U1: haga clic en el icono de Wi-Fi junto a la impresora e introduzca su IP",
         "keine U1-Adresse festgelegt: klicken Sie auf das WLAN-Symbol neben dem Drucker und geben Sie die IP ein",
         "未设置 U1 地址：请点击打印机旁的 Wi-Fi 图标并输入其 IP"),
-    "%s. Set the print setup pop-up to auto or always to choose toolheads.": _m(
-        "%s. Deixe a janela de preparo da impressão em auto ou sempre para escolher as cabeças.",
-        "%s. Ponga la ventana de preparación de la impresión en automático o siempre para elegir los cabezales.",
-        "%s. Stellen Sie das Fenster der Druckvorbereitung auf automatisch oder immer, um die Werkzeugköpfe zu wählen.",
-        "%s。请把打印准备窗口设为自动或总是，以便选择工具头。"),
     "print setup timed out; nothing was sent": _m(
         "o preparo da impressão expirou; nada foi enviado", "se agotó el tiempo de la preparación de la impresión; no se envió nada",
         "Zeitüberschreitung bei der Druckvorbereitung; es wurde nichts gesendet", "打印准备已超时；未发送任何内容"),
@@ -160,6 +180,16 @@ MESSAGES = {
     "unchanged": _m("sem alterações", "sin cambios", "unverändert", "未更改"),
     ". Problems: %s": _m(". Problemas: %s", ". Problemas: %s", ". Probleme: %s", "。问题：%s"),
     "filament %d: %s": _m("filamento %d: %s", "filamento %d: %s", "Filament %d: %s", "耗材丝 %d：%s"),
+    "T%d: no compatible user preset \"%s\" in OrcaSlicer, so the usual preset is used": _m(
+        "T%d: não há perfil de usuário compatível “%s” no OrcaSlicer, então foi usado o perfil de sempre",
+        "T%d: no hay ningún perfil de usuario compatible «%s» en OrcaSlicer, así que se usa el perfil habitual",
+        "T%d: kein kompatibles Benutzerprofil „%s“ in OrcaSlicer, daher wird das übliche Profil verwendet",
+        "T%d：OrcaSlicer 中没有兼容的用户预设“%s”，因此使用常规预设"),
+    "T%d: several user presets match \"%s\" ignoring case; write the exact name. The usual preset is used": _m(
+        "T%d: vários perfis de usuário correspondem a “%s” sem diferenciar maiúsculas; escreva o nome exato. Foi usado o perfil de sempre",
+        "T%d: varios perfiles de usuario coinciden con «%s» sin distinguir mayúsculas; escriba el nombre exacto. Se usa el perfil habitual",
+        "T%d: mehrere Benutzerprofile passen zu „%s“, wenn man Groß-/Kleinschreibung ignoriert; geben Sie den genauen Namen ein. Das übliche Profil wird verwendet",
+        "T%d：有多个用户预设在忽略大小写时与“%s”匹配；请填写准确名称。将使用常规预设"),
 
     # ------------------------------------------------------------ helper scripts
     "Select your Snapmaker U1 printer and set its IP (Wi-Fi icon next to the printer).": _m(
@@ -169,6 +199,10 @@ MESSAGES = {
         "请选择您的 Snapmaker U1 打印机并设置其 IP（打印机旁的 Wi-Fi 图标）。"),
     "Couldn't reach the U1: %s": _m("Não foi possível alcançar a U1: %s", "No se pudo conectar con la U1: %s",
                                     "Der U1 ist nicht erreichbar: %s", "无法连接 U1：%s"),
+    "OrcaSlicer did not answer in time; try again": _m("O OrcaSlicer não respondeu a tempo; tente de novo",
+                                                       "OrcaSlicer no respondió a tiempo; inténtelo de nuevo",
+                                                       "OrcaSlicer hat nicht rechtzeitig geantwortet; versuchen Sie es erneut",
+                                                       "OrcaSlicer 未及时响应；请重试"),
     "U1 at %s (official firmware %s)": _m("U1 em %s (firmware oficial %s)", "U1 en %s (firmware oficial %s)",
                                           "U1 unter %s (offizielle Firmware %s)", "U1 位于 %s（官方固件 %s）"),
     "U1 at %s (Extended Firmware %s)": _m("U1 em %s (Extended Firmware %s)", "U1 en %s (Extended Firmware %s)",
@@ -264,6 +298,11 @@ MESSAGES = {
         "Descargar al terminar se elige en cada impresión, por cabezal, en la ventana de preparación de impresión de la U1",
         "Entladen nach dem Druck wird für jeden Druck je Werkzeugkopf im Fenster der U1-Druckvorbereitung gewählt",
         "“完成后退料”需在 U1 打印准备窗口中按每次打印、每个工具头选择"),
+    "The exhaust fan stays off while the top cover recirculates (keep warm)": _m(
+        "O exaustor fica desligado enquanto a tampa superior recircula o ar (manter aquecido)",
+        "El extractor se queda apagado mientras la cubierta superior recircula el aire (mantener caliente)",
+        "Der Abluftlüfter bleibt aus, solange die obere Abdeckung die Luft umwälzt (warm halten)",
+        "顶盖内循环（保温）时排风扇保持关闭"),
     "nothing to change": _m("nada a alterar", "nada que cambiar", "nichts zu ändern", "没有可更改的内容"),
     "touch outside the screen": _m("toque fora da tela", "el toque está fuera de la pantalla",
                                    "Berührung außerhalb des Bildschirms", "点击位置超出屏幕"),
@@ -622,3 +661,5 @@ MESSAGES = {
         "aún no se puede saber si la impresora usa el Extended Firmware",
         "noch ist unklar, ob auf dem Drucker die Extended Firmware läuft", "尚无法判断打印机是否运行 Extended Firmware"),
 }
+
+MESSAGES = {key: {**langs, **({"pl": PL[key]} if key in PL else {})} for key, langs in MESSAGES.items()}

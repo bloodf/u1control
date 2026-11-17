@@ -214,6 +214,20 @@ class SpoolmanMatchTests(unittest.TestCase):
         view = sm.spool_view({"id": 1, "location": "U1 T1", "last_used": "2026-11-09T00:00:00Z", "archived": True})
         self.assertEqual((view["last_used"], view["archived"]), ("2026-11-09T00:00:00Z", True))
 
+    def test_spool_view_reads_the_orca_preset_link_spool_then_filament(self):
+        def link(spool_extra=None, filament_extra=None):
+            return sm.spool_view({"id": 1, "extra": spool_extra, "filament": {"extra": filament_extra}})["orca_preset"]
+        self.assertEqual(link({"orca_filament_preset": '"My PETG @Snapmaker U1"'}), "My PETG @Snapmaker U1")   # JSON
+        self.assertEqual(link({"orca_filament_preset": "My PETG"}), "My PETG")                     # raw, not JSON
+        self.assertEqual(link({"orca_filament_preset": '"  "'}, {"orca_filament_preset": '"Fil"'}), "Fil")   # empty spool
+        self.assertEqual(link({}, {"orca_filament_preset": '"Fil"'}), "Fil")
+        self.assertEqual(link({"orca_filament_preset": '"Spool"'}, {"orca_filament_preset": '"Fil"'}), "Spool")
+        for value in ("42", "null", "true", "false", "[\"A\"]", '{"a": "A"}'):              # JSON, not text
+            self.assertEqual(link({"orca_filament_preset": value}), "", value)
+        self.assertEqual(link({"orca_filament_preset": "null"}, {"orca_filament_preset": '"Fil"'}), "Fil")
+        self.assertEqual(link({"orca_filament_preset": None}, "junk"), "")
+        self.assertEqual(sm.spool_view({"id": 1})["orca_preset"], "")
+
     def test_spool_view_has_the_full_weight_for_the_spool_picture(self):
         # the spool's own initial weight, else the filament's net weight, else unknown
         self.assertEqual(sm.spool_view({"id": 1, "initial_weight": 750, "filament": {"weight": 1000}})["initial"], 750)
@@ -382,13 +396,44 @@ class PluginTests(unittest.TestCase):
         self.assertIn("AUTO_REPLENISH_FILAMENT=1", script)  # printer's own value carried over
         with open(self.path) as f:
             text = f.read()
-        self.assertIn(u1.PURIFIER["weak"], text)
+        self.assertIn(u1.purifier_command("weak", {"exhaust_fan": u1.COVER_FAN_DEFAULT}), text)   # offered 60 %
         boot = json.loads(re.search(r'<script type="application/json" id="u1-boot">(.*?)</script>',
                                     orca.windows[0].html, re.S).group(1))
         self.assertEqual(boot["mode"], "setup")   # the one Vue page, in print-setup mode
         data = boot["data"]
         self.assertEqual(data["map"], {"0": 0, "1": 1})
         self.assertTrue(ns["get_store"](cap).effective()["prefs"]["bed_level"])  # remembered
+
+    def test_print_setup_runs_once_per_gcode(self):
+        """A G-code that already went through print setup (its marker line) shows no second window and sends no
+        second pre-print script."""
+        orca, ns = self.load(answer={"map": {}, "prefs": {}, "purifier": "auto", "acknowledged": ["material:1:1"]})
+        cap = ns["U1PrintSetup"]()
+        self.assertEqual(cap.execute(self.ctx("OctoPrint")).status, "success")
+        with open(self.path) as f:
+            first = f.read()
+        self.assertTrue(first.rstrip().endswith("; u1control: print setup done"))
+        windows, scripts = len(orca.windows), len(self.fake.scripts)
+        result = cap.execute(self.ctx("OctoPrint"))
+        self.assertEqual(result.status, "success")
+        self.assertIn("already done", result.message)
+        self.assertEqual((len(orca.windows), len(self.fake.scripts)), (windows, scripts))
+        with open(self.path) as f:
+            self.assertEqual(f.read(), first)   # nothing inserted twice
+
+    def test_refused_send_remembers_nothing(self):
+        orca, ns = self.load(answer={"map": {}, "prefs": {"bed_level": False}, "purifier": "auto", "remember": True,
+                                     "acknowledged": ["material:1:1"]})
+        cap = ns["U1PrintSetup"]()
+        self.fake.order.clear()
+        real = ns["_still_valid"]
+
+        def refuse(*a):
+            raise ns["PrinterError"]("the U1 became busy")
+        ns["_still_valid"] = refuse
+        self.addCleanup(ns.__setitem__, "_still_valid", real)
+        self.assertEqual(cap.execute(self.ctx("OctoPrint")).status, "failure")
+        self.assertNotIn("bed_level", ns["get_store"](cap).effective()["prefs"])
 
     def test_print_setup_with_unconfirmed_warning_sends_nothing(self):
         for acked in (None, [], ["material:1:2"], "material:1:3"):   # missing, empty, other toolhead, not a list
@@ -477,6 +522,88 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(len(done), 3)  # head 3 is empty and skipped
         self.assertEqual(len(orca.filament_calls), 3)
         self.assertEqual(ns["sync_project"](heads[:0], [], {}), ([], []))
+
+    def test_sync_project_uses_the_spools_linked_user_preset(self):
+        meta = {"My PETG": {"is_user": True}, "Not mine": {}, "Other printer": {"is_user": True, "is_compatible": False},
+                "_local/spooler/Acme PLA @U1": {"is_user": True, "bundle_id": "spooler"}}
+        orca = fakes.install_orca(filament_names=["Generic PETG @U1", "Generic PLA @U1", *meta], filament_meta=meta)
+        ns = fakes.load_wheel(self.artifact)
+        inside, reads = [], []
+        on_ui, user_presets = ns["on_ui_thread"], ns["user_presets"]
+        ns["on_ui_thread"] = lambda fn: (inside.append(1), on_ui(fn), inside.pop())[1]
+        ns["user_presets"] = lambda: (reads.append(bool(inside)), user_presets())[1]
+        heads = u1.summarize(self.fake.status())["heads"]
+        links = {0: "my petg", 1: "Ghost", 3: "Not mine"}   # T1: case only; T2: missing; T4: not a user preset
+        bound = lambda i: {"id": i, "orca_preset": links[i]} if i in links else None   # noqa: E731
+        done, problems = ns["sync_project"](heads, [], {}, bound=bound)
+        self.assertEqual([c[:2] for c in orca.filament_calls], [(1, "My PETG"), (2, "Generic PETG @U1"), (4, "Generic PLA @U1")])
+        self.assertEqual(orca.filament_calls[0][2], {"filament_colour": heads[0]["colour"]})   # colour as before
+        self.assertEqual(len(problems), 2)
+        self.assertIn('T2: no compatible user preset "Ghost"', problems[0])
+        self.assertIn('"Not mine"', problems[1])
+        self.assertEqual(ns["sync_project"](heads, [], {}, bound=bound)[1], [])   # each name said once
+        links[0] = "Other printer"   # not compatible with this printer: the usual preset, said once
+        self.assertIn('"Other printer"', ns["sync_project"](heads, [], {}, bound=bound)[1][0])
+        self.assertEqual(reads, [True] * 3)   # presets read through on_ui_thread only
+        self.assertIsNone(ns["linked_preset"]("_local/spooler/Acme PLA @U1", ns["user_presets"]()))
+
+    def test_ambiguous_link_and_unreadable_presets(self):
+        meta = {"My PLA": {"is_user": True}, "MY PLA": {"is_user": True}}
+        orca = fakes.install_orca(filament_names=["Generic PLA @U1", *meta], filament_meta=meta)
+        ns = fakes.load_wheel(self.artifact)
+        heads = u1.summarize(self.fake.status())["heads"]
+        bound = lambda i: {"id": i, "orca_preset": "my pla"} if i == 0 else None   # noqa: E731
+        done, problems = ns["sync_project"](heads, [], {}, bound=bound)
+        self.assertIn('several user presets match "my pla"', problems[0])
+        self.assertNotEqual(orca.filament_calls[0][1], "My PLA")
+        logs = []
+        ns["log"] = logs.append
+        ns["user_presets"] = lambda: 1 / 0   # OrcaSlicer won't answer: no links, the rest still works, logged once
+        self.assertEqual((ns["_user_presets_safe"](), ns["_user_presets_safe"]()), ([], []))
+        self.assertEqual(len(logs), 1)
+        orca.filament_calls.clear()
+        self.assertEqual(len(ns["sync_project"](heads, [], {}, bound=bound)[0]), 3)
+        linked_run = list(orca.filament_calls)
+        orca.filament_calls.clear()
+        ns["sync_project"](heads, [], {})
+        self.assertEqual(linked_run, orca.filament_calls)   # the usual presets, as with no link at all
+
+    def test_a_fixed_link_that_breaks_again_is_said_again(self):
+        meta = {"My PLA": {"is_user": True}}
+        fakes.install_orca(filament_names=["Generic PLA @U1", *meta], filament_meta=meta)
+        ns = fakes.load_wheel(self.artifact)
+        mine = [{"name": "My PLA", "file": "", "inherits": ""}]
+        self.assertIn("no compatible user preset", ns["link_notice"](1, "My PLA", []))
+        self.assertEqual(ns["link_notice"](1, "My PLA", []), "")      # once
+        self.assertEqual(ns["link_notice"](1, "My PLA", mine), "")    # fixed
+        self.assertIn("no compatible user preset", ns["link_notice"](1, "My PLA", []))   # broken again: said again
+        two = [{"name": "My PLA", "file": "", "inherits": ""}, {"name": "my pla", "file": "", "inherits": ""}]
+        self.assertIn("several user presets match", ns["link_notice"](2, "MY PLA", two))
+
+    def test_linked_filament_id_reads_each_file_version_once(self):
+        orca, ns = self.load()
+        folder = tempfile.mkdtemp()
+        path = os.path.join(folder, "My PLA.json")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("{broken")
+        logs = []
+        ns["log"] = logs.append
+        mine = [{"name": "My PLA", "file": path, "inherits": ""}]
+        spool = {"orca_preset": "My PLA"}
+        self.assertEqual([ns["linked_filament_id"](spool, mine) for _ in range(3)], ["", "", ""])
+        self.assertEqual(len(logs), 1)   # a bad file is logged once
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"filament_id": "P1"}, f)
+        os.utime(path, (1, 1))   # a new version of the file is read again
+        opened = []
+        real_open = open
+        ns["open"] = lambda *a, **k: (opened.append(1), real_open(*a, **k))[1]
+        self.assertEqual([ns["linked_filament_id"](spool, mine) for _ in range(3)], ["P1", "P1", "P1"])
+        self.assertEqual(len(opened), 1)
+        os.remove(path)   # gone before the next refresh: the usual id, logged once
+        logs.clear()
+        self.assertEqual([ns["linked_filament_id"](spool, mine) for _ in range(3)], ["", "", ""])
+        self.assertEqual(len(logs), 1)
 
     def test_page_sync_project_message(self):
         orca, ns = self.load(filament_names=["Generic PETG @U1"])

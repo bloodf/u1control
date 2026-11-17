@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 UI = ROOT / "src" / "u1control" / "ui"
-MAX_BUILT_BYTES = 400_000   # unchanged: the Vue wheel measures ~227 kB (legacy pages: ~96 kB)
+MAX_BUILT_BYTES = 650_000   # ~450 kB with the photo spool (foundation 4.1.0), ~50 kB with the Dashboard printer photo, ~60 kB with the print setup window
 
 
 class UiAssets(unittest.TestCase):
@@ -57,6 +57,13 @@ class UiAssets(unittest.TestCase):
         self.assertIsNone(re.search(r"APP_HTML = '[^\n]*__ICONS__", self.text))
         self.assertNotIn("__ICONS__", build.page_html("app.html"))
         self.assertIn("__BOOT__", build.page_html("app.html"))   # filled per page by plugin.page_html
+
+    def test_printer_photo_credit_ships(self):
+        """The Dashboard's printer photo is Snapmaker's product image: NOTICE.md (its credit) is in the wheel."""
+        with zipfile.ZipFile(self.artifact) as z:
+            notice = [n for n in z.namelist() if n.endswith(".dist-info/licenses/NOTICE.md")]
+            self.assertEqual(len(notice), 1)
+            self.assertIn("Printer photo: Snapmaker product image", z.read(notice[0]).decode("utf-8"))
 
     def test_built_size_reasonable(self):
         size = self.artifact.stat().st_size

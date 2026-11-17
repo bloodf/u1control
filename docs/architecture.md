@@ -19,6 +19,7 @@ plugin. The sources live in `src/u1control/`, and `scripts/build.py` packs them.
 | `usage.py` | Prints u1control sent, by printer and file, until their filament use is booked in Spoolman; kept in `usage_ledger.json` | no |
 | `stockview.py` | Spooler's stock in the tab and linking one of its spools to a toolhead through u1control's own bind | no |
 | `files.py` | File manager commands, the time-lapse list (videos paired with their cover pictures) and downloads that never overwrite a local file | no |
+| `requirements.py` | What the plugin needs and can't install (printer agents preference, Extended Firmware, Spoolman): ok / missing / unknown from what the plugin already knows, no I/O | no |
 | `service.py` | Runs printer work for the U1 Control tab: command worker, status monitor, camera, Spoolman follow, job tracker | no |
 | `plugin.py` | OrcaSlicer glue: the capabilities (including the `U1Agent` printer agent), settings wiring, preset changes | yes |
 | `ui/app.html` | The U1 Control tab and the print setup pop-up: one compiled Vue 3 + PrimeVue page (built from the top-level `ui/` project; mode chosen by the boot JSON `plugin.page_html` fills in) | — |

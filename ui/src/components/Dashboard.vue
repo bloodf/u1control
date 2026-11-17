@@ -28,8 +28,9 @@ async function powerDiscard() {
 }
 </script>
 <template>
-  <OuiBanner v-if="exceptions" tone="error" :title="t('exceptions.title')"><span class="oui-error-detail">{{ exceptions }}</span></OuiBanner>
-  <OuiBanner v-if="st?.power_loss" role="note" tone="warn" :icon="zap" :title="t('power.title')">
+  <OuiBanner :show="!!exceptions" tone="error" :title="t('exceptions.title')" dismissible :dismiss-key="`exceptions:${exceptions}`" :close-label="t('common.close')"><span class="oui-error-detail">{{ exceptions }}</span></OuiBanner>
+  <!-- Not dismissible: it holds the only Resume and Discard controls. -->
+  <OuiBanner v-if="st?.power_loss" role="note" tone="warn" :icon="zap" :title="t('power.title')" data-test="power-loss">
     <template v-if="st.reprint">{{ t('power.options', { options: JSON.stringify(st.reprint) }) }}</template>
     <template #actions>
       <Button size="small" severity="secondary" :label="t('power.resume')" :disabled="!!controlsOff" :aria-describedby="controlsOff ? 'heads-why' : undefined" data-focus-key="pl-resume" @click="powerResume">
@@ -51,7 +52,7 @@ async function powerDiscard() {
       </OuiEmpty>
       <template #footer><p class="oui-meta">{{ t('target.detail', { error: s.error }) }}</p></template>
     </OuiPanel>
-    <SpoolerHint where="dash" />
+    <SpoolerHint />
     <StockCard />
   </template>
   <div v-else class="u1-grid">
@@ -59,10 +60,10 @@ async function powerDiscard() {
       <JobCard />
       <BedCard />
       <CameraCard />
-      <ScreenCard v-if="s.info?.firmware.kind === 'extended'" />
+      <ScreenCard />
     </div>
     <div class="oui-stack">
-      <SpoolerHint where="dash" />
+      <SpoolerHint />
       <ToolheadsCard />
       <StockCard />
     </div>

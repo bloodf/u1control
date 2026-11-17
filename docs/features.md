@@ -30,14 +30,18 @@ file leaves OrcaSlicer, the way Snapmaker Orca does.
 - The top-cover mode follows Snapmaker's rule for the filaments in the print, or the mode you pick.
 - Nothing is sent while the U1 is printing, loading, calibrating or updating.
 
-In Automagic the pop-up only opens when a choice is needed: the first print, an empty toolhead or
-another material, two filaments for one toolhead, or no exact material match. Otherwise the file goes
-out with the toolheads u1control matched, without asking. To pick the toolheads every time, switch to
-Expert and set **Print setup pop-up** to **always**.
+The window (**U1 Control — print setup**) opens before every print while **Show print setup before
+sending** is on, which is the default. It shows the print and the printer, one card per filament with the head
+it prints from, a top view coloured by head, **Refresh**, **Auto mapping** and **Heads settings**, the print
+options, **Print preferences** and the top-cover fans. Each option appears only when the printer's command
+list (Moonraker `/printer/gcode/help`) has its command. While the U1 is busy the settings can't change and
+nothing is sent. With the setting off (Expert), the file goes out with the toolheads u1control matched, and a
+different material, an empty toolhead or a busy U1 is refused.
 
 Print setup runs when OrcaSlicer sends the print through the U1's print host (**Print** or **Send**).
-It does not run for **Export G-code**, for **Print** on the U1 Control Files page, or when OrcaSlicer's
-**Use printer agents instead of print hosts** preference is on. **Settings > Print setup** in the U1
+It does not run for **Export G-code** or for **Print** on the U1 Control Files page. With OrcaSlicer's
+**Use printer agents instead of print hosts** preference on, the same window opens from the printer agent
+(below). **Settings > Print setup** in the U1
 Control tab says whether your process preset runs it.
 
 ## Printer agent
@@ -45,9 +49,16 @@ Control tab says whether your process preset runs it.
 With OrcaSlicer's printer agents, u1control can be the U1's agent instead, so OrcaSlicer's own Print
 dialog and Device tab work with the U1:
 
-1. In OrcaSlicer, open **Preferences** and turn on **Use printer agents instead of print hosts**.
-2. Open your U1 printer preset, set **Printer Agent** to `u1control` and its host to the U1's IP
-   address. Save the preset.
+1. In OrcaSlicer, open **Preferences** (macOS: the OrcaSlicer menu; Windows and Linux: the main menu),
+   go to the **Developer** tab, and under **Experimental Features** tick **Use printer agents instead of
+   print hosts**.
+2. Restart OrcaSlicer.
+3. In a copy of your U1 printer preset (system presets can't be changed), set **Printer Agent** to
+   `u1control` and its host to the U1's IP address. Save the preset.
+
+OrcaSlicer doesn't let plugins read this preference. **Settings > Requirements** in the U1 Control tab
+shows **On** once OrcaSlicer connects to the U1 through the u1control agent (or reports it as the
+selected printer's agent), and **Not detected** before that, with these steps.
 
 Then **Print** in OrcaSlicer opens its own print dialog:
 
@@ -59,10 +70,18 @@ Then **Print** in OrcaSlicer opens its own print dialog:
   Unticking a box turns that option off. OrcaSlicer remembers the box; tick it again to go back to
   U1 Control's setting. Auto-refill, tangle detection, unload when done and
   light off when done come from the U1 Control settings (the options you last chose), or the printer's own.
+- Then U1 Control's own **print setup** window opens on top, before anything is sent, while **Show print
+  setup before sending** is on. It starts from the slots and options picked in OrcaSlicer's dialog. Change
+  any head or option there; **Remember these options** keeps them for the next print. **Don't send**, or
+  cancelling the job in OrcaSlicer, sends nothing; after 15 minutes the window gives up and nothing is sent.
+- Two dialogs, one after the other: OrcaSlicer always opens its own Print dialog first (its
+  SelectMachineDialog), and no plugin hook can replace or skip it. U1 Control's window is the second step,
+  started from what you picked in the first.
 - u1control applies the same G-code fixes as below, then uploads the file, sends the toolhead map and
   options, and starts the print.
-- A busy U1 (printing, loading, calibrating, updating), an empty toolhead or another material in a picked
-  slot stops the print before anything is sent, with the reason in OrcaSlicer's dialog. Both are checked
+- A busy U1 (printing, loading, calibrating, updating) stops the print before the window opens. An empty
+  toolhead or another material in a picked slot needs the window's "send anyway" check (without the window,
+  it stops the print) before anything is sent, with the reason in OrcaSlicer's dialog. Both are checked
   again after the upload; if something changed, the file stays on the U1 and the print isn't started.
 
 **Send** uploads the fixed G-code without starting it, and refuses the name of the file the U1 is printing. The Device tab shows status, temperatures, the
@@ -77,9 +96,12 @@ When the plugin loads, OrcaSlicer asks once to let u1control read the sliced job
 <details>
 <summary>Em português: usar o u1control como agente de impressora</summary>
 
-1. No OrcaSlicer, abra **Preferências** e ligue **Use printer agents instead of print hosts**.
-2. Abra o perfil de impressora da U1, defina **Printer Agent** como `u1control` e o host como o IP da
-   U1. Salve o perfil.
+1. No OrcaSlicer, abra **Preferências** (macOS: menu OrcaSlicer; Windows e Linux: o menu principal),
+   vá à aba **Developer** e, em **Experimental Features**, marque **Use printer agents instead of print
+   hosts**.
+2. Reinicie o OrcaSlicer.
+3. Numa cópia do perfil de impressora da U1 (perfis do sistema não podem ser alterados), defina
+   **Printer Agent** como `u1control` e o host como o IP da U1. Salve o perfil.
 
 A janela **Imprimir** do próprio OrcaSlicer passa a mostrar as quatro cabeças como quatro slots, com
 filamento e cor. As caixas **Auto Bed Leveling**, **Flow Dynamics Calibration** e **Timelapse** já vêm
@@ -87,6 +109,9 @@ marcadas, então as opções de impressão do U1 Control decidem: uma opção s�
 ligada no U1 Control (por padrão nivelamento e calibração de fluxo ligados, time-lapse desligado); desmarcar
 a caixa a desliga. O OrcaSlicer lembra a caixa; marque-a de novo para voltar ao ajuste do U1 Control. Reabastecimento automático, detecção de
 emaranhado, descarregar ao terminar e apagar a luz ao terminar vêm dos ajustes do U1 Control. O u1control
+abre em seguida a janela **Preparar impressão na U1** (mesma regra de **Ajustes > Janela de preparo**),
+já com os slots e opções escolhidos, a impressora, o carretel do Spoolman de cada cabeça e um aviso quando a
+cor é outra; **Lembrar estas opções** guarda as escolhas e **Não enviar** não envia nada. O u1control
 aplica as mesmas correções de G-code, envia o arquivo, o mapa das cabeças e as opções, e inicia a
 impressão. Uma U1 ocupada, uma cabeça vazia ou outro material no slot escolhido impedem o envio, com o
 motivo na janela do OrcaSlicer. O caminho pelo host de impressão (preparo de impressão da U1) continua
@@ -136,7 +161,9 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
     **Delete** asks first, then removes the video and its cover pictures from the printer. Both work
     while the U1 prints.
 - **Console:** send G-code and see the printer's replies; `M112` runs the E-stop.
-- **Settings:** Automagic or Expert, Spoolman, the printer's print options, bed mesh, input shaper
+- **Settings:** Automagic or Expert, **Requirements** (OrcaSlicer's printer agents, the Extended
+  Firmware and Spoolman: whether each is there, what needs it and how to get it; what needs a missing one
+  stays off and says why), Spoolman, the printer's print options, bed mesh, input shaper
   and flow calibration, the Extended Firmware's settings (web UI, camera, RFID system, Spoolman, Remote
   Screen, SSH and more) with restart Klipper, restart Moonraker and reboot, Spooler, and the connection.
   While a print runs, firmware settings that restart Klipper or reboot the printer, Restart Klipper and
@@ -172,6 +199,39 @@ once. While Spooler runs in the same OrcaSlicer, the U1 Control Dashboard also l
 (search, filters, low stock) and links a spool to a toolhead from there. OrcaSlicer can't hide a
 plugin's tab, so Spooler's own tab stays unless you turn its page off in the Plugins dialog. The
 details are in [spooler-contract.md](spooler-contract.md).
+
+## Your own filament preset for a Spoolman spool
+
+Name one of your own OrcaSlicer filament presets in Spoolman, and U1 Control uses it for that spool
+instead of Spooler's preset or a Generic one, so tuned values (pressure advance, flow ratio, max
+volumetric speed, temperatures, cooling) are kept.
+
+1. In Spoolman, **Settings > Extra fields**, add a field to **Spool** and/or **Filament**: key
+   `orca_filament_preset`, type **Text**. (Spooler adds both fields for you and lets you pick the preset
+   in its spool editor; U1 Control only reads them.)
+2. Fill it with the exact name of the filament preset, as OrcaSlicer shows it, for example
+   `My PETG @Snapmaker U1`. A value on the spool beats the one on its filament; leave the spool's empty to
+   use the filament's for all its spools.
+
+**Apply to project filaments** (and **Sync U1 toolheads to project filaments**) then picks that preset
+for the toolhead holding the spool. The name must match exactly (or, failing that, one preset regardless
+of upper/lower case), and the preset must be your own user preset (not a system preset or one a
+plugin made) compatible with the selected printer. If it isn't, or if several presets match it only
+ignoring case, U1 Control picks a preset as it always did and says so once per name (in the Apply result,
+or as an OrcaSlicer notification when the Device tab's sync finds it first). Colour and the spool link work as before, so Spoolman usage is
+unaffected.
+
+OrcaSlicer's **Sync filaments** (Device tab, printer agent) loads the preset whose `filament_id` the
+toolhead reports, and only if that preset is its own base:
+
+- **Works:** a standalone user preset (made without a parent, or detached: `"inherits": ""`) with a
+  `filament_id` in its file. The toolhead reports that id, so sync loads your preset, unless another
+  compatible standalone preset has the same id (a detached copy that kept a system preset's id): then
+  the first of them in OrcaSlicer's list wins.
+- **Doesn't work:** a user preset that inherits from a parent (the usual "Save as" result). It shares its
+  parent's `filament_id`, and OrcaSlicer's sync always loads the parent, never the child. For such a link
+  the toolhead reports what it would without it (Spooler's preset, else the Generic preset of its
+  material); use **Apply to project filaments** to get your preset.
 
 ## Plugins > Run
 

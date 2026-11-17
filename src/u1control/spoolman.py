@@ -22,6 +22,7 @@ from moonraker import PrinterError, _NO_PROXY
 from i18n import tr
 
 LOCATION_FMT = "%s T%d"
+PRESET_FIELD = "orca_filament_preset"   # Spoolman extra field, spool then filament: an OrcaSlicer filament preset name
 
 
 class SpoolmanError(RuntimeError):
@@ -37,17 +38,22 @@ class Spoolman:
         self.timeout = timeout
         self._open = (opener or _NO_PROXY).open
         self.via_moonraker = False
+        # What the printer said about its own Spoolman: True / False (a clear answer: spoolman_connected, or a 404
+        # because Moonraker has no [spoolman]), None (no answer: offline, timeout, 5xx).
+        self.printer_spoolman = None
 
     def connect(self):
         """Prefer the printer's own Spoolman link; fall back to the configured URL."""
         if self.mr is not None:
             try:
                 status = self.mr.request("GET", "/server/spoolman/status", timeout=3) or {}
-                if status.get("spoolman_connected"):
+                self.printer_spoolman = bool(status.get("spoolman_connected"))
+                if self.printer_spoolman:
                     self.via_moonraker = True
                     return {"via": "moonraker", "active_spool": status.get("spool_id")}
-            except PrinterError:
-                pass
+            except PrinterError as e:
+                if e.status == 404:
+                    self.printer_spoolman = False
         if not self.url:
             raise SpoolmanError(tr("Spoolman not configured: set its URL in u1control settings"))
         self.via_moonraker = False
@@ -98,6 +104,20 @@ def _weight(v):
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
 
 
+def preset_link(obj):
+    """The PRESET_FIELD extra value of a Spoolman spool or filament, or "". Spoolman keeps extras JSON-encoded
+    ('"My PETG"'); a value that isn't JSON is taken as it is."""
+    extra = (obj or {}).get("extra")
+    raw = extra.get(PRESET_FIELD) if isinstance(extra, dict) else None
+    if not isinstance(raw, str):
+        return ""
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        value = raw
+    return value.strip() if isinstance(value, str) else ""   # null, true, numbers, lists, objects: no name
+
+
 def spool_view(spool):
     """Flatten a Spoolman spool for the UI and for matching."""
     f = spool.get("filament") or {}
@@ -118,6 +138,7 @@ def spool_view(spool):
         "archived": bool(spool.get("archived")),
         "extruder_temp": f.get("settings_extruder_temp"),
         "bed_temp": f.get("settings_bed_temp"),
+        "orca_preset": preset_link(spool) or preset_link(f),
     }
 
 

@@ -122,7 +122,7 @@ Every detail is in [docs/features.md](docs/features.md), and every setting in [d
 
 Automagic is the default mode: everything that can run by itself does, and the window opens only for the first print, an empty toolhead, another material, two filaments for one toolhead, or no exact material match. Expert turns each step into a setting, and your Expert choices are kept while Automagic is on.
 
-To use OrcaSlicer's own Print dialog instead, turn on **Use printer agents instead of print hosts** in **Preferences**, then set **Printer Agent** to `u1control` in your U1 printer preset. [The steps and what each box does](docs/features.md#printer-agent).
+To use OrcaSlicer's own Print dialog instead, tick **Use printer agents instead of print hosts** in **Preferences > Developer > Experimental Features**, restart OrcaSlicer, then set **Printer Agent** to `u1control` in a copy of your U1 printer preset. **Settings > Requirements** in the U1 Control tab shows whether OrcaSlicer uses the agent. The U1 Control print setup window then opens after OrcaSlicer's dialog, starting from the slots you picked there. [The steps and what each box does](docs/features.md#printer-agent).
 
 ## 🔒 Privacy and safety
 
@@ -148,9 +148,9 @@ No. Print setup, the camera, toolheads, Snapmaker RFID tags, Spoolman, files, ti
 </details>
 
 <details>
-<summary>The U1 print setup window did not open. Is that a problem?</summary>
+<summary>Why do I see two windows when I press Print?</summary>
 
-No. In Automagic the window opens only when a choice is needed. Otherwise the file goes out with the toolheads U1 Control matched. To see the window for every print, switch to Expert and set **Print setup pop-up** to **always**.
+OrcaSlicer always opens its own Print dialog first, and no plugin can replace it. U1 Control's print setup opens next, already filled in from what you picked, so you can check the heads and options before anything is sent. To skip it, switch to Expert and turn off **Show print setup before sending**; a different material or a busy U1 is still refused.
 </details>
 
 <details>
@@ -180,18 +180,20 @@ No. The two plugins agree on which spool is in which toolhead and record filamen
 <details>
 <summary>Can a spool use my own tuned filament preset?</summary>
 
-For an RFID tag, yes: in Expert mode `profile_overrides` picks an exact filament preset by tag UID, SKU, or brand and material ([how](docs/settings.md#profile-overrides)). Picking a preset per Spoolman spool is requested in [issue #11](https://github.com/bloodf/u1control/issues/11).
+Yes. For a Spoolman spool, put the preset's name in the Spoolman extra field `orca_filament_preset` (on the spool, or on its filament for all its spools; the spool's value wins). **Apply to project filaments** then picks that preset for the toolhead holding the spool. It must be your own user preset, compatible with the selected printer; if it isn't found, U1 Control says so once and picks a preset as before. OrcaSlicer's **Sync filaments** from the Device tab loads it only if it is a standalone preset (no parent). Setup and limits: [docs/features.md](docs/features.md#your-own-filament-preset-for-a-spoolman-spool).
+
+For an RFID tag, in Expert mode `profile_overrides` picks an exact filament preset by tag UID, SKU, or brand and material ([how](docs/settings.md#profile-overrides)).
 </details>
 
 <details>
 <summary>Is U1 Control made by Snapmaker?</summary>
 
-No. It is an independent project, not made or supported by Snapmaker, built from Snapmaker's public sources and the U1 Extended Firmware. [Credits](docs/credits.md).
+No. It is an independent project, not made or supported by Snapmaker, built from Snapmaker's public sources and the U1 Extended Firmware. [Credits](docs/credits.md). Printer photo: Snapmaker product image ([NOTICE.md](NOTICE.md)).
 </details>
 
 ## 🌍 Languages
 
-English, Brazilian Portuguese, Spanish, German and Simplified Chinese. The page follows OrcaSlicer's language (Traditional Chinese shows Simplified Chinese, any other language English), or the one you pick under **Settings > Language**. A Polish translation is proposed in [issue #20](https://github.com/bloodf/u1control/issues/20).
+English, Brazilian Portuguese, Spanish, German, Simplified Chinese and Polish. The page follows OrcaSlicer's language (Traditional Chinese shows Simplified Chinese, any other language English), or the one you pick under **Settings > Language**. Polish was asked for in [issue #20](https://github.com/bloodf/u1control/issues/20).
 
 ## 🧩 More plugins by bloodf
 

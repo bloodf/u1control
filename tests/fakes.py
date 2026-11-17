@@ -64,6 +64,9 @@ class FakePrinter:
         self.hold = None   # threading.Event: an M109 script waits for it (a G-code line that takes long)   # /server/files/upload: name -> bytes; request order
         self.files = {}   # "camera/t.mp4" -> bytes served under /server/files/
         self.task = task_config()
+        # GET /printer/gcode/help: a U1's own command names (u1-klipper); tests drop some to mimic older firmware
+        self.commands = {c: "" for c in ("SET_PRINT_PREFERENCES", "DEFECT_DETECTION_CONFIG", "SET_PURIFIER",
+                                         "SET_PURIFIER_MODE", "PAUSE", "RESUME")}
         self.tags = {}   # head -> filament_detect info dict
         self.spools = [
             {"id": 7, "location": "", "remaining_weight": 800,
@@ -149,6 +152,8 @@ class FakePrinter:
                 q = dict(urllib.parse.parse_qsl(u.query))
                 if u.path == "/printer/info":
                     return self._send(200, {"result": {"software_version": fake.version, "state": "ready", "hostname": "u1"}})
+                if u.path == "/printer/gcode/help":
+                    return self._send(200, {"result": dict(fake.commands)})
                 if u.path == "/printer/objects/query":
                     return self._send(200, {"result": {"status": fake.status()}})
                 if u.path == "/server/webcams/list":
@@ -392,7 +397,14 @@ def install_orca(answer=None, preset=None, filament_names=(), filament_meta=None
     class FPreset:
         def __init__(self, name):
             self.name = name
-            self.bundle_id = filament_meta.get(name, {}).get("bundle_id", "")
+            meta = filament_meta.get(name, {})
+            self.bundle_id = meta.get("bundle_id", "")
+            self.file = meta.get("file", "")
+            self.is_compatible = meta.get("is_compatible", True)
+            self._user = meta.get("is_user", False)
+
+        def is_user(self):
+            return self._user
 
         def config_value(self, key):
             return filament_meta.get(self.name, {}).get(key)

@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch, MOCK_HOST, HELPERS, preparePage } from './cdp.mjs';
+import { SETUP_FULL } from './setup-data.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../..');
@@ -35,18 +36,29 @@ async function connect(kind, gen) {
 }
 async function tab(name) { await click(q('[data-tab="' + name + '"]')); }
 async function pick(root, label) {
-  assert(root, 'select to open'); root.click(); await until(() => q('.p-select-overlay') && !q('.p-select-overlay[class*="enter-active"]'), 'select overlay open');
+  assert(root, 'select to open'); await reveal(root); root.click(); await until(() => q('.p-select-overlay') && !q('.p-select-overlay[class*="enter-active"]'), 'select overlay open');
   const opt = qa('.p-select-overlay [role=option]').find(o => text(o) === label);
   assert(opt, 'option ' + label + ' in ' + qa('.p-select-overlay [role=option]').map(text).join('|'));
   await mouse(opt); await until(() => !q('.p-select-overlay'), 'overlay closed'); await settle();
 }
-const alerts = () => qa('[role=alert] .oui-banner').map(text).join(' | ');
+// Command results are toasts (bottom-left, shared OuiToastHost); the print setup pop-up's warnings are banners.
+// A toast that was closed stays in the page for its leave transition: it no longer counts.
+const toastText = t => [q('strong', t), q('.oui-toast-body', t)].filter(Boolean).map(text).join(' ');
+const toasts = () => qa('.oui-toast:not(.oui-toast-leave-active)').map(toastText).join(' | ');
+const alerts = () => [...qa('[role=alert] .oui-banner').map(text), toasts()].filter(Boolean).join(' | ');
 const ROWS = [{id: 7, filament_id: 70, name: 'Matte Black', vendor: 'Generic', material: 'PLA', colour: '#111111', colours: [], remaining: 500, low: false, use_first: false, location: 'Shelf A'},
   {id: 11, filament_id: 110, name: 'White', vendor: 'Acme', material: 'PETG', colour: '#FAFAFA', colours: [], remaining: 40, low: true, use_first: true, location: ''}];
 const SP = state => ({state, text: state === 'active' ? 'Spooler is running' : 'Spooler was unloaded or disabled.', detail: '', version: '0.21.0', origin: 'http://box:7912'});
 const STOCK = extra => ({spooler: SP('active'), stock: {state: 'ok', code: 'ok', text: '', rows: ROWS, key: 's1:3', ts: Date.now() / 1000, origin: 'http://box:7912'},
   same_spoolman: true, usage: 'u1control', bindings: {}, ...extra});
 const stockRows = () => qa('[data-stock]');
+const REQS = (agents, ext, sm, spooler = 'ok') => [{id: 'printer_agents', status: agents, details: {}},
+  {id: 'extended_firmware', status: ext, details: ext === 'unknown' ? {} : {version: '1.0'}},
+  {id: 'spoolman', status: sm, details: sm === 'ok' ? {url: 'http://box:7912', via: 'direct'} : {}},
+  {id: 'spooler', status: spooler, details: {url: 'https://example.invalid/spooler'}}];
+const reqRow = name => byTest('req-' + name);
+const reqStatus = name => text(q('.oui-status', reqRow(name)));
+const reqSteps = name => { const el = q('.oui-req-install > span', reqRow(name)); return el ? el.textContent.split('\\n').map(x => x.trim()).filter(Boolean) : []; };
 `;
 
 const SETUP_DATA = {
@@ -154,6 +166,38 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   }
 `);
 
+test('the printer photo: spools in the Spoolman colour, else the printer colour, else empty; the active spool lit', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', filename: 'cube.gcode', progress: 0.5, extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1})),
+    heads: [head('PLA', {colour: '#00ff00'}), head('PETG', {colour: '#3e63dd'}), head(''), head('PLA', {colour: '#ffffff'})]})});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [{id: 7, name: 'Orange', vendor: 'G', material: 'PETG', colour: '#ff7a00', remaining: 250, initial: 1000},
+    {id: 12, name: 'Tri', vendor: 'G', material: 'PLA', colour: '#e5484d', colours: ['#e5484d', '#f5d90a', '#3e63dd'], remaining: 900, initial: 1000}], bindings: {'0': 7, '3': 12}, via: 'direct'});
+  await settle();
+  const fig = q('[data-test="job-card"] [data-test="printer-figure"]');
+  assert(fig, 'the printer is shown in the status card');
+  assert(!q('[data-test="job-card"] .art-printer'), 'the old icon is gone');
+  const reel = n => fig.querySelector('.pf-reel[data-head="' + n + '"]');
+  const paint = n => reel(n).style.getPropertyValue('--pf-paint');
+  eq([reel(1).dataset.colour, paint(1)], ['#ff7a00', '#ff7a00'], 'T1: the linked Spoolman spool colour');
+  eq([reel(2).dataset.colour, paint(2)], ['#3e63dd', '#3e63dd'], 'T2: the printer colour');
+  assert(reel(3).hasAttribute('data-empty') && !reel(3).dataset.colour, 'T3: empty reel');
+  for (const c of ['#e5484d', '#f5d90a', '#3e63dd']) assert(paint(4).includes(c), 'T4: every colour of a multi-colour spool: ' + paint(4));
+  assert(reel(2).hasAttribute('data-active') && !reel(1).hasAttribute('data-active') && fig.querySelector('.pf-halo'), 'the active toolhead spool is lit');
+  assert(qa('img', fig).every(i => i.complete && i.naturalWidth > 0), 'photo and light maps load');
+  eq(fig.getAttribute('role'), 'img');
+  eq(fig.getAttribute('aria-label'), 'Printer and spools: T1 orange PETG, T2 blue PETG (in use), T3 empty, T4 multicolour PLA', 'says what each toolhead holds');
+  await post({type: 'offline', error: 'timed out'});
+  await until(() => q('[data-test="printer-figure"][data-stale]'), 'last known values');
+  const old = q('[data-test="printer-figure"]');
+  assert(!old.querySelector('.pf-halo') && !old.getAttribute('aria-label').includes('(in use)'), 'stale: no spool lit, nothing said in use');
+  await post({type: 'status', data: VIEW()});
+  await settle();
+  const idle = q('[data-test="job-card"] [data-test="printer-figure"]');
+  assert(idle && !idle.querySelector('.pf-halo'), 'idle: still shown, no spool lit');
+  assert(!idle.getAttribute('aria-label').includes('(in use)'), 'idle: no toolhead in use');
+`);
+
 test('thumbnails only for visible rows, two at a time, dropped on folder change', `
   await connect();
   await tab('files');
@@ -254,48 +298,147 @@ test('console routes M112 to the urgent path and shows replies', `
   assert(log.includes('accepted') && log.includes('T0:21.0'), log);
 `);
 
-test('setup warning needs an acknowledgement tied to the current mapping', `
-  const send = () => byTest('send');
-  await until(() => send());
-  assert(alerts().includes('PETG'), 'warning announced: ' + alerts());
-  assert(send().disabled, 'send waits for the acknowledgement');
-  await click(send());
-  eq(__t.submits, [], 'nothing sent without it');
+const SETUP_BUSY = { ...SETUP_FULL, printer: { ...SETUP_FULL.printer, busy: true } };
+test('setup: the print, the printer, a card per filament with its head, spool and the preview', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  eq(text(byTest('job-meta')), '2h 12m 34s · 26.4 g', 'time and weight');
+  eq(text(byTest('job-meta2')), '175 layers · 522 tool changes', 'layers and tool changes');
+  const line = text(byTest('printer'));
+  assert(line.includes('Snapmaker U1') && line.includes('192.168.1.40') && line.includes('Ready'), 'printer: ' + line);
+  eq(qa('.su-card').length, 4, 'one card per filament');
+  const c0 = q('.su-card[data-f="0"]');
+  assert(text(c0).includes('[1]') && text(c0).includes('PETG') && text(c0).includes('Head 1') && text(c0).includes('Generic Leaf Green'), 'card 1: ' + text(c0));
+  eq(getComputedStyle(c0.querySelector('.hp-strand')).stroke, 'rgb(108, 191, 90)', 'strand in the Spoolman colour');
+  eq(getComputedStyle(q('.su-card[data-f="3"] .hp-strand')).stroke, 'rgb(245, 158, 11)', 'no spool: the printer colour');
+  assert(byTest('preview') && byTest('preview').getAttribute('aria-label').includes('Top view'), 'preview drawn');
+  assert(byTest('prefs') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
+  assert(!alerts() && !byTest('send').disabled && text(byTest('send')) === 'Apply & continue', 'nothing to confirm');
+  await click(byTest('send'));
+  const s0 = __t.submits[0];
+  eq(s0.map, {0: 0, 1: 2, 2: 1, 3: 3}, 'map');
+  eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan, s0.remember], ['medium', 60, true], 'prefs as offered');
+`, { mode: 'setup', data: SETUP_FULL });
+
+test('setup: a control the printer lacks is not shown', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  assert(!byTest('prefs') && !byTest('flow-more') && !q('#su-p-flow_calibrate') && !q('#su-p-time_lapse_camera') && !byTest('preview'), 'only what was offered');
+  assert(q('#su-p-bed_level'), 'bed leveling offered');
+  await click(byTest('cover-more'));
+  await until(() => byTest('cover-pop'), 'cover popover');
+  assert(!byTest('exhaust-mode') && !byTest('inner-mode'), 'no fan control without the command');
+`, { mode: 'setup' });
+
+test('setup: choose a head on the card; another material needs a confirmation tied to the mapping', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  const card = () => q('.su-card[data-f="1"]');
+  card().focus();
+  await press('Enter');
+  await until(() => q('.su-pick'), 'head picker open');
+  await until(() => document.activeElement && document.activeElement.matches('.su-pick-head'), 'focus in the picker');
+  await click(q('.su-pick-head[data-pick="2"]'));            // PETG -> empty T3
+  await until(() => !q('.su-pick'), 'picker closed');
+  eq(card().dataset.t, '2', 'mapped to T3');
+  assert(document.activeElement === card(), 'focus back on the card');
+  assert(alerts().includes('T3'), 'warning announced: ' + alerts());
+  assert(byTest('card-warn'), 'warning sign on the card');
+  assert(byTest('send').disabled, 'send waits for the confirmation');
   await click(q('#su-ack'));
-  assert(!send().disabled && text(send()).includes('1 warning'), 'says it sends with a warning: ' + text(send()));
-  await click(q('button[data-f="1"][data-t="2"]'));      // PETG -> empty T3: another warning
-  assert(!q('#su-ack').checked && send().disabled, 'a new warning needs a new acknowledgement');
-  assert(document.body.textContent.includes('previous check was cleared'), 'says why the box was cleared');
+  assert(!byTest('send').disabled && text(byTest('send')).includes('warning'), 'says it sends with a warning');
+  await click(card()); await until(() => q('.su-pick'), 'open again');
+  await click(q('.su-pick-head[data-pick="3"]'));            // PETG -> PLA T4: another warning set
+  assert(!q('#su-ack').checked && byTest('send').disabled, 'a new warning needs a new confirmation');
+  assert(document.body.textContent.includes('previous check'), 'says why the box was cleared');
   await click(q('#su-ack'));
-  await click(send());
-  eq(__t.submits.map(m => m.acknowledged), [['empty:1:2']], 'sends the ids it acknowledged');
-  await click(send());
+  await click(byTest('send'));
+  eq(__t.submits.map(m => m.acknowledged), [['material:1:3']], 'sends the ids it confirmed');
+  await click(byTest('send'));
   eq(__t.submits.length, 1, 'a second click does not send twice');
 `, { mode: 'setup' });
 
-test('setup without warnings keeps the plain flow; empty toolhead is labelled, not faded', `
-  await click(q('button[data-f="1"][data-t="3"]'));
-  await post({heads: HEADS.map(h => h.index === 3 ? {...h, type: 'PETG'} : h), map: {}});
-  assert(!alerts() && !q('#su-ack') && !byTest('send').disabled && text(byTest('send')) === 'Send to U1', 'no warning: unchanged flow');
-  const empty = q('button[data-f="0"][data-t="2"]');
-  assert(text(empty).includes('empty') && getComputedStyle(empty).opacity === '1' && !empty.disabled, 'empty is text, still selectable (B-08)');
-  await click(byTest('send'));
-  eq(__t.submits[0].acknowledged, [], 'nothing to acknowledge');
-`, { mode: 'setup' });
+test('setup: a busy printer locks the settings and Apply', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  assert(text(byTest('busy')).includes('can’t change during a print'), 'busy notice: ' + text(byTest('busy')));
+  assert(byTest('send').disabled && q('.su-card').disabled && byTest('prefs').disabled && q('#su-p-bed_level').disabled, 'locked');
+  assert(text(q('#su-why')).includes('busy'), 'why');
+  await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {}});
+  assert(!byTest('busy') && !byTest('send').disabled && !q('.su-card').disabled, 'unlocked when ready');
+`, { mode: 'setup', data: SETUP_BUSY });
 
-test('setup keeps focus on the chosen button across clicks and refreshes', `
-  const b = q('button[data-f="0"][data-t="3"]');
-  b.focus();
-  await press('Space');
-  const at = () => [document.activeElement.dataset.f, document.activeElement.dataset.t];
-  eq(at(), ['0', '3'], 'focus after choosing');
-  assert(b.isConnected && document.activeElement === b, 'same element kept');
-  await post({heads: HEADS, map: {}});
-  eq(at(), ['0', '3'], 'focus after a live refresh');
-  await post({heads: HEADS.map(h => ({...h, colour: '#654321'})), map: {}});
-  eq(at(), ['0', '3'], 'focus after a changed refresh');
-  eq(b.getAttribute('aria-pressed'), 'true', 'pressed state');
-`, { mode: 'setup' });
+test('setup: auto mapping, plugin settings, print preferences and the top-cover fans', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  await click(q('.su-card[data-f="0"]')); await until(() => q('.su-pick'));
+  await click(q('.su-pick-head[data-pick="3"]'));
+  await click(byTest('automap'));
+  assert(sent().some(m => m.refresh), 'asks the plugin to match again');
+  await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {0: 0, 1: 2, 2: 1, 3: 3}});
+  eq(q('.su-card[data-f="0"]').dataset.t, '0', 'auto mapping replaces a hand choice');
+  await click(byTest('plugin-settings'));
+  assert(sent().some(m => m.open_settings), 'asks the tab to open Settings');
+  await click(byTest('prefs'));
+  await until(() => byTest('prefs-dialog'), 'preferences dialog');
+  assert(text(byTest('prefs-dialog')).includes('Air printing'), 'tangle detection named as air printing');
+  eq(qa('[data-level="spaghetti_level"] [role=radio], [data-level="spaghetti_level"] button').length, 2, 'spaghetti: low/high only');
+  await click([...qa('[data-level="tangle_level"] button')].find(b => text(b) === 'High'));
+  await click(btn('Close', q('.p-dialog')));
+  await until(() => !q('.p-dialog'), 'dialog closed');
+  await click(byTest('cover-more')); await until(() => byTest('exhaust-mode'), 'exhaust control in a cooling mode');
+  assert(!byTest('inner-mode'), 'no recirculation fan outside keep warm');
+  await click([...qa('[data-test="exhaust-mode"] button')].find(b => text(b) === 'Off'));
+  await click(byTest('send'));
+  const s0 = __t.submits[0];
+  eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan], ['high', 0], 'chosen preferences sent');
+`, { mode: 'setup', data: SETUP_FULL });
+
+test('setup: Heads settings ask before overwriting a tagged spool; a set fan speed of 60 % stays set', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  await click(byTest('heads'));
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [{id: 7, vendor: 'Generic', name: 'Matte Black', material: 'PLA', colour: '#111111'}], bindings: {}});
+  await click(q('[data-head="1"] button[type="submit"]'));     // T2 holds an official spool
+  await until(dialogOpen, 'asks first');
+  eq(cmds('set_filament'), [], 'nothing sent before the answer');
+  await no();
+  eq(cmds('set_filament'), [], 'nothing sent on Go back');
+  await click(q('[data-head="1"] button[type="submit"]'));
+  await until(dialogOpen, 'asks again');
+  await yes();
+  await until(() => cmds('set_filament').length, 'sent after yes');
+  eq(cmds('set_filament')[0].args.force, true, 'force only after the confirmation');
+  await click(q('[data-head="0"] button[type="submit"]'));     // not tagged: no question, no force
+  await until(() => cmds('set_filament').length === 2, 'second save');
+  eq(cmds('set_filament')[1].args.force, false, 'no force');
+  await click(q('[data-head="2"] button[type="submit"]'));     // an RFID tag the head read: asks too
+  await until(dialogOpen, 'asks for a read tag');
+  await yes();
+  await until(() => cmds('set_filament').length === 3, 'third save');
+  eq(cmds('set_filament')[2].args.force, true, 'force after yes');
+  await click(byTest('cover-more')); await until(() => byTest('exhaust-mode'));
+  await click([...qa('[data-test="exhaust-mode"] button')].find(b => text(b) === 'Set'));
+  assert(q('.su-slider'), 'slider shown');
+  const range = q('.su-slider input[type=range]');
+  assert(range, 'the slider is a native range input (keyboard and screen readers)');
+  range.value = '60'; range.dispatchEvent(new Event('input', {bubbles: true}));
+  await settle();
+  assert(q('.su-slider') && text(q('.su-slider')).includes('60'), 'still Set at 60 %: ' + text(q('.su-slider') || document.body));
+`, { mode: 'setup', data: { ...SETUP_FULL, tags: [false, false, true, false] } });
+
+test('setup: keep warm hides the exhaust fan and never sends it', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  await click(byTest('cover-more')); await until(() => byTest('cover-pop'));
+  assert(text(byTest('exhaust-blocked')).includes('stays off'), 'says why: ' + text(byTest('exhaust-blocked')));
+  assert(byTest('inner-mode'), 'recirculation fan in keep warm');
+  await click(byTest('send'));
+  assert(!('exhaust_fan' in __t.submits[0].prefs) && __t.submits[0].prefs.inner_fan === 60, 'exhaust left out');
+`, { mode: 'setup', data: { ...SETUP_FULL, purifier: 'keep-warm' } });
+
+test('setup: remembers on request and in Portuguese at 380 px', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  eq(text(byTest('send')), 'Aplicar e continuar', 'pt-BR');
+  assert(document.documentElement.scrollWidth <= innerWidth, 'no horizontal scroll: ' + document.documentElement.scrollWidth);
+  await click(q('#su-remember'));
+  await click(byTest('send'));
+  eq(__t.submits.map(m => m.remember), [false], 'sends the remember choice');
+`, { mode: 'setup', data: SETUP_FULL, lang: 'pt_BR', size: [380, 900] });
 
 test('stock card stays hidden without Spooler', `
   await connect();
@@ -409,13 +552,13 @@ test('stock: many spools scroll inside the table; the reel never sets the row he
   eq(stockRows().length, 55, 'all spools listed');
   // OrcaSlicer's WebKit did not resolve the reel images' height: 100% in a table cell and used their 160 px source
   // height, which grew the reel to 40 x 160 and each row to ~177 px. Force that height: the box must not follow.
-  // The reel is now a vector (OuiSpool, width/height attributes), with no picture whose source height could leak.
+  // The reel is the foundation's photo spool (OuiSpool): a fixed px box with its pictures contained in it.
   await settle();
   const figs = qa('.sc-wrap .oui-spool').map(e => e.getBoundingClientRect());
   assert(figs.every(r => Math.round(r.width) === 40 && Math.round(r.height) === 40), 'reel is a fixed 40 px square: ' + JSON.stringify(figs.slice(0, 2)));
   const tall = qa('.sc-wrap tbody tr').map(r => r.getBoundingClientRect().height).filter(h => h > 80);
   eq(tall.length, 0, 'no row taller than its text needs');
-  eq(q('.sc-wrap .oui-spool').getAttribute('viewBox'), '0 0 48 48', 'reel drawn from its square viewBox, undistorted');
+  assert(qa('.sc-wrap .oui-spool img').every(e => Math.round(e.getBoundingClientRect().height) <= 40), 'reel pictures contained in their 40 px box');
   const wrap = q('.sc-wrap');
   assert(wrap.scrollHeight > wrap.clientHeight + 100 && getComputedStyle(wrap).overflowY === 'auto', 'long list scrolls inside the table');
   const after = q('[data-test="stock-card"] .oui-panel-foot');
@@ -598,7 +741,7 @@ test('B-04/B-05: one command per action, visible waiting, unknown after timeout,
   await reply(cmds('pause')[0], true);
   assert(!alerts().includes('no answer after'), 'late answer replaces the unknown notice');
   assert(document.body.textContent.includes('answered late'), 'late answer reported');
-  const dismiss = qa('[role=alert] .oui-banner').find(m => text(m).includes('Emergency stop failed')).querySelector('button');
+  const dismiss = qa('.oui-toast').find(m => text(m).includes('Emergency stop failed')).querySelector('.oui-toast-close');
   await click(dismiss);
   assert(!alerts().includes('Emergency stop failed'), 'dismissed by the user');
 `, { slow: true });
@@ -644,7 +787,7 @@ test('U05: unconfirmed use listed with identity; marking checked is local and ne
   eq(cmds('usage_ack').map(m => m.args), [{id: 'abc'}], 'only the local acknowledgement');
   assert(!__t.sent.slice(before).some(m => m.type === 'cmd' && !['usage_ack', 'usage', 'stock', 'spools'].includes(m.cmd)), 'no booking command');
   await reply(last('cmd', 'usage_ack'), {pending: [], unconfirmed: [], acknowledged: [{...entry, acknowledged_at: 1794300000}], acknowledged_total: 1, save_error: '', restore_notice: ''});
-  assert(!byTest('usage-card'), 'gone once checked');
+  assert(!byTest('usage-card').checkVisibility(), 'gone once checked');
 `);
 
 test('U05: a failed acknowledgement keeps the entry and says why', `
@@ -752,6 +895,25 @@ test('i18n: host language zh_CN gives zh-CN, including safety dialogs and errors
   assert(alerts().includes('暂停失败') && alerts().includes('timeout'), 'errors in zh-CN, printer text as given: ' + alerts());
 `, { lang: 'zh_CN' });
 
+test('i18n: host language pl_PL gives pl, including safety dialogs and errors', `
+  await until(() => last('hello'));
+  eq(document.documentElement.lang, 'pl', 'lang attribute');
+  assert(text(q('[data-tab="dash"]')).includes('Pulpit') && text(q('[data-tab="settings"]')).includes('Ustawienia'), 'nav in pl');
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  assert(text(byTest('state')).startsWith('Drukowanie'), 'state translated: ' + text(byTest('state')));
+  await click(byTest('cancel'));
+  assert(btn('Anuluj druk', dialogEl()) && btn('Drukuj dalej', dialogEl()), 'cancel dialog in pl');
+  await no();
+  await click(byTest('estop'));
+  assert(btn('Zatrzymaj teraz (E-stop)', dialogEl()) && btn('Wróć', dialogEl()), 'E-stop dialog in pl');
+  await no();
+  await fail(last('cmd', 'spools') || {id: -1}, 'x');
+  await click(byTest('pause'));
+  await fail(last('cmd', 'pause'), 'timeout');
+  assert(alerts().includes('Wstrzymaj – błąd') && alerts().includes('timeout'), 'errors in pl, printer text as given: ' + alerts());
+`, { lang: 'pl_PL' });
+
 test('i18n: Traditional Chinese OrcaSlicer reads Simplified Chinese', `
   await until(() => last('hello'));
   eq(document.documentElement.lang, 'zh-CN', 'zh_TW -> zh-CN');
@@ -764,7 +926,7 @@ test('i18n: unknown host language falls back to English', `
   assert(text(q('[data-tab="settings"]')).includes('Settings'), 'nav in English');
 `, { lang: 'fr_FR' });
 
-test('i18n: Deutsch, Español and 简体中文 can be chosen by hand and are kept', `
+test('i18n: Deutsch, Español, 简体中文 and Polski can be chosen by hand and are kept', `
   await connect();
   await tab('settings');
   await pick(byTest('lang'), 'Deutsch');
@@ -776,6 +938,12 @@ test('i18n: Deutsch, Español and 简体中文 can be chosen by hand and are kep
   await pick(byTest('lang'), '简体中文');
   assert(text(q('[data-tab="settings"]')).includes('设置'), 'switched to Chinese');
   eq(last('ui_language').value, 'zh-CN', 'Chinese kept');
+  await pick(byTest('lang'), 'Polski');
+  assert(text(q('[data-tab="settings"]')).includes('Ustawienia'), 'switched to Polish');
+  eq(last('ui_language').value, 'pl', 'Polish kept');
+  await pick(byTest('lang'), 'Automatycznie (English)');
+  eq(last('ui_language').value, 'auto', 'automatic from Polish');
+  await pick(byTest('lang'), '简体中文');
   await pick(byTest('lang'), '自动（English）');
   eq(last('ui_language').value, 'auto', 'automatic again');
   assert(text(q('[data-tab="settings"]')).includes('Settings'), 'back to the host language');
@@ -931,7 +1099,7 @@ test('time-lapses: one row per video with its cover; saving says where the file 
   assert(btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'no delete while that video is being saved');
   assert(!btn('Delete the time-lapse vase_20261115080000.mp4').disabled && !btn('Save the time-lapse vase_20261115080000.mp4').disabled, 'the other rows stay usable');
   await reply(last('cmd', 'download'), '/home/u/Downloads/u1control/benchy_20261116130921.mp4');
-  await until(() => text(q('.notices [role=status]')).includes('Saved to /home/u/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
+  await until(() => toasts().includes('Saved to /home/u/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
   assert(!btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'delete is back');
   await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
   assert(!btn('Save the time-lapse vase_20261115080000.mp4').disabled && !btn('Delete the time-lapse vase_20261115080000.mp4').disabled, 'saving and deleting stay on while printing');
@@ -960,7 +1128,7 @@ test('time-lapses: delete asks first, names both answers, takes the video and ke
   eq(qa('[data-timelapse]', panel).map(r => r.dataset.timelapse), ['timelapse/vase_20261115080000.mp4', 'timelapse/no cover.mp4'], 'the row is gone');
   assert(text(panel).includes('2 videos'), 'count follows');
   await until(() => document.activeElement === byTest('tl-refresh'), 'focus goes to Refresh, not to the top of the page');
-  assert(text(q('.notices [role=status]')).includes('Deleted'), 'success is said');
+  assert(toasts().includes('Deleted'), 'success is said');
   btn('Delete the time-lapse no cover.mp4').focus();
   await click(btn('Delete the time-lapse no cover.mp4'));
   await yes();
@@ -1034,7 +1202,7 @@ test('camera: save the picture on screen', `
   const cmd = last('cmd', 'snapshot');
   eq(cmd.args, {}, 'asks the plugin to save its last picture');
   await reply(cmd, '/home/u/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
-  await until(() => text(q('.notices [role=status]')).includes('Saved to'), 'says where it was saved');
+  await until(() => toasts().includes('Saved to'), 'says where it was saved');
 `);
 
 test('camera: frame rate choice starts at the stored rate, is sent to the plugin and says its limits', `
@@ -1076,7 +1244,7 @@ test('settings: says whether the process preset runs the toolhead choice and whe
 `);
 
 // PrimeVue's InputNumber reads only the locale's decimal sign; '.' typed or pasted must not turn 2.5 into 25.
-for (const [lang, shown] of [['de_DE', '2,5'], ['es_ES', '2,5'], ['pt_BR', '2,5'], ['en', '2.5']]) {
+for (const [lang, shown] of [['de_DE', '2,5'], ['es_ES', '2,5'], ['pt_BR', '2,5'], ['pl_PL', '2,5'], ['en', '2.5']]) {
   test(`decimal input: "2.5" typed or pasted is 2.5 in ${lang}`, `
     await connect();
     await post({type: 'status', data: VIEW()});
@@ -1094,6 +1262,206 @@ for (const [lang, shown] of [['de_DE', '2,5'], ['es_ES', '2,5'], ['pt_BR', '2,5'
   `, { lang });
 }
 
+// ------------------------------------------------------------------ requirements (Settings > Requirements)
+
+test('requirements: one section; each row says status, why and how; Check again asks anew', `
+  await connect('stock');
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'spools'));
+  await reply(last('cmd', 'spools'), {spools: [], bindings: {}, via: 'direct'});
+  await tab('settings');
+  await until(() => last('requirements'), 'the page asks which requirements are there');
+  eq(last('requirements').recheck, false, 'a plain ask, not a recheck');
+  await post({type: 'requirements', items: REQS('unknown', 'missing', 'missing', 'missing')});
+  eq(qa('[data-test="requirements"]').length, 1, 'one Requirements section');
+  eq(qa('[data-test="requirements"] .oui-req').map(r => r.dataset.test), ['req-agents', 'req-ext', 'req-spoolman', 'req-spooler'], 'four rows');
+  eq(reqStatus('agents'), 'Not detected', 'agents: not detected');
+  eq(q('.oui-status', reqRow('agents')).dataset.state, 'warn', 'a warning, not an error');
+  assert(reqSteps('agents').some(x => x.includes('Developer tab > Experimental Features') && x.includes('Use printer agents instead of print hosts')), 'names the exact preference: ' + reqSteps('agents'));
+  assert(reqSteps('agents').some(x => x.includes('Restart OrcaSlicer')), 'says to restart');
+  eq(reqStatus('ext'), 'Official firmware', 'stock firmware');
+  assert(reqSteps('ext').some(x => x.includes('firmware_config: true')), 'how to install the Extended Firmware');
+  assert(q('a[href*="SnapmakerU1-Extended-Firmware"]', reqRow('ext')), 'links the project');
+  eq(reqStatus('spoolman'), 'Not set', 'no Spoolman');
+  assert(reqSteps('spoolman').some(x => x.startsWith('macOS')) && reqSteps('spoolman').some(x => x.startsWith('Linux')), 'one line per OS: ' + reqSteps('spoolman'));
+  assert(q('a[href="https://github.com/Donkie/Spoolman"]', reqRow('spoolman')), 'official Spoolman link');
+  eq(reqRow('spooler').dataset.status, 'missing', 'Spooler from the plugin check');
+  eq(q('.oui-req-link', reqRow('spooler')).getAttribute('href'), 'https://example.invalid/spooler', 'Spooler install link');
+  await post({type: 'requirements', items: REQS('ok', 'ok', 'ok')});
+  eq(reqStatus('agents'), 'On', 'agents on');
+  eq(reqStatus('spoolman'), 'Set', 'Spoolman set');
+  assert(text(reqRow('spoolman')).includes('http://box:7912'), 'shows the address');
+  eq(qa('[data-test="requirements"] .oui-req-install').length, 0, 'nothing to install: no steps');
+  const before = cmds('spools').length;
+  await click(q('.oui-req-check', reqRow('agents')));
+  assert(sent().some(m => m.type === 'requirements' && m.recheck === true), 'Check again rechecks');
+  assert(cmds('spools').length > before, 'and asks the printer for its Spoolman link again');
+`);
+
+test('requirements: printer screen stays on stock firmware, off, with its reason', `
+  await connect('stock');
+  await post({type: 'status', data: VIEW()});
+  assert(byTest('screen-card'), 'the card is not hidden on stock firmware');
+  assert(byTest('screen-show').disabled, 'Show screen is off');
+  assert(text(byTest('screen-card')).includes('Needs the U1 Extended Firmware'), 'one-line reason: ' + text(byTest('screen-card')));
+  await post({type: 'selection_changed'});
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  assert(!byTest('screen-show').disabled, 'on the Extended Firmware it can be shown');
+`);
+
+test('requirements: no Spoolman turns stock links off with the reason', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), STOCK({same_spoolman: null}));
+  assert(stockRows().length && stockRows().every(b => !b.disabled), 'links on while Spoolman is not known missing');
+  await post({type: 'requirements', items: REQS('unknown', 'missing', 'missing')});
+  assert(stockRows().every(b => b.disabled && b.getAttribute('aria-describedby') === 'stock-why'), 'links off, pointing at the reason');
+  assert(text(byTest('stock-why')).includes('no Spoolman'), 'visible reason: ' + text(byTest('stock-why')));
+  await post({type: 'requirements', items: REQS('unknown', 'missing', 'ok')});
+  assert(stockRows().every(b => !b.disabled) && !byTest('stock-why'), 'Spoolman set: links on again');
+`);
+
+// ------------------------------------------------------------------ foundation 4.2.0: toasts, dismissible notices, requirements
+test('toasts: bottom-left, each with a Close button, gone once closed', `
+  await connect();
+  await post({type: 'notice', text: 'Project filaments updated'});
+  await until(() => q('.oui-toast'), 'toast shown');
+  const host = q('.oui-toasts');
+  eq(qa('.oui-toasts').length, 1, 'one toast host on the page');
+  const toast = q('.oui-toast'), r = toast.getBoundingClientRect();
+  assert(r.left <= 20 && innerHeight - r.bottom <= 20 && r.bottom <= innerHeight, 'bottom-left: ' + JSON.stringify(r));
+  eq(toast.getAttribute('role'), 'status', 'an info toast is polite');
+  assert(toasts().includes('Project filaments updated'), 'text shown: ' + toasts());
+  const close = q('.oui-toast-close', toast);
+  eq(close && close.getAttribute('aria-label'), 'Close', 'Close button named');
+  await click(close);
+  await until(() => !toasts().includes('Project filaments updated'), 'toast closed');
+  await post({type: 'reply', id: 99999, error: 'boom'});
+  const err = qa('.oui-toast').find(t => text(t).includes('boom'));
+  assert(err && err.getAttribute('role') === 'alert', 'an error toast is an alert');
+  assert(err.parentElement.closest('.oui-toasts') === host, 'in the same host');
+`);
+
+test('notices: a closed banner stays closed while its condition holds and comes back when it starts again', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  const busyBanner = () => qa('.oui-banner').find(b => text(b).includes('busy'));
+  assert(busyBanner(), 'busy banner shown');
+  const close = q('.oui-banner-close', busyBanner());
+  eq(close && close.getAttribute('aria-label'), 'Close', 'Close button named');
+  await click(close);
+  assert(!busyBanner(), 'closed');
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, progress: 0.5})});
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, progress: 0.6})});
+  assert(!busyBanner(), 'stays closed across polls with the same condition');
+  await post({type: 'status', data: VIEW()});
+  await sleep(5);
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  assert(busyBanner(), 'back when the printer is busy again');
+  // unconfirmed filament use: keyed on the entries
+  const entry = id => ({id, at: null, spool: 7, grams: 1, head: 0, file: 'a.gcode', error: 'x', printer: 'u1:80', printer_name: 'Bench U1'});
+  const usage = list => ({pending: [], unconfirmed: list, acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: ''});
+  await until(() => last('cmd', 'usage'), 'usage asked');
+  await reply(last('cmd', 'usage'), usage([entry('a')]));
+  await until(() => byTest('usage-banner'), 'usage banner');
+  await click(q('.oui-banner-close', byTest('usage-banner')));
+  assert(!byTest('usage-banner'), 'usage banner closed');
+  await post({type: 'status', data: VIEW({progress: 0.1})});
+  assert(!byTest('usage-banner'), 'same entries: stays closed across a poll');
+`);
+
+test('settings: requirements say what was found; Check again asks again', `
+  await connect();
+  await tab('settings');
+  await click(q('.oui-settings-link[data-section="requirements"]'));
+  await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
+  const sp = byTest('req-spooler'), sm = byTest('req-spoolman');
+  assert(sp && sm, 'Spoolman and Spooler rows');
+  eq(sp.dataset.status, 'missing', 'Spooler not found');
+  assert(text(sp).includes('Not found') && text(sp).includes('Install Spooler'), 'says so and how to get it: ' + text(sp));
+  await click(q('.oui-req-check', sp));
+  const ask = [...sent()].reverse().find(m => m.type === 'requirements' && m.recheck === true);
+  assert(ask, 'Check again asks the plugin to look again');
+  eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
+  await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'ok')});
+  eq(byTest('req-spooler').dataset.status, 'found', 'found after installing');
+  assert(text(byTest('req-spooler')).includes('Found') && !q('.oui-req-link', byTest('req-spooler')), 'no install link once found');
+  await reply(last('cmd', 'spools'), {spools: ROWS, bindings: {}, via: 'direct'});
+  await post({type: 'requirements', items: REQS('unknown', 'unknown', 'ok', 'ok')});
+  eq(byTest('req-spoolman').dataset.status, 'found', 'Spoolman reached');
+  assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'Spoolman Check again off while the printer has sent no status');
+  await post({type: 'status', data: VIEW()});
+  assert(!q('.oui-req-check', byTest('req-spoolman')).disabled, 'on once the printer answers');
+  await post({type: 'offline', error: 'timed out'});
+  assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'off again while the printer is offline');
+  await post({type: 'status', data: VIEW()});
+  const before = cmds('spools').length;
+  await click(q('.oui-req-check', byTest('req-spoolman')));
+  eq(cmds('spools').length, before + 1, 'Check again loads the spools again');
+  await fail(last('cmd', 'spools'), 'connection refused');
+  eq(byTest('req-spoolman').dataset.status, 'missing', 'Spoolman not reached');
+  assert(text(byTest('req-spoolman')).includes('connection refused'), 'says why');
+`);
+
+test('settings: requirements Check again stops after 10 s without an answer and says so', `
+  await connect();
+  await tab('settings');
+  await click(q('.oui-settings-link[data-section="requirements"]'));
+  await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
+  await click(q('.oui-req-check', byTest('req-spooler')));
+  eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
+  await sleep(10500);
+  eq(byTest('req-spooler').dataset.status, 'missing', 'Checking ends after 10 s');
+  assert(alerts().includes('did not answer within 10 s'), 'says the plugin did not answer: ' + alerts());
+`);
+
+test('settings: a toast sits above the sticky save bar', `
+  await connect();
+  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: true},
+    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}, automations: []});
+  await tab('settings');
+  await post({type: 'notice', text: 'Project filaments updated'});
+  await until(() => q('.oui-toast'), 'toast shown');
+  await sleep(400); await frame();
+  const bar = q('.oui-settings-foot').getBoundingClientRect(), toast = q('.oui-toast').getBoundingClientRect();
+  assert(bar.height > 0, 'save bar on screen');
+  assert(toast.bottom <= bar.top, 'toast bottom ' + toast.bottom + ' <= save bar top ' + bar.top);
+`);
+
+test('power loss: the banner with Resume and Discard cannot be closed', `
+  await connect();
+  await post({type: 'status', data: VIEW({power_loss: true})});
+  const b = byTest('power-loss');
+  assert(b && qa('button', b).length === 2, 'banner with its two actions: ' + text(b));
+  assert(!q('.oui-banner-close', b), 'no Close button');
+`);
+
+test('notices: dismissals are keyed on the condition, survive a remount and are forgotten when it clears', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await post({type: 'offline', error: 'timed out'});
+  await until(() => byTest('heads-why'), 'offline banner');
+  await click(q('.oui-banner-close', byTest('heads-why')));
+  assert(!byTest('heads-why'), 'closed');
+  eq(sessionStorage.getItem('oui-banner:offline:u1:80'), '1', 'remembered under the printer, not a time (survives a reload)');
+  await post({type: 'offline', error: 'timed out again'});
+  assert(!byTest('heads-why'), 'stays closed while still offline');
+  await post({type: 'status', data: VIEW()});
+  eq(sessionStorage.getItem('oui-banner:offline:u1:80'), null, 'forgotten once the printer answers');
+  await post({type: 'offline', error: 'timed out'});
+  assert(byTest('heads-why') && text(byTest('heads-why')).includes('doesn'), 'shown again when it goes offline again');
+  // the unconfirmed-use card is hidden (v-show) when empty, so its banner sees its condition clear
+  const entry = id => ({id, at: null, spool: 7, grams: 1, head: 0, file: 'a.gcode', error: 'x', printer: 'u1:80', printer_name: 'Bench U1'});
+  const usage = list => ({pending: [], unconfirmed: list, acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: ''});
+  await until(() => last('cmd', 'usage'), 'usage asked');
+  await reply(last('cmd', 'usage'), usage([entry('a')]));
+  await click(q('.oui-banner-close', byTest('usage-banner')));
+  assert(!byTest('usage-banner'), 'usage banner closed');
+  eq(sessionStorage.getItem('oui-banner:unconfirmed:a'), '1', 'keyed on the entry ids');
+`);
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');
@@ -1108,14 +1476,14 @@ try {
   await Promise.all(Array.from({ length: Math.min(workers, chosen.length) }, async (_, worker) => {
     for (let k = worker; k < chosen.length; k += workers) {
       const sc = chosen[k];
-      const boot = sc.mode === 'setup' ? { mode: 'setup', version: 'test', lang: sc.lang ?? 'en', data: SETUP_DATA }
+      const boot = sc.mode === 'setup' ? { mode: 'setup', version: 'test', lang: sc.lang ?? 'en', data: sc.data ?? SETUP_DATA }
         : { mode: 'app', version: 'test', lang: sc.lang ?? 'en', pref: sc.pref ?? 'auto' };
       const file = join(dir, `p${k}.html`);
       await writeFile(file, preparePage(page, boot));
       const p = await browser.newPage();
       const started = Date.now();
       try {
-        await p.size(1280, 900);
+        await p.size(...(sc.size ?? [1280, 900]));
         await p.init(MOCK_HOST + 'try { localStorage.clear(); } catch {}');
         await p.goto(pathToFileURL(file).href);
         const body = `(async () => { ${HELPERS} ${PRELUDE} const GROUPS = ${JSON.stringify(GROUPS)}; const HEADS = ${JSON.stringify(SETUP_DATA.heads)};

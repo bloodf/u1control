@@ -8,13 +8,13 @@ The page's own texts are in ui/src/core/messages*.ts. Text the printer sends is 
 
 from i18n_text import MESSAGES
 
-LANGUAGES = ("en", "pt-BR", "es", "de", "zh-CN")
-_PREFIXES = (("pt", "pt-BR"), ("en", "en"), ("es", "es"), ("de", "de"), ("zh", "zh-CN"))   # zh_TW reads zh-CN too
+LANGUAGES = ("en", "pt-BR", "es", "de", "zh-CN", "pl")
+_PREFIXES = (("pt", "pt-BR"), ("en", "en"), ("es", "es"), ("de", "de"), ("zh", "zh-CN"), ("pl", "pl"))   # zh_TW reads zh-CN too
 _language = "en"
 
 
 def normalize(code):
-    """OrcaSlicer's or a browser's language code ("pt_BR", "de", "zh_CN", "es-MX") -> one of LANGUAGES, or None."""
+    """OrcaSlicer's or a browser's language code ("pt_BR", "de", "zh_CN", "pl_PL", "es-MX") -> one of LANGUAGES, or None."""
     if not isinstance(code, str):
         return None
     tag = code.strip().replace("_", "-").lower()
