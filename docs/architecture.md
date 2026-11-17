@@ -27,8 +27,8 @@ plugin. The sources live in `src/u1control/`, and `scripts/build.py` packs them.
 Only `plugin.py` imports `orca`, so everything else is tested without OrcaSlicer.
 
 The wheel is the package `u1control`: `plugin.py` becomes `u1control/__init__.py`, each module keeps
-its name (`u1control.service`, and so on), and `u1control/_assets.py` holds the HTML pages and SVG
-icons as string constants. Nothing is embedded as source text or executed at load time, and the
+its name (`u1control.service`, and so on), `u1control/_assets.py` holds the tab icon, and the compiled page ships as
+`u1control/app.html`, read with `pkgutil.get_data` (not a Python string, so Orca Cloud's code review stays short). Nothing is embedded as source text or executed at load time, and the
 modules never use plain names like `settings` or `service` that could clash with other plugins.
 The sources keep `import u1` style so they run and test in place; the build rewrites those imports
 to relative form (`from . import u1`) in the wheel copies. The build refuses any SVG that contains a

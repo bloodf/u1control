@@ -17,7 +17,7 @@ import build  # noqa: E402
 
 PROJECT = tomllib.loads((ROOT / "pyproject.toml").read_text("utf-8"))["project"]
 DIST_INFO = "u1control-%s.dist-info/" % PROJECT["version"]
-EXPECTED = {"u1control/%s.py" % n for n in ("__init__", "_assets") + build.MODULES} | {
+EXPECTED = {"u1control/%s.py" % n for n in ("__init__", "_assets") + build.MODULES} | {"u1control/app.html"} | {
     DIST_INFO + n for n in ("METADATA", "WHEEL", "RECORD", "top_level.txt", "licenses/LICENSE", "licenses/NOTICE.md", "licenses/Lucide.txt",
                             "licenses/Manrope.txt", "licenses/PrimeUIX.txt", "licenses/PrimeVue.txt", "licenses/Vue.txt")}
 # (?<![.\w]): a JS method call such as RegExp .exec( in the embedded page is not Python exec().
@@ -83,6 +83,26 @@ class WheelTests(unittest.TestCase):
             for node in ast.walk(ast.parse(text)):   # builtin compile()/exec()/eval() calls; re.compile is fine
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
                     self.assertNotIn(node.func.id, DYNAMIC_BUILTINS, name)
+
+    def test_installed_package_reads_its_page(self):
+        """The page ships as u1control/app.html, not a Python string: the package reads it unpacked or from the zip."""
+        sys.path.insert(0, str(ROOT / "tests"))
+        from fakes import install_orca
+        install_orca()
+        folder = tempfile.mkdtemp()
+        self.zip.extractall(folder)
+        for where in (folder, str(self.path)):
+            with self.subTest(where=where):
+                saved = dict(sys.modules)
+                sys.path.insert(0, where)
+                try:
+                    import u1control
+                    self.assertEqual(u1control._asset("app.html"), build.page_html("app.html"))
+                    self.assertEqual(u1control._asset("icon.png"), (build.SRC / "ui" / "icon.png").read_bytes())
+                finally:
+                    sys.path.remove(where)
+                    for name in set(sys.modules) - set(saved):
+                        del sys.modules[name]
 
     def test_reproducible(self):
         again = build.build(out_dir=Path(tempfile.mkdtemp()))

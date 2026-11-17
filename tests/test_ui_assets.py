@@ -23,6 +23,7 @@ class UiAssets(unittest.TestCase):
         cls.artifact = build.build(out_dir=Path(tempfile.mkdtemp()))
         with zipfile.ZipFile(cls.artifact) as z:
             cls.text = z.read("u1control/_assets.py").decode("utf-8")
+            cls.page = z.read("u1control/app.html").decode("utf-8")
 
     def test_page_ships_as_built(self):
         """Icons come from the shared foundation, compiled into the page: nothing is injected at build time."""
@@ -30,7 +31,8 @@ class UiAssets(unittest.TestCase):
         self.assertEqual(html, (UI / "app.html").read_text("utf-8"))
         self.assertNotIn("__ICONS__", html)
         self.assertNotIn('id="u1-icons"', html)
-        self.assertIn(repr(html), self.text)   # the wheel carries exactly this page
+        self.assertEqual(html, self.page)   # the wheel carries exactly this page, as a file
+        self.assertNotIn("APP_HTML", self.text)   # not as a Python string: Orca Cloud's code review would read it all
         self.assertNotIn("SETUP_HTML", self.text)   # one page serves the tab and the print setup window
 
     def test_committed_page_is_the_recorded_vue_build(self):
@@ -54,7 +56,7 @@ class UiAssets(unittest.TestCase):
         self.assertNotRegex((UI / "app.html").read_text("utf-8"), r"\b(?:icon|spot|toolhead)/(?:emergency-stop|toolheads-rfid|camera-off|t1)\b")
 
     def test_no_unresolved_placeholders(self):
-        self.assertIsNone(re.search(r"APP_HTML = '[^\n]*__ICONS__", self.text))
+        self.assertNotIn("__ICONS__", self.page)
         self.assertNotIn("__ICONS__", build.page_html("app.html"))
         self.assertIn("__BOOT__", build.page_html("app.html"))   # filled per page by plugin.page_html
 
