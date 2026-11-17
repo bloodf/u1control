@@ -759,13 +759,14 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         return {"spools": spools, "bindings": bindings, "via": "moonraker" if smc.via_moonraker else "direct"}
 
     def spool_names(self, host):
-        """{"<toolhead>": "Vendor Name"} for the heads linked to a Spoolman spool, from what the tab already read
-        (no I/O); {} unless `host` is the printer the tab follows."""
+        """{"<toolhead>": {"name": "Vendor Name", "colour": "#RRGGBB" | None}} for the heads linked to a Spoolman
+        spool, from what the tab already read (no I/O); {} unless `host` is the printer the tab follows."""
         with self.lock:
             if self.target is None or printer_ident(self.target.host) != printer_ident(host):
                 return {}
             by_id = {s["id"]: s for s in self.spools}
-            return {str(h): " ".join(x for x in (by_id[sid]["vendor"], by_id[sid]["name"]) if x)
+            return {str(h): {"name": " ".join(x for x in (by_id[sid]["vendor"], by_id[sid]["name"]) if x),
+                             "colour": by_id[sid].get("colour")}
                     for h, sid in self.bindings.items() if sid in by_id}
 
     def cmd_bind_spool(self, head, spool_id, force=False):

@@ -293,7 +293,7 @@ class PluginAgentTests(unittest.TestCase):
 
     def test_unticked_box_wins_over_the_setting(self):
         # no print setup here: a remembered pop-up answer would become the next print's setting
-        self.ns["get_store"](self.agent).update({"mode": "expert", "print_dialog": "never",
+        self.ns["get_store"](self.agent).update({"mode": "expert", "print_dialog": False,
                                                  "prefs": {"bed_level": True, "flow_calibrate": True,
                                                            "time_lapse_camera": True}})
         p = self.params(task_bed_leveling=False, task_flow_cali=True, task_record_timelapse=False)
@@ -367,12 +367,12 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(self.agent.start_local_print(self.params(task_bed_leveling=True), self.update, None), 0)
         self.assertIs(self.ns["get_store"](self.agent).effective()["prefs"]["bed_level"], False)
 
-    def test_print_setup_setting_never_and_always(self):
+    def test_print_setup_setting_off_and_on(self):
         windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
-        self.setting(print_dialog="never")
+        self.setting(print_dialog=False)
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
         self.assertEqual(windows, [])
-        self.setting(print_dialog="always", printed_before=True)
+        self.setting(print_dialog=True, printed_before=True)
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
         self.assertEqual(len(windows), 1)
 
@@ -409,11 +409,12 @@ class PluginAgentTests(unittest.TestCase):
         class Svc:
             @staticmethod
             def spool_names(host):
-                return {"1": "Acme Cobalt"}
+                return {"1": {"name": "Acme Cobalt", "colour": "#2850A8"}}
+            target = None
         self.ns["_service"] = Svc()
         self.addCleanup(self.ns.__setitem__, "_service", None)
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
-        self.assertIn('"spools": {"1": "Acme Cobalt"}', windows[0].html)
+        self.assertIn('"spools": {"1": {"name": "Acme Cobalt", "colour": "#2850A8"}}', windows[0].html)
 
     def test_send_and_verify(self):
         self.assertEqual(self.agent.start_send_gcode_to_sdcard(self.params(), self.update, None, None), 0)

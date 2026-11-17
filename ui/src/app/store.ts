@@ -183,6 +183,7 @@ function onMessage(m: any): void {
     case 'config': configHandlers.forEach(h => h(m)); break;
     case 'rfid': rfidHandlers.forEach(h => h(m)); break;
     case 'selection_changed': void hello(); break;
+    case 'show_tab': if (m.tab === 'settings') s.tab = 'settings'; break;   // the print setup's "Plugin settings"
     case 'reply': if (m.error) tracker.notify('error', t('msg.plugin', { error: String(m.error) })); break;
   }
 }

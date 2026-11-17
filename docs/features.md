@@ -30,14 +30,18 @@ file leaves OrcaSlicer, the way Snapmaker Orca does.
 - The top-cover mode follows Snapmaker's rule for the filaments in the print, or the mode you pick.
 - Nothing is sent while the U1 is printing, loading, calibrating or updating.
 
-In Automagic the pop-up only opens when a choice is needed: the first print, an empty toolhead or
-another material, two filaments for one toolhead, or no exact material match. Otherwise the file goes
-out with the toolheads u1control matched, without asking. To pick the toolheads every time, switch to
-Expert and set **Print setup pop-up** to **always**.
+The window (**U1 Control — print setup**) opens before every print while **Show print setup before
+sending** is on, which is the default. It shows the print and the printer, one card per filament with the head
+it prints from, a top view coloured by head, **Refresh**, **Auto mapping** and **Heads settings**, the print
+options, **Print preferences** and the top-cover fans. Each option appears only when the printer's command
+list (Moonraker `/printer/gcode/help`) has its command. While the U1 is busy the settings can't change and
+nothing is sent. With the setting off (Expert), the file goes out with the toolheads u1control matched, and a
+different material, an empty toolhead or a busy U1 is refused.
 
 Print setup runs when OrcaSlicer sends the print through the U1's print host (**Print** or **Send**).
-It does not run for **Export G-code**, for **Print** on the U1 Control Files page, or when OrcaSlicer's
-**Use printer agents instead of print hosts** preference is on. **Settings > Print setup** in the U1
+It does not run for **Export G-code** or for **Print** on the U1 Control Files page. With OrcaSlicer's
+**Use printer agents instead of print hosts** preference on, the same window opens from the printer agent
+(below). **Settings > Print setup** in the U1
 Control tab says whether your process preset runs it.
 
 ## Printer agent
@@ -59,13 +63,13 @@ Then **Print** in OrcaSlicer opens its own print dialog:
   Unticking a box turns that option off. OrcaSlicer remembers the box; tick it again to go back to
   U1 Control's setting. Auto-refill, tangle detection, unload when done and
   light off when done come from the U1 Control settings (the options you last chose), or the printer's own.
-- Then U1 Control's own **U1 print setup** window opens on top, before anything is sent, under the same
-  **Settings > Print setup pop-up** rule as the print-host path (always; auto: only when something needs a
-  decision, such as the first print, an empty toolhead, another material or two filaments on one toolhead;
-  never). It starts from the slots and options picked in OrcaSlicer's dialog and shows the printer and
-  its state, each toolhead's material, colour and linked Spoolman spool, and a hint when a toolhead holds
-  another colour. Change any slot or option there; **Remember these options** keeps them for the next
-  print. **Don't send**, or cancelling the job in OrcaSlicer, sends nothing.
+- Then U1 Control's own **print setup** window opens on top, before anything is sent, while **Show print
+  setup before sending** is on. It starts from the slots and options picked in OrcaSlicer's dialog. Change
+  any head or option there; **Remember these options** keeps them for the next print. **Don't send**, or
+  cancelling the job in OrcaSlicer, sends nothing; after 15 minutes the window gives up and nothing is sent.
+- Two dialogs, one after the other: OrcaSlicer always opens its own Print dialog first (its
+  SelectMachineDialog), and no plugin hook can replace or skip it. U1 Control's window is the second step,
+  started from what you picked in the first.
 - u1control applies the same G-code fixes as below, then uploads the file, sends the toolhead map and
   options, and starts the print.
 - A busy U1 (printing, loading, calibrating, updating) stops the print before the window opens. An empty

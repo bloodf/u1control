@@ -31,13 +31,13 @@ class SettingsTests(unittest.TestCase):
     def test_modes(self):
         st, d = self.store()
         eff = st.effective()
-        self.assertEqual((eff["mode"], eff["print_dialog"], eff["printer_name"]), ("automagic", "auto", "Snapmaker U1"))
-        st.update({"print_dialog": "never", "chamber_wait": False, "host": "1.2.3.4", "bogus": 1, "purifier": "nope"})
+        self.assertEqual((eff["mode"], eff["print_dialog"], eff["printer_name"]), ("automagic", True, "Snapmaker U1"))
+        st.update({"print_dialog": False, "chamber_wait": False, "host": "1.2.3.4", "bogus": 1, "purifier": "nope"})
         eff = st.effective()
-        self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["host"]), ("auto", True, "1.2.3.4"))  # ignored
+        self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["host"]), (True, True, "1.2.3.4"))  # ignored
         st.update({"mode": "expert"})
         eff = st.effective()
-        self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["purifier"]), ("never", False, "auto"))
+        self.assertEqual((eff["print_dialog"], eff["chamber_wait"], eff["purifier"]), (False, False, "auto"))
         self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective(), eff)  # persisted
 
     def test_camera_fps(self):
@@ -155,7 +155,7 @@ class PipelineTests(PluginBase):
         orca, ns, page = self.page({"slicing_pipeline_plugin": ""})
         msg = page._config_message()
         self.assertEqual(msg["mode"], "automagic")
-        self.assertTrue(any(a["key"] == "print_dialog" and a["choices"] for a in msg["automations"]))
+        self.assertTrue(any(a["key"] == "print_dialog" and a["choices"] is None for a in msg["automations"]))
         self.assertFalse(msg["spooler"]["installed"])
         page.on_message({"type": "save_settings", "settings": {"spooler_hint_dismissed": True, "api_key": "••••", "host": "127.0.0.1:1"}})
         config = [m for m in page.posted if m["type"] == "config"][-1]
@@ -176,7 +176,7 @@ class PipelineTests(PluginBase):
 
 
 class DialogFlowTests(PluginBase):
-    def test_second_print_skips_dialog(self):
+    def test_every_print_shows_the_setup(self):
         fake = fakes.FakePrinter()
         self.addCleanup(fake.close)
         fd, path = tempfile.mkstemp(suffix=".gcode")
@@ -191,8 +191,7 @@ class DialogFlowTests(PluginBase):
         write(path, SAMPLE)
         fake.task["filament_type"] = ["PLA", "PETG", "NONE", "PLA"]
         self.assertEqual(cap.execute(ctx).status, "success")
-        # second print: options known, mapping clean -> auto mode sends without the pop-up
-        self.assertEqual(len(orca.windows), 1)
+        self.assertEqual(len(orca.windows), 2)   # shown before every print while the setting is on
 
 
 class SpoolerTests(PluginBase):

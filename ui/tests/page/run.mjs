@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { launch, MOCK_HOST, HELPERS, preparePage } from './cdp.mjs';
+import { SETUP_FULL } from './setup-data.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = resolve(here, '../../..');
@@ -254,68 +255,114 @@ test('console routes M112 to the urgent path and shows replies', `
   assert(log.includes('accepted') && log.includes('T0:21.0'), log);
 `);
 
-test('setup warning needs an acknowledgement tied to the current mapping', `
-  const send = () => byTest('send');
-  await until(() => send());
-  assert(alerts().includes('PETG'), 'warning announced: ' + alerts());
-  assert(send().disabled, 'send waits for the acknowledgement');
-  await click(send());
-  eq(__t.submits, [], 'nothing sent without it');
+const SETUP_BUSY = { ...SETUP_FULL, printer: { ...SETUP_FULL.printer, busy: true } };
+test('setup: the print, the printer, a card per filament with its head, spool and the preview', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  eq(text(byTest('job-meta')), '2h 12m 34s · 26.4 g', 'time and weight');
+  eq(text(byTest('job-meta2')), '175 layers · 522 tool changes', 'layers and tool changes');
+  const line = text(byTest('printer'));
+  assert(line.includes('Snapmaker U1') && line.includes('192.168.1.40') && line.includes('Ready'), 'printer: ' + line);
+  eq(qa('.su-card').length, 4, 'one card per filament');
+  const c0 = q('.su-card[data-f="0"]');
+  assert(text(c0).includes('[1]') && text(c0).includes('PETG') && text(c0).includes('Head 1') && text(c0).includes('Generic Leaf Green'), 'card 1: ' + text(c0));
+  eq(getComputedStyle(c0.querySelector('.hp-strand')).stroke, 'rgb(108, 191, 90)', 'strand in the Spoolman colour');
+  eq(getComputedStyle(q('.su-card[data-f="3"] .hp-strand')).stroke, 'rgb(245, 158, 11)', 'no spool: the printer colour');
+  assert(byTest('preview') && byTest('preview').getAttribute('aria-label').includes('Top view'), 'preview drawn');
+  assert(byTest('prefs') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
+  assert(!alerts() && !byTest('send').disabled && text(byTest('send')) === 'Apply & continue', 'nothing to confirm');
+  await click(byTest('send'));
+  const s0 = __t.submits[0];
+  eq(s0.map, {0: 0, 1: 2, 2: 1, 3: 3}, 'map');
+  eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan, s0.remember], ['medium', 60, true], 'prefs as offered');
+`, { mode: 'setup', data: SETUP_FULL });
+
+test('setup: a control the printer lacks is not shown', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  assert(!byTest('prefs') && !byTest('flow-more') && !q('#su-p-flow_calibrate') && !q('#su-p-time_lapse_camera') && !byTest('preview'), 'only what was offered');
+  assert(q('#su-p-bed_level'), 'bed leveling offered');
+  await click(byTest('cover-more'));
+  await until(() => byTest('cover-pop'), 'cover popover');
+  assert(!byTest('exhaust-mode') && !byTest('inner-mode'), 'no fan control without the command');
+`, { mode: 'setup' });
+
+test('setup: choose a head on the card; another material needs a confirmation tied to the mapping', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  const card = () => q('.su-card[data-f="1"]');
+  card().focus();
+  await press('Enter');
+  await until(() => q('.su-pick'), 'head picker open');
+  await until(() => document.activeElement && document.activeElement.matches('.su-pick-head'), 'focus in the picker');
+  await click(q('.su-pick-head[data-pick="2"]'));            // PETG -> empty T3
+  await until(() => !q('.su-pick'), 'picker closed');
+  eq(card().dataset.t, '2', 'mapped to T3');
+  assert(document.activeElement === card(), 'focus back on the card');
+  assert(alerts().includes('T3'), 'warning announced: ' + alerts());
+  assert(byTest('card-warn'), 'warning sign on the card');
+  assert(byTest('send').disabled, 'send waits for the confirmation');
   await click(q('#su-ack'));
-  assert(!send().disabled && text(send()).includes('1 warning'), 'says it sends with a warning: ' + text(send()));
-  await click(q('button[data-f="1"][data-t="2"]'));      // PETG -> empty T3: another warning
-  assert(!q('#su-ack').checked && send().disabled, 'a new warning needs a new acknowledgement');
-  assert(document.body.textContent.includes('previous check was cleared'), 'says why the box was cleared');
+  assert(!byTest('send').disabled && text(byTest('send')).includes('warning'), 'says it sends with a warning');
+  await click(card()); await until(() => q('.su-pick'), 'open again');
+  await click(q('.su-pick-head[data-pick="3"]'));            // PETG -> PLA T4: another warning set
+  assert(!q('#su-ack').checked && byTest('send').disabled, 'a new warning needs a new confirmation');
+  assert(document.body.textContent.includes('previous check'), 'says why the box was cleared');
   await click(q('#su-ack'));
-  await click(send());
-  eq(__t.submits.map(m => m.acknowledged), [['empty:1:2']], 'sends the ids it acknowledged');
-  await click(send());
+  await click(byTest('send'));
+  eq(__t.submits.map(m => m.acknowledged), [['material:1:3']], 'sends the ids it confirmed');
+  await click(byTest('send'));
   eq(__t.submits.length, 1, 'a second click does not send twice');
 `, { mode: 'setup' });
 
-test('setup without warnings keeps the plain flow; empty toolhead is labelled, not faded', `
-  await click(q('button[data-f="1"][data-t="3"]'));
-  await post({heads: HEADS.map(h => h.index === 3 ? {...h, type: 'PETG'} : h), map: {}});
-  assert(!alerts() && !q('#su-ack') && !byTest('send').disabled && text(byTest('send')) === 'Send to U1', 'no warning: unchanged flow');
-  const empty = q('button[data-f="0"][data-t="2"]');
-  assert(text(empty).includes('empty') && getComputedStyle(empty).opacity === '1' && !empty.disabled, 'empty is text, still selectable (B-08)');
-  await click(byTest('send'));
-  eq(__t.submits[0].acknowledged, [], 'nothing to acknowledge');
-`, { mode: 'setup' });
+test('setup: a busy printer locks the settings and Apply', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  assert(text(byTest('busy')).includes('can’t change during a print'), 'busy notice: ' + text(byTest('busy')));
+  assert(byTest('send').disabled && q('.su-card').disabled && byTest('prefs').disabled && q('#su-p-bed_level').disabled, 'locked');
+  assert(text(q('#su-why')).includes('busy'), 'why');
+  await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {}});
+  assert(!byTest('busy') && !byTest('send').disabled && !q('.su-card').disabled, 'unlocked when ready');
+`, { mode: 'setup', data: SETUP_BUSY });
 
-const SETUP_PRINTER = { ...SETUP_DATA, printer: { name: 'Bench U1', busy: false, address: '10.0.0.9' }, spools: { 1: 'Acme Cobalt Blue' }, remember: false,
-  filaments: [{ index: 0, type: 'PLA', colour: '#E5484D' }, { index: 1, type: 'PETG', colour: '#000' }],
-  heads: SETUP_DATA.heads.map(h => h.index === 3 ? { ...h, type: 'PETG' } : h), map: { 0: 0, 1: 3 } };
-test('setup shows the printer, linked spools, a colour hint and remembers on request', `
-  const line = byTest('printer');
-  assert(line && text(line).includes('Bench U1') && text(line).includes('Ready') && text(line).includes('10.0.0.9'), 'printer line: ' + text(line));
-  const t2 = q('button[data-f="0"][data-t="1"]');
-  assert(text(t2).includes('Acme Cobalt Blue') && t2.getAttribute('aria-label').includes('Acme Cobalt Blue'), 'spool named on T2: ' + t2.getAttribute('aria-label'));
-  eq(qa('[data-test="spool"]').length, 2, 'one spool line per filament row for T2 only');
-  assert(text(byTest('colour-hint')).includes('T1 holds another colour'), 'colour hint for filament 1');
-  assert(!alerts() && !byTest('send').disabled, 'a colour hint needs no acknowledgement');
-  await post({heads: HEADS.map(h => h.index === 3 ? {...h, type: 'PETG'} : h.index === 0 ? {...h, colour: '#E5484D'} : h), busy: true, map: {}});
-  assert(!byTest('colour-hint'), 'hint gone once the colours match');
-  assert(text(byTest('printer')).includes('Busy'), 'live busy state');
-  assert(!q('#su-remember').checked, 'remember starts as the setting says');
+test('setup: auto mapping, plugin settings, print preferences and the top-cover fans', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  await click(q('.su-card[data-f="0"]')); await until(() => q('.su-pick'));
+  await click(q('.su-pick-head[data-pick="3"]'));
+  await click(byTest('automap'));
+  assert(sent().some(m => m.refresh), 'asks the plugin to match again');
+  await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {0: 0, 1: 2, 2: 1, 3: 3}});
+  eq(q('.su-card[data-f="0"]').dataset.t, '0', 'auto mapping replaces a hand choice');
+  await click(byTest('plugin-settings'));
+  assert(sent().some(m => m.open_settings), 'asks the tab to open Settings');
+  await click(byTest('prefs'));
+  await until(() => byTest('prefs-dialog'), 'preferences dialog');
+  assert(text(byTest('prefs-dialog')).includes('Air printing'), 'tangle detection named as air printing');
+  eq(qa('[data-level="spaghetti_level"] [role=radio], [data-level="spaghetti_level"] button').length, 2, 'spaghetti: low/high only');
+  await click([...qa('[data-level="tangle_level"] button')].find(b => text(b) === 'High'));
+  await click(btn('Close', q('.p-dialog')));
+  await until(() => !q('.p-dialog'), 'dialog closed');
+  await click(byTest('cover-more')); await until(() => byTest('exhaust-mode'), 'exhaust control in a cooling mode');
+  assert(!byTest('inner-mode'), 'no recirculation fan outside keep warm');
+  await click([...qa('[data-test="exhaust-mode"] button')].find(b => text(b) === 'Off'));
+  await click(byTest('send'));
+  const s0 = __t.submits[0];
+  eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan], ['high', 0], 'chosen preferences sent');
+`, { mode: 'setup', data: SETUP_FULL });
+
+test('setup: keep warm hides the exhaust fan and never sends it', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  await click(byTest('cover-more')); await until(() => byTest('cover-pop'));
+  assert(text(byTest('exhaust-blocked')).includes('stays off'), 'says why: ' + text(byTest('exhaust-blocked')));
+  assert(byTest('inner-mode'), 'recirculation fan in keep warm');
+  await click(byTest('send'));
+  assert(!('exhaust_fan' in __t.submits[0].prefs) && __t.submits[0].prefs.inner_fan === 60, 'exhaust left out');
+`, { mode: 'setup', data: { ...SETUP_FULL, purifier: 'keep-warm' } });
+
+test('setup: remembers on request and in Portuguese at 380 px', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  eq(text(byTest('send')), 'Aplicar e continuar', 'pt-BR');
+  assert(document.documentElement.scrollWidth <= innerWidth, 'no horizontal scroll: ' + document.documentElement.scrollWidth);
   await click(q('#su-remember'));
   await click(byTest('send'));
-  eq(__t.submits.map(m => m.remember), [true], 'sends the remember choice');
-`, { mode: 'setup', data: SETUP_PRINTER });
-
-test('setup keeps focus on the chosen button across clicks and refreshes', `
-  const b = q('button[data-f="0"][data-t="3"]');
-  b.focus();
-  await press('Space');
-  const at = () => [document.activeElement.dataset.f, document.activeElement.dataset.t];
-  eq(at(), ['0', '3'], 'focus after choosing');
-  assert(b.isConnected && document.activeElement === b, 'same element kept');
-  await post({heads: HEADS, map: {}});
-  eq(at(), ['0', '3'], 'focus after a live refresh');
-  await post({heads: HEADS.map(h => ({...h, colour: '#654321'})), map: {}});
-  eq(at(), ['0', '3'], 'focus after a changed refresh');
-  eq(b.getAttribute('aria-pressed'), 'true', 'pressed state');
-`, { mode: 'setup' });
+  eq(__t.submits.map(m => m.remember), [false], 'sends the remember choice');
+`, { mode: 'setup', data: SETUP_FULL, lang: 'pt_BR', size: [380, 900] });
 
 test('stock card stays hidden without Spooler', `
   await connect();
@@ -1135,7 +1182,7 @@ try {
       const p = await browser.newPage();
       const started = Date.now();
       try {
-        await p.size(1280, 900);
+        await p.size(...(sc.size ?? [1280, 900]));
         await p.init(MOCK_HOST + 'try { localStorage.clear(); } catch {}');
         await p.goto(pathToFileURL(file).href);
         const body = `(async () => { ${HELPERS} ${PRELUDE} const GROUPS = ${JSON.stringify(GROUPS)}; const HEADS = ${JSON.stringify(SETUP_DATA.heads)};

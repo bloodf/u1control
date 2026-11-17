@@ -2,10 +2,14 @@
 
 ## [Unreleased]
 
-- Printing through OrcaSlicer's own Print dialog (printer agent `u1control`) now opens the **U1 print setup** window after it, before anything is sent, under the same **Print setup pop-up** setting (always, auto, never). It starts from the slots and options picked in OrcaSlicer's dialog; what you choose there is exactly what is sent. **Don't send**, or cancelling the job in OrcaSlicer, closes it and sends nothing. A busy U1 is refused before it opens.
-- The U1 print setup window shows the printer's name, state (ready or busy, live) and address, the linked Spoolman spool under each toolhead, and a hint when a toolhead with the right material holds another colour.
-- **Remember these options** in the window decides whether the options chosen become the next print's defaults (it starts as the **Remember print options** setting).
-- The window fits a 380 px wide window: one column, buttons wrap.
+- **U1 Control — print setup**, redesigned. The window shows the print at the top: plate picture, name, time, weight, layers and tool changes, all read from the sliced G-code. Next to it are the printer's name, address and Ready/Busy state. Each filament has a card with its colour, material and grams, a U1 toolhead drawing whose filament strand takes the mapped spool's colour (Spoolman's colour first, then the printer's), the head it prints from, and that head's material and Spoolman spool. Click a card, or press Enter on it, to choose another head. A small top view of the print shows every filament in its head's colour.
+- **Refresh** reads the toolheads again, **Auto mapping** matches every filament by material and colour again, and **Heads settings** edits each head's filament and Spoolman spool in place, with the same commands as the Dashboard.
+- The options sit in one row: auto bed leveling, dynamic flow calibration (**…** picks the heads to calibrate), time-lapse, and the top cover (**…** holds the mode and the exhaust and recirculation fans, each Auto, Off or a set speed). The exhaust fan stays off while the cover keeps the chamber warm. **Print preferences** holds spaghetti detection and the foreign object check (low or high), air printing detection, which is the firmware's tangle detection (low, medium or high), auto-refill, refill from any colour, unload when done and light off when done. A control appears only when the printer's command list has its command.
+- While the U1 is busy, the window says the settings can't change during a print and **Apply & continue** stays off.
+- **Plugin settings** at the bottom opens the U1 Control tab on Settings, where you see it once the window is closed.
+- Printing through OrcaSlicer's own Print dialog (printer agent `u1control`) opens this window too, after OrcaSlicer's dialog and before anything is sent. It starts from the slots and options picked there, and what you leave in the window is exactly what is sent. **Don't send**, or cancelling the job in OrcaSlicer, sends nothing, and after 15 minutes the window gives up. OrcaSlicer always opens its own Print dialog first: no plugin hook can replace it, so U1 Control's window is the second step.
+- The setting is now **Show print setup before sending**, on or off and on by default. With it off, OrcaSlicer's choice is sent as is, but a different material, an empty toolhead or a busy U1 is still refused. An Expert setting stored as "never" reads as off.
+- **Remember these options** decides whether the options chosen become the next print's defaults.
 
 ## [0.12.0] - 2026-11-16
 

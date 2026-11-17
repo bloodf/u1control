@@ -30,7 +30,7 @@ export function parseSpeed(raw: unknown): number | null {
 export const family = (t: unknown): string => ((String(t ?? '').match(/[A-Za-z]+/) || [''])[0]).toUpperCase();
 
 export interface SetupFilament { index: number; type: string; colour?: string; weight?: number }
-export interface SetupHead { index: number; loaded: boolean; type: string; vendor?: string; sub_type?: string; colour?: string }
+export interface SetupHead { index: number; loaded: boolean; type: string; vendor?: string; sub_type?: string; colour?: string; official?: boolean }
 export type SetupWarning =
   | { id: string; kind: 'empty'; f: number; h: number }
   | { id: string; kind: 'material'; f: number; h: number; a: string; b: string };

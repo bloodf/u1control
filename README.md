@@ -148,9 +148,9 @@ No. Print setup, the camera, toolheads, Snapmaker RFID tags, Spoolman, files, ti
 </details>
 
 <details>
-<summary>The U1 print setup window did not open. Is that a problem?</summary>
+<summary>Why do I see two windows when I press Print?</summary>
 
-No. In Automagic the window opens only when a choice is needed. Otherwise the file goes out with the toolheads U1 Control matched. To see the window for every print, switch to Expert and set **Print setup pop-up** to **always**.
+OrcaSlicer always opens its own Print dialog first, and no plugin can replace it. U1 Control's print setup opens next, already filled in from what you picked, so you can check the heads and options before anything is sent. To skip it, switch to Expert and turn off **Show print setup before sending**; a different material or a busy U1 is still refused.
 </details>
 
 <details>

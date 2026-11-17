@@ -292,7 +292,8 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
     Returns (temp path, mapping, filaments, choice). Raises JobError: not a U1 print, or the mapping has warnings.
     view=None (Send, no print starts): fixes only, no toolhead check.
     choose(view, filaments, mapping, prefs, lines, cfg) -> None (no print setup shown) or the print setup's answer
-    {"map", "prefs", "purifier", "heads"} (its warnings already acknowledged and checked); raises Cancelled."""
+    {"map", "prefs", "purifier", "heads", "commands"} (its warnings already acknowledged and checked; the top-cover
+    fan speeds in prefs go into the G-code); raises Cancelled."""
     tmp = _copy_job(path, plate_index, work_dir)
     try:
         lines, newline = gcode.read(tmp)
@@ -306,7 +307,8 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
             choice = choose(view, filaments, mapping, prefs, lines, cfg) if choose else None
             if choice:
                 mapping, heads = choice["map"], choice.get("heads") or heads
-                options = {**options, "purifier": choice["purifier"]}
+                fans = {k: choice["prefs"][k] for k in u1.COVER_FANS if k in choice["prefs"]}
+                options = {**options, **fans, "purifier": choice["purifier"]}
             else:
                 problems = u1.mapping_warnings(filaments, heads, mapping)
                 if problems:
@@ -362,7 +364,7 @@ def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs
             now = u1.summarize(client.query(u1.STATUS_OBJECTS))   # the print setup may have stayed open a while
             if u1.machine_busy(now):
                 raise JobError(_busy_reason(now))
-        script = u1.preprint_script(mapping, prefs)
+        script = u1.preprint_script(mapping, prefs, choice.get("commands", False) if choice else False)
         filename = upload_name(name, path)
         if stage:
             stage("upload")

@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 UI = ROOT / "src" / "u1control" / "ui"
-MAX_BUILT_BYTES = 400_000   # unchanged: the Vue wheel measures ~227 kB (legacy pages: ~96 kB)
+MAX_BUILT_BYTES = 450_000   # the wheel measures ~407 kB with the print setup window (Popover, Dialog, Slider, SelectButton)
 
 
 class UiAssets(unittest.TestCase):

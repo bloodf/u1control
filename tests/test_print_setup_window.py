@@ -1,0 +1,144 @@
+"""The print setup window after OrcaSlicer's Print: offered options by command list, the answer as sent, the
+top-cover fans, Heads settings, the Plugin settings link, the job facts and the preview. Never contacts a printer:
+FakePrinter is a local HTTP server."""
+
+import json
+import os
+import re
+import sys
+import tempfile
+import unittest
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path[:0] = [os.path.join(ROOT, "src", "u1control"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "scripts")]
+
+import fakes  # noqa: E402
+import preview  # noqa: E402
+from test_agent import PluginAgentTests as _B  # noqa: E402
+
+# _B: test_agent's wheel fixture and helpers, borrowed (its tests are not run here)
+
+
+def boot(window):
+    return json.loads(re.search(r'id="u1-boot">(.*?)</script>', window.html, re.S).group(1))["data"]
+
+
+class PreviewTests(unittest.TestCase):
+    LINES = ["G28", "G1 X5 Y5 E1",            # start G-code: never drawn
+             ";LAYER_CHANGE", "T0", "M83", "G1 X0 Y0", "G1 X10 Y0 E0.5", "G1 X10 Y10 E0.5",
+             "T1", "G1 X0 Y10 E0.5", "G1 X0 Y0", "T0", ";LAYER_CHANGE", "G1 X20 Y20 E1"]
+
+    def test_paths_by_tool_and_bounds(self):
+        p = preview.paths(self.LINES)
+        self.assertEqual(p["tools"]["0"][:4], [0.0, 0.0, 10.0, 0.0])
+        self.assertEqual(p["tools"]["1"], [10.0, 10.0, 0.0, 10.0])
+        self.assertEqual(p["bounds"], [0.0, 0.0, 20.0, 20.0])
+
+    def test_budget_samples_layers(self):
+        lines = []
+        for layer in range(100):
+            lines += [";LAYER_CHANGE", "G1 X0 Y0"] + ["G1 X%d Y1 E%d" % (i, layer * 50 + i) for i in range(1, 50)]
+        small = preview.paths(lines, budget=500)   # absolute E (M82): extrusion is the rise in E
+        drawn = sum(len(v) // 4 for v in small["tools"].values())
+        self.assertTrue(0 < drawn <= 500, drawn)
+        self.assertIsNone(preview.paths(["G28", "G1 X1 Y1"]))
+
+    def test_tool_changes(self):
+        self.assertEqual(preview.tool_changes(self.LINES), 2)
+        self.assertEqual(preview.tool_changes(["T0", "T0"]), 0)
+
+
+class WindowTests(unittest.TestCase):   # noqa: D101
+    """Agent path (start_local_print); the slicing-pipeline path shares open_setup / ask_setup."""
+    setUpClass = classmethod(_B.setUpClass.__func__)
+    setUp, params, update, answer, setting = _B.setUp, _B.params, _B.update, _B.answer, _B.setting
+
+    def test_extras_offered_only_with_their_command(self):
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        data = boot(windows[0])
+        self.assertIn("exhaust_fan", data["prefs"])
+        self.assertIn("cover_fan", data["features"])
+        self.assertEqual(data["levels"]["tangle_level"], ["low", "medium", "high"])
+        self.assertEqual(data["job"]["tool_changes"], 1)
+        self.fake.commands.clear()   # an older firmware: no command list, only the original options
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        data = boot(windows[1])
+        self.assertNotIn("exhaust_fan", data["prefs"])
+        self.assertEqual(data["features"], [])
+
+    def test_answer_keeps_levels_and_fans_and_drops_what_was_not_offered(self):
+        self.answer({"map": {}, "prefs": {"tangle_level": "high", "exhaust_fan": 35, "made_up": True},
+                     "purifier": "strong"})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        uploaded = self.fake.uploads["part.gcode"].decode()
+        self.assertIn("FAN_SPEED=0.35", uploaded)
+        self.assertNotIn("made_up", " ".join(self.fake.scripts))
+
+    def test_exhaust_not_sent_while_the_cover_recirculates(self):
+        self.answer({"map": {}, "prefs": {"exhaust_fan": 90, "inner_fan": 40}, "purifier": "keep-warm"})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        uploaded = self.fake.uploads["part.gcode"].decode()
+        self.assertNotIn("FAN_SPEED=0.90", uploaded)
+        self.assertIn("FAN_SPEED=0.40", uploaded)
+
+    def test_setting_off_still_refuses_a_mismatch(self):
+        self.setting(print_dialog=False)
+        windows = self.answer({"cancelled": True})
+        code = self.agent.start_local_print(self.params(ams_mapping="[1, 0]"), self.update, None)   # PETG on PLA
+        self.assertEqual((code, windows, self.fake.order), (self.ns["ERR_LP_PUBLISH"], [], []))
+
+    def test_title_and_plugin_settings_link(self):
+        posted = []
+        page = type("P", (), {"post_message": lambda self, m: posted.append(m)})()
+        self.ns["_page_ref"] = lambda: page
+        self.addCleanup(self.ns.__setitem__, "_page_ref", lambda: None)
+        titles = []
+
+        def create(html, title="", on_message=None, on_submit=None, **kw):
+            titles.append(title)
+            on_message({"ready": True})
+            on_message({"open_settings": True})
+            w = fakes.FakeWindow(lambda m: None, on_submit, {"cancelled": True})
+            w.html = html
+            return w
+        self.orca.host.ui.create_window = create
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), self.ns["ERR_CANCELED"])
+        self.assertEqual(titles, ["U1 Control — print setup"])
+        self.assertEqual(posted, [{"type": "show_tab", "tab": "settings"}])
+
+    def test_heads_settings_need_the_tab_for_this_printer(self):
+        windows = []
+
+        class Win(fakes.FakeWindow):
+            def __init__(self, on_message, on_submit, answer):
+                self.on_message, self.on_submit, self.open, self.posted = on_message, on_submit, True, []
+                on_message({"ready": True})
+
+        def create(html, on_message=None, on_submit=None, **kw):
+            w = Win(on_message, on_submit, None)
+            windows.append(w)
+            return w
+
+        def stop():   # polled by the waiting job thread once the window exists
+            if windows and not windows[0].posted and not getattr(windows[0], "asked", False):
+                windows[0].asked = True
+                windows[0].on_message({"type": "cmd", "id": 1, "cmd": "set_filament", "args": {"head": 0}})
+                windows[0].on_message({"type": "cmd", "id": 2, "cmd": "gcode", "args": {"script": "M112"}})
+            if windows and len([m for m in windows[0].posted if m.get("type") == "reply"]) >= 2:
+                windows[0].on_submit({"cancelled": True})
+            return False
+        self.orca.host.ui.create_window = create
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, stop), self.ns["ERR_CANCELED"])
+        replies = {m["id"]: m for m in windows[0].posted if m.get("type") == "reply"}
+        self.assertIn("U1 Control tab", replies[1]["error"])
+        self.assertEqual(replies[2]["error"], "unknown command")   # only the Heads settings commands
+        self.assertEqual(self.fake.order, [])
+
+
+
+del _B   # not collected a second time from this module
+
+
+if __name__ == "__main__":
+    unittest.main()

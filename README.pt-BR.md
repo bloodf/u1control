@@ -148,9 +148,9 @@ Não. O preparo da impressão, a câmera, as cabeças, as etiquetas RFID da Snap
 </details>
 
 <details>
-<summary>A janela Preparar impressão na U1 não abriu. Isso é um problema?</summary>
+<summary>Por que aparecem duas janelas quando clico em Imprimir?</summary>
 
-Não. No Automágico a janela só abre quando é preciso escolher. Nos outros casos o arquivo sai com as cabeças que o U1 Control relacionou. Para ver a janela em toda impressão, mude para Especialista e defina **Janela de preparo da impressão** como **sempre**.
+O OrcaSlicer sempre abre a própria janela Imprimir primeiro, e nenhum plugin pode substituí-la. O preparo da impressão do U1 Control abre em seguida, já preenchido com o que você escolheu, para conferir as cabeças e as opções antes de enviar. Para pular, mude para Especialista e desligue **Mostrar o preparo antes de enviar**; um material diferente ou uma U1 ocupada continuam sendo recusados.
 </details>
 
 <details>

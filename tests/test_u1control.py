@@ -382,7 +382,7 @@ class PluginTests(unittest.TestCase):
         self.assertIn("AUTO_REPLENISH_FILAMENT=1", script)  # printer's own value carried over
         with open(self.path) as f:
             text = f.read()
-        self.assertIn(u1.PURIFIER["weak"], text)
+        self.assertIn(u1.purifier_command("weak", {"exhaust_fan": u1.COVER_FAN_DEFAULT}), text)   # offered 60 %
         boot = json.loads(re.search(r'<script type="application/json" id="u1-boot">(.*?)</script>',
                                     orca.windows[0].html, re.S).group(1))
         self.assertEqual(boot["mode"], "setup")   # the one Vue page, in print-setup mode
