@@ -492,6 +492,7 @@ export const de: Record<MessageKey, string> = {
   'req.checking': 'Wird geprüft…',
   'req.unknown': 'Noch nicht geprüft',
   'req.check': 'Erneut prüfen',
+  'req.noAnswer': 'U1 Control hat nicht innerhalb von {seconds} s geantwortet. Bitte erneut versuchen.',
   'req.spoolman.why': 'Listet die Spulen zum Verknüpfen mit den Druckköpfen und protokolliert das Filament jedes Drucks.',
   'req.spoolman.install': 'Installieren Sie Spoolman auf einem Rechner in Ihrem Netzwerk und tragen Sie die Adresse unter Verbindung ein oder schalten Sie die Spoolman-Integration des Druckers ein.',
   'req.spooler.why': 'Macht aus Ihren Spoolman-Spulen OrcaSlicer-Filamentprofile und zeigt den Bestand im Dashboard.',

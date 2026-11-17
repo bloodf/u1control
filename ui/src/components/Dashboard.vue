@@ -14,12 +14,10 @@ import SpoolerHint from './SpoolerHint.vue';
 import { s, run, hello, controlsOff } from '../app/store';
 import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
-import { since } from '../core/since';
 import firstRunArt from '../assets/u1-toolheads.webp';
 
 const st = computed(() => s.status);
 const exceptions = computed(() => (st.value?.exceptions ?? []).map(x => JSON.stringify(x)).join('\n'));
-const powerLoss = since(() => !!st.value?.power_loss);
 async function powerResume() {
   if (!await ask({ title: t('act.powerResume'), text: t('confirm.powerResume.text'), yes: t('confirm.powerResume.yes'), no: t('common.goBack') })) return;
   await run({ key: 'power', label: t('act.powerResume'), cmd: 'power_loss', args: { action: 'resume' }, okText: t('ok.powerResume'), timeoutMs: 60000 });
@@ -30,9 +28,9 @@ async function powerDiscard() {
 }
 </script>
 <template>
-  <OuiBanner v-if="exceptions" tone="error" :title="t('exceptions.title')" dismissible :dismiss-key="`exceptions:${exceptions}`" :close-label="t('common.close')"><span class="oui-error-detail">{{ exceptions }}</span></OuiBanner>
-  <OuiBanner v-if="st?.power_loss" role="note" tone="warn" :icon="zap" :title="t('power.title')"
-             dismissible :dismiss-key="`power-loss:${powerLoss}`" :close-label="t('common.close')">
+  <OuiBanner :show="!!exceptions" tone="error" :title="t('exceptions.title')" dismissible :dismiss-key="`exceptions:${exceptions}`" :close-label="t('common.close')"><span class="oui-error-detail">{{ exceptions }}</span></OuiBanner>
+  <!-- Not dismissible: it holds the only Resume and Discard controls. -->
+  <OuiBanner v-if="st?.power_loss" role="note" tone="warn" :icon="zap" :title="t('power.title')" data-test="power-loss">
     <template v-if="st.reprint">{{ t('power.options', { options: JSON.stringify(st.reprint) }) }}</template>
     <template #actions>
       <Button size="small" severity="secondary" :label="t('power.resume')" :disabled="!!controlsOff" :aria-describedby="controlsOff ? 'heads-why' : undefined" data-focus-key="pl-resume" @click="powerResume">

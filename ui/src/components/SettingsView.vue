@@ -10,7 +10,6 @@ import { clipboard, info, languages, plug, printer, save as saveIcon, spoolman, 
 import FirmwareCard from './FirmwareCard.vue';
 import { s, run, tracker, controlsOff, busy, loadSpools, printerName, targetKnown } from '../app/store';
 import { config, form, dirty, saving, save, discard, valueOf, recheck, rechecking } from '../app/settings';
-import { since } from '../core/since';
 import { ask } from '../core/dialog';
 import { t, tMaybe, langPref, setLangPref, autoLocale, fmt } from '../core/i18n';
 import { LOCALES } from '../core/i18n-core';
@@ -54,7 +53,6 @@ async function calibrate(kind: string, name: string) {
 // When the toolhead choice (U1 print setup) runs and when its pop-up opens: a print sent without asking is easy to
 // mistake for a broken setup.
 const pipe = computed(() => config.value?.pipeline ?? null);
-const psSince = since(() => !!pipe.value && !pipe.value.on);
 const dialogRule = computed(() => tMaybe(`ps.dialog.${config.value?.settings.print_dialog}`, ''));
 const langOptions = computed(() => [
   { value: 'auto', label: t('lang.auto', { current: t(`lang.${autoLocale.value}`) }) },
@@ -103,10 +101,10 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
 
       <OuiFormSection v-if="config" id="print-setup" :icon="printer" :title="t('ps.title')" :aria-label="t('ps.title')" data-test="print-setup">
         <div class="oui-stack u1-pad">
-          <OuiBanner v-if="pipe && !pipe.on" role="note" tone="warn" :title="t('ps.off', { preset: pipe.preset })" data-test="ps-off"
-                     dismissible :dismiss-key="`ps-off:${pipe.preset}:${psSince}`" :close-label="t('common.close')">
+          <OuiBanner :show="!!pipe && !pipe.on" role="note" tone="warn" :title="t('ps.off', { preset: pipe?.preset ?? '' })" data-test="ps-off"
+                     dismissible :dismiss-key="`ps-off:${pipe?.preset ?? ''}`" :close-label="t('common.close')">
             {{ config.settings.auto_add_pipeline ? t('ps.offAuto') : t('ps.offManual') }}</OuiBanner>
-          <p v-else-if="pipe" data-test="ps-on">{{ t('ps.on', { preset: pipe.preset }) }}</p>
+          <p v-if="pipe?.on" data-test="ps-on">{{ t('ps.on', { preset: pipe.preset }) }}</p>
           <p v-if="dialogRule" data-test="ps-rule">{{ dialogRule }}</p>
           <p class="oui-meta">{{ t('ps.how') }}</p>
           <p class="oui-meta" data-test="ps-agent">{{ t('ps.agent') }}</p>
@@ -147,7 +145,7 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
         <div role="status" data-test="requirements">
           <OuiRequirement :name="t('sm.title')" :why="t('req.spoolman.why')" :status="smStatus" :status-label="smLabel" :detail="smInfo"
                           :install-text="t('req.spoolman.install')" :install-url="SPOOLMAN_URL" :check-label="t('req.check')"
-                          :disabled="!targetKnown" data-test="req-spoolman" @check="loadSpools(false)" />
+                          :disabled="!targetKnown || !!controlsOff" data-test="req-spoolman" @check="loadSpools(false)" />
           <OuiRequirement :name="t('spooler.title')" :why="t('req.spooler.why')" :status="spStatus" :status-label="spLabel" :detail="spDetail"
                           :install-text="t('spooler.suggest')" :install-url="config?.spooler.url" :check-label="t('req.check')"
                           data-test="req-spooler" @check="recheck" />

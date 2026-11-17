@@ -648,7 +648,7 @@ test('U05: unconfirmed use listed with identity; marking checked is local and ne
   eq(cmds('usage_ack').map(m => m.args), [{id: 'abc'}], 'only the local acknowledgement');
   assert(!__t.sent.slice(before).some(m => m.type === 'cmd' && !['usage_ack', 'usage', 'stock', 'spools'].includes(m.cmd)), 'no booking command');
   await reply(last('cmd', 'usage_ack'), {pending: [], unconfirmed: [], acknowledged: [{...entry, acknowledged_at: 1794300000}], acknowledged_total: 1, save_error: '', restore_notice: ''});
-  assert(!byTest('usage-card'), 'gone once checked');
+  assert(!byTest('usage-card').checkVisibility(), 'gone once checked');
 `);
 
 test('U05: a failed acknowledgement keeps the entry and says why', `
@@ -1169,12 +1169,76 @@ test('settings: requirements say what was found; Check again asks again', `
   assert(text(byTest('req-spooler')).includes('Found') && !q('.oui-req-link', byTest('req-spooler')), 'no install link once found');
   await reply(last('cmd', 'spools'), {spools: ROWS, bindings: {}, via: 'direct'});
   eq(byTest('req-spoolman').dataset.status, 'found', 'Spoolman reached');
+  assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'Spoolman Check again off while the printer has sent no status');
+  await post({type: 'status', data: VIEW()});
+  assert(!q('.oui-req-check', byTest('req-spoolman')).disabled, 'on once the printer answers');
+  await post({type: 'offline', error: 'timed out'});
+  assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'off again while the printer is offline');
+  await post({type: 'status', data: VIEW()});
   const before = cmds('spools').length;
   await click(q('.oui-req-check', byTest('req-spoolman')));
   eq(cmds('spools').length, before + 1, 'Check again loads the spools again');
   await fail(last('cmd', 'spools'), 'connection refused');
   eq(byTest('req-spoolman').dataset.status, 'missing', 'Spoolman not reached');
   assert(text(byTest('req-spoolman')).includes('connection refused'), 'says why');
+`);
+
+test('settings: Spooler Check again stops after 10 s without an answer and says so', `
+  await connect();
+  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: false, url: 'https://example.invalid/spooler'},
+    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}, automations: []});
+  await tab('settings');
+  await click(q('.oui-settings-link[data-section="spoolman"]'));
+  await click(q('.oui-req-check', byTest('req-spooler')));
+  eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
+  await sleep(10500);
+  eq(byTest('req-spooler').dataset.status, 'missing', 'Checking ends after 10 s');
+  assert(alerts().includes('did not answer within 10 s'), 'says the plugin did not answer: ' + alerts());
+`);
+
+test('settings: a toast sits above the sticky save bar', `
+  await connect();
+  await post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: true},
+    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: ''}, automations: []});
+  await tab('settings');
+  await post({type: 'notice', text: 'Project filaments updated'});
+  await until(() => q('.oui-toast'), 'toast shown');
+  await sleep(400); await frame();
+  const bar = q('.oui-settings-foot').getBoundingClientRect(), toast = q('.oui-toast').getBoundingClientRect();
+  assert(bar.height > 0, 'save bar on screen');
+  assert(toast.bottom <= bar.top, 'toast bottom ' + toast.bottom + ' <= save bar top ' + bar.top);
+`);
+
+test('power loss: the banner with Resume and Discard cannot be closed', `
+  await connect();
+  await post({type: 'status', data: VIEW({power_loss: true})});
+  const b = byTest('power-loss');
+  assert(b && qa('button', b).length === 2, 'banner with its two actions: ' + text(b));
+  assert(!q('.oui-banner-close', b), 'no Close button');
+`);
+
+test('notices: dismissals are keyed on the condition, survive a remount and are forgotten when it clears', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await post({type: 'offline', error: 'timed out'});
+  await until(() => byTest('heads-why'), 'offline banner');
+  await click(q('.oui-banner-close', byTest('heads-why')));
+  assert(!byTest('heads-why'), 'closed');
+  eq(sessionStorage.getItem('oui-banner:offline:u1:80'), '1', 'remembered under the printer, not a time (survives a reload)');
+  await post({type: 'offline', error: 'timed out again'});
+  assert(!byTest('heads-why'), 'stays closed while still offline');
+  await post({type: 'status', data: VIEW()});
+  eq(sessionStorage.getItem('oui-banner:offline:u1:80'), null, 'forgotten once the printer answers');
+  await post({type: 'offline', error: 'timed out'});
+  assert(byTest('heads-why') && text(byTest('heads-why')).includes('doesn'), 'shown again when it goes offline again');
+  // the unconfirmed-use card is hidden (v-show) when empty, so its banner sees its condition clear
+  const entry = id => ({id, at: null, spool: 7, grams: 1, head: 0, file: 'a.gcode', error: 'x', printer: 'u1:80', printer_name: 'Bench U1'});
+  const usage = list => ({pending: [], unconfirmed: list, acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: ''});
+  await until(() => last('cmd', 'usage'), 'usage asked');
+  await reply(last('cmd', 'usage'), usage([entry('a')]));
+  await click(q('.oui-banner-close', byTest('usage-banner')));
+  assert(!byTest('usage-banner'), 'usage banner closed');
+  eq(sessionStorage.getItem('oui-banner:unconfirmed:a'), '1', 'keyed on the entry ids');
 `);
 
 // ------------------------------------------------------------------ runner

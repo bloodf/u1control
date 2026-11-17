@@ -8,6 +8,9 @@
 - Settings are tabs: one section at a time, and the save bar stays on screen at any window height.
 - Notifications appear bottom-left and each one can be closed; warnings and notices on the page can be dismissed.
 - Settings > Spoolman lists what the Spoolman features need (Spoolman and the Spooler plugin), whether each was found, and how to install it, with a Check again button.
+- Notifications wait while OrcaSlicer is in another tab or app; errors stay until closed. A closed warning stays closed
+  (also after a reload) until its problem goes away, and shows again when it comes back. The power-loss notice, which
+  holds Resume and Discard, can no longer be closed. Check again for Spooler gives up after 10 s and says so.
 
 ### Fixed
 

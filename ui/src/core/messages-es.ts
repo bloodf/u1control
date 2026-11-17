@@ -491,6 +491,7 @@ export const es: Record<MessageKey, string> = {
   'req.checking': 'Comprobando…',
   'req.unknown': 'Aún sin comprobar',
   'req.check': 'Comprobar de nuevo',
+  'req.noAnswer': 'U1 Control no respondió en {seconds} s. Inténtelo de nuevo.',
   'req.spoolman.why': 'Lista las bobinas para vincularlas a los cabezales y registra el filamento que usa cada impresión.',
   'req.spoolman.install': 'Instale Spoolman en un ordenador de su red y escriba su dirección en Conexión o active la integración de Spoolman de la impresora.',
   'req.spooler.why': 'Convierte sus bobinas de Spoolman en perfiles de filamento de OrcaSlicer y muestra el inventario en el Panel.',

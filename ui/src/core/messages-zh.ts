@@ -491,6 +491,7 @@ export const zhCN: Record<MessageKey, string> = {
   'req.checking': '正在检查…',
   'req.unknown': '尚未检查',
   'req.check': '重新检查',
+  'req.noAnswer': 'U1 Control 在 {seconds} 秒内没有回应。请重试。',
   'req.spoolman.why': '列出可关联到工具头的料盘，并记录每次打印用掉的耗材丝。',
   'req.spoolman.install': '在你网络中的一台电脑上安装 Spoolman，然后在“连接”中填写它的地址，或打开打印机的 Spoolman 集成。',
   'req.spooler.why': '把 Spoolman 料盘变成 OrcaSlicer 耗材丝预设，并在仪表盘上显示库存。',
