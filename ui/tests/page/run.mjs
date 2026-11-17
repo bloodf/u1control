@@ -35,7 +35,7 @@ async function connect(kind, gen) {
 }
 async function tab(name) { await click(q('[data-tab="' + name + '"]')); }
 async function pick(root, label) {
-  assert(root, 'select to open'); root.click(); await until(() => q('.p-select-overlay') && !q('.p-select-overlay[class*="enter-active"]'), 'select overlay open');
+  assert(root, 'select to open'); await reveal(root); root.click(); await until(() => q('.p-select-overlay') && !q('.p-select-overlay[class*="enter-active"]'), 'select overlay open');
   const opt = qa('.p-select-overlay [role=option]').find(o => text(o) === label);
   assert(opt, 'option ' + label + ' in ' + qa('.p-select-overlay [role=option]').map(text).join('|'));
   await mouse(opt); await until(() => !q('.p-select-overlay'), 'overlay closed'); await settle();
