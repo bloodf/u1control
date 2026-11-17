@@ -15,6 +15,7 @@ sys.path[:0] = [SRC, os.path.join(ROOT, "tests")]
 
 import fakes  # noqa: E402
 import requirements as req  # noqa: E402
+import service as service_mod  # noqa: E402
 import spoolman as sm  # noqa: E402
 import u1  # noqa: E402
 from moonraker import PrinterError  # noqa: E402
@@ -161,18 +162,74 @@ class ServiceTests(unittest.TestCase):
         svc.set_target(Target(self.printer().host))
         self.assertEqual(svc.spoolman_link, "")
 
-    def test_follow_does_not_retry_without_spoolman(self):
-        fake = self.printer(spoolman=False, extended=True)
-        svc = self.make(fake)
+    def test_no_printer_answer_leaves_the_link_unknown(self):
+        svc = self.make(self.printer(spoolman=False))
+        with mock.patch.object(svc.client, "request", side_effect=PrinterError("can't reach the U1")):
+            with self.assertRaises(sm.SpoolmanError):
+                svc._spoolman()
+        self.assertEqual(svc.spoolman_link, "")   # offline is not "no Spoolman"
+        self.assertEqual(req.spoolman("", svc.spoolman_link)["status"], "unknown")
+
+    def test_clear_printer_answers(self):
+        def gone(*a, **k):
+            e = PrinterError("printer said: not found")
+            e.status = 404
+            raise e
+        for answer, want in ((lambda *a, **k: {"spoolman_connected": False}, False), (gone, False),
+                             (lambda *a, **k: {"spoolman_connected": True}, True)):
+            mr = mock.Mock()
+            mr.request.side_effect = answer
+            smc = sm.Spoolman("", mr)
+            try:
+                smc.connect()
+            except sm.SpoolmanError:
+                pass
+            self.assertIs(smc.printer_spoolman, want)
+        mr = mock.Mock()
+        mr.request.side_effect = PrinterError("timed out")
+        smc = sm.Spoolman("", mr)
+        with self.assertRaises(sm.SpoolmanError):
+            smc.connect()
+        self.assertIsNone(smc.printer_spoolman)
+
+    def test_follow_backs_off_and_retries(self):
+        fake = self.printer()
+        svc = self.make(fake, spoolman_url="http://127.0.0.1:1")
         with svc.lock:
-            svc.firmware = {"kind": "extended", "version": "x"}
-            svc.spoolman_link = "none"
+            svc.firmware = {"kind": "stock", "version": "1.0"}
+        notices = []
+        svc._notice = lambda text, gen=None: notices.append(text)
         view = u1.summarize(fake.status())
-        view.pop("spool_ids", None)
-        with mock.patch.object(svc, "cmd_spools", side_effect=AssertionError("Spoolman asked again")):
-            svc._spoolman_follow(view, svc.generation)
-            changed = [dict(h, type="PETG", colour="#000000") for h in view["heads"]]
-            svc._spoolman_follow(dict(view, heads=changed), svc.generation)
+        changed = dict(view, heads=[dict(h, type="PETG", colour="#000000") for h in view["heads"]],
+                       rfid=[None] * u1.TOOLHEADS)
+        for h in changed["heads"]:
+            h["official"] = False
+        svc._spoolman_follow(view, svc.generation)    # first view: nothing to compare yet
+        now = [1000.0]
+        calls = []
+
+        def spools():
+            calls.append(now[0])
+            raise sm.SpoolmanError("can't reach Spoolman")
+        with mock.patch.object(service_mod.time, "monotonic", lambda: now[0]), \
+                mock.patch.object(svc, "cmd_spools", side_effect=spools):
+            svc._spoolman_follow(changed, svc.generation)
+            self.assertEqual((len(calls), svc.follow_wait), (1, 30.0))
+            svc._spoolman_follow(changed, svc.generation)   # inside the back-off: no retry
+            self.assertEqual(len(calls), 1)
+            now[0] += 31
+            svc._spoolman_follow(changed, svc.generation)   # the pending change is retried
+            self.assertEqual((len(calls), svc.follow_wait), (2, 60.0))
+            for _ in range(6):
+                now[0] += 301
+                svc._spoolman_follow(changed, svc.generation)
+            self.assertEqual(svc.follow_wait, 300.0)   # capped at 5 min
+        self.assertEqual(len(notices), 1)   # said once, not on every retry
+        now[0] += 301
+        with mock.patch.object(service_mod.time, "monotonic", lambda: now[0]), \
+                mock.patch.object(svc, "cmd_spools", return_value=None):
+            svc._spoolman_follow(changed, svc.generation)
+        self.assertEqual((svc.follow_wait, svc.follow_retry_at), (0.0, 0.0))   # works again: back-off reset
 
     def test_extended_only_commands_refuse_on_stock(self):
         svc = self.make(self.printer())

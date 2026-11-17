@@ -8,7 +8,8 @@
   - **Spoolman**: set (an address in Settings, or the printer's own Moonraker `[spoolman]`), not set, or not known yet. No extra network check: it comes from the Spoolman link u1control already makes.
 - The checks run only when the tab asks, never while OrcaSlicer loads the plugin.
 - On the official firmware the printer screen card stays on the Dashboard, off, with "Needs the U1 Extended Firmware" instead of disappearing.
-- With no Spoolman anywhere, linking a spool from Spooler's stock is off with the reason, and the automatic spool follow no longer retries Spoolman on every filament change.
+- With no Spoolman anywhere (the printer says it has none and no address is set), linking a spool from Spooler's stock is off with the reason. A printer that doesn't answer leaves Spoolman as not known yet, never "not set".
+- When Spoolman can't be read, the automatic spool follow waits before trying again (30 s, doubling up to 5 min, back to normal once it works) and says so once, instead of retrying and warning on every filament change. The change it missed is tried again after the wait.
 - Docs: the printer agent steps now name Preferences > Developer > Experimental Features, the restart and the copy of the printer preset.
 
 ## [0.12.0] - 2026-11-16
