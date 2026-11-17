@@ -2,6 +2,7 @@
 Fakes only (FakePrinter on 127.0.0.1); nothing here talks to a real U1."""
 
 import json
+import re
 import os
 import pathlib
 import sys
@@ -357,7 +358,9 @@ class PluginAgentTests(unittest.TestCase):
         self.assertIn("BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=0", self.fake.scripts[-1])
 
     def test_unticked_box_wins_over_the_setting(self):
-        self.ns["get_store"](self.agent).update({"prefs": {"bed_level": True, "flow_calibrate": True,
+        # no print setup here: a remembered pop-up answer would become the next print's setting
+        self.ns["get_store"](self.agent).update({"mode": "expert", "print_dialog": False,
+                                                 "prefs": {"bed_level": True, "flow_calibrate": True,
                                                            "time_lapse_camera": True}})
         p = self.params(task_bed_leveling=False, task_flow_cali=True, task_record_timelapse=False)
         self.assertEqual(self.agent.start_local_print(p, self.update, None), 0)
@@ -388,6 +391,96 @@ class PluginAgentTests(unittest.TestCase):
     def test_cancelled_before_start(self):
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, lambda: True), self.ns["ERR_CANCELED"])
         self.assertEqual(self.fake.order, [])
+
+    # U1 print setup after OrcaSlicer's Print dialog --------------------------------------------------------
+    def answer(self, reply, submit=True):
+        """The print setup window answers `reply` at once (or never, submit=False); returns the windows opened."""
+        windows = []
+
+        class Silent(fakes.FakeWindow):
+            def __init__(self, on_message, on_submit, answer):
+                self.on_message, self.on_submit, self.answer, self.open, self.posted = on_message, on_submit, answer, True, []
+                on_message({"ready": True})
+
+        def create(html, on_message=None, on_submit=None, **kw):
+            w = (fakes.FakeWindow if submit else Silent)(on_message, on_submit, reply)
+            w.html = html
+            windows.append(w)
+            return w
+        self.orca.host.ui.create_window = create
+        return windows
+
+    def setting(self, **kw):
+        self.ns["get_store"](self.agent).update({"mode": "expert", **kw})
+
+    def test_print_setup_choice_is_what_is_sent(self):
+        windows = self.answer({"map": {"0": 3, "1": 1}, "prefs": {"bed_level": False, "flow_calibrate": True},
+                               "purifier": "auto", "acknowledged": [], "remember": False})
+        p = self.params(task_bed_leveling=True, task_flow_cali=True)
+        self.assertEqual(self.agent.start_local_print(p, self.update, lambda: False), 0)
+        self.assertEqual(len(windows), 1)                                  # first print: auto shows it
+        data = json.loads(re.search(r'id="u1-boot">(.*?)</script>', windows[0].html, re.S).group(1))["data"]
+        self.assertEqual(data["map"], {"0": 0, "1": 1})                    # starts from OrcaSlicer's slots
+        self.assertEqual(data["printer"]["busy"], False)
+        self.assertTrue(data["remember"])
+        script = self.fake.scripts[-1]
+        self.assertIn("CONFIG_EXTRUDER=0 MAP_EXTRUDER=3", script)
+        self.assertIn("BED_LEVEL=0 FLOW_CALIBRATE=1", script)
+        self.assertEqual(self.ns["get_store"](self.agent).effective()["prefs"], {})   # not remembered
+
+    def test_print_setup_remembers_when_ticked(self):
+        self.answer({"map": {}, "prefs": {"bed_level": False}, "purifier": "auto", "remember": True})
+        self.assertEqual(self.agent.start_local_print(self.params(task_bed_leveling=True), self.update, None), 0)
+        self.assertIs(self.ns["get_store"](self.agent).effective()["prefs"]["bed_level"], False)
+
+    def test_print_setup_setting_off_and_on(self):
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.setting(print_dialog=False)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertEqual(windows, [])
+        self.setting(print_dialog=True, printed_before=True)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertEqual(len(windows), 1)
+
+    def test_print_setup_cancel_sends_nothing(self):
+        self.answer({"cancelled": True})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), self.ns["ERR_CANCELED"])
+        self.assertEqual(self.fake.order, [])
+
+    def test_print_setup_warnings_must_be_acknowledged(self):
+        self.answer({"map": {"0": 2}, "prefs": {}, "purifier": "auto", "acknowledged": []})   # T3 is empty
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), self.ns["ERR_LP_PUBLISH"])
+        self.assertIn("weren't confirmed", self.updates[-1][2])
+        self.assertEqual(self.fake.order, [])
+        self.answer({"map": {"0": 2}, "prefs": {}, "purifier": "auto", "acknowledged": ["empty:0:2"]})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertIn("CONFIG_EXTRUDER=0 MAP_EXTRUDER=2", self.fake.scripts[-1])
+
+    def test_busy_u1_is_refused_before_the_print_setup(self):
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.fake.state = "printing"
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), self.ns["ERR_LP_PUBLISH"])
+        self.assertEqual((windows, self.fake.order), ([], []))
+
+    def test_orcaslicer_cancel_closes_the_print_setup(self):
+        windows = self.answer(None, submit=False)
+        code = self.agent.start_local_print(self.params(), self.update, lambda: bool(windows))
+        self.assertEqual(code, self.ns["ERR_CANCELED"])
+        self.assertFalse(windows[0].open)
+        self.assertEqual(self.fake.order, [])
+
+    def test_print_setup_shows_linked_spool_names(self):
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+
+        class Svc:
+            @staticmethod
+            def spool_names(host):
+                return {"1": {"name": "Acme Cobalt", "colour": "#2850A8"}}
+            target = None
+        self.ns["_service"] = Svc()
+        self.addCleanup(self.ns.__setitem__, "_service", None)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertIn('"spools": {"1": {"name": "Acme Cobalt", "colour": "#2850A8"}}', windows[0].html)
 
     def test_send_and_verify(self):
         self.assertEqual(self.agent.start_send_gcode_to_sdcard(self.params(), self.update, None, None), 0)

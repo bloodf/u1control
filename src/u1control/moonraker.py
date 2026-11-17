@@ -150,6 +150,11 @@ class Moonraker:
                          for k, v in params.items())
         return (self.request("GET", "/printer/objects/query?" + query) or {}).get("status", {})
 
+    def gcode_commands(self):
+        """The G-code commands this printer's Klipper registers (read-only GET /printer/gcode/help), upper case."""
+        result = self.request("GET", "/printer/gcode/help")
+        return frozenset(str(k).upper() for k in result) if isinstance(result, dict) else frozenset()
+
     def gcode(self, script, timeout=30):
         return self.request("POST", "/printer/gcode/script", json_body={"script": script}, timeout=timeout)
 

@@ -306,32 +306,50 @@ def _remove(path):
         pass
 
 
-def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir):
+def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir, prefs=None, choose=None):
     """Read the job, check it against the toolheads and apply u1control's G-code fixes into a temp file.
-    Returns (temp path, mapping, filaments). Raises JobError: not a U1 print, or the mapping has warnings.
-    view=None (Send, no print starts): fixes only, no toolhead check."""
+    Returns (temp path, mapping, filaments, choice). Raises JobError: not a U1 print, or the mapping has warnings.
+    view=None (Send, no print starts): fixes only, no toolhead check.
+    choose(view, filaments, mapping, prefs, lines, cfg) -> None (no print setup shown) or the print setup's answer
+    {"map", "prefs", "purifier", "heads", "commands"} (its warnings already acknowledged and checked; the top-cover
+    fan speeds in prefs go into the G-code); raises Cancelled."""
     tmp = _copy_job(path, plate_index, work_dir)
     try:
         lines, newline = gcode.read(tmp)
         cfg = gcode.settings(lines)
         if not gcode.is_u1(cfg):
             raise JobError(tr("this G-code was not sliced for a Snapmaker U1"))
-        mapping, filaments, heads = None, gcode.filaments(lines, cfg), None
+        mapping, filaments, heads, choice = None, gcode.filaments(lines, cfg), None, None
+        done = setup_done(lines)
         if view is not None:
             heads = view["heads"]
             mapping = job_mapping(ams_mapping, filaments, heads)
-            problems = u1.mapping_warnings(filaments, heads, mapping)
-            if problems:
-                raise JobError(tr("%s. Pick other slots in the print dialog, or load the filament.") % "; ".join(problems))
-        lines, _ = gcode.process(lines, cfg, options, mapping, heads, version)
-        gcode.write(tmp, lines, newline)
-        return tmp, mapping, filaments
+            choice = choose(view, filaments, mapping, prefs, lines, cfg) if choose and not done else None
+            if choice:
+                mapping, heads = choice["map"], choice.get("heads") or heads
+                fans = {k: choice["prefs"][k] for k in u1.COVER_FANS if k in choice["prefs"]}
+                options = {**options, **fans, "purifier": choice["purifier"]}
+            else:
+                problems = u1.mapping_warnings(filaments, heads, mapping)
+                if problems:
+                    raise JobError(tr("%s. Pick other slots in the print dialog, or load the filament.") % "; ".join(problems))
+        if not done:
+            lines, _ = gcode.process(lines, cfg, options, mapping, heads, version)
+            gcode.write(tmp, lines + ([SETUP_DONE] if choice else []), newline)
+        return tmp, mapping, filaments, choice
     except BaseException:
         _remove(tmp)
         raise
 
 
 HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")   # as plugin._still_valid
+SETUP_DONE = gcode.MARK + " print setup done"   # last line of G-code that went through print setup
+
+
+def setup_done(lines):
+    """True when this G-code already went through U1 print setup (the slicing pipeline or the printer agent):
+    a second pass shows no window, sends no second pre-print script and changes nothing in it."""
+    return any(line.strip() == SETUP_DONE for line in lines[-50:])
 
 
 def _busy_reason(view):
@@ -345,7 +363,7 @@ def send_job(client, path, name, plate_index, options, version, work_dir, progre
     view = u1.summarize(client.query(u1.STATUS_OBJECTS))
     if u1.is_busy(view["state"]) and view["filename"].lstrip("/") == filename:
         raise JobError(tr("the U1 is printing %s now; send it under another name or wait") % filename)
-    tmp, _, _ = prepare_gcode(path, plate_index, options, None, None, version, work_dir)
+    tmp, _, _, _ = prepare_gcode(path, plate_index, options, None, None, version, work_dir)
     try:
         client.upload(tmp, filename, progress=progress, cancelled=cancelled)
         return filename
@@ -354,18 +372,27 @@ def send_job(client, path, name, plate_index, options, version, work_dir, progre
 
 
 def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs, task, version, work_dir,
-            progress=None, cancelled=None, stage=None):
-    """Print from the dialog: refuse a busy U1, map and fix the G-code, upload, send the toolhead map and print
-    options (u1.preprint_script), then start the print. task: {"bed_leveling", "flow_cali", "timelapse"}.
-    offered_prefs(view) -> the prefs u1control offers for this printer. Returns {"filename", "mapping",
-    "filaments", "script"}. Raises JobError, Cancelled or moonraker.PrinterError."""
+            progress=None, cancelled=None, stage=None, choose=None):
+    """Print from the dialog: refuse a busy U1, map (and ask, see prepare_gcode's choose) and fix the G-code,
+    upload, send the toolhead map and print options (u1.preprint_script), then start the print.
+    task: {"bed_leveling", "flow_cali", "timelapse"}. offered_prefs(view) -> the prefs u1control offers for this
+    printer. Returns {"filename", "mapping", "filaments", "script"}. Raises JobError, Cancelled or
+    moonraker.PrinterError."""
     view = u1.summarize(client.query(u1.STATUS_OBJECTS))
     if u1.machine_busy(view):
         raise JobError(_busy_reason(view))
-    tmp, mapping, filaments = prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir)
+    prefs = job_prefs(offered_prefs(view), task.get("bed_leveling"), task.get("flow_cali"), task.get("timelapse"))
+    tmp, mapping, filaments, choice = prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_dir,
+                                                    prefs, choose)
     try:
-        prefs = job_prefs(offered_prefs(view), task.get("bed_leveling"), task.get("flow_cali"), task.get("timelapse"))
-        script = u1.preprint_script(mapping, prefs)
+        if choice:
+            prefs, view = choice["prefs"], {**view, "heads": choice.get("heads") or view["heads"]}
+            if cancelled and cancelled():
+                raise Cancelled()
+            now = u1.summarize(client.query(u1.STATUS_OBJECTS))   # the print setup may have stayed open a while
+            if u1.machine_busy(now):
+                raise JobError(_busy_reason(now))
+        script = u1.preprint_script(mapping, prefs, choice.get("commands", False) if choice else False)
         filename = upload_name(name, path)
         if stage:
             stage("upload")
@@ -385,6 +412,6 @@ def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs
         if cancelled and cancelled():
             raise Cancelled()
         client.print_start(filename)
-        return {"filename": filename, "mapping": mapping, "filaments": filaments, "script": script}
+        return {"filename": filename, "mapping": mapping, "filaments": filaments, "script": script, "choice": choice}
     finally:
         _remove(tmp)

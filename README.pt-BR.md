@@ -122,7 +122,7 @@ Os detalhes estão em [docs/features.md](docs/features.md) e todos os ajustes em
 
 Automágico é o modo padrão: tudo o que pode rodar sozinho roda, e a janela só abre na primeira impressão, com uma cabeça vazia, com outro material, com dois filamentos para a mesma cabeça ou sem material exatamente igual. O modo Especialista transforma cada etapa em um ajuste, e as suas escolhas ficam guardadas enquanto o Automágico está ligado.
 
-Para usar a janela Imprimir do próprio OrcaSlicer, marque **Use printer agents instead of print hosts** em **Preferências > Developer > Experimental Features**, reinicie o OrcaSlicer e defina **Printer Agent** como `u1control` numa cópia do perfil de impressora da U1. **Ajustes > Requisitos** na aba U1 Control mostra se o OrcaSlicer usa o agente. [Os passos e o que cada caixa faz](docs/features.md#printer-agent).
+Para usar a janela Imprimir do próprio OrcaSlicer, marque **Use printer agents instead of print hosts** em **Preferências > Developer > Experimental Features**, reinicie o OrcaSlicer e defina **Printer Agent** como `u1control` numa cópia do perfil de impressora da U1. **Ajustes > Requisitos** na aba U1 Control mostra se o OrcaSlicer usa o agente. O preparo da impressão do U1 Control abre em seguida, já com os slots escolhidos lá. [Os passos e o que cada caixa faz](docs/features.md#printer-agent).
 
 ## 🔒 Privacidade e segurança
 
@@ -148,9 +148,9 @@ Não. O preparo da impressão, a câmera, as cabeças, as etiquetas RFID da Snap
 </details>
 
 <details>
-<summary>A janela Preparar impressão na U1 não abriu. Isso é um problema?</summary>
+<summary>Por que aparecem duas janelas quando clico em Imprimir?</summary>
 
-Não. No Automágico a janela só abre quando é preciso escolher. Nos outros casos o arquivo sai com as cabeças que o U1 Control relacionou. Para ver a janela em toda impressão, mude para Especialista e defina **Janela de preparo da impressão** como **sempre**.
+O OrcaSlicer sempre abre a própria janela Imprimir primeiro, e nenhum plugin pode substituí-la. O preparo da impressão do U1 Control abre em seguida, já preenchido com o que você escolheu, para conferir as cabeças e as opções antes de enviar. Para pular, mude para Especialista e desligue **Mostrar o preparo antes de enviar**; um material diferente ou uma U1 ocupada continuam sendo recusados.
 </details>
 
 <details>
