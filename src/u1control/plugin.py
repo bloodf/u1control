@@ -33,6 +33,8 @@ _store = None
 _store_lock = threading.Lock()
 _pipeline_done = set()   # process presets U1 print setup was already offered for this session
 _presets_lock = threading.Lock()   # preset edits (begin_update/commit) run one at a time, off the UI thread
+_queue_on_main = None    # OrcaSlicer's queue_on_main, once it hands it to the printer agent
+UI_WAIT = 5.0            # seconds a script's worker thread waits for the UI thread to read the presets
 SETUP_TIMEOUT = 15 * 60  # seconds the print setup window may stay open before the send is abandoned
 
 
@@ -387,18 +389,28 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
         return True
 
     def _auto_pipeline(self):
-        cfg = self._config()
+        """UI thread (page messages, lifecycle events): presets are read here, only the write runs on a plugin
+        thread."""
+        try:
+            plan = pipeline_plan(self._config())
+        except Exception as e:
+            log("auto-add U1 print setup failed: %r" % e)
+            plan = None
+        message = self._config_message()   # the Settings page says whether this preset runs it
 
         def job():
             try:
-                name = ensure_pipeline(cfg)
+                name = apply_pipeline(plan)
                 if name:
+                    message["pipeline"] = {"preset": name, "on": True}
                     self.post_message({"type": "notice", "text": tr("U1 print setup added to %s; save the preset to keep it") % name})
             except Exception as e:
                 log("auto-add U1 print setup failed: %r" % e)
-            self.post_message(self._config_message())   # the Settings page says whether this preset runs it
+            self.post_message(message)
         if not self._background(job):   # another preset edit is running: still say which preset is selected now
-            self.post_message(self._config_message())
+            if plan is not None:
+                _pipeline_done.discard(plan[0])   # not written: offered again on the next event
+            self.post_message(message)
 
     def on_lifecycle_event(self, event, ctx):
         kind = getattr(ctx, "msg", "")
@@ -430,10 +442,14 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
 # ====================================================================== print setup
 
 def ensure_pipeline(cfg):
-    """Add "U1 print setup" to the selected U1 process preset's Slicing Pipeline Plugin, once per
-    preset name per session. Call from a plugin thread or the Script worker, never the UI thread
-    (begin_update blocks until the UI thread has applied the change).
-    Returns the preset name when it was added."""
+    """pipeline_plan then apply_pipeline, on one thread (tests and callers that are already off the UI thread)."""
+    return apply_pipeline(pipeline_plan(cfg))
+
+
+def pipeline_plan(cfg):
+    """UI thread: (process preset name, new slicing_pipeline_plugin value) when "U1 print setup" should be added to
+    the selected U1 process preset (once per preset name per session), else None. Only reads presets: OrcaSlicer's
+    preset bundle is read on the UI thread, never on a plugin thread."""
     if not cfg.get("auto_add_pipeline"):
         return None
     bundle = orca.host.preset_bundle()
@@ -447,6 +463,15 @@ def ensure_pipeline(cfg):
     value = settings.with_pipeline(bundle.full_config_value("slicing_pipeline_plugin"))
     if value is None:
         return None
+    return name, value
+
+
+def apply_pipeline(plan):
+    """Plugin thread, never the UI thread (begin_update blocks until the UI thread has applied the change): write a
+    pipeline_plan. Returns the preset name when it was added."""
+    if plan is None:
+        return None
+    name, value = plan
     tx = orca.host.preset.process.begin_update("")
     tx.set("slicing_pipeline_plugin", value)
     tx.commit()
@@ -783,7 +808,10 @@ class U1Agent(pa.PrinterAgentBase):
     def set_on_printer_connected_fn(self, fn): return self._store_cb("printer_connected", fn)
     def set_on_subscribe_failure_fn(self, fn): return self._store_cb("subscribe_failure", fn)
     def set_server_callback(self, fn): return self._store_cb("server_error", fn)
-    def set_queue_on_main_fn(self, fn): return self._store_cb("queue_on_main", fn)
+    def set_queue_on_main_fn(self, fn):
+        global _queue_on_main
+        _queue_on_main = fn   # also for the scripts' preset reads (on_ui_thread)
+        return self._store_cb("queue_on_main", fn)
 
     def _emit(self, key, *args):
         """Call a host callback the way MoonrakerPrinterAgent dispatches: through queue_on_main when set."""
@@ -1147,6 +1175,31 @@ def _selected_u1():
     return Moonraker(host, key, timeout=5)
 
 
+def on_ui_thread(fn):
+    """fn() run on OrcaSlicer's UI thread through queue_on_main, from a script's worker thread; its result, or its
+    exception raised here. Waits at most UI_WAIT seconds. Without queue_on_main (OrcaSlicer hands it only to a
+    printer agent it has created) fn runs here: after start-up the presets are loaded, so this is the old behaviour,
+    not the load-time race."""
+    queue = _queue_on_main
+    if queue is None:
+        return fn()
+    box, done = {}, threading.Event()
+
+    def task():
+        try:
+            box["value"] = fn()
+        except Exception as e:   # handed back to the worker
+            box["error"] = e
+        finally:
+            done.set()
+    queue(lambda: call_safely("script", task))
+    if not done.wait(UI_WAIT):
+        raise TimeoutError(tr("OrcaSlicer did not answer in time; try again"))
+    if "error" in box:
+        raise box["error"]
+    return box["value"]
+
+
 class CheckConnection(orca.script.ScriptPluginCapabilityBase):
     def get_name(self):
         return "Check U1 connection"
@@ -1154,7 +1207,7 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
     def execute(self):
         use_language()
         try:
-            client = _selected_u1()
+            client = on_ui_thread(_selected_u1)
             info, ext_status = run_off_thread(lambda: (client.info(), ext.Extended(client).status()))
             heads = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS))["heads"])
         except Exception as e:
@@ -1352,7 +1405,7 @@ class SyncHeadsToProject(orca.script.ScriptPluginCapabilityBase):
     def execute(self):
         use_language(self)
         try:
-            client = _selected_u1()
+            client = on_ui_thread(_selected_u1)
             view = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS)))
         except Exception as e:
             return orca.ExecutionResult.skipped(tr("Couldn't reach the U1: %s") % e)

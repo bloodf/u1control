@@ -6,6 +6,9 @@
 
 - OrcaSlicer could close by itself at start-up, or while the Device tab was open, if one of the status updates
   U1 Control hands to it failed. Such a failure is now written to the log and OrcaSlicer keeps running.
+- U1 Control now reads OrcaSlicer's presets only on OrcaSlicer's own UI thread when it adds "U1 print setup"
+  to a process preset, and for Check U1 connection and Sync U1 toolheads to project. Before, it read them from a
+  thread of its own while OrcaSlicer might be changing them.
 
 ## [0.12.0] - 2026-11-16
 

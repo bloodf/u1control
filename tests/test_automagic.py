@@ -129,6 +129,56 @@ class PipelineTests(PluginBase):
         configs = [m for m in getattr(page, "posted", []) if m["type"] == "config"]
         self.assertEqual(configs[-1]["pipeline"], {"preset": "Now selected", "on": True})
 
+    def test_presets_are_read_on_the_ui_thread_and_written_off_it(self):
+        """_auto_pipeline runs on the UI thread (page messages, lifecycle events): it reads the presets there and
+        only the write (begin_update, which blocks until the UI thread applies it) runs on a plugin thread."""
+        import threading
+        orca, ns, page = self.page({"slicing_pipeline_plugin": ["Other"], "name": "My process"})
+        readers, real = [], orca.host.preset_bundle
+
+        def bundle():
+            readers.append(threading.current_thread().name)
+            return real()
+        orca.host.preset_bundle = bundle
+        page._auto_pipeline()
+        self.assertTrue(wait_for(lambda: any(m["type"] == "config" for m in getattr(page, "posted", []))))
+        self.assertEqual(len(orca.process_calls), 1)
+        self.assertTrue(readers)
+        self.assertEqual(set(readers), {threading.current_thread().name})
+        config = [m for m in page.posted if m["type"] == "config"][-1]
+        self.assertEqual(config["pipeline"], {"preset": "My process", "on": True})
+
+    def test_busy_lock_leaves_the_preset_to_offer_again(self):
+        _, ns, page = self.page({"slicing_pipeline_plugin": ["Other"], "name": "My process"})
+        lock = ns["_presets_lock"]
+        self.assertTrue(lock.acquire(blocking=False))
+        try:
+            page._auto_pipeline()
+        finally:
+            lock.release()
+        self.assertEqual(ns["ensure_pipeline"](page._config()), "My process")
+
+    def test_scripts_read_presets_on_the_ui_thread(self):
+        """Scripts run on a worker thread: on_ui_thread has queue_on_main run the read on the UI thread and waits."""
+        import threading
+        _, ns, _ = self.page({})
+        ran = []
+
+        def queue(task):
+            threading.Thread(target=task, name="ui").start()
+        ns["U1Agent"]().set_queue_on_main_fn(queue)
+        self.addCleanup(ns.__setitem__, "_queue_on_main", None)
+        self.assertEqual(ns["on_ui_thread"](lambda: ran.append(threading.current_thread().name) or 7), 7)
+        self.assertEqual(ran, ["ui"])
+
+        def no_address():
+            raise ValueError("no address")
+        with self.assertRaises(ValueError):
+            ns["on_ui_thread"](no_address)
+        ns["_queue_on_main"], ns["UI_WAIT"] = (lambda task: None), 0.05   # the UI thread does not answer in time
+        with self.assertRaises(TimeoutError):
+            ns["on_ui_thread"](lambda: 1)
+
     def test_skips(self):
         orca, ns, page = self.page({"slicing_pipeline_plugin": '"U1 print setup"'})
         self.assertIsNone(ns["ensure_pipeline"](page._config()))
