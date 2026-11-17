@@ -48,6 +48,7 @@ PL = {
     "unchanged": "bez zmian",
     ". Problems: %s": ". Problemy: %s",
     "filament %d: %s": "filament %d: %s",
+    "T%d: several user presets match \"%s\" ignoring case; write the exact name. The usual preset is used": "T%d: kilka profili użytkownika pasuje do „%s” bez względu na wielkość liter; wpisz dokładną nazwę. Użyto zwykłego profilu",
     "T%d: no compatible user preset \"%s\" in OrcaSlicer, so the usual preset is used": "T%d: brak zgodnego profilu użytkownika „%s” w OrcaSlicer, więc użyto zwykłego profilu",
     "Select your Snapmaker U1 printer and set its IP (Wi-Fi icon next to the printer).": "Wybierz swoją drukarkę Snapmaker U1 i ustaw jej IP (ikona Wi-Fi obok drukarki).",
     "Couldn't reach the U1: %s": "Nie udało się połączyć z U1: %s",
