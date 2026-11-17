@@ -180,7 +180,9 @@ No. The two plugins agree on which spool is in which toolhead and record filamen
 <details>
 <summary>Can a spool use my own tuned filament preset?</summary>
 
-For an RFID tag, yes: in Expert mode `profile_overrides` picks an exact filament preset by tag UID, SKU, or brand and material ([how](docs/settings.md#profile-overrides)). Picking a preset per Spoolman spool is requested in [issue #11](https://github.com/bloodf/u1control/issues/11).
+Yes. For a Spoolman spool, put the preset's name in the Spoolman extra field `orca_filament_preset` (on the spool, or on its filament for all its spools; the spool's value wins). **Apply to project filaments** then picks that preset for the toolhead holding the spool. It must be your own user preset, compatible with the selected printer; if it isn't found, U1 Control says so once and picks a preset as before. OrcaSlicer's **Sync filaments** from the Device tab loads it only if it is a standalone preset (no parent). Setup and limits: [docs/features.md](docs/features.md#your-own-filament-preset-for-a-spoolman-spool).
+
+For an RFID tag, in Expert mode `profile_overrides` picks an exact filament preset by tag UID, SKU, or brand and material ([how](docs/settings.md#profile-overrides)).
 </details>
 
 <details>

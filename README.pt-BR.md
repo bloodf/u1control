@@ -180,7 +180,9 @@ Não. Os dois plugins concordam sobre qual bobina está em qual cabeça e regist
 <details>
 <summary>Uma bobina pode usar o meu perfil de filamento ajustado?</summary>
 
-Para uma etiqueta RFID, sim: no modo Especialista, `profile_overrides` escolhe um perfil de filamento exato pelo UID da etiqueta, pelo SKU ou por marca e material ([como](docs/settings.md#profile-overrides)). Escolher um perfil por bobina do Spoolman foi pedido na [issue #11](https://github.com/bloodf/u1control/issues/11).
+Sim. Para uma bobina do Spoolman, coloque o nome do perfil no campo extra do Spoolman `orca_filament_preset` (na bobina, ou no filamento para todas as bobinas dele; o valor da bobina vence). **Aplicar aos filamentos do projeto** passa a escolher esse perfil para o cabeçote com a bobina. Ele precisa ser um perfil de usuário seu, compatível com a impressora selecionada; se não for encontrado, o U1 Control avisa uma vez e escolhe um perfil como antes. O **Sincronizar filamentos** da aba Dispositivo do OrcaSlicer só carrega esse perfil se ele for independente (sem perfil pai). Configuração e limites: [docs/features.md](docs/features.md#your-own-filament-preset-for-a-spoolman-spool).
+
+Para uma etiqueta RFID, no modo Especialista, `profile_overrides` escolhe um perfil de filamento exato pelo UID da etiqueta, pelo SKU ou por marca e material ([como](docs/settings.md#profile-overrides)).
 </details>
 
 <details>

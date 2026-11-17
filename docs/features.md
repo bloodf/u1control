@@ -185,6 +185,38 @@ once. While Spooler runs in the same OrcaSlicer, the U1 Control Dashboard also l
 plugin's tab, so Spooler's own tab stays unless you turn its page off in the Plugins dialog. The
 details are in [spooler-contract.md](spooler-contract.md).
 
+## Your own filament preset for a Spoolman spool
+
+Name one of your own OrcaSlicer filament presets in Spoolman, and U1 Control uses it for that spool
+instead of Spooler's preset or a Generic one, so tuned values (pressure advance, flow ratio, max
+volumetric speed, temperatures, cooling) are kept.
+
+1. In Spoolman, **Settings > Extra fields**, add a field to **Spool** and/or **Filament**: key
+   `orca_filament_preset`, type **Text**. (Spooler adds both fields for you and lets you pick the preset
+   in its spool editor; U1 Control only reads them.)
+2. Fill it with the exact name of the filament preset, as OrcaSlicer shows it, for example
+   `My PETG @Snapmaker U1`. A value on the spool beats the one on its filament; leave the spool's empty to
+   use the filament's for all its spools.
+
+**Apply to project filaments** (and **Sync U1 toolheads to project filaments**) then picks that preset
+for the toolhead holding the spool. The name must match exactly (or, failing that, one preset regardless
+of upper/lower case), and the preset must be your own user preset (not a system preset or one a
+plugin made) compatible with the selected printer. If it isn't, U1 Control picks a preset as it always
+did and says so once per name. Colour and the spool link work as before, so Spoolman usage is
+unaffected.
+
+OrcaSlicer's **Sync filaments** (Device tab, printer agent) loads the preset whose `filament_id` the
+toolhead reports, and only if that preset is its own base:
+
+- **Works:** a standalone user preset (made without a parent, or detached: `"inherits": ""`) with a
+  `filament_id` in its file. The toolhead reports that id, so sync loads your preset, unless another
+  compatible standalone preset has the same id (a detached copy that kept a system preset's id): then
+  the first of them in OrcaSlicer's list wins.
+- **Doesn't work:** a user preset that inherits from a parent (the usual "Save as" result). It shares its
+  parent's `filament_id`, and OrcaSlicer's sync always loads the parent, never the child. For such a link
+  the toolhead reports what it would without it (Spooler's preset, else the Generic preset of its
+  material); use **Apply to project filaments** to get your preset.
+
 ## Plugins > Run
 
 - **Check U1 connection**
