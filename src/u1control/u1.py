@@ -41,6 +41,16 @@ LEVELS = {"spaghetti_level": DETECTION_LEVELS, "bed_check_level": DETECTION_LEVE
 # modes and the inner (recirculation) fan in keep-warm (purifier.py _setup_cool/_hot_chamber_mode).
 COVER_FANS = ("exhaust_fan", "inner_fan")
 PURIFIER_FAN = {"keep-warm": "inner_fan", "weak": "exhaust_fan", "strong": "exhaust_fan"}
+COVER_FAN_DEFAULT = 60   # FAN_SPEED=0.6 in Snapmaker's U1 start G-code
+COVER_FAN_LIVE = {"exhaust": "exhaust_fan", "inner": "inner_fan"}   # SET_PURIFIER FAN=<name> SPEED=0..1
+# The command each extra pref needs. It is offered and sent only when the printer's own command list
+# (Moonraker GET /printer/gcode/help) has that command: an older firmware just hides the control.
+FEATURE_COMMANDS = {
+    "spaghetti_detect": "DEFECT_DETECTION_CONFIG", "spaghetti_level": "DEFECT_DETECTION_CONFIG",
+    "bed_check": "DEFECT_DETECTION_CONFIG", "bed_check_level": "DEFECT_DETECTION_CONFIG",
+    "tangle_level": "SET_PRINT_PREFERENCES", "flow_calibrate_heads": "SET_PRINT_PREFERENCES",
+    "exhaust_fan": "SET_PURIFIER_MODE", "inner_fan": "SET_PURIFIER_MODE",
+}
 
 TASK_FIELDS = ("filament_vendor", "filament_type", "filament_sub_type", "filament_color_rgba",
                "filament_color_multi", "filament_official", "filament_exist", "filament_soft",
@@ -209,13 +219,45 @@ def printer_tuning(task, detection=None):
     return found
 
 
-def clean_prefs(prefs):
+def supports(key, commands):
+    """True when the printer has the command pref `key` needs. commands: gcode_commands(), or None = unknown,
+    which offers only the original options (no guess is ever sent)."""
+    need = FEATURE_COMMANDS.get(key)
+    return need is None or (commands is not None and need in commands)
+
+
+def features(commands):
+    """What the page may show for this printer: the extra pref keys it can take, plus "cover_fan" (SET_PURIFIER)."""
+    keys = [k for k in FEATURE_COMMANDS if supports(k, commands)]
+    return keys + (["cover_fan"] if "SET_PURIFIER" in (commands or ()) else [])
+
+
+def offered_extras(saved, view, commands):
+    """The extra print options to offer for this printer, with their starting values: the saved choice when
+    there is one, else what the printer has now (view["options"] / view["tuning"]), else a default."""
+    have = {**(view.get("tuning") or {}), **{k: v for k, v in (view.get("options") or {}).items() if k in DETECTION_KEYS}}
+    if (view.get("purifier") or {}).get("fitted"):
+        have.update({k: COVER_FAN_DEFAULT for k in COVER_FANS})
+    if (view.get("options") or {}).get("tangle_detect") is not None:
+        have.setdefault("tangle_level", "medium")   # the firmware's default
+    offered = {k: (saved or {}).get(k, v) for k, v in have.items() if k in FEATURE_COMMANDS}
+    return clean_prefs(offered, commands)
+
+
+def pick_prefs(offered, picked):
+    """The pop-up's answer, limited to what was offered and cleaned: a key that was not offered is not sent."""
+    picked = picked or {}
+    return clean_prefs({k: picked.get(k, v) for k, v in (offered or {}).items()})
+
+
+def clean_prefs(prefs, commands=False):
     """Validate print preferences from the page or the pop-up: unknown keys and bad values are dropped.
     Toggles -> bool, *_level -> a level the firmware takes, flow_calibrate_heads -> sorted head indexes,
-    exhaust_fan/inner_fan -> 0..100 percent."""
+    exhaust_fan/inner_fan -> 0..100 percent. commands (gcode_commands()) also drops what the printer lacks;
+    leave it out to skip that check."""
     out = {}
     for key, value in (prefs or {}).items():
-        if value is None:
+        if value is None or (commands is not False and not supports(key, commands)):
             continue
         if key in PREF_KEYS or key in DETECTION_KEYS:
             out[key] = bool(value)
@@ -261,6 +303,17 @@ def preference_commands(prefs, used=()):
         on = any(prefs.get(k) for k in DETECTION_KEYS)
         lines.append("DEFECT_DETECTION_CONFIG " + " ".join((["MAIN_ENABLE=1"] if on else []) + detect))
     return lines
+
+
+def cover_fan_command(fan, percent):
+    """SET_PURIFIER for one top-cover fan now (purifier.py cmd_SET_PURIFIER: FAN=exhaust|inner, SPEED 0..1;
+    0 turns it off after the firmware's delay)."""
+    if fan not in COVER_FAN_LIVE:
+        raise ValueError(tr("bad purifier mode"))
+    pct = clean_prefs({COVER_FAN_LIVE[fan]: percent}).get(COVER_FAN_LIVE[fan])
+    if pct is None:
+        raise ValueError(tr("nothing to change"))
+    return "SET_PURIFIER FAN=%s SPEED=%.2f" % (fan, pct / 100)
 
 
 def purifier_command(mode, prefs=None):
@@ -456,12 +509,13 @@ def needs_dialog(filaments, heads, mapping, prefs_known, first_print):
     return len(best) != len(set(best))  # two filaments best-match the same head
 
 
-def preprint_script(mapping, prefs):
-    """Commands Snapmaker Orca sends before a print starts (refused by firmware mid-print)."""
+def preprint_script(mapping, prefs, commands=False):
+    """Commands Snapmaker Orca sends before a print starts (refused by firmware mid-print). commands: see
+    clean_prefs."""
     lines = ["SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=%d MAP_EXTRUDER=%d" % (f, t) for f, t in sorted(mapping.items())]
     used = sorted(set(mapping.values()))
     lines.append("SET_PRINT_USED_EXTRUDERS EXTRUDERS=" + ",".join(map(str, used)))
-    lines += preference_commands(clean_prefs(prefs), used)   # a key not offered: the printer keeps its setting
+    lines += preference_commands(clean_prefs(prefs, commands), used)   # a key not offered: the printer keeps its setting
     return "\n".join(lines)
 
 

@@ -104,6 +104,84 @@ class CoverFans(unittest.TestCase):
         self.assertNotIn("FAN_SPEED=0.45", "\n".join(again))
 
 
+U1_COMMANDS = frozenset({"SET_PRINT_PREFERENCES", "DEFECT_DETECTION_CONFIG", "SET_PURIFIER", "SET_PURIFIER_MODE"})
+EVERYTHING = {"spaghetti_detect": True, "spaghetti_level": "high", "bed_check": True, "bed_check_level": "low",
+              "tangle_detect": True, "tangle_level": "high", "flow_calibrate": True, "flow_calibrate_heads": [0],
+              "exhaust_fan": 70, "inner_fan": 30}
+
+
+class CommandDetection(unittest.TestCase):
+    def test_command_present_keeps_the_option(self):
+        self.assertEqual(u1.clean_prefs(EVERYTHING, U1_COMMANDS), EVERYTHING)
+
+    def test_command_absent_drops_the_option(self):
+        no_camera = U1_COMMANDS - {"DEFECT_DETECTION_CONFIG"}
+        kept = u1.clean_prefs(EVERYTHING, no_camera)
+        self.assertNotIn("spaghetti_detect", kept)
+        self.assertNotIn("bed_check_level", kept)
+        self.assertEqual(kept["tangle_level"], "high")
+        self.assertNotIn("DEFECT_DETECTION_CONFIG", u1.preprint_script({0: 0}, EVERYTHING, no_camera))
+        fans = u1.clean_prefs(EVERYTHING, U1_COMMANDS - {"SET_PURIFIER_MODE"})
+        self.assertFalse(set(u1.COVER_FANS) & set(fans))
+
+    def test_unknown_command_list_sends_only_the_original_options(self):
+        self.assertEqual(u1.clean_prefs(EVERYTHING, None), {"tangle_detect": True, "flow_calibrate": True})
+        self.assertEqual(u1.clean_prefs(EVERYTHING, frozenset()), {"tangle_detect": True, "flow_calibrate": True})
+
+
+class Features(unittest.TestCase):
+    def test_features_follow_the_command_list(self):
+        self.assertEqual(set(u1.features(U1_COMMANDS)), set(u1.FEATURE_COMMANDS) | {"cover_fan"})
+        self.assertEqual(u1.features(frozenset({"SET_PRINT_PREFERENCES"})), ["tangle_level", "flow_calibrate_heads"])
+        self.assertEqual(u1.features(None), [])
+
+    def test_connect_reads_the_list_and_status_carries_it(self):
+        fake = fakes.FakePrinter()
+        self.addCleanup(fake.close)
+        del fake.commands["DEFECT_DETECTION_CONFIG"]
+        svc = Service(lambda m: None, log=lambda m: None)
+        self.addCleanup(svc.close)
+        svc.set_target(Target(fake.host, spoolman_url="http://" + fake.host))
+        svc.cmd_connect()
+        self.assertNotIn("DEFECT_DETECTION_CONFIG", svc.gcode_cmds)
+        self.assertIn("SET_PURIFIER", svc.gcode_cmds)
+
+
+class Offering(unittest.TestCase):
+    VIEW = {"options": {"tangle_detect": False, "spaghetti_detect": True, "bed_check": False, "bed_level": True},
+            "tuning": {"spaghetti_level": "low", "bed_check_level": "high", "flow_calibrate_heads": [0, 1, 2, 3]},
+            "purifier": {"fitted": True}}
+
+    def test_offers_what_the_printer_has_with_saved_choices_first(self):
+        self.assertEqual(u1.offered_extras({"spaghetti_level": "high", "exhaust_fan": 90}, self.VIEW, U1_COMMANDS), {
+            "spaghetti_detect": True, "bed_check": False, "spaghetti_level": "high", "bed_check_level": "high",
+            "tangle_level": "medium", "flow_calibrate_heads": [0, 1, 2, 3], "exhaust_fan": 90, "inner_fan": 60})
+
+    def test_offers_nothing_the_printer_cannot_take(self):
+        self.assertEqual(u1.offered_extras({}, self.VIEW, frozenset({"SET_PRINT_PREFERENCES"})),
+                         {"tangle_level": "medium", "flow_calibrate_heads": [0, 1, 2, 3]})
+        self.assertEqual(u1.offered_extras({}, self.VIEW, None), {})
+
+    def test_no_cover_no_fans(self):
+        offered = u1.offered_extras({}, {**self.VIEW, "purifier": {"fitted": False}}, U1_COMMANDS)
+        self.assertFalse(set(u1.COVER_FANS) & set(offered))
+
+    def test_answer_is_limited_to_what_was_offered(self):
+        offered = {"spaghetti_detect": True, "spaghetti_level": "low"}
+        self.assertEqual(u1.pick_prefs(offered, {"spaghetti_level": "high", "bed_check": True, "exhaust_fan": 5}),
+                         {"spaghetti_detect": True, "spaghetti_level": "high"})
+
+
+class GcodeHelp(unittest.TestCase):
+    def test_reads_the_command_list(self):
+        fake = fakes.FakePrinter()
+        self.addCleanup(fake.close)
+        from moonraker import Moonraker
+        fake.commands = {"set_purifier": "", "PAUSE": ""}
+        self.assertEqual(Moonraker(fake.host).gcode_commands(), frozenset({"SET_PURIFIER", "PAUSE"}))
+        self.assertEqual(fake.scripts, [])   # a read: nothing sent to the printer
+
+
 class ServicePreferences(unittest.TestCase):
     def setUp(self):
         self.fake = fakes.FakePrinter()
@@ -127,6 +205,30 @@ class ServicePreferences(unittest.TestCase):
     def test_bad_values_are_nothing_to_change(self):
         with self.assertRaises(ValueError):
             self.svc.cmd_preferences({"spaghetti_level": "medium"})   # the camera checks have no medium
+
+    def test_hidden_when_the_printer_lacks_the_command(self):
+        del self.fake.commands["DEFECT_DETECTION_CONFIG"]
+        with self.assertRaises(ValueError):
+            self.svc.cmd_preferences({"spaghetti_detect": True})
+        self.assertEqual(self.fake.scripts, [])
+
+    def test_cover_fan_now(self):
+        self.svc.cmd_cover_fan("exhaust", 75)
+        self.assertEqual(self.fake.scripts[-1], "SET_PURIFIER FAN=exhaust SPEED=0.75")
+        self.svc.cmd_cover_fan("inner", 0)
+        self.assertEqual(self.fake.scripts[-1], "SET_PURIFIER FAN=inner SPEED=0.00")
+        with self.assertRaises(ValueError):
+            self.svc.cmd_cover_fan("side", 50)
+
+    def test_cover_fan_needs_the_command_and_an_idle_printer(self):
+        del self.fake.commands["SET_PURIFIER"]
+        with self.assertRaises(ValueError):
+            self.svc.cmd_cover_fan("exhaust", 50)
+        self.fake.commands["SET_PURIFIER"] = ""
+        with_machine(self.fake, "PRINTING")
+        with self.assertRaises(PrinterError):
+            self.svc.cmd_cover_fan("exhaust", 50)
+        self.assertEqual(self.fake.scripts, [])
 
 
 if __name__ == "__main__":

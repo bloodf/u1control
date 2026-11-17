@@ -57,6 +57,9 @@ class MemClient:
     def query(self, objects):
         return self.status
 
+    def gcode_commands(self):
+        return frozenset({"SET_PRINT_PREFERENCES"})
+
     def raw(self, method, path, body=None, headers=None, timeout=None):
         err = PrinterError("no firmware config")
         err.status = 404   # as a stock U1 answers: the Firmware Config API isn't there
