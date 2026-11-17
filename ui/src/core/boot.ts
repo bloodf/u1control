@@ -4,7 +4,7 @@ export interface Boot {
   mode: 'app' | 'setup';
   version: string;
   lang: string | null;
-  pref?: 'auto' | 'en' | 'pt-BR' | 'es' | 'de' | 'zh-CN';
+  pref?: 'auto' | 'en' | 'pt-BR' | 'es' | 'de' | 'zh-CN' | 'pl';
   data?: unknown;
 }
 

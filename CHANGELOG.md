@@ -4,6 +4,7 @@
 
 ### Added
 
+- Polish (pl) translation. Thanks to @xtronets for asking (u1control#20). The tab, the U1 print setup window and the messages in OrcaSlicer's Print dialog follow an OrcaSlicer set to Polish (pl_PL), or pick **Polski** under **Settings > Language**. Counts use Polish plural forms (1 nagranie, 2 nagrania, 5 nagrań).
 - **Settings > Requirements** lists what some features need that U1 Control can't install by itself, whether each one is there, what it is for and how to get it, with **Check again**:
   - **Spoolman** and the **Spooler** plugin rows that 4.2 added under Settings > Spoolman now live here too, so there is one Requirements section.
   - **OrcaSlicer printer agents** (only for OrcaSlicer's own Print dialog and Device tab): **On** once OrcaSlicer connects to the U1 through the u1control agent or reports it as the selected printer's agent, else **Not detected** with the steps (Preferences > Developer > Experimental Features > Use printer agents instead of print hosts, restart, Printer Agent = u1control in a copy of the printer preset). Plugins can't read the preference itself, so nothing is turned off because of it.

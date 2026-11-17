@@ -191,7 +191,7 @@ No. It is an independent project, not made or supported by Snapmaker, built from
 
 ## 🌍 Languages
 
-English, Brazilian Portuguese, Spanish, German and Simplified Chinese. The page follows OrcaSlicer's language (Traditional Chinese shows Simplified Chinese, any other language English), or the one you pick under **Settings > Language**. A Polish translation is proposed in [issue #20](https://github.com/bloodf/u1control/issues/20).
+English, Brazilian Portuguese, Spanish, German, Simplified Chinese and Polish. The page follows OrcaSlicer's language (Traditional Chinese shows Simplified Chinese, any other language English), or the one you pick under **Settings > Language**. Polish was asked for in [issue #20](https://github.com/bloodf/u1control/issues/20).
 
 ## 🧩 More plugins by bloodf
 

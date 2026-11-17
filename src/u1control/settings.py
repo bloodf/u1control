@@ -42,7 +42,7 @@ AUTOMATIONS = [
 ]
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
 EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto", "camera_fps": 5}
-UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN")   # "auto": OrcaSlicer's language, then the system's
+UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl")   # "auto": OrcaSlicer's language, then the system's
 CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
 
 

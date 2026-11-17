@@ -1,5 +1,5 @@
 """Texts Python writes (errors, notices, the agent's Print dialog progress) in English, Portuguese, Spanish,
-German and Simplified Chinese: every text has every language with the same placeholders, and the language
+German, Simplified Chinese and Polish: every text has every language with the same placeholders, and the language
 follows the user's choice, then OrcaSlicer's, then English."""
 
 import ast
@@ -58,6 +58,10 @@ class Messages(unittest.TestCase):
                 self.assertTrue(text.strip(), (lang, key))
                 self.assertEqual(HOLES.findall(text), HOLES.findall(key), (lang, key, text))
 
+    def test_polish_is_a_translation(self):
+        same = [k for k, langs in MESSAGES.items() if langs["pl"] == k and re.search("[a-z]{4}", k)]
+        self.assertLess(len(same), len(MESSAGES) * 0.05, same)
+
     def test_every_text_python_shows_is_translated(self):
         missing = sorted(tr_keys() - set(MESSAGES))
         self.assertGreater(len(tr_keys()), 100)
@@ -69,6 +73,9 @@ class Messages(unittest.TestCase):
         self.assertEqual(i18n.resolve("auto", "zh_CN"), "zh-CN")
         self.assertEqual(i18n.resolve("auto", "zh_TW"), "zh-CN")
         self.assertEqual(i18n.resolve("auto", "pt_BR"), "pt-BR")
+        self.assertEqual(i18n.resolve("auto", "pl_PL"), "pl")
+        self.assertEqual(i18n.resolve("auto", "PL"), "pl")
+        self.assertEqual(i18n.resolve("auto", "pl-PL"), "pl")
         self.assertEqual(i18n.resolve("auto", "fr_FR"), "en")
         self.assertEqual(i18n.resolve("auto", None), "en")
         self.assertEqual(i18n.resolve("xx", "de"), "de")
@@ -79,6 +86,8 @@ class Messages(unittest.TestCase):
         self.assertEqual(i18n.tr("Print started"), "Druck gestartet")
         i18n.use("zh-CN")
         self.assertEqual(i18n.tr("Print started"), "打印已开始")
+        i18n.use("pl")
+        self.assertEqual(i18n.tr("Print started"), "Rozpoczęto druk")
         self.assertEqual(i18n.tr("text from the printer"), "text from the printer")   # unknown: as given
         i18n.use("klingon")
         self.assertEqual(i18n.language(), "en")
