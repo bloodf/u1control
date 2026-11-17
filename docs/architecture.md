@@ -27,8 +27,9 @@ plugin. The sources live in `src/u1control/`, and `scripts/build.py` packs them.
 Only `plugin.py` imports `orca`, so everything else is tested without OrcaSlicer.
 
 The wheel is the package `u1control`: `plugin.py` becomes `u1control/__init__.py`, each module keeps
-its name (`u1control.service`, and so on), and `u1control/_assets.py` holds the HTML pages and SVG
-icons as string constants. Nothing is embedded as source text or executed at load time, and the
+its name (`u1control.service`, and so on), and `u1control/_assets.py` holds the compiled page,
+zlib-compressed and base64-encoded in short lines (`APP_HTML_Z64`, as Spooler ships its page; Orca Cloud's upload
+review timed out on the page as readable text), and the PNG tab icon. Nothing is embedded as source text or executed at load time, and the
 modules never use plain names like `settings` or `service` that could clash with other plugins.
 The sources keep `import u1` style so they run and test in place; the build rewrites those imports
 to relative form (`from . import u1`) in the wheel copies. The build refuses any SVG that contains a

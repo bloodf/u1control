@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.12.2] - 2026-11-17
+
+### Fixed
+
+- Publishing to Orca Cloud: the automated permission review of the 0.12.1 wheel ran for about five and a half minutes and timed out six times before it went through (0.12.0 took under a minute). The wheel carried the 1.2 MB page as readable text inside a Python file; it now carries it compressed (zlib + base64), as Spooler does, so the wheel holds about 1.1 MB of Python instead of 1.7 MB. The page, the icon and everything the plugin does are unchanged.
+
 ## [0.12.1] - 2026-11-17
 
 ### Added

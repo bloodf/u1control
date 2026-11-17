@@ -1,11 +1,14 @@
 """Built wheel ships the compiled Vue page (icons from the shared foundation) and the tab icon, with no unresolved placeholders."""
 
+import ast
+import base64
 import hashlib
 import json
 import re
 import sys
 import tempfile
 import unittest
+import zlib
 import zipfile
 from pathlib import Path
 
@@ -30,7 +33,7 @@ class UiAssets(unittest.TestCase):
         self.assertEqual(html, (UI / "app.html").read_text("utf-8"))
         self.assertNotIn("__ICONS__", html)
         self.assertNotIn('id="u1-icons"', html)
-        self.assertIn(repr(html), self.text)   # the wheel carries exactly this page
+        self.assertEqual(self.page(), html)   # the wheel carries exactly this page
         self.assertNotIn("SETUP_HTML", self.text)   # one page serves the tab and the print setup window
 
     def test_committed_page_is_the_recorded_vue_build(self):
@@ -53,8 +56,32 @@ class UiAssets(unittest.TestCase):
         self.assertEqual(sorted(p.name for p in UI.glob("spot-*.svg")), [])
         self.assertNotRegex((UI / "app.html").read_text("utf-8"), r"\b(?:icon|spot|toolhead)/(?:emergency-stop|toolheads-rfid|camera-off|t1)\b")
 
+    def page(self):
+        """The page as plugin._asset unpacks it from the wheel's _assets.py."""
+        node = next(n for n in ast.parse(self.text).body if isinstance(n, ast.Assign) and n.targets[0].id == "APP_HTML_Z64")
+        return zlib.decompress(base64.b64decode(ast.literal_eval(node.value))).decode("utf-8")
+
+    def test_page_ships_packed(self):
+        """Orca Cloud's upload review reads the wheel's Python source and timed out on 1.2 MB of readable page (0.12.1):
+        the page ships zlib + base64 in short lines, as Spooler's does, and none of its markup is readable."""
+        self.assertNotIn("APP_HTML =", self.text)
+        self.assertNotIn("<script", self.text)
+        blob = [line for line in self.text.splitlines() if line.startswith('    "')]
+        self.assertGreater(len(blob), 1000)
+        self.assertLessEqual(max(map(len, blob)), 106)
+        self.assertLess(len(self.text), len(build.page_html("app.html")) * 0.7)
+
+    def test_installed_plugin_unpacks_the_page(self):
+        """The wheel imported as OrcaSlicer imports it: _asset returns the exact page and the tab icon."""
+        sys.path.insert(0, str(ROOT / "tests"))
+        import fakes
+        fakes.install_orca()
+        ns = fakes.load_wheel(self.artifact)
+        self.assertEqual(ns["_asset"]("app.html"), build.page_html("app.html"))
+        self.assertEqual(ns["_asset"]("icon.png"), (UI / "icon.png").read_bytes())
+
     def test_no_unresolved_placeholders(self):
-        self.assertIsNone(re.search(r"APP_HTML = '[^\n]*__ICONS__", self.text))
+        self.assertNotIn("__ICONS__", self.page())
         self.assertNotIn("__ICONS__", build.page_html("app.html"))
         self.assertIn("__BOOT__", build.page_html("app.html"))   # filled per page by plugin.page_html
 
