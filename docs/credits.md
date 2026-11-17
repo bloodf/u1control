@@ -20,4 +20,7 @@ The marketing images in `assets/orca-cloud`, `assets/readme` and `assets/social`
 [`assets/marketing/asset-manifest.json`](../assets/marketing/asset-manifest.json). The screenshots inside them
 are mock previews of the plugin's page with fake data, not captures from OrcaSlicer.
 
+The toolhead in the print setup window (`ui/src/setup/HeadPicture.vue`) is an original drawing made for U1 Control,
+not a copy of a Snapmaker or third-party image.
+
 License: [GPL-3.0-only](../LICENSE).

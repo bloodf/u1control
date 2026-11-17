@@ -30,6 +30,18 @@ async function setSpeed() {
 const purMode = ref<string | null>(null);
 const purOptions = computed(() => ['strong', 'weak', 'keep-warm', 'idle'].map(v => ({ value: v, label: t(`purifier.${v}` as any) })));
 const setPurifier = () => purMode.value && run({ key: 'purifier', label: t('act.purifier'), cmd: 'purifier', args: { mode: purMode.value }, okText: t('ok.purifier') });
+// Top-cover fans, live: only when the printer has SET_PURIFIER. Recirculation (keep warm) keeps the exhaust off.
+const fansShown = computed(() => st.value?.purifier?.fitted !== false && (st.value?.features ?? []).includes('cover_fan'));
+const exhaustBlocked = computed(() => !!st.value?.purifier?.recirculating);
+const fans = [{ id: 'exhaust', label: 'pref.exhaust_fan' }, { id: 'inner', label: 'pref.inner_fan' }] as const;
+const fanDraft = ref<Record<string, number | null>>({ exhaust: null, inner: null });
+const fanOff = (id: string) => !!controlsOff.value || (id === 'exhaust' && exhaustBlocked.value);
+async function setFan(id: string) {
+  const v = fanDraft.value[id];
+  if (v == null || fanOff(id)) return;
+  const r = await run({ key: `fan:${id}`, label: t('act.purifier'), cmd: 'cover_fan', args: { fan: id, percent: v }, okText: t('ok.fan') });
+  if (r.ok) fanDraft.value = { ...fanDraft.value, [id]: null };
+}
 async function setLight(on: boolean) {
   await run({ key: 'light', label: t('act.light'), cmd: 'light', args: { on } });
 }
@@ -58,6 +70,17 @@ async function setLight(on: boolean) {
         <Button severity="secondary" size="small" :label="t('common.apply')" :disabled="!!controlsOff || !purMode" :aria-describedby="why" :loading="tracker.isBusy('purifier')"
                 data-focus-key="purifier" @click="setPurifier" />
       </div>
+      <template v-if="fansShown">
+        <div v-for="f in fans" :key="f.id" class="u1-line">
+          <label :for="`fan-${f.id}`" class="u1-line-label"><OuiIcon :icon="wind" :size="14" tile tone="sky" />{{ t(f.label) }}</label>
+          <span :id="`fan-${f.id}-why`" class="u1-note" role="status">{{ f.id === 'exhaust' && exhaustBlocked ? t('fan.exhaustBlocked') : '' }}</span>
+          <InputNumber :model-value="fanDraft[f.id]" :input-id="`fan-${f.id}`" :min="0" :max="100" :step="5" suffix=" %" placeholder="%" :use-grouping="false" size="small"
+                       :input-style="{ width: '72px' }" :disabled="fanOff(f.id)" :pt="{ pcInputText: { root: { 'aria-describedby': why ?? `fan-${f.id}-why` } } }"
+                       @update:model-value="v => (fanDraft = { ...fanDraft, [f.id]: v })" @keydown.enter="setFan(f.id)" />
+          <Button severity="secondary" size="small" :label="t('temps.set')" :aria-label="t('fan.set', { fan: t(f.label) })" :disabled="fanOff(f.id) || fanDraft[f.id] == null"
+                  :aria-describedby="why ?? `fan-${f.id}-why`" :loading="tracker.isBusy(`fan:${f.id}`)" :data-focus-key="`fan-${f.id}`" @click="setFan(f.id)" />
+        </div>
+      </template>
       <div class="u1-line">
         <label for="light" class="u1-line-label"><OuiIcon :icon="light" :size="14" tile tone="lime" />{{ t('light.label') }}</label>
         <span v-if="st.light == null" class="u1-note">{{ t('common.unknown') }}</span>

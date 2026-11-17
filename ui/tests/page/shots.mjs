@@ -6,12 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { launch, MOCK_HOST, HELPERS, preparePage } from './cdp.mjs';
+import { SETUP_FULL } from './setup-data.mjs';
 
 const OUT = process.env.OUT; const page = await readFile(process.env.PAGE, 'utf8');
-const SETUP = { job: { name: 'Desk organiser — plate 1', time: '2h 04m', weight: 86, plate: 'Plate 1', address: '192.168.1.40' }, purifier: 'auto', auto_purifier: 'weak',
-  filaments: [{ index: 0, type: 'PLA', colour: '#e5484d', weight: 50 }, { index: 1, type: 'PETG', colour: '#3e63dd', weight: 36 }],
-  heads: [0, 1, 2, 3].map(i => ({ index: i, loaded: i !== 2, type: i === 2 ? '' : 'PLA', vendor: 'Generic', sub_type: 'Basic', colour: ['#e5484d', '#f4cf78', '#888', '#78cfd5'][i] })),
-  map: { 0: 0, 1: 1 }, prefs: { bed_level: true, flow_calibrate: true, time_lapse_camera: false }, labels: {} };
+const SETUP = SETUP_FULL;
 const STATE = `
 await until(() => __t.sent.find(m => m.type === 'hello'));
 const hello = __t.sent.find(m => m.type === 'hello');
@@ -54,8 +52,11 @@ const SCENES = [
   ['settings', 'light', 'en', 1280, 1], ['settings', 'dark', 'pt_BR', 720, 1], ['files', 'light', 'pt_BR', 1280, 1], ['files', 'dark', 'en', 640, 2],
   ['console', 'dark', 'en', 1280, 1], ['dash', 'light', 'en', 380, 1], ['dash', 'dark', 'en', 380, 1],
   ['idle', 'light', 'en', 1280, 1], ['idle', 'dark', 'en', 1280, 1], ['idle', 'light', 'pt_BR', 380, 1], ['idle', 'dark', 'en', 380, 1], ['setup', 'light', 'pt_BR', 720, 1], ['setup', 'dark', 'en', 1280, 1], ['setup', 'light', 'en', 360, 2],
+  ['setup', 'light', 'en', 1280, 1], ['setup', 'dark', 'en', 380, 1], ['setup', 'light', 'en', 380, 1],
 ];
 // LANGS=de_DE,zh_CN,...: every scene in those languages instead, wide light and narrow dark (and the reverse).
+// SCENES=<json>: these scenes only, [scene, theme, lang, width, scale].
+if (process.env.SCENES) SCENES.splice(0, SCENES.length, ...JSON.parse(process.env.SCENES));
 if (process.env.LANGS) SCENES.splice(0, SCENES.length, ...process.env.LANGS.split(',').flatMap(lang =>
   ['dash', 'notarget', 'dialog', 'settings', 'files', 'console', 'setup'].flatMap(scn =>
     [[scn, 'light', lang, 1280, 1], [scn, 'dark', lang, 400, 1], [scn, 'dark', lang, 1280, 1], [scn, 'light', lang, 400, 1]])));
@@ -66,7 +67,8 @@ const browser = await launch();
 const metrics = [];
 try {
   for (const [scn, theme, lang, width, scale] of SCENES) {
-    const boot = scn === 'setup' ? { mode: 'setup', version: '0.5.0', lang, data: SETUP } : { mode: 'app', version: '0.5.0', lang };
+    const boot = scn === 'setup-busy' ? { mode: 'setup', version: '0.5.0', lang, data: { ...SETUP, printer: { ...SETUP.printer, busy: true } } }
+      : scn === 'setup' ? { mode: 'setup', version: '0.5.0', lang, data: SETUP } : { mode: 'app', version: '0.5.0', lang };
     const file = join(dir, `${scn}.html`);
     await writeFile(file, preparePage(page, boot));
     const p = await browser.newPage();
@@ -75,7 +77,7 @@ try {
     await p.goto(pathToFileURL(file).href + '?theme=' + theme);
     const m = await p.evaluate(`(async () => { ${HELPERS} const SCN = ${JSON.stringify(scn)};
       await until(() => document.querySelector('#app > *'));
-      ${scn === 'setup' ? 'await sleep(300);' : STATE}
+      ${scn.startsWith('setup') ? 'await sleep(300);' : STATE}
       const over = [...document.querySelectorAll('body *')].filter(e => { const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 1 && getComputedStyle(e).position !== 'fixed'; })
         .slice(0, 5).map(e => e.tagName + '.' + String(e.className).slice(0, 40));
       const b = document.querySelector('.p-button'); const cs = b ? getComputedStyle(b) : null;
