@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- OrcaSlicer could close by itself at start-up, or while the Device tab was open, if one of the status updates
+  U1 Control hands to it failed. Such a failure is now written to the log and OrcaSlicer keeps running.
+
 ## [0.12.0] - 2026-11-16
 
 - U1 Control now speaks Spanish, German and Simplified Chinese as well as English and Portuguese: the U1 Control tab (Dashboard, Files with Time-lapses, Console, Settings), the U1 print setup window, confirmations, empty states, notices and errors, and the progress and error messages u1control shows in OrcaSlicer's Print dialog.

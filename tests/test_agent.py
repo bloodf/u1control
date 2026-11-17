@@ -284,6 +284,44 @@ class PluginAgentTests(unittest.TestCase):
         reads = self.orca.permission_requests[0]["fs_read"]
         self.assertTrue(reads and all(r.endswith("/*") for r in reads))
 
+    def test_raising_queued_callback_is_caught(self):
+        """A callback queued to OrcaSlicer's UI thread that raises must not escape: OnExceptionInMainLoop would end
+        OrcaSlicer."""
+        queued, logged = [], []
+        self.agent.set_queue_on_main_fn(queued.append)
+
+        def boom(*args):
+            raise RuntimeError("host gone")
+        self.agent.set_on_printer_connected_fn(boom)
+        self.agent._emit("printer_connected", "dev")
+        old_log, self.ns["log"] = self.ns["log"], logged.append
+        try:
+            queued[0]()   # what OrcaSlicer's CallAfter runs later: must return normally
+        finally:
+            self.ns["log"] = old_log
+        self.assertEqual(len(logged), 1)
+        self.assertIn("printer_connected", logged[0])
+        self.assertIn("host gone", logged[0])
+
+    def test_register_capabilities_reads_no_preset(self):
+        """Plugins load on a thread of their own while OrcaSlicer's UI thread loads the presets: reading them then
+        races it. Only the plugin's own storage folder is asked for."""
+        touched = []
+        real = self.orca.host
+
+        class Host:
+            plugin = real.plugin
+
+            def __getattr__(self, name):
+                touched.append(name)
+                raise AssertionError("orca.host.%s read at load" % name)
+        self.orca.host = Host()
+        try:
+            self.ns["U1Control"]().register_capabilities()
+        finally:
+            self.orca.host = real
+        self.assertEqual(touched, [])
+
     def test_default_settings_with_every_box_ticked(self):
         """OrcaSlicer's dialog starts every box ticked: U1 Control's defaults decide, time-lapse stays off."""
         p = self.params(task_bed_leveling=True, task_flow_cali=True, task_record_timelapse=True)

@@ -727,6 +727,18 @@ def job_read_grants():
     return out
 
 
+def call_safely(key, fn, *args):
+    """Run a host callback queued to OrcaSlicer's UI thread. Nothing may escape: an exception leaving a queued call
+    ends OrcaSlicer (GUI_App::OnExceptionInMainLoop returns false)."""
+    try:
+        fn(*args)
+    except Exception as e:   # pybind's error_already_set arrives as an Exception too; never re-raised
+        try:
+            log("host callback %s failed: %r" % (key, e))
+        except Exception:
+            pass
+
+
 class U1Agent(pa.PrinterAgentBase):
     """Printer agent `u1control`: OrcaSlicer's Print / Send dialog and Device tab for the U1, with the same toolhead
     map, print options and G-code fixes as U1 print setup. Printer I/O runs on the agent's own threads."""
@@ -781,7 +793,7 @@ class U1Agent(pa.PrinterAgentBase):
             return
         try:
             if queue is not None:
-                queue(lambda: fn(*args))
+                queue(lambda: call_safely(key, fn, *args))
             else:
                 fn(*args)
         except Exception as e:
