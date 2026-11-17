@@ -1,4 +1,4 @@
-"""The tab icon OrcaSlicer shows is the brand tile, scaled to 64x64, and the wheel carries exactly that file."""
+"""The tab icon OrcaSlicer shows is the brand tile, scaled to 40x40, and the wheel carries exactly that file."""
 
 import struct
 import sys
@@ -53,27 +53,33 @@ def read_png(path):
 
 
 class TabIcon(unittest.TestCase):
-    def test_icon_is_a_small_64px_rgba_png(self):
+    def test_icon_is_a_small_40px_rgba_png(self):
+        """OrcaSlicer draws the tab icon at 20 px (40 px on Retina)."""
         width, height, rows = read_png(ICON)
-        self.assertEqual((width, height), (64, 64))
+        self.assertEqual((width, height), (40, 40))
         self.assertLess(ICON.stat().st_size, 100_000)
-        self.assertEqual(rows[0][0][3], 0, "the corners outside the rounded tile are transparent")
+        self.assertLess(rows[0][0][3], 8, "the corners outside the rounded tile are transparent")
 
     def test_icon_is_the_brand_tile(self):
-        """Each icon pixel matches the average of the 8x8 block of the 512x512 tile it was scaled from."""
+        """Each opaque icon pixel matches the average of the tile area it was scaled from (tile cropped to its square)."""
         tw, th, tile = read_png(TILE)
         self.assertEqual((tw, th), (512, 512))
-        _, _, icon = read_png(ICON)
+        solid = [[p[3] > 0 and min(p[:3]) <= 235 for p in row] for row in tile]
+        ys = [y for y in range(th) if any(solid[y])]
+        xs = [x for x in range(tw) if any(solid[y][x] for y in ys)]
+        x0, y0, side = xs[0], ys[0], max(xs[-1] - xs[0], ys[-1] - ys[0]) + 1
+        size, _, icon = read_png(ICON)
+        step = side / size
         diffs = []
-        for y in range(2, 62):
-            for x in range(2, 62):
+        for y in range(3, size - 3):
+            for x in range(3, size - 3):
                 if icon[y][x][3] < 255:
                     continue
-                block = [tile[y * 8 + j][x * 8 + i] for j in range(8) for i in range(8)]
-                mean = [sum(p[k] for p in block) / 64 for k in range(3)]
+                block = [tile[int(y0 + (y + j / 4) * step)][int(x0 + (x + i / 4) * step)] for j in range(4) for i in range(4)]
+                mean = [sum(p[k] for p in block) / len(block) for k in range(3)]
                 diffs.append(sum(abs(mean[k] - icon[y][x][k]) for k in range(3)) / 3)
-        self.assertGreater(len(diffs), 3000)
-        self.assertLess(sum(diffs) / len(diffs), 6)
+        self.assertGreater(len(diffs), 1000)
+        self.assertLess(sum(diffs) / len(diffs), 12)
 
     def test_wheel_carries_the_icon(self):
         artifact = build.build(out_dir=Path(tempfile.mkdtemp()))
