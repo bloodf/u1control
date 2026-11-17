@@ -158,26 +158,81 @@ class PipelineTests(PluginBase):
             lock.release()
         self.assertEqual(ns["ensure_pipeline"](page._config()), "My process")
 
-    def test_scripts_read_presets_on_the_ui_thread(self):
-        """Scripts run on a worker thread: on_ui_thread has queue_on_main run the read on the UI thread and waits."""
+    def off_main(self, fn):
+        """fn() on a worker thread, as OrcaSlicer runs scripts and preset jobs; its result or exception."""
         import threading
-        _, ns, _ = self.page({})
-        ran = []
+        box = {}
+
+        def run():
+            try:
+                box["value"] = fn()
+            except BaseException as e:
+                box["error"] = e
+        t = threading.Thread(target=run, name="worker")
+        t.start()
+        t.join(10)
+        if "error" in box:
+            raise box["error"]
+        return box.get("value")
+
+    def with_ui_queue(self, orca, ns):
+        """queue_on_main that runs tasks on a thread named "ui"; records the thread of every preset read and write."""
+        import threading
+        seen = []
 
         def queue(task):
             threading.Thread(target=task, name="ui").start()
         ns["U1Agent"]().set_queue_on_main_fn(queue)
         self.addCleanup(ns.__setitem__, "_queue_on_main", None)
-        self.assertEqual(ns["on_ui_thread"](lambda: ran.append(threading.current_thread().name) or 7), 7)
+        real_bundle, filament, process = orca.host.preset_bundle, orca.host.preset.filament, orca.host.preset.process
+
+        def bundle():
+            seen.append(("read", threading.current_thread().name))
+            return real_bundle()
+
+        def update(real):
+            def begin(*a):
+                seen.append(("write", threading.current_thread().name))
+                return real(*a)
+            return begin
+        orca.host.preset_bundle = bundle
+        filament.begin_update, process.begin_update = update(filament.begin_update), update(process.begin_update)
+        return seen
+
+    def test_scripts_read_presets_on_the_ui_thread(self):
+        """Scripts run on a worker thread: on_ui_thread has queue_on_main run the read on the UI thread and waits."""
+        import threading
+        orca, ns, _ = self.page({})
+        self.with_ui_queue(orca, ns)
+        ran = []
+        self.assertEqual(self.off_main(lambda: ns["on_ui_thread"](lambda: ran.append(threading.current_thread().name) or 7)), 7)
         self.assertEqual(ran, ["ui"])
+        self.assertEqual(ns["on_ui_thread"](lambda: threading.current_thread().name), threading.current_thread().name)  # on it already
 
         def no_address():
             raise ValueError("no address")
         with self.assertRaises(ValueError):
-            ns["on_ui_thread"](no_address)
+            self.off_main(lambda: ns["on_ui_thread"](no_address))
         ns["_queue_on_main"], ns["UI_WAIT"] = (lambda task: None), 0.05   # the UI thread does not answer in time
         with self.assertRaises(TimeoutError):
-            ns["on_ui_thread"](lambda: 1)
+            self.off_main(lambda: ns["on_ui_thread"](lambda: 1))
+
+    def test_sync_project_reads_on_the_ui_thread_and_writes_off_it(self):
+        meta = {"Generic PLA @Snapmaker U1": {"default_filament_colour": ["#0000FF"]}}
+        orca, ns = self.load(filament_names=list(meta), filament_meta=meta)
+        seen = self.with_ui_queue(orca, ns)
+        heads = [{"index": 0, "loaded": True, "type": "PLA", "vendor": "Generic", "colour": "#0000FF", "sub_type": ""}]
+        spool = {"id": 5, "filament_id": 1, "vendor": "Generic", "material": "PLA", "name": "x", "colour": "#0000FF"}
+        done, problems = self.off_main(lambda: ns["sync_project"](heads, [], {}, bound=lambda i: spool))
+        self.assertEqual((len(done), problems), (1, []))
+        self.assertEqual(sorted(set(seen)), [("read", "ui"), ("write", "worker")])
+
+    def test_process_tuning_reads_on_the_ui_thread_and_writes_off_it(self):
+        orca, ns, _ = self.page({"name": "0.20 Standard @Snapmaker U1", "wall_generator": "arachne"})
+        seen = self.with_ui_queue(orca, ns)
+        result = self.off_main(lambda: ns["ApplyForkTuning"]().execute())
+        self.assertIn("Updated", result.message)
+        self.assertEqual(sorted(set(seen)), [("read", "ui"), ("write", "worker")])
 
     def test_skips(self):
         orca, ns, page = self.page({"slicing_pipeline_plugin": '"U1 print setup"'})
