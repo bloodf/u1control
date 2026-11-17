@@ -178,6 +178,11 @@ MESSAGES = {
     "unchanged": _m("sem alterações", "sin cambios", "unverändert", "未更改"),
     ". Problems: %s": _m(". Problemas: %s", ". Problemas: %s", ". Probleme: %s", "。问题：%s"),
     "filament %d: %s": _m("filamento %d: %s", "filamento %d: %s", "Filament %d: %s", "耗材丝 %d：%s"),
+    "T%d: no compatible user preset \"%s\" in OrcaSlicer, so the usual preset is used": _m(
+        "T%d: não há perfil de usuário compatível “%s” no OrcaSlicer, então foi usado o perfil de sempre",
+        "T%d: no hay ningún perfil de usuario compatible «%s» en OrcaSlicer, así que se usa el perfil habitual",
+        "T%d: kein kompatibles Benutzerprofil „%s“ in OrcaSlicer, daher wird das übliche Profil verwendet",
+        "T%d：OrcaSlicer 中没有兼容的用户预设“%s”，因此使用常规预设"),
 
     # ------------------------------------------------------------ helper scripts
     "Select your Snapmaker U1 printer and set its IP (Wi-Fi icon next to the printer).": _m(

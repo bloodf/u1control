@@ -61,6 +61,7 @@ class WindowTests(unittest.TestCase):   # noqa: D101
         self.assertIn("cover_fan", data["features"])
         self.assertEqual(data["levels"]["tangle_level"], ["low", "medium", "high"])
         self.assertEqual(data["job"]["tool_changes"], 1)
+        self.assertEqual(len(data["tags"]), 4)   # one RFID flag per head (Heads settings asks before FORCE)
         self.fake.commands.clear()   # an older firmware: no command list, only the original options
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
         data = boot(windows[1])

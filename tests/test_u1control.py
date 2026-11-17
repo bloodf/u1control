@@ -214,6 +214,18 @@ class SpoolmanMatchTests(unittest.TestCase):
         view = sm.spool_view({"id": 1, "location": "U1 T1", "last_used": "2026-11-09T00:00:00Z", "archived": True})
         self.assertEqual((view["last_used"], view["archived"]), ("2026-11-09T00:00:00Z", True))
 
+    def test_spool_view_reads_the_orca_preset_link_spool_then_filament(self):
+        def link(spool_extra=None, filament_extra=None):
+            return sm.spool_view({"id": 1, "extra": spool_extra, "filament": {"extra": filament_extra}})["orca_preset"]
+        self.assertEqual(link({"orca_filament_preset": '"My PETG @Snapmaker U1"'}), "My PETG @Snapmaker U1")   # JSON
+        self.assertEqual(link({"orca_filament_preset": "My PETG"}), "My PETG")                     # raw, not JSON
+        self.assertEqual(link({"orca_filament_preset": '"  "'}, {"orca_filament_preset": '"Fil"'}), "Fil")   # empty spool
+        self.assertEqual(link({}, {"orca_filament_preset": '"Fil"'}), "Fil")
+        self.assertEqual(link({"orca_filament_preset": '"Spool"'}, {"orca_filament_preset": '"Fil"'}), "Spool")
+        self.assertEqual(link({"orca_filament_preset": "42"}), "42")                               # JSON, not text
+        self.assertEqual(link({"orca_filament_preset": None}, "junk"), "")
+        self.assertEqual(sm.spool_view({"id": 1})["orca_preset"], "")
+
     def test_spool_view_has_the_full_weight_for_the_spool_picture(self):
         # the spool's own initial weight, else the filament's net weight, else unknown
         self.assertEqual(sm.spool_view({"id": 1, "initial_weight": 750, "filament": {"weight": 1000}})["initial"], 750)
@@ -508,6 +520,30 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(len(done), 3)  # head 3 is empty and skipped
         self.assertEqual(len(orca.filament_calls), 3)
         self.assertEqual(ns["sync_project"](heads[:0], [], {}), ([], []))
+
+    def test_sync_project_uses_the_spools_linked_user_preset(self):
+        meta = {"My PETG": {"is_user": True}, "Not mine": {}, "Other printer": {"is_user": True, "is_compatible": False},
+                "_local/spooler/Acme PLA @U1": {"is_user": True, "bundle_id": "spooler"}}
+        orca = fakes.install_orca(filament_names=["Generic PETG @U1", "Generic PLA @U1", *meta], filament_meta=meta)
+        ns = fakes.load_wheel(self.artifact)
+        inside, reads = [], []
+        on_ui, user_presets = ns["on_ui_thread"], ns["user_presets"]
+        ns["on_ui_thread"] = lambda fn: (inside.append(1), on_ui(fn), inside.pop())[1]
+        ns["user_presets"] = lambda: (reads.append(bool(inside)), user_presets())[1]
+        heads = u1.summarize(self.fake.status())["heads"]
+        links = {0: "my petg", 1: "Ghost", 3: "Not mine"}   # T1: case only; T2: missing; T4: not a user preset
+        bound = lambda i: {"id": i, "orca_preset": links[i]} if i in links else None   # noqa: E731
+        done, problems = ns["sync_project"](heads, [], {}, bound=bound)
+        self.assertEqual([c[:2] for c in orca.filament_calls], [(1, "My PETG"), (2, "Generic PETG @U1"), (4, "Generic PLA @U1")])
+        self.assertEqual(orca.filament_calls[0][2], {"filament_colour": heads[0]["colour"]})   # colour as before
+        self.assertEqual(len(problems), 2)
+        self.assertIn('T2: no compatible user preset "Ghost"', problems[0])
+        self.assertIn('"Not mine"', problems[1])
+        self.assertEqual(ns["sync_project"](heads, [], {}, bound=bound)[1], [])   # each name said once
+        links[0] = "Other printer"   # not compatible with this printer: the usual preset, said once
+        self.assertIn('"Other printer"', ns["sync_project"](heads, [], {}, bound=bound)[1][0])
+        self.assertEqual(reads, [True] * 3)   # presets read through on_ui_thread only
+        self.assertIsNone(ns["linked_preset"]("_local/spooler/Acme PLA @U1", ns["user_presets"]()))
 
     def test_page_sync_project_message(self):
         orca, ns = self.load(filament_names=["Generic PETG @U1"])

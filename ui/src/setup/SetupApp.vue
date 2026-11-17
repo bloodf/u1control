@@ -29,10 +29,11 @@ interface Data { job: { name?: string; time?: string; weight?: number | string; 
     thumbnail?: string; preview?: PathData | null };
   filaments: SetupFilament[]; heads: SetupHead[]; map: Record<string, number>; prefs: Record<string, Pref>;
   labels: Record<string, string>; levels?: Record<string, string[]>; features?: string[]; purifier: string; auto_purifier: string;
-  printer?: { name: string; busy: boolean; address: string } | null; spools?: Record<string, Spool | string>; remember?: boolean }
+  printer?: { name: string; busy: boolean; address: string } | null; spools?: Record<string, Spool | string>; remember?: boolean; tags?: boolean[] }
 const D = boot.data as Data;
 const heads = ref<SetupHead[]>(D.heads);
 const spools = ref<Record<string, Spool | string>>(D.spools ?? {});
+const tags = ref<boolean[]>(D.tags ?? []);
 const map = reactive<Record<string, number>>({ ...D.map });
 const touched = new Set<string>();
 const prefs = reactive<Record<string, Pref>>({ ...D.prefs });
@@ -150,6 +151,7 @@ onMounted(() => {
     heads.value = m.heads;
     if (typeof m.busy === 'boolean') busy.value = m.busy;
     if (m.spools && typeof m.spools === 'object') spools.value = m.spools;
+    if (Array.isArray(m.tags)) tags.value = m.tags;
     for (const [f, h] of Object.entries(m.map || {})) if (autoNext || !touched.has(f)) map[f] = h as number;
     if (autoNext) { touched.clear(); autoNext = false; }
   });
@@ -213,7 +215,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
         <Button size="small" severity="secondary" :label="t('setup.headsSettings')" data-test="heads" :aria-expanded="editing" aria-controls="su-heads-edit"
                 :disabled="sent" @click="editing = !editing"><template #icon><OuiIcon :icon="wrench" :size="14" /></template></Button>
       </div>
-      <div id="su-heads-edit"><HeadsSettings v-if="editing" :heads="heads" :disabled="busy || sent" /></div>
+      <div id="su-heads-edit"><HeadsSettings v-if="editing" :heads="heads" :tags="tags" :disabled="busy || sent" /></div>
     </section>
 
     <section v-if="warnings.length" class="oui-stack su-warn" aria-labelledby="su-w">

@@ -13,7 +13,9 @@ import { t } from '../core/i18n';
 import type { SetupHead } from '../core/logic';
 
 interface Spool { id: number; vendor: string; name: string; material: string; colour?: string | null }
-const props = defineProps<{ heads: SetupHead[]; disabled: boolean }>();
+const props = defineProps<{ heads: SetupHead[]; tags?: boolean[]; disabled: boolean }>();
+// Tagged as on the Dashboard (HeadCard.vue): an official spool or one whose RFID tag the head read.
+const tagged = (i: number) => !!(props.heads[i]?.official || props.tags?.[i]);
 const TYPES = ['PLA', 'PLA+', 'PLA-CF', 'PETG', 'PETG-CF', 'PCTG', 'ABS', 'ASA', 'TPU', 'PA', 'PA-CF', 'PC', 'PVA', 'HIPS'];
 
 const forms = reactive(props.heads.map(h => ({ vendor: h.vendor || 'Generic', type: h.type || 'PLA', colour: h.colour || '#ffffff' })));
@@ -30,11 +32,11 @@ onMounted(async () => {
   } catch (e) { say(-1, false, String((e as Error).message ?? e), true); }
 });
 
-// An official (RFID) spool's tag data is only overwritten after the same confirmation as on the Dashboard
+// A tagged spool's data is only overwritten after the same confirmation as on the Dashboard
 // (HeadCard.vue): force is sent only after that yes.
 async function save(i: number) {
-  const f = forms[i], h = props.heads[i], n = i + 1, force = !!h.official;
-  if (force && !await ask({ title: t('edit.title', { n }), text: t('confirm.overwrite.text', { n, kind: t('edit.official') }),
+  const f = forms[i], h = props.heads[i], n = i + 1, force = tagged(i);
+  if (force && !await ask({ title: t('edit.title', { n }), text: t('confirm.overwrite.text', { n, kind: h.official ? t('edit.official') : t('edit.tagged') }),
     yes: t('confirm.overwrite.yes'), no: t('common.goBack'), danger: true })) return;
   say(i, true);
   try {
@@ -43,7 +45,7 @@ async function save(i: number) {
   } catch (e) { say(i, false, String((e as Error).message ?? e), true); }
 }
 async function link(i: number, id: number) {
-  const n = i + 1, force = !!props.heads[i].official;
+  const n = i + 1, force = tagged(i);
   if (id && !await ask({ title: t('act.bind', { n }), text: force ? t('confirm.bind.force', { n, id }) : t('confirm.bind.text', { n, id }),
     yes: t('confirm.bind.yes', { n }), no: t('common.goBack'), danger: force })) return;
   if (!id && bindings.value[String(i)] != null && !await ask({ title: t('act.unbind', { n }),

@@ -397,7 +397,14 @@ def install_orca(answer=None, preset=None, filament_names=(), filament_meta=None
     class FPreset:
         def __init__(self, name):
             self.name = name
-            self.bundle_id = filament_meta.get(name, {}).get("bundle_id", "")
+            meta = filament_meta.get(name, {})
+            self.bundle_id = meta.get("bundle_id", "")
+            self.file = meta.get("file", "")
+            self.is_compatible = meta.get("is_compatible", True)
+            self._user = meta.get("is_user", False)
+
+        def is_user(self):
+            return self._user
 
         def config_value(self, key):
             return filament_meta.get(self.name, {}).get(key)

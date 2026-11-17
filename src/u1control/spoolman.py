@@ -22,6 +22,7 @@ from moonraker import PrinterError, _NO_PROXY
 from i18n import tr
 
 LOCATION_FMT = "%s T%d"
+PRESET_FIELD = "orca_filament_preset"   # Spoolman extra field, spool then filament: an OrcaSlicer filament preset name
 
 
 class SpoolmanError(RuntimeError):
@@ -103,6 +104,20 @@ def _weight(v):
     return v if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0 else None
 
 
+def preset_link(obj):
+    """The PRESET_FIELD extra value of a Spoolman spool or filament, or "". Spoolman keeps extras JSON-encoded
+    ('"My PETG"'); a value that isn't JSON is taken as it is."""
+    extra = (obj or {}).get("extra")
+    raw = extra.get(PRESET_FIELD) if isinstance(extra, dict) else None
+    if not isinstance(raw, str):
+        return ""
+    try:
+        value = json.loads(raw)
+    except ValueError:
+        value = raw
+    return (value if isinstance(value, str) else raw).strip()
+
+
 def spool_view(spool):
     """Flatten a Spoolman spool for the UI and for matching."""
     f = spool.get("filament") or {}
@@ -123,6 +138,7 @@ def spool_view(spool):
         "archived": bool(spool.get("archived")),
         "extruder_temp": f.get("settings_extruder_temp"),
         "bed_temp": f.get("settings_bed_temp"),
+        "orca_preset": preset_link(spool) or preset_link(f),
     }
 
 

@@ -389,7 +389,7 @@ test('setup: auto mapping, plugin settings, print preferences and the top-cover 
   eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan], ['high', 0], 'chosen preferences sent');
 `, { mode: 'setup', data: SETUP_FULL });
 
-test('setup: Heads settings ask before overwriting an official spool; a set fan speed of 60 % stays set', `
+test('setup: Heads settings ask before overwriting a tagged spool; a set fan speed of 60 % stays set', `
   await until(() => sent().some(m => m.ready), 'ready posted');
   await click(byTest('heads'));
   await until(() => last('cmd', 'spools'), 'spools asked');
@@ -404,9 +404,14 @@ test('setup: Heads settings ask before overwriting an official spool; a set fan 
   await yes();
   await until(() => cmds('set_filament').length, 'sent after yes');
   eq(cmds('set_filament')[0].args.force, true, 'force only after the confirmation');
-  await click(q('[data-head="0"] button[type="submit"]'));     // not official: no question, no force
+  await click(q('[data-head="0"] button[type="submit"]'));     // not tagged: no question, no force
   await until(() => cmds('set_filament').length === 2, 'second save');
   eq(cmds('set_filament')[1].args.force, false, 'no force');
+  await click(q('[data-head="2"] button[type="submit"]'));     // an RFID tag the head read: asks too
+  await until(dialogOpen, 'asks for a read tag');
+  await yes();
+  await until(() => cmds('set_filament').length === 3, 'third save');
+  eq(cmds('set_filament')[2].args.force, true, 'force after yes');
   await click(byTest('cover-more')); await until(() => byTest('exhaust-mode'));
   await click([...qa('[data-test="exhaust-mode"] button')].find(b => text(b) === 'Set'));
   assert(q('.su-slider'), 'slider shown');
@@ -415,7 +420,7 @@ test('setup: Heads settings ask before overwriting an official spool; a set fan 
   range.value = '60'; range.dispatchEvent(new Event('input', {bubbles: true}));
   await settle();
   assert(q('.su-slider') && text(q('.su-slider')).includes('60'), 'still Set at 60 %: ' + text(q('.su-slider') || document.body));
-`, { mode: 'setup', data: SETUP_FULL });
+`, { mode: 'setup', data: { ...SETUP_FULL, tags: [false, false, true, false] } });
 
 test('setup: keep warm hides the exhaust fan and never sends it', `
   await until(() => sent().some(m => m.ready), 'ready posted');
