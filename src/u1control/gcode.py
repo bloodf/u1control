@@ -150,11 +150,12 @@ LAYER_RE = re.compile(r"^\s*;\s*(CHANGE_LAYER|LAYER_CHANGE)\s*$")
 WAS_RE = re.compile(r"\(was: (.*)\)$")
 
 
-def ensure_purifier(lines, mode):
+def ensure_purifier(lines, mode, fans=None):
     """Make the start G-code's top-cover purifier line match mode ('auto' resolved by caller; 'off' leaves
     the file as sliced). The profile's first SET_PURIFIER_MODE before the first layer (upstream 2.5's U1
     profile has one in its start G-code) is replaced by ours, with a '; u1control: purifier <mode> (was: ...)'
-    marker; without one ours goes after PRINT_START. Re-running first restores what the marker recorded."""
+    marker; without one ours goes after PRINT_START. Re-running first restores what the marker recorded.
+    fans: {"exhaust_fan"/"inner_fan": percent} sets the mode's fan speed (u1.purifier_command)."""
     out, ours_next, was = [], False, None
     for line in lines:   # undo an earlier run so the result only depends on the original file and mode
         if line.startswith(MARK + " purifier"):
@@ -170,14 +171,15 @@ def ensure_purifier(lines, mode):
         out.append(line)
     if mode == "off" or mode not in u1.PURIFIER:
         return out
+    cmd = u1.purifier_command(mode, fans)
     limit = next((i for i, l in enumerate(out) if LAYER_RE.match(l)), len(out))
     first = next((i for i in range(limit) if PURIFIER_RE.match(out[i])), None)
     if first is not None:
-        return out[:first] + ["%s purifier %s (was: %s)" % (MARK, mode, out[first].strip()), u1.PURIFIER[mode]] + out[first + 1:]
+        return out[:first] + ["%s purifier %s (was: %s)" % (MARK, mode, out[first].strip()), cmd] + out[first + 1:]
     i = _start_index(out)
     if i is None:
         return out
-    return out[:i + 1] + [MARK + " purifier " + mode, u1.PURIFIER[mode]] + out[i + 1:]
+    return out[:i + 1] + [MARK + " purifier " + mode, cmd] + out[i + 1:]
 
 
 def ensure_chamber_wait(lines):
@@ -304,13 +306,15 @@ def tag_slicer(lines, version):
 
 
 def process(lines, cfg, options, mapping=None, heads=None, version="0"):
-    """Apply the enabled transforms. options: dict of booleans plus 'purifier' mode."""
+    """Apply the enabled transforms. options: dict of booleans plus 'purifier' mode and, optionally, the
+    top-cover fan speeds ("exhaust_fan", "inner_fan": percent)."""
     used = filaments(lines, cfg)
     mode = options.get("purifier", "auto")
     if mode == "auto":
         mode = u1.purifier_mode(used)
-    lines = ensure_purifier(lines, mode)
-    if mode in u1.PURIFIER and u1.PURIFIER[mode] not in lines:
+    fans = u1.clean_prefs({k: options.get(k) for k in u1.COVER_FANS})
+    lines = ensure_purifier(lines, mode, fans)
+    if mode in u1.PURIFIER and u1.purifier_command(mode, fans) not in lines:
         mode = "off"   # nowhere to put it (no PRINT_START): report what actually happened
     if options.get("chamber_wait", True):
         lines = ensure_chamber_wait(lines)

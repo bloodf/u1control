@@ -25,9 +25,27 @@ PREFERENCES = (
 )
 PREF_KEYS = tuple(p[0] for p in PREFERENCES)
 
+# Camera checks: DEFECT_DETECTION_CONFIG (klippy/extras/defect_detection.py). The "defect_detection" status
+# object is the module's stored config: {"main_enable", section: {"enable", "sensitivity"}}. The firmware only
+# knows two levels here. (key, command prefix, label, status section, sensitivity pref key)
+DETECTION = (
+    ("spaghetti_detect", "NOODLE", "Spaghetti detection", "noodle", "spaghetti_level"),
+    ("bed_check", "CLEAN_BED", "Foreign object check", "clean_bed", "bed_check_level"),
+)
+DETECTION_KEYS = tuple(d[0] for d in DETECTION)
+DETECTION_LEVELS = ("low", "high")
+TANGLE_LEVELS = ("low", "medium", "high")   # FILAMENT_ENTANGLE_SEN (print_task_config.py ENTANGLE_SENSITIVITY_*)
+# Sensitivity pref key -> the levels the firmware accepts for it.
+LEVELS = {"spaghetti_level": DETECTION_LEVELS, "bed_check_level": DETECTION_LEVELS, "tangle_level": TANGLE_LEVELS}
+# Top-cover fan speed prefs, in percent. SET_PURIFIER_MODE's FAN_SPEED drives the exhaust fan in the cooling
+# modes and the inner (recirculation) fan in keep-warm (purifier.py _setup_cool/_hot_chamber_mode).
+COVER_FANS = ("exhaust_fan", "inner_fan")
+PURIFIER_FAN = {"keep-warm": "inner_fan", "weak": "exhaust_fan", "strong": "exhaust_fan"}
+
 TASK_FIELDS = ("filament_vendor", "filament_type", "filament_sub_type", "filament_color_rgba",
                "filament_color_multi", "filament_official", "filament_exist", "filament_soft",
-               "extruder_map_table", "extruders_used", "reprint_info", "filament_spool_id") + tuple(p[3] for p in PREFERENCES)
+               "extruder_map_table", "extruders_used", "reprint_info", "filament_spool_id",
+               "filament_entangle_sen", "flow_calib_extruders") + tuple(p[3] for p in PREFERENCES)
 
 STATUS_OBJECTS = {
     "webhooks": None,
@@ -41,6 +59,7 @@ STATUS_OBJECTS = {
     "heater_bed": ["temperature", "target"],
     "print_task_config": list(TASK_FIELDS),
     "purifier": None,
+    "defect_detection": None,
     "led cavity_led": ["color_data"],
     "fan": ["speed"],
     "filament_detect": ["info", "state"],   # RFID: Snapmaker, OpenRFID, OpenSpool, external readers
@@ -161,14 +180,96 @@ def rfid_signature(tag):
     return tag and tuple(tag.get(k) for k in ("uid", "type", "vendor", "sub_type", "colour"))
 
 
-def printer_options(task):
-    """Print options the printer reports, as set now: {key: bool}."""
+def printer_options(task, detection=None):
+    """Print options the printer reports, as set now: {key: bool}. detection: the defect_detection object."""
     found = {}
     for key, _, _, field, _ in PREFERENCES:
         if field in task:
             v = task[field]
             found[key] = any(v) if isinstance(v, list) else bool(v)
+    for key, _, _, section, _ in DETECTION:
+        part = (detection or {}).get(section)
+        if isinstance(part, dict) and "enable" in part:
+            found[key] = bool(detection.get("main_enable", True)) and bool(part["enable"])
     return found
+
+
+def printer_tuning(task, detection=None):
+    """The non-toggle print settings the printer reports: sensitivity levels and the flow-calibration heads."""
+    found = {}
+    for _, _, _, section, key in DETECTION:
+        level = ((detection or {}).get(section) or {}).get("sensitivity")
+        if level in DETECTION_LEVELS:
+            found[key] = level
+    if task.get("filament_entangle_sen") in TANGLE_LEVELS:
+        found["tangle_level"] = task["filament_entangle_sen"]
+    heads = task.get("flow_calib_extruders")
+    if isinstance(heads, list):
+        found["flow_calibrate_heads"] = [i for i, on in enumerate(heads[:TOOLHEADS]) if on]
+    return found
+
+
+def clean_prefs(prefs):
+    """Validate print preferences from the page or the pop-up: unknown keys and bad values are dropped.
+    Toggles -> bool, *_level -> a level the firmware takes, flow_calibrate_heads -> sorted head indexes,
+    exhaust_fan/inner_fan -> 0..100 percent."""
+    out = {}
+    for key, value in (prefs or {}).items():
+        if value is None:
+            continue
+        if key in PREF_KEYS or key in DETECTION_KEYS:
+            out[key] = bool(value)
+        elif key in LEVELS and str(value).lower() in LEVELS[key]:
+            out[key] = str(value).lower()
+        elif key == "flow_calibrate_heads" and isinstance(value, (list, tuple)):
+            heads = {h for h in value if isinstance(h, int) and not isinstance(h, bool) and 0 <= h < TOOLHEADS}
+            out[key] = sorted(heads)
+        elif key in COVER_FANS and isinstance(value, (int, float)) and not isinstance(value, bool):
+            out[key] = int(max(0, min(100, round(value))))
+    return out
+
+
+def preference_commands(prefs, used=()):
+    """SET_PRINT_PREFERENCES and DEFECT_DETECTION_CONFIG lines for cleaned prefs (clean_prefs). A key that is
+    absent leaves the printer's own setting alone. used: the heads the print uses (for END_UNLOAD_FILAMENT)."""
+    params = []
+    for key, param, _, _, _ in PREFERENCES:
+        value = prefs.get(key)
+        if value is None:
+            continue
+        if key == "unload_when_done":
+            params.append("%s=[%s]" % (param, ",".join("1" if value and t in used else "0" for t in range(TOOLHEADS))))
+        elif key == "flow_calibrate" and value and prefs.get("flow_calibrate_heads") is not None:
+            heads = prefs["flow_calibrate_heads"]   # the firmware fails the whole command on an empty list
+            params.append("FLOW_CALIBRATE=%d" % (1 if heads else 0))
+            if heads:
+                params.append("FLOW_CALIBRATE_EXTRUDERS=" + ",".join(map(str, heads)))
+        else:
+            params.append("%s=%d" % (param, 1 if value else 0))
+    if prefs.get("tangle_level"):
+        params.append("FILAMENT_ENTANGLE_SEN=" + prefs["tangle_level"])
+    lines = ["SET_PRINT_PREFERENCES " + " ".join(params)] if params else []
+    detect = []
+    for key, prefix, _, _, level_key in DETECTION:
+        if prefs.get(key) is not None:
+            detect.append("%s_ENABLE=%d" % (prefix, 1 if prefs[key] else 0))
+        level = prefs.get(level_key)
+        if level:
+            detect.append("%s_SENSITIVITY=%s" % (prefix, level))
+    if detect:
+        # MAIN_ENABLE gates every camera check; switch it on with any of them, never off (the nozzle check uses it).
+        on = any(prefs.get(k) for k in DETECTION_KEYS)
+        lines.append("DEFECT_DETECTION_CONFIG " + " ".join((["MAIN_ENABLE=1"] if on else []) + detect))
+    return lines
+
+
+def purifier_command(mode, prefs=None):
+    """The SET_PURIFIER_MODE line for mode, with the matching top-cover fan's speed from prefs when set."""
+    cmd = PURIFIER[mode]
+    pct = (prefs or {}).get(PURIFIER_FAN[mode])
+    if pct is None:
+        return cmd
+    return re.sub(r"FAN_SPEED=[\d.]+", "FAN_SPEED=%.2f" % (max(0, min(100, pct)) / 100), cmd)
 
 
 def summarize(status):
@@ -198,7 +299,8 @@ def summarize(status):
                 "target": (status.get("heater_bed") or {}).get("target")},
         "extruders": temps,
         "heads": describe_toolheads(task),
-        "options": printer_options(task),
+        "options": printer_options(task, status.get("defect_detection")),
+        "tuning": printer_tuning(task, status.get("defect_detection")),
         "light": bool(led[0][3]) if led and led[0] and len(led[0]) > 3 else None,
         "purifier": {"fitted": purifier.get("power_detected"), "mode": purifier.get("mode")},
         "fan": (status.get("fan") or {}).get("speed"),
@@ -359,17 +461,7 @@ def preprint_script(mapping, prefs):
     lines = ["SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=%d MAP_EXTRUDER=%d" % (f, t) for f, t in sorted(mapping.items())]
     used = sorted(set(mapping.values()))
     lines.append("SET_PRINT_USED_EXTRUDERS EXTRUDERS=" + ",".join(map(str, used)))
-    params = []
-    for key, param, _, _, _ in PREFERENCES:
-        value = prefs.get(key)
-        if value is None:
-            continue  # not offered: printer keeps its own setting
-        if key == "unload_when_done":
-            params.append("%s=[%s]" % (param, ",".join("1" if value and t in used else "0" for t in range(TOOLHEADS))))
-        else:
-            params.append("%s=%d" % (param, 1 if value else 0))
-    if params:
-        lines.append("SET_PRINT_PREFERENCES " + " ".join(params))
+    lines += preference_commands(clean_prefs(prefs), used)   # a key not offered: the printer keeps its setting
     return "\n".join(lines)
 
 

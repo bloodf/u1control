@@ -656,12 +656,11 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         prefs = prefs or {}
         if "unload_when_done" in prefs:
             raise ValueError(tr("Unload when done is chosen for each print, per toolhead, in the U1 print setup pop-up"))
-        clean = {k: bool(v) for k, v in prefs.items() if k in u1.PREF_KEYS}
-        params = ["%s=%d" % (param, 1 if clean[key] else 0) for key, param, _, _, _ in u1.PREFERENCES if key in clean]
-        if not params:
+        lines = u1.preference_commands(u1.clean_prefs(prefs))
+        if not lines:
             raise ValueError(tr("nothing to change"))
         self._require_idle()
-        return self._gcode("SET_PRINT_PREFERENCES " + " ".join(params))
+        return self._gcode("\n".join(lines))
 
     # toolheads -----------------------------------------------------------
 
