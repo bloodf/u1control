@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 UI = ROOT / "src" / "u1control" / "ui"
-MAX_BUILT_BYTES = 400_000   # unchanged: the Vue wheel measures ~227 kB (legacy pages: ~96 kB)
+MAX_BUILT_BYTES = 480_000   # ~438 kB with the Dashboard printer photo (~50 kB of WebP that does not compress further)
 
 
 class UiAssets(unittest.TestCase):

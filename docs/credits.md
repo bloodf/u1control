@@ -11,6 +11,9 @@ Ideas came from the SnapSend, U1 Sync & Send, Set & Send and
 
 u1control is an independent project. It is not made or supported by Snapmaker.
 
+Printer photo: Snapmaker product image. The picture of the U1 on the Dashboard (`ui/src/assets/printer`) is cut out
+from Snapmaker's product photo, with the spools' filament recoloured live; see [NOTICE.md](../NOTICE.md).
+
 Fonts in `assets/fonts` (Outfit, JetBrains Mono) are under the SIL Open Font License.
 
 The marketing images in `assets/orca-cloud`, `assets/readme` and `assets/social` are listed in

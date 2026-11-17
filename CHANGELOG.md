@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- The Dashboard's status card now shows the U1 itself, as a photo, in place of the small printer icon. The four spools on its side holders (T1 and T2 on the left, T3 and T4 on the right) take the colour of the Spoolman spool linked to each toolhead (every colour of a multi-colour spool, side by side), else the colour the printer reports; an empty holder shows a faded grey reel. The wound strands and the light of the photo stay, only the colour changes. While printing, the active toolhead's spool is softly lit. Screen readers hear what each toolhead holds ("T1 orange PLA, T2 empty…"). Printer photo: Snapmaker product image (see NOTICE.md).
+
 ## [0.12.0] - 2026-11-16
 
 - U1 Control now speaks Spanish, German and Simplified Chinese as well as English and Portuguese: the U1 Control tab (Dashboard, Files with Time-lapses, Console, Settings), the U1 print setup window, confirmations, empty states, notices and errors, and the progress and error messages u1control shows in OrcaSlicer's Print dialog.

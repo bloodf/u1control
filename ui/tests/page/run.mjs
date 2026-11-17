@@ -154,6 +154,34 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   }
 `);
 
+test('the printer photo: spools in the Spoolman colour, else the printer colour, else empty; the active spool lit', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', filename: 'cube.gcode', progress: 0.5, extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1})),
+    heads: [head('PLA', {colour: '#00ff00'}), head('PETG', {colour: '#3e63dd'}), head(''), head('PLA', {colour: '#ffffff'})]})});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [{id: 7, name: 'Orange', vendor: 'G', material: 'PETG', colour: '#ff7a00', remaining: 250, initial: 1000},
+    {id: 12, name: 'Tri', vendor: 'G', material: 'PLA', colour: '#e5484d', colours: ['#e5484d', '#f5d90a', '#3e63dd'], remaining: 900, initial: 1000}], bindings: {'0': 7, '3': 12}, via: 'direct'});
+  await settle();
+  const fig = q('[data-test="job-card"] [data-test="printer-figure"]');
+  assert(fig, 'the printer is shown in the status card');
+  assert(!q('[data-test="job-card"] .art-printer'), 'the old icon is gone');
+  const reel = n => fig.querySelector('.pf-reel[data-head="' + n + '"]');
+  const paint = n => reel(n).style.getPropertyValue('--pf-paint');
+  eq([reel(1).dataset.colour, paint(1)], ['#ff7a00', '#ff7a00'], 'T1: the linked Spoolman spool colour');
+  eq([reel(2).dataset.colour, paint(2)], ['#3e63dd', '#3e63dd'], 'T2: the printer colour');
+  assert(reel(3).hasAttribute('data-empty') && !reel(3).dataset.colour, 'T3: empty reel');
+  for (const c of ['#e5484d', '#f5d90a', '#3e63dd']) assert(paint(4).includes(c), 'T4: every colour of a multi-colour spool: ' + paint(4));
+  assert(reel(2).hasAttribute('data-active') && !reel(1).hasAttribute('data-active') && fig.querySelector('.pf-halo'), 'the active toolhead spool is lit');
+  assert(qa('img', fig).every(i => i.complete && i.naturalWidth > 0), 'photo and light maps load');
+  eq(fig.getAttribute('role'), 'img');
+  eq(fig.getAttribute('aria-label'), 'Printer and spools: T1 orange PETG, T2 blue PETG (in use), T3 empty, T4 multicolour PLA', 'says what each toolhead holds');
+  await post({type: 'status', data: VIEW()});
+  await settle();
+  const idle = q('[data-test="job-card"] [data-test="printer-figure"]');
+  assert(idle && !idle.querySelector('.pf-halo'), 'idle: still shown, no spool lit');
+  assert(!idle.getAttribute('aria-label').includes('(in use)'), 'idle: no toolhead in use');
+`);
+
 test('thumbnails only for visible rows, two at a time, dropped on folder change', `
   await connect();
   await tab('files');
