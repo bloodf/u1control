@@ -1,4 +1,4 @@
-// What each spool of the drawn printer shows: Spoolman spool, else printer colour, else an empty reel.
+// What each spool of the printer photo shows: Spoolman spool, else printer colour, else an empty reel.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { colourName, figureSpools, parseHex } from '../../src/core/figure.ts';
@@ -15,6 +15,11 @@ test('the Spoolman spool wins over the printer colour and sets the fill', () => 
 test('no linked spool: the printer-reported colour, fill unknown', () => {
   const [, t2] = figureSpools([head(''), head('PLA', '#3e63dd')], {}, []);
   assert.equal(t2.source, 'printer'); assert.equal(t2.colour, '#3e63dd'); assert.equal(t2.fraction, null); assert.equal(t2.name, 'blue'); assert.equal(t2.empty, false);
+});
+
+test('no status yet: four empty reels', () => {
+  const out = figureSpools(undefined, { 0: 7 }, [spool(7)]);
+  assert.deepEqual(out.map(sp => [sp.n, sp.empty, sp.colour]), [[1, true, null], [2, true, null], [3, true, null], [4, true, null]]);
 });
 
 test('nothing loaded and nothing linked: an empty reel; missing heads too', () => {
