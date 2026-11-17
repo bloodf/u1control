@@ -1176,12 +1176,12 @@ def _selected_u1():
 
 
 def on_ui_thread(fn):
-    """fn() run on OrcaSlicer's UI thread through queue_on_main, from a script's worker thread; its result, or its
-    exception raised here. Waits at most UI_WAIT seconds. Without queue_on_main (OrcaSlicer hands it only to a
+    """fn() run on OrcaSlicer's UI thread through queue_on_main, from a worker thread (a script, a preset job); its
+    result, or its exception raised here. Waits at most UI_WAIT seconds; on the main thread fn runs at once. Without queue_on_main (OrcaSlicer hands it only to a
     printer agent it has created) fn runs here: after start-up the presets are loaded, so this is the old behaviour,
     not the load-time race."""
     queue = _queue_on_main
-    if queue is None:
+    if queue is None or threading.current_thread() is threading.main_thread():   # already on it: never wait on itself
         return fn()
     box, done = {}, threading.Event()
 
@@ -1361,19 +1361,28 @@ def spooler_preference(presets, bound, printer_label=""):
     return prefer
 
 
+def _sync_reads(with_printer):
+    """UI thread: what sync_project needs from the presets, as plain data (filament_meta, and the selected printer's
+    name, inherits and model when with_printer)."""
+    meta = filament_meta()
+    if not with_printer:
+        return meta, None
+    printer = orca.host.preset_bundle().current_printer_preset()
+    return meta, {"name": printer.name, "inherits": clean(printer.config_value("inherits")),
+                  "model": clean(printer.config_value("printer_model"))}
+
+
 def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None):
     """Apply each loaded toolhead's best filament preset and colour to project slot n+1.
     Spooler's presets are preferred for heads with a bound spool (bound: head index -> spool).
     Returns (done, problems) as lists of strings."""
-    meta = filament_meta()
+    meta, printer = on_ui_thread(lambda: _sync_reads(preset_preference is None and bool(bound)))
     names = [m["name"] for m in meta]
     colours = {m["name"]: m["colour"] for m in meta}
-    if preset_preference is None and bound:
-        printer = orca.host.preset_bundle().current_printer_preset()
-        presets = spooler_bridge.spooler_presets(meta, (printer.name, clean(printer.config_value("inherits"))))
+    if printer is not None:
+        presets = spooler_bridge.spooler_presets(meta, (printer["name"], printer["inherits"]))
         if presets:
-            preset_preference = spooler_preference(presets, bound,
-                                                   clean(printer.config_value("printer_model")) or printer.name)
+            preset_preference = spooler_preference(presets, bound, printer["model"] or printer["name"])
     done, problems = [], []
     for head in heads:
         tag = (tags[head["index"]] if head["index"] < len(tags or []) else None) or None
@@ -1432,24 +1441,34 @@ def tuning_changes(preset_name, current):
     return changes
 
 
+def _tuning_reads():
+    """UI thread: (process preset name, tuning_changes) for the selected U1, or (None, []) when it is not a U1."""
+    bundle = orca.host.preset_bundle()
+    printer = bundle.current_printer_preset()
+    if not is_u1_name(printer.config_value("printer_model"), printer.name, printer.config_value("inherits")):
+        return None, []
+    process = bundle.current_process_preset()
+    keys = [k for k, _ in FORK_PROCESS_TUNING] + ["layer_height"]
+    return process.name, tuning_changes(process.name, {k: bundle.full_config_value(k) for k in keys})
+
+
 class ApplyForkTuning(orca.script.ScriptPluginCapabilityBase):
     def get_name(self):
         return "Apply Snapmaker Orca U1 process tuning"
 
     def execute(self):
         use_language()
-        bundle = orca.host.preset_bundle()
-        printer = bundle.current_printer_preset()
-        if not is_u1_name(printer.config_value("printer_model"), printer.name, printer.config_value("inherits")):
+        try:
+            name, changes = on_ui_thread(_tuning_reads)   # the presets are read on the UI thread; the write below not
+        except TimeoutError as e:
+            return orca.ExecutionResult.skipped(str(e))
+        if name is None:
             return orca.ExecutionResult.skipped(tr("Select a Snapmaker U1 printer first."))
-        process = bundle.current_process_preset()
-        keys = [k for k, _ in FORK_PROCESS_TUNING] + ["layer_height"]
-        changes = tuning_changes(process.name, {k: bundle.full_config_value(k) for k in keys})
         if not changes:
-            return orca.ExecutionResult.success(tr("\"%s\" already matches Snapmaker Orca.") % process.name)
+            return orca.ExecutionResult.success(tr("\"%s\" already matches Snapmaker Orca.") % name)
         listing = "\n".join("  %s: %s -> %s" % c for c in changes)
         if orca.host.ui.message(tr("Change the process preset \"%s\" to Snapmaker Orca's U1 values?\n\n%s\n\n"
-                                "The preset stays unsaved until you save it.") % (process.name, listing),
+                                "The preset stays unsaved until you save it.") % (name, listing),
                                 title="U1 Control", buttons="yes_no", icon="question") != "yes":
             return orca.ExecutionResult.skipped(tr("No changes made."))
         tx = orca.host.preset.process.begin_update("")
