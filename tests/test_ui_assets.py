@@ -58,17 +58,6 @@ class UiAssets(unittest.TestCase):
         self.assertNotIn("__ICONS__", build.page_html("app.html"))
         self.assertIn("__BOOT__", build.page_html("app.html"))   # filled per page by plugin.page_html
 
-    def test_tab_icon_is_not_scriptable(self):
-        self.assertNotRegex((UI / "icon.svg").read_text("utf-8"), r"(?i)<script|\bon\w+\s*=|javascript:")
-
-    def test_tab_icon_is_monochrome_fefefe(self):
-        svg = (UI / "icon.svg").read_text("utf-8")
-        colours = {c.upper() for c in re.findall(r"#[0-9a-fA-F]{3,8}\b", svg)}
-        self.assertEqual(colours, {"#FEFEFE"})
-        self.assertEqual(len(re.findall(r'fill="#FEFEFE"', svg)), 5)
-        self.assertIn('viewBox="0 0 256 256"', svg)
-        self.assertNotIn("currentColor", svg)
-
     def test_built_size_reasonable(self):
         size = self.artifact.stat().st_size
         print("built size: %d bytes" % size)

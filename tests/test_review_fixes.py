@@ -449,7 +449,8 @@ class PluginFixTests(unittest.TestCase):
         with open(path, "w") as f:
             f.write("old")
         self.assertEqual(page.get_icon(), path)
-        self.assertIn("<svg", Path(path).read_text())
+        self.assertTrue(path.endswith("u1control-icon.png"))
+        self.assertTrue(Path(path).read_bytes().startswith(b"\x89PNG"))
         orca.host.plugin.storage = mock.Mock(side_effect=RuntimeError("no storage"))
         fallback = page.get_icon()
         self.assertTrue(os.path.exists(fallback))
