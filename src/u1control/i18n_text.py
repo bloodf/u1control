@@ -11,6 +11,15 @@ def _m(pt, es, de, zh):
 
 
 MESSAGES = {
+    "U1 print setup already done for this G-code; nothing sent again": _m(
+        "o preparo da impressão na U1 já foi feito para este G-code; nada foi enviado de novo",
+        "la preparación de impresión de la U1 ya se hizo para este G-Code; no se envió nada de nuevo",
+        "die U1-Druckvorbereitung wurde für diesen G-Code bereits ausgeführt; es wurde nichts erneut gesendet",
+        "此 G-code 已完成 U1 打印准备；未再次发送任何内容"),
+    "unknown top-cover fan %r": _m("ventilador da tampa superior desconhecido: %r", "ventilador de la tapa superior desconocido: %r",
+                                   "unbekannter Lüfter der oberen Abdeckung: %r", "未知的顶盖风扇：%r"),
+    "not supported by this firmware": _m("não é compatível com este firmware", "no es compatible con este firmware",
+                                         "wird von dieser Firmware nicht unterstützt", "此固件不支持"),
     # ------------------------------------------------------------ print setup after OrcaSlicer's Print
     "U1 Control — print setup": _m("U1 Control — preparo da impressão", "U1 Control — preparación de la impresión",
                                    "U1 Control — Druckvorbereitung", "U1 Control — 打印准备"),

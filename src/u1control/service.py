@@ -696,11 +696,10 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
 
     def cmd_cover_fan(self, fan, percent):
         """Set a top-cover fan (exhaust or inner/recirculation) now, when the printer has SET_PURIFIER."""
-        view = self._require_idle()
-        cmd = u1.cover_fan_command(fan, percent, (view.get("purifier") or {}).get("mode"))
         if "SET_PURIFIER" not in self._commands(self._client()):
-            raise ValueError(tr("nothing to change"))
-        return self._gcode(cmd)
+            raise ValueError(tr("not supported by this firmware"))
+        view = self._require_idle()
+        return self._gcode(u1.cover_fan_command(fan, percent, (view.get("purifier") or {}).get("mode")))
 
     @staticmethod
     def _commands(client):

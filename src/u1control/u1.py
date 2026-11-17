@@ -318,7 +318,7 @@ def cover_fan_command(fan, percent, mode=None):
     """SET_PURIFIER for one top-cover fan now (purifier.py cmd_SET_PURIFIER: FAN=exhaust|inner, SPEED 0..1;
     0 turns it off after the firmware's delay). mode: the purifier's current mode (exhaust refused in recirculation)."""
     if fan not in COVER_FAN_LIVE:
-        raise ValueError(tr("bad purifier mode"))
+        raise ValueError(tr("unknown top-cover fan %r") % (fan,))
     pct = clean_prefs({COVER_FAN_LIVE[fan]: percent}).get(COVER_FAN_LIVE[fan])
     if pct is None:
         raise ValueError(tr("nothing to change"))
@@ -501,24 +501,6 @@ def warning_ids(filaments, heads, mapping):
         elif material_family(f.get("type")) != material_family(h["type"]):
             out.append("material:%d:%d" % (fi, t))
     return out
-
-
-def needs_dialog(filaments, heads, mapping, prefs_known, first_print):
-    """True when the print setup pop-up should open in "auto" mode: something needs a decision."""
-    if first_print or not prefs_known or mapping_warnings(filaments, heads, mapping):
-        return True
-    loaded = [h["index"] for h in heads if h["loaded"]]
-    by_index = {f["index"]: f for f in filaments}
-    used = [t for fi, t in mapping.items() if fi in by_index]
-    if len(used) != len(set(used)):
-        return True  # two filaments share a head
-    best = []
-    for f in filaments:
-        if loaded:
-            best.append(min(loaded, key=lambda t: (match_cost(f, heads[t]), t)))
-            if (f.get("type") or "").upper() != (heads[mapping.get(f["index"], best[-1])].get("type") or "").upper():
-                return True  # no exact type match
-    return len(best) != len(set(best))  # two filaments best-match the same head
 
 
 def preprint_script(mapping, prefs, commands=False):

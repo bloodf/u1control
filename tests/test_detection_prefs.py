@@ -234,8 +234,9 @@ class ServicePreferences(unittest.TestCase):
         self.assertEqual(self.fake.scripts[-1], "SET_PURIFIER FAN=exhaust SPEED=0.75")
         self.svc.cmd_cover_fan("inner", 0)
         self.assertEqual(self.fake.scripts[-1], "SET_PURIFIER FAN=inner SPEED=0.00")
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as e:
             self.svc.cmd_cover_fan("side", 50)
+        self.assertIn("top-cover fan", str(e.exception))
 
     def test_exhaust_refused_while_the_cover_recirculates(self):
         base = self.fake.status
@@ -249,8 +250,9 @@ class ServicePreferences(unittest.TestCase):
 
     def test_cover_fan_needs_the_command_and_an_idle_printer(self):
         del self.fake.commands["SET_PURIFIER"]
-        with self.assertRaises(ValueError):
+        with self.assertRaises(ValueError) as e:
             self.svc.cmd_cover_fan("exhaust", 50)
+        self.assertIn("not supported by this firmware", str(e.exception))
         self.fake.commands["SET_PURIFIER"] = ""
         with_machine(self.fake, "PRINTING")
         with self.assertRaises(PrinterError):

@@ -65,27 +65,6 @@ class SettingsTests(unittest.TestCase):
         self.assertEqual(settings.parse_strings('a;"b c";"d\\"e"'), ["a", "b c", 'd"e'])
 
 
-class DialogTests(unittest.TestCase):
-    def setUp(self):
-        self.heads = u1.describe_toolheads(fakes.task_config())
-        self.fils = [{"index": 0, "type": "PLA", "colour": "#FF0000"}, {"index": 1, "type": "PETG", "colour": "#FFFFFF"}]
-        self.mapping = u1.auto_map(self.fils, self.heads)
-
-    def nd(self, fils=None, mapping=None, known=True, first=False):
-        fils = fils or self.fils
-        return u1.needs_dialog(fils, self.heads, mapping or u1.auto_map(fils, self.heads), known, first)
-
-    def test_cases(self):
-        self.assertFalse(self.nd())
-        self.assertTrue(self.nd(first=True))
-        self.assertTrue(self.nd(known=False))
-        self.assertTrue(self.nd(mapping={0: 2, 1: 1}))  # empty head -> warning
-        self.assertTrue(self.nd(fils=[{"index": 0, "type": "ABS", "colour": "#FF0000"}]))  # no head with ABS
-        self.assertTrue(self.nd(fils=[{"index": 0, "type": "PLA+", "colour": "#FF0000"}]))  # family only
-        both = [{"index": 0, "type": "PETG", "colour": "#FFFFFF"}, {"index": 1, "type": "PETG", "colour": "#EEEEEE"}]
-        self.assertTrue(self.nd(fils=both))  # two filaments want the single PETG head
-
-
 class PluginBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
