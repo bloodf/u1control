@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- OrcaSlicer's "sync from AMS" picks the right filament for each toolhead. The Device tab reported the Generic preset's id for every loaded toolhead, and nothing at all for a material it didn't know ("PLA WOOD", "PETG-CF"), which OrcaSlicer turns into "Generic PLA". A toolhead linked to a Spoolman spool now reports the id of that spool's Spooler preset, else a system preset of the spool's vendor and material, else the Generic preset of the toolhead's real material. OrcaSlicer keeps a slot's Spooler preset when it already holds it; on a slot that holds something else it loads the system preset the Spooler preset is based on, since its sync only loads base presets.
+- OrcaSlicer's "sync from AMS" no longer turns every toolhead into "Generic PLA". The Device tab sent an empty filament id for every tray, because OrcaSlicer's plugin API doesn't show a preset's `filament_id`, and OrcaSlicer reads an empty id as Generic PLA. A toolhead linked to a Spoolman spool now reports the id of that spool's Spooler preset (from Spooler's `profiles.json`; Spooler's presets are standalone copies now, which OrcaSlicer's sync can load), so sync loads that preset. Any other loaded toolhead reports the Generic preset of its real material, also for materials such as "PLA WOOD", "PETG-CF". The links are read from Spoolman when the printer connects, so this works without opening the tab.
 - "Apply to project filaments" uses the spool's own Spooler preset when Spooler makes presets per spool, instead of the preset of the filament's lowest-numbered spool.
 
 ## [0.12.0] - 2026-11-16

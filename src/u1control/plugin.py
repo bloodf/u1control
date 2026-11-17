@@ -18,6 +18,7 @@ import gcode
 import i18n
 import peers
 import settings
+import spoolman as sm
 import spooler_bridge
 import u1
 from i18n import tr
@@ -692,7 +693,7 @@ OK, ERR_INVALID_HANDLE, ERR_CANCELED, ERR_INVALID_RESULT = 0, -1, -18, -19
 ERR_LP_UPLOAD, ERR_LP_PUBLISH, ERR_SG_UPLOAD, ERR_CONNECT = -4020, -4030, -5010, -6010
 STAGE_CREATE, STAGE_UPLOAD, STAGE_SENDING, STAGE_FINISHED, STAGE_ERROR = 0, 1, 3, 6, 7
 AGENT_POLL = 2.0         # s between status queries while OrcaSlicer is connected to the U1
-CATALOG_EVERY = 30.0     # s between re-reads of the filament presets and Spooler's profiles.json for tray ids
+CATALOG_EVERY = 30.0     # s between re-reads of Spooler's presets, profiles.json and the Spoolman links for tray ids
 
 
 URGENT_KINDS = ("pause", "resume", "stop")   # Device tab commands sent at once, on their own thread
@@ -748,9 +749,10 @@ class U1Agent(pa.PrinterAgentBase):
         self.client = None
         self.view = None
         self.firmware = ""
-        self._filament_ids = {}
-        self._catalog = ([], "", None)       # (presets, printer label, Spooler's profiles.json) for tray ids
+        self._catalog = ([], "", None)       # (Spooler presets, printer label, Spooler's profiles.json) for tray ids
         self._catalog_at = 0.0
+        self._links = ([], {})               # (spools, {toolhead: spool id}) the agent read from Spoolman itself
+        self._links_busy = threading.Lock()
         self.base = ""
         self._wake = threading.Event()
         self._stop = threading.Event()
@@ -838,13 +840,14 @@ class U1Agent(pa.PrinterAgentBase):
         base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
         client = Moonraker(base, key, timeout=5)
         self._catalog_at = 0.0   # the first push re-reads Spooler's profiles.json
-        self._refresh_catalog()
         with self._lock:   # one step: a reader under the lock never sees the new printer with the old one's id
             self.dev_id, self.host, self.api_key, self.base = params.dev_id, host, key, base
             self.firmware = ""   # another printer, or the same one updated meanwhile
             self.client = client
             self._stop = threading.Event()
             stop = self._stop
+        self._links = ([], {})   # another printer's links never reach this one's trays
+        self._refresh_catalog()
         threading.Thread(target=self._poll, args=(stop, client), name="u1control-agent", daemon=True).start()
         return OK
 
@@ -879,25 +882,46 @@ class U1Agent(pa.PrinterAgentBase):
             self._worker = None
 
     def _refresh_catalog(self, profiles=None):
-        """UI thread, no I/O: re-read the presets the trays' ids come from (Spooler adds its own at any time)."""
+        """UI thread, no I/O: re-read Spooler's presets (it adds its own at any time), then the toolheads' links
+        from Spoolman on a thread of their own, so sync from AMS knows them without the tab ever opening."""
         try:
-            generic, presets, label = filament_catalog()
+            presets, label = filament_catalog()
+            cfg = self._settings().effective()
         except Exception as e:
-            log("agent: filament presets not readable (%s); trays show no preset" % e)
+            log("agent: filament presets not readable (%s); trays show generic presets" % e)
             return
-        self._filament_ids = generic
         self._catalog = (presets, label, profiles if profiles is not None else self._catalog[2])
+        args = (clean(cfg.get("spoolman_url")), settings.printer_label(clean(cfg.get("printer_name"))))
+        threading.Thread(target=self._load_links, args=args, name="u1control-links", daemon=True).start()
+
+    def _load_links(self, url, printer_name):
+        """Spools and links by Spoolman location ("<printer name> T<n>"), through the U1's own Spoolman link
+        when it has one, else url."""
+        with self._lock:
+            client = self.client
+        if client is None or not self._links_busy.acquire(blocking=False):
+            return   # not connected, or the last read is still running
+        try:
+            smc = sm.Spoolman(url, client)
+            smc.connect()
+            spools = [sm.spool_view(s) for s in smc.spools()]
+            self._links = (spools, sm.bindings_from_locations(spools, printer_name))
+        except Exception as e:   # no Spoolman, or it is down: keep the last links
+            log("agent: Spoolman links for the Device tab not read (%s)" % e)
+        finally:
+            self._links_busy.release()
 
     def _bound_spools(self):
-        """{toolhead index: Spoolman spool} for this U1's toolheads linked to spools, as the tab last loaded them."""
+        """{toolhead index: Spoolman spool} for this U1's toolheads linked to spools: the tab's (up to date with
+        every link made there, Extended Firmware's too) when it shows this U1, else the agent's own read."""
         svc = _service
-        if svc is None:
-            return {}
-        with svc.lock:
-            if not (svc.target and _hostname(svc.target.host) == _hostname(self.host)):
-                return {}
-            by_id = {s["id"]: s for s in svc.spools}
-            return {h: by_id[sid] for h, sid in svc.bindings.items() if sid in by_id}
+        spools, bindings = self._links
+        if svc is not None:
+            with svc.lock:
+                if svc.target and _hostname(svc.target.host) == _hostname(self.host) and svc.spools:
+                    spools, bindings = list(svc.spools), dict(svc.bindings)
+        by_id = {s["id"]: s for s in spools}
+        return {h: by_id[sid] for h, sid in bindings.items() if sid in by_id}
 
     def _preferred(self):
         """preferred(head) for agent.push_status: the filament_id of the head's spool's preset, or ""."""
@@ -935,7 +959,7 @@ class U1Agent(pa.PrinterAgentBase):
                     dev_id = self._dev_id()
                     self._emit("local_connect", 0, dev_id, "0")
                     self._emit("printer_connected", dev_id)
-                self._message(agent.push_status(view, self._filament_ids.get, self._preferred()))
+                self._message(agent.push_status(view, self._preferred()))
             except Exception as e:
                 if connected:
                     log("agent: the U1 stopped answering (%s)" % e)
@@ -1291,29 +1315,21 @@ def filament_meta(full=True):
 
 
 def filament_catalog():
-    """(Generic ids, presets, printer label) for the Device tab's tray ids; UI thread, no I/O.
-    Generic ids: {"Generic <family> @System": filament_id}. Presets: spooler_bridge.tray_filament_id meta for
-    the system and Spooler presets OrcaSlicer counts as compatible with the selected printer, the only ones its
-    AMS sync loads."""
+    """(Spooler presets, printer label) for the Device tab's tray ids; UI thread, no I/O. Presets: the Spooler
+    presets OrcaSlicer counts as compatible with the selected printer, the only ones its sync from AMS loads, as
+    spooler_bridge.tray_filament_id meta."""
     bundle = orca.host.preset_bundle()
     printer = bundle.current_printer_preset()
-    wanted = {agent.generic_preset_name(m) for m in agent.FILAMENT_FAMILIES}
     collection = bundle.filaments
-    generic, presets = {}, []
+    presets = []
     for i in range(collection.size()):
         preset = collection.preset(i)
-        bundle_id = getattr(preset, "bundle_id", "") or ""
-        first = lambda key: (spooler_bridge.as_list(preset.config_value(key)) or [""])[0]   # noqa: E731
-        if preset.name in wanted and first("filament_id"):
-            generic[preset.name] = first("filament_id")
-        system = bool(getattr(preset, "is_system", False))
-        if not getattr(preset, "is_compatible", True) or not (system or bundle_id == spooler_bridge.BUNDLE_ID):
+        if (getattr(preset, "bundle_id", "") or "") != spooler_bridge.BUNDLE_ID or not getattr(preset, "is_compatible", True):
             continue
-        presets.append({"name": preset.name, "bundle_id": bundle_id, "is_system": system,
-                        "filament_id": first("filament_id"), "vendor": first("filament_vendor"),
-                        "type": first("filament_type"),
+        first = lambda key: (spooler_bridge.as_list(preset.config_value(key)) or [""])[0]   # noqa: E731
+        presets.append({"name": preset.name, "bundle_id": spooler_bridge.BUNDLE_ID, "vendor": first("filament_vendor"),
                         "colour": first("default_filament_colour") or first("filament_colour")})
-    return generic, presets, clean(printer.config_value("printer_model")) or printer.name
+    return presets, clean(printer.config_value("printer_model")) or printer.name
 
 
 def spooler_state():

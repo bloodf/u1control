@@ -16,7 +16,8 @@ NAME_PREFIX = "_local/spooler/"
 DATA_SUBDIR = "spooler"                  # <Orca data dir>/spooler/, the data dir being the parent of orca_plugins
 SETTINGS_FILE = "spooler_settings.json"
 PROFILES_FILE = "profiles.json"          # {"version": 1, "filaments": {"<filament id>": {"<printer label>": "<preset>"}},
-                                         #  "spools": {"<spool id>": {...}}}, "spools" only with presets per spool
+                                         #  "spools": {"<spool id>": {...}}, "ids": {"<preset>": "<filament_id>"}};
+                                         #  "spools" only with presets per spool
 KEEP_SLOTS_FILE = "keep_slots.json"      # {"active": true, "printer": "<label>", "ts": <unix s>}, refreshed ~5 s
 KEEP_SLOTS_FRESH = 30.0                  # seconds
 PROFILES_VERSION = 1
@@ -158,22 +159,13 @@ def preset_for_spool(presets, spool, profiles=None, printer_label=""):
 
 
 def tray_filament_id(spool, presets, profiles=None, printer_label=""):
-    """The filament_id a printer agent reports for a slot holding this Spoolman spool (tray_info_idx), or "".
-    OrcaSlicer's AMS sync (PresetBundle::sync_ams_list) loads the first compatible base preset that carries
-    the id and keeps a slot's user preset when it carries the same one; a Spooler preset carries its
-    parent's id. So: the Spooler preset of the spool (or of its filament), else a system preset of the spool's
-    vendor and material. The caller falls back to Generic <material>.
-    presets: filament preset meta {"name", "bundle_id", "compatible_printers", "colour", "vendor",
-    "filament_id", "type", "is_system"}."""
-    if not spool:
+    """The filament_id a printer agent reports for a tray holding this Spoolman spool (tray_info_idx), or "".
+    OrcaSlicer's sync from AMS (PresetBundle::sync_ams_list) loads the compatible base preset carrying that
+    id; Spooler's presets are standalone ones with ids of their own, which only profiles.json "ids" tells
+    (OrcaSlicer's plugin API doesn't show a preset's filament_id). presets: Spooler's preset meta
+    {"name", "bundle_id", "colour", "vendor"} usable with this printer. "" leaves it to the Generic id."""
+    if not spool or not isinstance(profiles, dict) or not isinstance(profiles.get("ids"), dict):
         return ""
-    name = preset_for_spool([p for p in presets if p.get("bundle_id") == BUNDLE_ID], spool, profiles, printer_label)
-    fid = next((p.get("filament_id") for p in presets if name and p.get("name") == name), "")
-    if fid:
-        return fid
-    vendor, material = _norm(spool.get("vendor")), _norm(spool.get("material"))
-    # ponytail: the shortest name is the vendor's plain line ("SUNLU PLA" over "SUNLU PLA Matte"); no colour ranking
-    same = sorted((len(p["name"]), p["filament_id"]) for p in presets
-                  if p.get("is_system") and p.get("filament_id") and p.get("name") and vendor and material
-                  and _norm(p.get("vendor")) == vendor and _norm(p.get("type")) == material)
-    return same[0][1] if same else ""
+    name = preset_for_spool(presets, spool, profiles, printer_label)
+    ids = {_bare(str(k)).casefold(): v for k, v in profiles["ids"].items() if isinstance(v, str)}
+    return ids.get(_bare(name).casefold(), "") if name else ""

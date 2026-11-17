@@ -31,13 +31,23 @@ HAS_SDCARD_NORMAL = 1          # DevStorage.h SdcardState
 CHAMBER_LIGHT = "chamber_light"
 LIGHT_ON, LIGHT_OFF = "SET_LED LED=cavity_led WHITE=1 SYNC=0", "SET_LED LED=cavity_led WHITE=0 SYNC=0"
 
-# Material -> OrcaFilamentLibrary family (MRA map_filament_type_to_generic_id). The id comes from the loaded
-# system preset "Generic <family> @System", never hard-coded.
+# Material -> OrcaFilamentLibrary family (MRA map_filament_type_to_generic_id).
 FILAMENT_FAMILIES = {
     "PLA": "PLA", "PLA-CF": "PLA-CF", "PLA SILK": "PLA Silk", "PLA HIGH SPEED": "PLA High Speed",
     "PLA MATTE": "PLA Matte", "ABS": "ABS", "ASA": "ASA", "PETG": "PETG", "PET": "PETG", "PCTG": "PCTG",
     "PA": "PA", "PA-CF": "PA-CF", "PPA-CF": "PPA-CF", "PPA-GF": "PPA-GF", "PC": "PC", "PVA": "PVA",
     "HIPS": "HIPS", "BVOH": "BVOH", "TPU": "TPU",
+}
+# filament_id of each "Generic <family> @System" preset in OrcaSlicer's OrcaFilamentLibrary (resources/profiles/
+# OrcaFilamentLibrary/filament, resolved through "inherits", OrcaSlicer main 32f6db87). OrcaSlicer's plugin API
+# doesn't show a preset's filament_id, so they are listed here. An id OrcaSlicer doesn't know still works: its sync
+# from AMS then takes "Generic <tray_type>" (PresetBundle::sync_ams_list); only an empty one becomes "Generic PLA".
+GENERIC_IDS = {
+    "ABS": "OFY9muEs", "ASA": "OFLPAxz3", "BVOH": "OFo2UF2C", "CoPE": "OFjt9en1", "EVA": "OFCD8qiU",
+    "HIPS": "OFsFon5l", "PA": "OFg8ndtj", "PA-CF": "OFQLcbps", "PC": "OFLakOUI", "PCTG": "OFu1evlr",
+    "PE": "OFPklMI1", "PETG": "OFYPdQJh", "PHA": "OF74KeQR", "PLA": "OFDSrzZ8", "PLA High Speed": "OFmpMwxS",
+    "PLA Matte": "OFmY0l6t", "PLA Silk": "OFesA6rF", "PLA-CF": "OFWbdGsC", "PP": "OF1UNk9P", "PPA-CF": "OF8tPByX",
+    "PPA-GF": "OF8Tlg47", "PVA": "OFDvXujf", "SBS": "OFhQfUQY", "TPU": "OFgbpcy9",
 }
 _SUB_TYPES = {"CF": "-CF", "GF": "-GF", "SNAPSPEED": " HIGH SPEED", "HS": " HIGH SPEED", "SILK": " SILK",
               "WOOD": " WOOD", "MATTE": " MATTE", "MARBLE": " MARBLE"}
@@ -62,15 +72,18 @@ def tray_type(ftype, sub_type=""):
     return base + _SUB_TYPES.get(sub, "")
 
 
-def generic_preset_name(material):
-    """'Generic <family> @System' for a toolhead's material, or None. A material not in the table takes the
-    longest family named in it as a whole word ("PLA WOOD", "PETG HF" -> PLA, PETG), as OrcaSlicer's own
-    similarity fallback does: an empty tray id makes its AMS sync pick "Generic PLA"."""
+def material_family(material):
+    """OrcaFilamentLibrary family of a material, or None: the table, else the longest family named in it as a
+    whole word."""
     text = " ".join(str(material or "").split()).upper()
-    family = FILAMENT_FAMILIES.get(text) or next(
+    return FILAMENT_FAMILIES.get(text) or next(
         (FILAMENT_FAMILIES[k] for k in sorted(FILAMENT_FAMILIES, key=len, reverse=True)
          if re.search(r"(?<![A-Z0-9])%s(?![A-Z0-9])" % re.escape(k), text)), None)
-    return "Generic %s @System" % family if family else None
+
+
+def generic_filament_id(material):
+    """filament_id of the material's "Generic <family> @System" preset, or ""."""
+    return GENERIC_IDS.get(material_family(material), "")
 
 
 def _rgba(colour):
@@ -78,23 +91,20 @@ def _rgba(colour):
     return (c[1:] if c else "FFFFFF") + "FF"
 
 
-def ams_block(heads, filament_id=None, preferred=None):
+def ams_block(heads, preferred=None):
     """The four toolheads as one four-tray unit (MRA build_ams_payload: id "0", info "0002"), tray id = toolhead.
     tray_info_idx is what OrcaSlicer's AMS sync matches presets on (filament_id): preferred(head) first (the
-    preset of the head's Spoolman spool, or ""), else filament_id(preset name), the id of the Generic preset of
-    the head's material, or None."""
+    Spooler preset of the head's Spoolman spool, or ""), else the Generic preset of the head's material."""
     trays, bits = [], 0
     for h in heads[:u1.TOOLHEADS]:
         tray = {"id": str(h["index"]), "tag_uid": "0000000000000000"}
         if h.get("loaded"):
             bits |= 1 << h["index"]
             material = tray_type(h.get("type"), h.get("sub_type"))
-            preset = generic_preset_name(material)
             colour = _rgba(h.get("colour"))
             colours = [_rgba(c) for c in h.get("colours") or []] or [colour]
             tray.update(tray_type=material, tray_color=colour, cols=colours, ctype=1, remain=-1,
-                        tray_info_idx=(preferred(h) if preferred else "")
-                        or (filament_id(preset) if filament_id and preset else None) or "")
+                        tray_info_idx=(preferred(h) if preferred else "") or generic_filament_id(material))
         else:
             tray.update(tray_info_idx="", tray_type="", tray_color="00000000", tray_slot_placeholder="1")
         trays.append(tray)
@@ -108,8 +118,8 @@ def _remaining_minutes(view):
     return int(spent * (1 - p) / p // 60)
 
 
-def push_status(view, filament_id=None, preferred=None):
-    """{"print": {...}} for on_local_message_fn, from u1.summarize(); filament_id and preferred as ams_block."""
+def push_status(view, preferred=None):
+    """{"print": {...}} for on_local_message_fn, from u1.summarize(); preferred as ams_block."""
     state = view.get("state") or "standby"
     gstate = GCODE_STATE.get(state, "RUNNING")
     if gstate == "IDLE" and view.get("machine_state") not in ("", "IDLE", None):
@@ -137,7 +147,7 @@ def push_status(view, filament_id=None, preferred=None):
         "mc_remaining_time": _remaining_minutes(view),
         "layer_num": int(view.get("layer") or 0), "total_layer_num": int(view.get("total_layers") or 0),
         "lights_report": [{"node": CHAMBER_LIGHT, "mode": "on" if view.get("light") else "off"}],
-        **ams_block(view.get("heads") or [], filament_id, preferred),
+        **ams_block(view.get("heads") or [], preferred),
     }
     return {"print": p}
 
