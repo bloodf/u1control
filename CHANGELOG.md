@@ -4,7 +4,7 @@
 
 ### Changed
 
-- Spools are drawn as spools, filled as far as Spoolman says is left: the toolhead cards, the Spoolman spool pickers on the Dashboard and in the print setup's Heads settings, and the head under each filament in the print setup. A toolhead without a linked Spoolman spool (or a spool without a full weight) shows the bare reel instead of a reel drawn about two-thirds full; the U1 reports no amount left (an RFID tag carries the spool's nominal weight only). The head picker in the print setup keeps its colour chip.
+- Spools are drawn as spools, filled as far as Spoolman says is left: the toolhead cards, the Spoolman spool pickers on the Dashboard and in the print setup's Heads settings, and the head under each filament in the print setup. A toolhead without a linked Spoolman spool (or a spool without a full weight) shows a full reel in its colour with a small "?" badge, the amount unknown, instead of a reel drawn about two-thirds full; a head with nothing loaded shows the bare reel, so the two no longer look alike (shared UI foundation 4.2.2); the U1 reports no amount left (an RFID tag carries the spool's nominal weight only). The head picker in the print setup keeps its colour chip.
 
 ## [0.12.2] - 2026-11-17
 

@@ -67,8 +67,8 @@ const bound = computed(() => s.bindings[String(i)] ?? null);
 // The linked Spoolman spool, when there is one: its colour(s) and how much is left draw the spool and the bar.
 const linked = computed(() => (bound.value != null ? s.spools.find(x => x.id === bound.value) ?? null : null));
 const colours = computed(() => (linked.value?.colours && linked.value.colours.length > 1 ? linked.value.colours : null));
-// Filament left (headFraction): unknown draws the bare reel. OuiSlot (ui-foundation 4.2.1) draws an unknown amount as 0.6 full, so it gets the
-// fraction as remaining/initial (0/1 when unknown) and the weight line below is ours, until OuiSlot stops faking it.
+// Filament left (headFraction), given to OuiSlot as remaining/initial; null when unknown, which draws the full reel with
+// the unknown badge (ui-foundation 4.2.2). The weight line below is ours.
 const fraction = computed(() => headFraction(head.value?.loaded, linked.value));
 const grams = (v: number) => Math.round(v).toLocaleString(document.documentElement.lang || undefined);
 const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material, grams: fmt.grams(sp.remaining) });
@@ -103,7 +103,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 <template>
   <OuiSlot v-if="head" class="hc" :label="`T${n}`" :tool="(n as 1 | 2 | 3 | 4)" :name="head.loaded ? [head.type, head.sub_type].filter(Boolean).join(' ') || t('common.unknown') : null"
            :material="head.loaded ? head.vendor || head.type : null" :color="linked?.colour || head.colour || null" :colors="colours"
-           :remaining="fraction ?? 0" :initial="1" :active="active" :empty-label="t('heads.noFilament')" :aria-label="`T${n}`">
+           :remaining="fraction" :initial="1" :active="active" :empty-label="t('heads.noFilament')" :aria-label="`T${n}`">
     <template #state>
       <OuiStatus v-if="!head.loaded" state="idle">{{ t('heads.empty') }}</OuiStatus>
       <OuiStatus v-else-if="active && s.status?.state === 'printing'" state="busy">{{ t('status.state.printing') }}</OuiStatus>
