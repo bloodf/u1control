@@ -817,6 +817,11 @@ def _clean_answer(answer, filaments, mapping, shown, prefs, purifier, remember_d
             "remember": remember if isinstance(remember, bool) else remember_default}
 
 
+# The print setup page, boot data included. OrcaSlicer 2.5.1 on Windows (WebView2) showed a blank window for a
+# 1.78 MB page (1.2 MB app + a 540 KB path preview) and the page as expected at 1.24 MB.
+SETUP_PAGE_LIMIT = 1_450_000
+
+
 def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client, extras=None, language="auto",
               host=""):
     """Show the U1 print setup window and wait for the answer (call from a worker thread, never the UI thread:
@@ -834,6 +839,11 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
         "remember": bool(extras.get("remember", True)), "tags": extras.get("tags") or [],
     }
     html = page_html("setup", data, language=language)
+    if len(html.encode("utf-8")) > SETUP_PAGE_LIMIT and (data["job"] or {}).get("preview"):
+        # A page this big stays blank in OrcaSlicer's WebView2 on Windows (never "ready": the window times out).
+        log("print setup: the plate preview makes the page %d bytes; shown without it" % len(html.encode("utf-8")))
+        data["job"] = {**data["job"], "preview": None}
+        html = page_html("setup", data, language=language)
     done, ready, wanted, stop = (threading.Event() for _ in range(4))
     result = {}
     window_box = []

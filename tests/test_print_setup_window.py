@@ -132,6 +132,21 @@ class WindowTests(unittest.TestCase):   # noqa: D101
         self.assertEqual(titles, ["U1 Control — print setup"])
         self.assertEqual(posted, [{"type": "show_tab", "tab": "settings"}])
 
+    def test_preview_left_out_when_the_page_would_be_too_big(self):
+        real = self.ns["preview"]
+        big = {"bounds": [0, 0, 1, 1], "tools": {"0": [0.0, 0.0, 1.0, 1.0] * 50000}}   # ~1 MB of JSON
+        self.ns["preview"] = type("P", (), {"paths": staticmethod(lambda lines: big),
+                                            "tool_changes": staticmethod(real.tool_changes)})
+        self.addCleanup(self.ns.__setitem__, "preview", real)
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertIsNone(boot(windows[0])["job"]["preview"])   # over the default limit
+        self.ns["SETUP_PAGE_LIMIT"], limit = 10 ** 9, self.ns["SETUP_PAGE_LIMIT"]
+        self.addCleanup(self.ns.__setitem__, "SETUP_PAGE_LIMIT", limit)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertEqual(boot(windows[1])["job"]["preview"], big)   # kept when the page fits
+        self.assertEqual(boot(windows[0])["job"]["tool_changes"], 1)   # the other job facts stay
+
     def test_heads_settings_need_the_tab_for_this_printer(self):
         windows = []
 
