@@ -40,7 +40,7 @@ await settle();
 // Toasts (bottom-left): what a command answered, one that leaves and an error that stays.
 if (SCN === 'dash') { __t.handler({type: 'notice', text: 'Project filaments updated: T1 PLA, T2 PETG'}); __t.handler({type: 'reply', id: 424242, error: 'Spoolman timed out'}); }
 if (SCN === 'settings' || SCN === 'files' || SCN === 'console') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
-if (SCN === 'settings') { document.querySelector('.oui-settings-link[data-section="spoolman"]').click(); await sleep(100); }
+if (SCN === 'settings') { document.querySelector('.oui-settings-link[data-section="connection"]').click(); await sleep(100); }
 if (SCN === 'files') { ans('files', {path: 'gcodes', dirs: [{name: 'archive'}], files: [{name: 'desk_organiser_plate_1.gcode', size: 4200000, modified: Date.now()/1000 - 3600, time: 7440}, {name: 'benchy.gcode', size: 900000, modified: Date.now()/1000 - 86400, time: 2700}], disk: {free: 5.2e9}}); }
 if (SCN === 'console') { const i = document.querySelector('#console-cmd'); i.value = 'M105'; i.dispatchEvent(new Event('input')); }
 if (SCN === 'dialog') { document.querySelector('[data-test="cancel"]').focus(); document.querySelector('[data-test="cancel"]').click(); await until(() => document.querySelector('.p-dialog')); }

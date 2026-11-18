@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Settings is a set of pages: a list of pages beside the open one, or in a narrow window the list first and one page at a time with a Back button. The last page opens again next time, a page that needs attention is marked in the list, and focus moves to the page heading when a page opens. "Open Settings" with no printer opens Connection, and the print setup's "Plugin settings" opens Print setup.
+
 ## [0.13.0] - 2026-11-18
 
 ### Changed

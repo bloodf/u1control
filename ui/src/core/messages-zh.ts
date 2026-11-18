@@ -680,6 +680,7 @@ export const zhCN: Record<MessageKey, string> = {
   'files.deleteLabel': '删除 {name}',
   'files.printLabel': '打印 {name}',
   'files.saveLabel': '保存 {name}',
+  'settings.back': '返回', 'settings.hasError': '有需要修正的值',
   'settings.nav': '设置分区',
   'settings.discard': '放弃更改',
   'about.title': '关于',

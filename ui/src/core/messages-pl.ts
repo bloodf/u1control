@@ -672,6 +672,7 @@ export const pl: Record<PolishKey, string> = {
   'files.deleteLabel': 'Usuń {name}',
   'files.printLabel': 'Drukuj {name}',
   'files.saveLabel': 'Zapisz {name}',
+  'settings.back': 'Wstecz', 'settings.hasError': 'zawiera wartość do poprawienia',
   'settings.nav': 'Sekcje ustawień',
   'settings.discard': 'Odrzuć',
   'about.title': 'O wtyczce',
