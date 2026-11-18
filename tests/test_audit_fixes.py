@@ -70,10 +70,12 @@ class SpoolNamesTests(unittest.TestCase):
         self.addCleanup(svc.close)
         self.assertEqual(svc.spool_names("10.0.0.5"), {})                      # no printer followed
         svc.set_target(Target("http://10.0.0.5/"))
-        svc.spools = [{"id": 7, "vendor": "Acme", "name": "Cobalt", "colour": "#2850A8"}, {"id": 8, "vendor": "", "name": "Basic"}]
+        svc.spools = [{"id": 7, "vendor": "Acme", "name": "Cobalt", "colour": "#2850A8", "remaining": 250, "initial": 1000},
+                      {"id": 8, "vendor": "", "name": "Basic"}]
         svc.bindings = {1: 7, 2: 8, 3: 99}                                       # 99: not in the list
-        self.assertEqual(svc.spool_names("10.0.0.5"), {"1": {"name": "Acme Cobalt", "colour": "#2850A8"},
-                                                           "2": {"name": "Basic", "colour": None}})
+        self.assertEqual(svc.spool_names("10.0.0.5"), {
+            "1": {"name": "Acme Cobalt", "colour": "#2850A8", "colours": [], "remaining": 250, "initial": 1000},
+            "2": {"name": "Basic", "colour": None, "colours": [], "remaining": None, "initial": None}})
         self.assertEqual(svc.spool_names("10.0.0.6"), {})                      # another U1
 
 

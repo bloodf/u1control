@@ -6,13 +6,14 @@ import { onMounted, reactive, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { OuiSwatch } from '../../shared/src/components';
+import { OuiSpool } from '../../shared/src/components';
+import { spoolFraction } from '../core/spool-level';
 import * as bridge from '../core/bridge';
 import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
 import type { SetupHead } from '../core/logic';
 
-interface Spool { id: number; vendor: string; name: string; material: string; colour?: string | null }
+interface Spool { id: number; vendor: string; name: string; material: string; colour?: string | null; colours?: string[]; remaining?: number | null; initial?: number | null }
 const props = defineProps<{ heads: SetupHead[]; tags?: boolean[]; disabled: boolean }>();
 // Tagged as on the Dashboard (HeadCard.vue): an official spool or one whose RFID tag the head read.
 const tagged = (i: number) => !!(props.heads[i]?.official || props.tags?.[i]);
@@ -58,7 +59,7 @@ async function link(i: number, id: number) {
     say(i, false, t('setup.headSaved', { n: i + 1 }));
   } catch (e) { say(i, false, String((e as Error).message ?? e), true); }
 }
-const spoolOptions = () => [{ id: 0, label: t('setup.noSpool') }, ...spools.value.map(sp => ({ id: sp.id, label: `#${sp.id} ${sp.vendor} ${sp.name} · ${sp.material}`, colour: sp.colour }))];
+const spoolOptions = () => [{ id: 0, label: t('setup.noSpool') }, ...spools.value.map(sp => ({ id: sp.id, label: `#${sp.id} ${sp.vendor} ${sp.name} · ${sp.material}`, sp }))];
 </script>
 
 <template>
@@ -75,7 +76,7 @@ const spoolOptions = () => [{ id: 0, label: t('setup.noSpool') }, ...spools.valu
       <Button type="submit" size="small" severity="secondary" :label="t('common.save')" :loading="status[i]?.busy" :disabled="disabled" />
       <Select v-if="spools.length" :model-value="bindings[String(i)] ?? 0" :options="spoolOptions()" option-label="label" option-value="id" size="small" class="hs-spool"
               :aria-label="t('setup.spoolFor', { n: i + 1 })" :disabled="disabled || status[i]?.busy" @update:model-value="v => link(i, v)">
-        <template #option="{ option }"><span class="hs-opt"><OuiSwatch v-if="option.id" :color="option.colour" :size="12" />{{ option.label }}</span></template>
+        <template #option="{ option }"><span class="hs-opt"><OuiSpool v-if="option.sp" :color="option.sp.colour" :colors="option.sp.colours" :fraction="spoolFraction(option.sp.remaining, option.sp.initial)" :size="24" />{{ option.label }}</span></template>
       </Select>
       <p v-if="status[i]?.text" class="u1-note hs-status" :data-tone="status[i].error ? 'error' : undefined" role="status">{{ status[i].text }}</p>
     </form>
