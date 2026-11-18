@@ -159,6 +159,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 self._reset_printer_state()
             self.target = target
         self.ledger.fill_api_key(target.ident, target.api_key)   # jobs restored from disk keep no key
+        if not target.spoolman_report_usage or not target.spoolman_url:
+            self.ledger.forget_pending()   # reporting off or no Spoolman: stop waiting (and retrying) silently
 
     def clear_target(self):
         """The selection is not a usable U1: stop controlling the previous printer."""

@@ -186,7 +186,7 @@ class Ledger:
                 job.sending = {}
                 key = ("retry", job.id) if job.retry_at is not None else ("restored", job.id) if job.booking else job.key
                 job.booking = False   # read back mid-booking: waits again, and restored + armed decides it
-                if job.per_head:
+                if job.per_head and job.spoolman_url and job.report:   # nothing to book without both: drop silently
                     self.jobs[key] = job
             self.unconfirmed = [_with_id(u) for u in self.unconfirmed[-MAX_UNCONFIRMED:]]
             self._save()
@@ -212,6 +212,14 @@ class Ledger:
                 self.jobs.pop(oldest)
             self._save()
         return replaced
+
+    def forget_pending(self):
+        """Reporting was turned off, or Spoolman has no URL: drop every job not being booked right now, silently."""
+        with self.lock:
+            keep = {k: j for k, j in self.jobs.items() if j.booking}
+            if len(keep) != len(self.jobs):
+                self.jobs = keep
+                self._save()
 
     def fill_api_key(self, host, api_key):
         """Jobs read back from disk carry no key: give them the one of the printer at that address."""
@@ -383,8 +391,8 @@ class UsageMixin:
         name = opts.get("printer_name") or (target.name if target else settings.CONNECTION["printer_name"])
         url = opts["spoolman_url"] if "spoolman_url" in opts else (target.spoolman_url if target else "")
         report = opts.get("spoolman_report_usage", target.spoolman_report_usage if target else True)
-        if not report or (same and kind == "extended"):
-            return None   # nothing to book: usage is off, or SpoolLink books it
+        if not report or not url or (same and kind == "extended"):
+            return None   # nothing to book: usage is off, no Spoolman URL, or SpoolLink books it
         job = Job(ident, api_key or (target.api_key if same else ""), filename, per_head,
                         bindings if same and kind == "stock" and bindings else None, name, url, report)
         if self.ledger.add(job):
@@ -440,6 +448,8 @@ class UsageMixin:
         """Book one finished job, one Spoolman call per toolhead, each saved as "sending" first. A failed call
         may have been applied, so it is listed as unconfirmed and never repeated; heads not tried yet wait for
         another attempt."""
+        if not job.spoolman_url or not job.report:
+            return   # Spoolman not set up for this job: nothing to book, nothing to say
         client = self.client_factory(job.host, job.api_key)
         try:
             if self._job_on_extended(job, client):
