@@ -98,6 +98,16 @@ class SnapshotTests(unittest.TestCase):
         self.assertNotEqual(again, path)   # never overwrites
         self.assertTrue(os.path.exists(path))
 
+    def test_camera_asks_one_fixed_url(self):
+        # GitHub #48: OrcaSlicer saves a runtime network approval for the exact URL; a ?t= per frame asked forever.
+        seen, raw = [], self.svc.client.raw
+        self.svc.client.raw = lambda method, path, *a, **k: (seen.append((path, k.get("headers"))), raw(method, path, *a, **k))[1]
+        self.svc._push_frame()
+        self.svc.frame_ack.set()
+        self.svc._push_frame()
+        self.assertEqual([p for p, _ in seen], [service_mod.STOCK_CAMERA] * 2)
+        self.assertEqual(seen[0][1]["Cache-Control"], "no-cache")
+
     def test_without_a_picture_nothing_is_saved(self):
         self.assertIn("camera", call(self, self.svc, self.pub, "snapshot").get("error", ""))
         self.assertFalse(os.path.exists(os.path.join(self.home, "Downloads", "u1control")))

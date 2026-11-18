@@ -1,7 +1,9 @@
 """Moonraker client for the Snapmaker U1 (stdlib only).
 
 Stock and extended U1 firmware both serve Moonraker behind nginx on port 80 and
-directly on 7125. The client tries the address as given, then :7125.
+directly on 7125. The client tries the address as given, then :7125 (a plain http address without a port or
+path only). The address may also be a reverse proxy: https://u1.example.com[:port][/prefix]; the prefix is kept for
+every request, and the websocket goes over TLS (wss) for https.
 """
 
 import base64
@@ -10,6 +12,7 @@ import http.client
 import json
 import os
 import socket
+import ssl
 import struct
 import time
 import urllib.error
@@ -39,23 +42,43 @@ class UploadCancelled(Exception):
 
 
 def normalize_host(host):
-    """'192.168.1.5' / 'http://u1.lan:80/' -> 'http://192.168.1.5'. Raises PrinterError."""
-    host = (host or "").strip().strip('"').rstrip("/")
-    if not host:
+    """'192.168.1.5' -> 'http://192.168.1.5'; 'HTTPS://u1.example.com/u1/' -> 'https://u1.example.com/u1'
+    (scheme, host, port and path prefix kept; query and fragment dropped). Raises PrinterError."""
+    host = (host or "").strip().strip('"')
+    if not host.rstrip("/"):
         raise PrinterError(tr("no printer address configured"))
     if "://" not in host:
         host = "http://" + host
-    parts = urllib.parse.urlsplit(host)
-    if parts.scheme not in ("http", "https") or not parts.hostname:
+    try:
+        parts = urllib.parse.urlsplit(host)
+        parts.port   # a port that isn't a number raises here
+    except ValueError:
+        raise PrinterError(tr("can't read printer address %r") % host) from None
+    scheme = parts.scheme.lower()
+    if scheme not in ("http", "https") or not parts.hostname:
         raise PrinterError(tr("can't read printer address %r") % host)
-    return "%s://%s" % (parts.scheme, parts.netloc)
+    return "%s://%s%s" % (scheme, parts.netloc, parts.path.rstrip("/"))
+
+
+def permission_origin(host):
+    """The scheme://host OrcaSlicer's network permission is granted for (every port and path on it): one grant per
+    printer instead of one per URL. "" when the address can't be read."""
+    try:
+        parts = urllib.parse.urlsplit(normalize_host(host))
+    except PrinterError:
+        return ""
+    name = parts.hostname
+    return "%s://%s" % (parts.scheme, "[%s]" % name if ":" in name else name)
 
 
 class Moonraker:
     def __init__(self, host, api_key="", timeout=5.0, opener=None):
         base = normalize_host(host)
         parts = urllib.parse.urlsplit(base)
-        self.candidates = [base] if parts.port else [base, "%s://%s:%d" % (parts.scheme, parts.hostname, MOONRAKER_PORT)]
+        name = "[%s]" % parts.hostname if ":" in parts.hostname else parts.hostname
+        # Moonraker's own port answers plain http at the root: no fallback for https (a proxy) or a path prefix.
+        direct = parts.scheme == "http" and not parts.port and not parts.path
+        self.candidates = [base, "http://%s:%d" % (name, MOONRAKER_PORT)] if direct else [base]
         self.hostname = parts.hostname
         self.api_key = (api_key or "").strip()
         self.timeout = timeout
@@ -268,15 +291,20 @@ class Moonraker:
         are registered for websocket/MQTT only, not HTTP."""
         base = self.base or self.candidates[0]
         parts = urllib.parse.urlsplit(base)
-        if parts.scheme != "http":
-            raise PrinterError(tr("websocket calls need plain http"))
-        port = parts.port or 80
-        with socket.create_connection((parts.hostname, port), timeout=timeout or self.timeout) as sock:
+        secure = parts.scheme == "https"   # wss: TLS to the proxy, verified as any https request is
+        port = parts.port or (443 if secure else 80)
+        plain = socket.create_connection((parts.hostname, port), timeout=timeout or self.timeout)
+        try:
+            sock = ssl.create_default_context().wrap_socket(plain, server_hostname=parts.hostname) if secure else plain
+        except BaseException:
+            plain.close()
+            raise
+        with sock:
             key = base64.b64encode(os.urandom(16)).decode()
             extra = "X-Api-Key: %s\r\n" % self.api_key if self.api_key else ""
-            sock.sendall(("GET /websocket HTTP/1.1\r\nHost: %s:%d\r\nUpgrade: websocket\r\n"
+            sock.sendall(("GET %s/websocket HTTP/1.1\r\nHost: %s\r\nUpgrade: websocket\r\n"
                           "Connection: Upgrade\r\nSec-WebSocket-Key: %s\r\nSec-WebSocket-Version: 13\r\n%s\r\n"
-                          % (parts.hostname, port, key, extra)).encode())
+                          % (parts.path, parts.netloc.rsplit("@", 1)[-1], key, extra)).encode())
             head, buf = _read_handshake(sock)
             lines = head.split(b"\r\n")
             if b" 101 " not in lines[0]:

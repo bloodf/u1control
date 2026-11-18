@@ -4,7 +4,20 @@
 
 ### Changed
 
-- Spools are drawn as spools, filled as far as Spoolman says is left: the toolhead cards, the Spoolman spool pickers on the Dashboard and in the print setup's Heads settings, and the head under each filament in the print setup. A toolhead without a linked Spoolman spool (or a spool without a full weight) shows a full reel in its colour with a small "?" badge, the amount unknown, instead of a reel drawn about two-thirds full; a head with nothing loaded shows the bare reel, so the two no longer look alike (shared UI foundation 4.2.2); the U1 reports no amount left (an RFID tag carries the spool's nominal weight only). The head picker in the print setup keeps its colour chip.
+- A toolhead with filament loaded but no linked Spoolman spool (or a spool without a full weight) shows a full reel in its colour with a small "?" badge, the amount unknown. It used to show the bare reel, which looked exactly like a head with nothing loaded; that one keeps the bare reel (shared UI foundation 4.2.2).
+
+## [0.13.0] - 2026-11-18
+
+### Changed
+
+- Spool pictures show how much filament is left, as Spoolman reports it: on the toolhead cards, in the Spoolman spool pickers on the Dashboard and in the print setup's Heads settings, and under each filament in the print setup. A toolhead with no linked Spoolman spool, or a spool without a full weight, shows an empty reel instead of a guessed amount. The printer itself doesn't report what's left: an RFID tag only carries the spool's full weight.
+
+### Fixed
+
+- Without Spoolman, the message "Spoolman usage for <file> waits for a retry: Spoolman not configured" kept coming back, even with **Report filament use to Spoolman** turned off. Prints are now only kept for Spoolman when a Spoolman address is set and reporting is on, and turning reporting off or clearing the address quietly drops the ones still waiting. Old waiting prints are cleared when U1 Control starts, so there is nothing to delete by hand. Thanks to @rehlers for reporting it (#47).
+- With the camera on, OrcaSlicer asked for network permission again for every picture. Now it asks once for each printer and for Spoolman. Thanks to @rp86 for reporting it (#48).
+- Printer addresses behind a reverse proxy work: `https://host`, `https://host:port` and addresses with a path such as `https://example.com/u1`. Plain IP addresses and bare hostnames work as before.
+- **Sync heads to project** no longer fails on OrcaSlicer 2.5 because of filament colours. OrcaSlicer 2.5 doesn't let a plugin set a project filament's colour, so the sync applies the filament presets and leaves the colours as they are.
 
 ## [0.12.2] - 2026-11-17
 

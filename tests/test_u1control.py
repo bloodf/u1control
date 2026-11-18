@@ -523,6 +523,25 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(len(orca.filament_calls), 3)
         self.assertEqual(ns["sync_project"](heads[:0], [], {}), ([], []))
 
+    def test_sync_project_keeps_the_presets_when_orca_refuses_the_colour(self):
+        # OrcaSlicer 2.5.x: filament_colour is a project setting, so a filament preset edit refuses it at commit.
+        orca, ns = self.load(filament_names=["Generic PETG @U1", "Polymaker PLA @U1", "Generic PLA @U1"])
+        tx_class = type(orca.host.preset.filament.begin_update(1, ""))
+        commit = tx_class.commit
+
+        def strict_commit(tx):
+            if "filament_colour" in tx.values:
+                raise ValueError('Unknown filament preset setting "filament_colour"')
+            commit(tx)
+        tx_class.commit = strict_commit
+        self.addCleanup(setattr, tx_class, "commit", commit)
+        heads = u1.summarize(self.fake.status())["heads"]
+        done, problems = ns["sync_project"](heads, [None] * 4, {})
+        self.assertEqual(problems, [])
+        self.assertEqual(len(done), 3)
+        self.assertEqual([(slot, values) for slot, _, values in orca.filament_calls], [(1, {}), (2, {}), (4, {})])
+        self.assertNotIn("Problems", ns["sync_message"](done, problems))
+
     def test_sync_project_uses_the_spools_linked_user_preset(self):
         meta = {"My PETG": {"is_user": True}, "Not mine": {}, "Other printer": {"is_user": True, "is_compatible": False},
                 "_local/spooler/Acme PLA @U1": {"is_user": True, "bundle_id": "spooler"}}

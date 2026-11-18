@@ -307,6 +307,22 @@ class PluginAgentTests(unittest.TestCase):
         reads = self.orca.permission_requests[0]["fs_read"]
         self.assertTrue(reads and all(r.endswith("/*") for r in reads))
 
+    def test_printer_origin_is_asked_once_at_load(self):
+        # GitHub #48: one scheme://host grant (every port and path) instead of one runtime prompt per URL.
+        # Presets are never read at load (see test_no_preset_read_until_loaded): the origins come from the settings
+        # and from the printers U1 Control already used, remembered in the settings store.
+        storage = tempfile.mkdtemp()
+        self.addCleanup(__import__("shutil").rmtree, storage, ignore_errors=True)
+        orca = fakes.install_orca(storage=storage)
+        ns = fakes.load_wheel(self.artifact)
+        ns["U1Control"]().register_capabilities()
+        self.assertEqual(orca.permission_requests[-1]["network_http"], [])
+        ns["remember_origins"](ns["get_store"](None), "https://U1.example.com:8443/u1/", "http://box:7912", "")
+        orca = fakes.install_orca(storage=storage)
+        fakes.load_wheel(self.artifact)["U1Control"]().register_capabilities()
+        self.assertEqual(orca.permission_requests[-1]["network_http"], ["https://u1.example.com", "http://box"])
+        self.assertTrue(orca.permission_requests[-1]["threading"])
+
     def test_raising_queued_callback_is_caught(self):
         """A callback queued to OrcaSlicer's UI thread that raises must not escape: OnExceptionInMainLoop would end
         OrcaSlicer."""
@@ -371,6 +387,7 @@ class PluginAgentTests(unittest.TestCase):
         self.assertIn("BED_LEVEL=1 FLOW_CALIBRATE=1 TIME_LAPSE_CAMERA=1", self.fake.scripts[-1])   # both on
 
     def test_print_from_the_dialog(self):
+        self.ns["get_store"](self.agent).update({"spoolman_url": "http://spoolman.test:7912"})   # else nothing to book
         p = self.params(task_bed_leveling=True, task_flow_cali=True, task_record_timelapse=False)
         self.assertEqual(self.agent.start_local_print(p, self.update, lambda: False), 0)
         self.assertEqual(self.fake.started, ["part.gcode"])
@@ -715,6 +732,8 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(base_url("10.0.0.5", "7125", False), "http://10.0.0.5:7125")
         self.assertEqual(base_url("10.0.0.5", "", True), "https://10.0.0.5")
         self.assertEqual(base_url("http://10.0.0.5:80/", "7125"), "http://10.0.0.5:80")   # a port in the host wins
+        self.assertEqual(base_url("https://u1.example.com/u1/", "", False), "https://u1.example.com/u1")   # a proxy
+        self.assertEqual(base_url("u1.example.com/u1", "8443", True), "https://u1.example.com:8443/u1")
         host, port = self.fake.host.split(":")
         self.connect(host=host, port=port)
         self.assertEqual(self.agent.base, "http://" + self.fake.host)

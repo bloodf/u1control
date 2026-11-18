@@ -255,6 +255,9 @@ class FakeSpoolman:
         FakeSpoolman.uses.append((sid, grams))
 
 
+SPOOLMAN = "http://spoolman.test:7912"
+
+
 class UsageLedgerTests(unittest.TestCase):
     def setUp(self):
         FakeSpoolman.uses, FakeSpoolman.fail_on, FakeSpoolman.spools_list, FakeSpoolman.via_moonraker = [], set(), [], False
@@ -262,7 +265,7 @@ class UsageLedgerTests(unittest.TestCase):
         patcher.start()
         self.addCleanup(patcher.stop)
         self.svc, self.pub = mem_service(self)
-        self.svc.set_target(Target("printer-A"))
+        self.svc.set_target(Target("printer-A", spoolman_url=SPOOLMAN))
         self.svc.firmware, self.svc.firmware_sure = {"kind": "stock", "version": ""}, True   # as cmd_connect leaves it
         self.svc.bindings = {0: 7, 1: 9}
 
@@ -318,7 +321,7 @@ class UsageLedgerTests(unittest.TestCase):
     def test_jobs_belong_to_their_printer(self):
         self.remember()                      # sent to A with A's spools
         a = self.svc.target.ident
-        self.svc.set_target(Target("printer-C"))
+        self.svc.set_target(Target("printer-C", spoolman_url=SPOOLMAN))
         self.svc.firmware = {"kind": "stock", "version": ""}
         self.svc.bindings = {0: 99}
         self.observe(self.svc.target.ident, ("printing", "part.gcode"), ("complete", "part.gcode"))
@@ -361,6 +364,52 @@ class UsageLedgerTests(unittest.TestCase):
         for t in threads:
             t.join(3)
         self.assertEqual([o for _, o in results], ["book"])
+
+
+    # GitHub #47: users without Spoolman got "waits for a retry: Spoolman not configured" forever.
+    def test_no_spoolman_url_queues_nothing(self):
+        self.svc.set_target(Target("printer-A"))
+        self.assertIsNone(self.remember())
+        self.assertIsNone(self.remember(options={"spoolman_url": "", "spoolman_report_usage": True}))
+        self.assertEqual(self.svc.ledger.pending(), [])
+
+    def test_turning_reporting_off_drops_waiting_and_retrying_jobs_silently(self):
+        self.remember("a.gcode")
+        with mock.patch.object(FakeSpoolman, "connect", side_effect=sm.SpoolmanError("down")):
+            self.remember("b.gcode")
+            self.observe(self.svc.target.ident, ("printing", "b.gcode"), ("complete", "b.gcode"))
+        self.assertEqual(len(self.svc.ledger.pending()), 2)   # a waits to print, b waits for a retry
+        before = len(self.notices())
+        self.svc.set_target(Target("printer-A", spoolman_url=SPOOLMAN, spoolman_report_usage=False))
+        self.assertEqual(self.svc.ledger.pending(), [])
+        self.assertEqual(self.svc.ledger.due(now=time.time() + usage.RETRY_AFTER + 1), [])
+        self.assertEqual(len(self.notices()), before)
+
+    def test_clearing_the_spoolman_url_drops_pending_jobs(self):
+        self.remember()
+        self.svc.set_target(Target("printer-A"))
+        self.assertEqual(self.svc.ledger.pending(), [])
+
+    def test_a_job_without_spoolman_never_notifies(self):
+        job = usage.Job(self.svc.target.ident, "", "part.gcode", {0: 2.0}, {0: 7})
+        self.svc.ledger.add(job)
+        self.observe(self.svc.target.ident, ("printing", "part.gcode"), ("complete", "part.gcode"))
+        self.assertEqual(self.notices(), [])
+        self.assertEqual(self.svc.ledger.pending(), [])
+
+    def test_ledger_drops_jobs_without_url_or_with_reporting_off_on_load(self):
+        folder = tempfile.mkdtemp(prefix="ledger-")
+        self.addCleanup(__import__("shutil").rmtree, folder, ignore_errors=True)
+        path = os.path.join(folder, "usage_ledger.json")
+        stuck = {"id": "s", "host": "printer-a", "path": "x.gcode", "per_head": {"0": 2.0}, "spoolman_url": "",
+                 "report": True, "created": time.time(), "retry_at": time.time() + 60}
+        off = {**stuck, "id": "o", "spoolman_url": SPOOLMAN, "report": False}
+        good = {**stuck, "id": "g", "spoolman_url": SPOOLMAN, "retry_at": None}
+        Path(path).write_text(__import__("json").dumps({"version": 1, "jobs": [stuck, off, good], "unconfirmed": []}))
+        ledger = usage.Ledger(usage.LedgerStore(path, log=lambda m: None))
+        self.assertEqual([j.id for j in ledger.pending()], ["g"])
+        self.assertEqual(ledger.restore_notice, "")
+        self.assertEqual([j["id"] for j in __import__("json").loads(Path(path).read_text())["jobs"]], ["g"])
 
 
 class UsageWithoutPageTests(unittest.TestCase):

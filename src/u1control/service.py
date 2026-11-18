@@ -48,6 +48,9 @@ DEDICATED = URGENT + ("download", "screen_touch", "stock", "usage", "usage_ack",
 THUMB_QUEUE = 8             # thumbnails waiting at most; the page asks for a few at a time
 STOCK_CAMERA = "/server/files/camera/monitor.jpg"
 EXT_CAMERA = "/webcam/snapshot.jpg"
+# One fixed URL per picture, fresh through headers instead of a ?t= cache-buster: OrcaSlicer's permission check saves a
+# runtime approval for the exact URL, so a changing query asked again for every frame (GitHub #48).
+NO_CACHE = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
 EXT_SCREEN = "/screen/snapshot"    # Extended Firmware remote screen (touchscreen mirror), PNG
 EXT_TOUCH = "/screen/touch"
 SCREEN_INTERVAL = 0.5             # remote screen refresh, as its own viewer (~2 Hz)
@@ -159,6 +162,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 self._reset_printer_state()
             self.target = target
         self.ledger.fill_api_key(target.ident, target.api_key)   # jobs restored from disk keep no key
+        if not target.spoolman_report_usage or not target.spoolman_url:
+            self.ledger.forget_pending()   # reporting off or no Spoolman: stop waiting (and retrying) silently
 
     def clear_target(self):
         """The selection is not a usable U1: stop controlling the previous printer."""
@@ -403,7 +408,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 self.log("u1control: camera.start_monitor: %s" % e)
             self.camera_keepalive_at = time.monotonic() + CAMERA_KEEPALIVE
         path = EXT_CAMERA if extended else STOCK_CAMERA
-        data, _ = client.raw("GET", path + "?t=%d" % int(time.time() * 1000), timeout=4)
+        data, _ = client.raw("GET", path, headers=NO_CACHE, timeout=4)
         if data[:2] != b"\xff\xd8":
             raise PrinterError(tr("camera returned no image"))
         with self.lock:
@@ -445,7 +450,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             return
         try:
             gen, client, _ = self._ctx()
-            data, _ = client.raw("GET", EXT_SCREEN + "?t=%d" % int(time.time() * 1000), timeout=4)
+            data, _ = client.raw("GET", EXT_SCREEN, headers=NO_CACHE, timeout=4)
             if data[:8] != b"\x89PNG\r\n\x1a\n":
                 raise PrinterError(tr("remote screen is off: turn on Remote Screen in Settings > Firmware"))
         except Exception as e:   # the screen has its own error and retry: it must never stop the monitor thread
