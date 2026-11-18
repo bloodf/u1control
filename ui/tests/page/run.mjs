@@ -185,6 +185,14 @@ test('the printer photo: spools in the Spoolman colour, else the printer colour,
   for (const c of ['#e5484d', '#f5d90a', '#3e63dd']) assert(paint(4).includes(c), 'T4: every colour of a multi-colour spool: ' + paint(4));
   assert(reel(2).hasAttribute('data-active') && !reel(1).hasAttribute('data-active') && fig.querySelector('.pf-halo'), 'the active toolhead spool is lit');
   assert(qa('img', fig).every(i => i.complete && i.naturalWidth > 0), 'photo and light maps load');
+  // The toolhead cards' spools: the linked spool's real fill; loaded with no Spoolman spool (amount unknown) the full
+  // reel in its colour with the "?" badge, not the empty reel; nothing loaded the bare reel.
+  const cardSpool = n => qa('.hc').find(c => text(c.querySelector('.oui-slot-badge')) === 'T' + n).querySelector('.oui-spool');
+  const drawn = n => [cardSpool(n).dataset.level, cardSpool(n).hasAttribute('data-unknown'), cardSpool(n).querySelector('.oui-spool-unknown')?.textContent ?? null];
+  eq(drawn(1), ['6', false, null], 'T1: 250 of 1000 g left');
+  eq(drawn(2), ['1', true, '?'], 'T2: loaded, amount unknown: full reel with the unknown badge');
+  eq(drawn(3), ['8', false, null], 'T3: nothing loaded: the bare reel');
+  eq(drawn(4), ['2', false, null], 'T4: 900 of 1000 g left');
   eq(fig.getAttribute('role'), 'img');
   eq(fig.getAttribute('aria-label'), 'Printer and spools: T1 orange PETG, T2 blue PETG (in use), T3 empty, T4 multicolour PLA', 'says what each toolhead holds');
   await post({type: 'offline', error: 'timed out'});
