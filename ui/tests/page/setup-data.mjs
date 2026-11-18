@@ -25,5 +25,5 @@ export const SETUP_FULL = {
   labels: {}, levels: { spaghetti_level: ['low', 'high'], bed_check_level: ['low', 'high'], tangle_level: ['low', 'medium', 'high'] },
   features: ['spaghetti_detect', 'spaghetti_level', 'bed_check', 'bed_check_level', 'tangle_level', 'flow_calibrate_heads', 'exhaust_fan', 'inner_fan', 'cover_fan'],
   printer: { name: 'Snapmaker U1', busy: false, address: '192.168.1.40' },
-  spools: { 0: { name: 'Generic Leaf Green', colour: '#6CBF5A' }, 2: { name: 'Elegoo Sky Blue', colour: '#5B9BEA' } }, remember: true,
+  spools: { 0: { name: 'Generic Leaf Green', colour: '#6CBF5A', remaining: 720, initial: 1000 }, 2: { name: 'Elegoo Sky Blue', colour: '#5B9BEA', remaining: 150, initial: 1000 } }, remember: true,
 };

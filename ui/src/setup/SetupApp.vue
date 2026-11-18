@@ -12,11 +12,12 @@ import Select from 'primevue/select';
 import SelectButton from 'primevue/selectbutton';
 import Slider from 'primevue/slider';
 import ToggleSwitch from 'primevue/toggleswitch';
-import { OuiBanner, OuiIcon, OuiStatus, OuiSwatch, OuiThumb } from '../../shared/src/components';
+import { OuiBanner, OuiIcon, OuiSpool, OuiStatus, OuiSwatch, OuiThumb } from '../../shared/src/components';
 import { more, printer, refresh as refreshIcon, settings as settingsIcon, target, warning, wrench } from '../../shared/src/icons';
 import * as bridge from '../core/bridge';
 import { boot } from '../core/boot';
 import { t, tn, tMaybe } from '../core/i18n';
+import { headFraction } from '../core/spool-level';
 import { colourFar, family, setupWarnings, warningKey, type SetupFilament, type SetupHead } from '../core/logic';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import HeadPicture from './HeadPicture.vue';
@@ -24,7 +25,7 @@ import HeadsSettings from './HeadsSettings.vue';
 import PathPreview, { type PathData } from './PathPreview.vue';
 
 type Pref = boolean | string | number | number[];
-interface Spool { name: string; colour?: string | null }
+interface Spool { name: string; colour?: string | null; colours?: string[]; remaining?: number | null; initial?: number | null }
 interface Data { job: { name?: string; time?: string; weight?: number | string; layers?: number | string; tool_changes?: number; address?: string;
     thumbnail?: string; preview?: PathData | null };
   filaments: SetupFilament[]; heads: SetupHead[]; map: Record<string, number>; prefs: Record<string, Pref>;
@@ -47,6 +48,7 @@ const has = (k: string) => k in D.prefs;
 const spoolOf = (h: number): Spool | null => { const v = spools.value[String(h)]; return !v ? null : typeof v === 'string' ? { name: v } : v; };
 /** The colour a head prints in: its Spoolman spool's colour first, the printer's own reading otherwise. */
 const headColour = (h: number) => { const hd = heads.value[h]; return hd?.loaded ? spoolOf(h)?.colour || hd.colour || null : null; };
+const headFill = (h: number) => headFraction(heads.value[h]?.loaded, spoolOf(h));
 const headOf = (f: SetupFilament) => heads.value[map[String(f.index)]];
 const warnings = computed(() => setupWarnings(D.filaments, heads.value, map));
 const warnFor = (f: SetupFilament) => warnings.value.find(w => w.f === f.index);
@@ -196,7 +198,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
                 <span v-if="f.weight" class="su-card-g oui-num">{{ t('setup.grams', { g: f.weight }) }}</span></span>
               <HeadPicture :n="map[String(f.index)] + 1" :strand="headColour(map[String(f.index)])" />
               <span class="su-card-foot">
-                <OuiSwatch :color="headColour(map[String(f.index)])" :size="22" />
+                <OuiSpool :color="headColour(map[String(f.index)])" :colors="spoolOf(map[String(f.index)])?.colours" :fraction="headFill(map[String(f.index)])" :size="32" />
                 <span class="su-card-id"><span class="oui-strong">{{ t('setup.head', { n: map[String(f.index)] + 1 }) }}
                   <OuiIcon v-if="warnFor(f)" :icon="warning" :size="14" class="su-warn-ico" data-test="card-warn" /></span>
                   <span class="oui-meta"><em v-if="!headOf(f)?.loaded" class="su-empty">{{ t('setup.empty') }}</em>
@@ -261,6 +263,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
       <button v-for="h in heads" :key="h.index" type="button" role="radio" class="su-pick-head" :aria-checked="map[String(picking.index)] === h.index"
               :data-pick="h.index" @click="pick(h.index)">
         <span class="u1-tool" :data-tool="h.index + 1">T{{ h.index + 1 }}</span>
+        <!-- A colour chip, not the spool: picking a head is matching colours, and a head without a Spoolman spool would draw a colourless bare reel. -->
         <OuiSwatch :color="headColour(h.index)" :size="16" />
         <span class="su-pick-text"><span class="oui-strong"><em v-if="!h.loaded" class="su-empty">{{ t('setup.empty') }}</em><template v-else>{{ [h.type, h.sub_type].filter(Boolean).join(' ') }}</template></span>
           <span v-if="spoolOf(h.index)" class="oui-meta">{{ spoolOf(h.index)!.name }}</span></span>

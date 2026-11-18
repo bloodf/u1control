@@ -3,13 +3,14 @@ import { computed, reactive, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { OuiIcon, OuiSlot, OuiStatus, OuiSwatch } from '../../shared/src/components';
+import { OuiIcon, OuiLevel, OuiSlot, OuiSpool, OuiStatus } from '../../shared/src/components';
 import { download, edit as editIcon, rfid as rfidIcon, upload } from '../../shared/src/icons';
 import HeaterControl from './HeaterControl.vue';
 import { s, run, tracker, controlsOff, loadSpools, guidedWhy } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, fmt } from '../core/i18n';
 import { family } from '../core/logic';
+import { headFraction, spoolFraction } from '../core/spool-level';
 import type { Spool, Tag } from '../app/types';
 
 // One toolhead as an object card: its filament's colour across the top, the spool, what is left of the linked
@@ -66,6 +67,10 @@ const bound = computed(() => s.bindings[String(i)] ?? null);
 // The linked Spoolman spool, when there is one: its colour(s) and how much is left draw the spool and the bar.
 const linked = computed(() => (bound.value != null ? s.spools.find(x => x.id === bound.value) ?? null : null));
 const colours = computed(() => (linked.value?.colours && linked.value.colours.length > 1 ? linked.value.colours : null));
+// Filament left (headFraction): unknown draws the bare reel. OuiSlot (ui-foundation 4.2.1) draws an unknown amount as 0.6 full, so it gets the
+// fraction as remaining/initial (0/1 when unknown) and the weight line below is ours, until OuiSlot stops faking it.
+const fraction = computed(() => headFraction(head.value?.loaded, linked.value));
+const grams = (v: number) => Math.round(v).toLocaleString(document.documentElement.lang || undefined);
 const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material, grams: fmt.grams(sp.remaining) });
 const groups = computed(() => {
   const fam = head.value?.type ? family(head.value.type) : '';
@@ -98,7 +103,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 <template>
   <OuiSlot v-if="head" class="hc" :label="`T${n}`" :tool="(n as 1 | 2 | 3 | 4)" :name="head.loaded ? [head.type, head.sub_type].filter(Boolean).join(' ') || t('common.unknown') : null"
            :material="head.loaded ? head.vendor || head.type : null" :color="linked?.colour || head.colour || null" :colors="colours"
-           :remaining="linked?.remaining" :initial="linked?.initial" :low="!!linked?.low" :active="active" :empty-label="t('heads.noFilament')" :aria-label="`T${n}`">
+           :remaining="fraction ?? 0" :initial="1" :active="active" :empty-label="t('heads.noFilament')" :aria-label="`T${n}`">
     <template #state>
       <OuiStatus v-if="!head.loaded" state="idle">{{ t('heads.empty') }}</OuiStatus>
       <OuiStatus v-else-if="active && s.status?.state === 'printing'" state="busy">{{ t('status.state.printing') }}</OuiStatus>
@@ -107,7 +112,13 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
     </template>
     <template #meta>{{ head.vendor }}<span v-if="tag" class="oui-chip hc-tag" :title="tag.official ? t('heads.tagOfficial', { uid: tag.uid || '' }) : t('heads.tagThird', { uid: tag.uid || '' })">{{ t('heads.tag') }}</span></template>
     <!-- No Spoolman spool linked: there is no weight to show, so no amount line at all (not a dash that looks like a reading). -->
-    <template v-if="!linked" #amount />
+    <template #amount>
+      <div v-if="linked" class="oui-slot-amount">
+        <p v-if="linked.remaining == null" class="oui-muted">—</p>
+        <p v-else class="oui-num"><strong>{{ grams(linked.remaining) }}</strong> g<span v-if="linked.initial != null" class="oui-muted"> / {{ grams(linked.initial) }} g</span></p>
+        <OuiLevel :fraction="fraction" :tone="linked.low ? 'low' : 'normal'" />
+      </div>
+    </template>
 
     <!-- The nozzle heater stays on screen while the Edit form is open: its reading and Off must not disappear. -->
     <template v-if="!editing">
@@ -116,11 +127,11 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
               :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" :pt="{ label: { 'aria-describedby': offWhy } }" class="hc-pick" :data-focus-key="`pick:${i}`" :data-pick="i"
               @update:model-value="choose">
         <template #value="{ value }">
-          <span class="hc-opt"><OuiSwatch v-if="value" :color="spoolOf(value)?.colour" :colors="spoolOf(value)?.colours" />
+          <span class="hc-opt"><OuiSpool v-if="value" :color="spoolOf(value)?.colour" :colors="spoolOf(value)?.colours" :fraction="spoolFraction(spoolOf(value)?.remaining, spoolOf(value)?.initial)" :size="22" />
             <span class="oui-truncate">{{ value ? label(spoolOf(value) ?? { id: value, vendor: '', name: '', material: '' } as Spool) : t('pick.choose') }}</span></span>
         </template>
         <template #option="{ option }">
-          <span class="hc-opt"><OuiSwatch v-if="option.sp" :color="option.sp.colour" :colors="option.sp.colours" />
+          <span class="hc-opt"><OuiSpool v-if="option.sp" :color="option.sp.colour" :colors="option.sp.colours" :fraction="spoolFraction(option.sp.remaining, option.sp.initial)" :size="28" />
             <span class="oui-truncate">{{ option.label }}</span>
             <span v-if="option.sp && option.sp.remaining != null && option.sp.remaining < 100" class="oui-chip" data-tone="warn">{{ t('stock.low') }}</span></span>
         </template>

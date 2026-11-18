@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- Spools are drawn as spools, filled as far as Spoolman says is left: the toolhead cards, the Spoolman spool pickers on the Dashboard and in the print setup's Heads settings, and the head under each filament in the print setup. A toolhead without a linked Spoolman spool (or a spool without a full weight) shows the bare reel instead of a reel drawn about two-thirds full; the U1 reports no amount left (an RFID tag carries the spool's nominal weight only). The head picker in the print setup keeps its colour chip.
+
 ### Fixed
 
 - Without Spoolman, "Spoolman usage for <file> waits for a retry: Spoolman not configured" kept coming back, even with **Report filament use to Spoolman** off (u1control#47). A print is only queued for Spoolman when a Spoolman URL is set and reporting is on. Turning reporting off, or clearing the URL, drops the prints still waiting, silently. Prints already stuck in `usage_ledger.json` with no URL or with reporting off are dropped when U1 Control loads, so there is no need to delete the file.
