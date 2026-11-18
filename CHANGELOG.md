@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- Without Spoolman, "Spoolman usage for <file> waits for a retry: Spoolman not configured" kept coming back, even with **Report filament use to Spoolman** off (u1control#47). A print is only queued for Spoolman when a Spoolman URL is set and reporting is on. Turning reporting off, or clearing the URL, drops the prints still waiting, silently. Prints already stuck in `usage_ledger.json` with no URL or with reporting off are dropped when U1 Control loads, so there is no need to delete the file.
+- With the camera on, OrcaSlicer asked for a new network permission for every picture (u1control#48). The camera and the remote screen now ask one fixed address each, and U1 Control asks OrcaSlicer at load for the printers and Spoolman it has used, as one grant per host (every port and path on it).
+- A printer address behind a reverse proxy works: `https://u1.example.com`, another port, and a path prefix such as `https://example.com/u1`. Requests, uploads, the camera and the websocket (wss over https) keep the scheme, port and prefix; a plain IP or hostname works as before.
+- **Sync heads to project** on OrcaSlicer 2.5: every filament failed with `Unknown filament preset setting "filament_colour"`. OrcaSlicer 2.5 keeps a project filament's colour outside the filament preset and has no plugin call to set it, so the sync now applies the presets and leaves the colours as they are instead of reporting a problem per filament.
+
 ## [0.12.2] - 2026-11-17
 
 ### Fixed

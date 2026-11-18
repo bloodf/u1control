@@ -40,7 +40,8 @@ AUTOMATIONS = [
     ("time_lapse_camera", "Print option: time-lapse", "Default for the print setup.", False, "bool"),
 ]
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
-EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto", "camera_fps": 5}
+EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto", "camera_fps": 5,
+         "network_origins": []}   # scheme://host of printers and Spoolman used: the network grants asked for at load
 UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl")   # "auto": OrcaSlicer's language, then the system's
 CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
 

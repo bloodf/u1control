@@ -28,7 +28,7 @@ import preview
 import u1
 import usage
 from i18n import tr
-from moonraker import Moonraker, PrinterError
+from moonraker import Moonraker, PrinterError, permission_origin
 from service import Service, Target
 
 VERSION = "0.0.0-dev"
@@ -37,6 +37,7 @@ _service = None
 _service_lock = threading.Lock()
 _link = None             # peers.SpoolerLink while the plugin is loaded (U1ControlPage.on_load .. on_unload)
 LEDGER_FILE = "usage_ledger.json"
+MAX_ORIGINS = 16   # printers and Spoolman addresses remembered for the load-time network permission
 _store = None
 _store_lock = threading.Lock()
 _page_ref = lambda: None   # the U1 Control tab once loaded (weakref)
@@ -379,6 +380,10 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
             svc.clear_target()
             raise
         svc.set_target(target)
+        try:
+            remember_origins(self._settings(), target.host, target.spoolman_url)
+        except Exception as e:   # only the next load's permission request misses it
+            log("network permission: can't remember %s (%s)" % (target.host, e))
 
     def _config_message(self):
         cfg = self._config()
@@ -943,11 +948,44 @@ def _hostname(address):
 
 
 def base_url(host, port="", use_ssl=False):
-    """MRA normalize_base_url: http(s)://host[:port]. A port already in the host wins."""
-    host = host_of(host)
+    """MRA normalize_base_url: http(s)://host[:port][/prefix]. A port already in the host wins; so does an https
+    scheme, and a path prefix (a reverse proxy) is kept."""
+    address = clean(host)
+    scheme, _, rest = address.rpartition("://")
+    host, _, prefix = rest.partition("/")
     has_port = host.rsplit("]", 1)[-1].count(":") == 1
     port = clean(str(port or ""))
-    return "%s://%s%s" % ("https" if use_ssl else "http", host, ":" + port if port and not has_port else "")
+    scheme = "https" if use_ssl or scheme.lower() == "https" else "http"
+    prefix = prefix.split("?", 1)[0].split("#", 1)[0].strip("/")
+    return "%s://%s%s%s" % (scheme, host, ":" + port if port and not has_port else "", "/" + prefix if prefix else "")
+
+
+def network_grants(cap):
+    """scheme://host of the printer and Spoolman set in the settings or used before (remember_origins), for the
+    load-time permission request. A new address is left to the runtime prompt until the next load."""
+    addresses = []
+    try:   # never presets here: reading them while OrcaSlicer loads them crashed 2.5.1
+        cfg = get_store(cap).effective()
+        addresses += [clean(cfg.get("host")), clean(cfg.get("spoolman_url"))] + cfg["network_origins"]
+    except Exception as e:
+        log("network permission: settings not readable at load (%s)" % e)
+    return _origins(addresses)
+
+
+def _origins(addresses):
+    out = []
+    for origin in map(permission_origin, filter(None, addresses)):
+        if origin and origin not in out:
+            out.append(origin)
+    return out
+
+
+def remember_origins(store, *addresses):
+    """Keep the scheme://host of a printer or Spoolman in use, so the next load asks for it once (network_grants)."""
+    known = store.effective()["network_origins"]
+    merged = _origins(known + list(addresses))
+    if merged != known:
+        store.update({"network_origins": merged[-MAX_ORIGINS:]})
 
 
 def slicer_temp_root():
@@ -1087,6 +1125,10 @@ class U1Agent(pa.PrinterAgentBase):
         key = clean(getattr(params, "password", ""))
         base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
         client = Moonraker(base, key, timeout=5)
+        try:
+            remember_origins(self._settings(), base)
+        except Exception as e:   # only the next load's permission request misses it
+            log("network permission: can't remember %s (%s)" % (base, e))
         self._catalog_at = 0.0   # the first push re-reads Spooler's profiles.json
         with self._lock:   # one step: a reader under the lock never sees the new printer with the old one's id
             self.dev_id, self.host, self.api_key, self.base = params.dev_id, host, key, base
@@ -1780,6 +1822,7 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
         if presets:
             preset_preference = spooler_preference(presets, bound, printer["model"] or printer["name"])
     done, problems = [], []
+    colour_ok = True   # OrcaSlicer 2.5 refuses filament_colour here: a project setting, not a filament preset one
     for head in heads:
         tag = (tags[head["index"]] if head["index"] < len(tags or []) else None) or None
         if not head["loaded"] and not tag:
@@ -1794,14 +1837,26 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
             names, head, tag, overrides, preference=preset_preference, colours=colours)
         colour = (tag or {}).get("colour") or head["colour"]
         try:
-            tx = orca.host.preset.filament.begin_update(slot, preset_name)
-            if colour:
-                tx.set("filament_colour", colour)
-            tx.commit()
+            try:
+                _set_slot(slot, preset_name, colour if colour_ok else "")
+            except Exception as e:
+                if not (colour and colour_ok and "filament_colour" in str(e)):
+                    raise
+                colour_ok = False   # the preset still counts; colours stay as they are for every slot
+                log("project sync: this OrcaSlicer doesn't take filament_colour from a plugin (%s); colours left as they are" % e)
+                _set_slot(slot, preset_name, "")
             done.append("%d: %s" % (slot, preset_name or (tag or head).get("type") or "?"))
         except Exception as e:
             problems.append(tr("filament %d: %s") % (slot, e))
     return done, problems
+
+
+def _set_slot(slot, preset_name, colour):
+    """Project slot `slot`'s filament preset, and its colour when given (accepted by OrcaSlicer before 2.5)."""
+    tx = orca.host.preset.filament.begin_update(slot, preset_name)
+    if colour:
+        tx.set("filament_colour", colour)
+    tx.commit()
 
 
 def sync_message(done, problems):
@@ -1886,9 +1941,16 @@ class U1Control(orca.base):
         # Network I/O runs on the plugin's own worker threads; downloads are saved under ~/Downloads/u1control.
         # (Declarations match exact target strings, so the folder is informational for the user.)
         # The printer agent reads the sliced job from OrcaSlicer's temp folder (job_read_grants).
-        orca.request_permissions(threading=True, fs_read=job_read_grants(),
-                                 fs_readwrite=[os.path.join(os.path.expanduser("~"), "Downloads", "u1control")])
+        # The printer and Spoolman are asked for once each, as scheme://host (every port and path on it): a runtime
+        # approval only covers the exact URL it saw (GitHub #48).
+        grants = {"threading": True, "fs_read": job_read_grants(),
+                  "fs_readwrite": [os.path.join(os.path.expanduser("~"), "Downloads", "u1control")]}
         _storage()
+        network = network_grants(self)
+        try:
+            orca.request_permissions(**grants, network_http=network)
+        except TypeError:   # an OrcaSlicer without network targets: each URL is asked for when first used
+            orca.request_permissions(**grants)
         orca.register_capability(U1ControlPage)
         orca.register_capability(U1PrintSetup)
         orca.register_capability(CheckConnection)
