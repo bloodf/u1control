@@ -11,9 +11,20 @@ bindings, but the Dashboard shows no Spooler stock.
 1. **Extended Firmware:** the printer's `print_task_config.filament_spool_id[n]`. u1control sets it
    with `SET_SPOOL_ID`; Spooler reads it first.
 2. **Stock firmware:** the spool's Spoolman location, `"<printer name> T<n>"` with n = 1–4, for
-   example `Snapmaker U1 T1`. u1control writes it; Spooler reads it and never writes a location. The
-   printer name always ends in "U1"; Spooler accepts its own printer label, the printer model, or any
-   name ending in "U1".
+   example `Snapmaker U1 T1`. u1control writes it, and Spooler reads it. The printer name always ends
+   in "U1". Spooler accepts its own printer label, the printer model, or any name ending in "U1".
+   A location naming this printer exactly wins over one that only ends in "U1"; among equals, the
+   spool used last wins. u1control's `location_score` uses the same rule.
+
+   Spooler (newer than 0.29.1) writes this location in one case only: when you press **Assign
+   spool**, **Change spool** or **Unassign** on a U1 toolhead in its Printer tab. On its own it never
+   writes one. Assign writes `"<printer model> T<n>"`, for example `Snapmaker U1 T1`, the form
+   u1control reads. It also clears that location from any other spool that held it, so each head has
+   one spool. Unassign clears the location only when it binds that head. Spooler sends nothing to the
+   printer. While the printer prints, it asks first. If you renamed the printer in u1control so the
+   name no longer ends in "U1", a link Spooler writes doesn't match it: rename it back or link the
+   spool from u1control. On Extended Firmware, `filament_spool_id` still wins, so Spooler offers no
+   Assign on a head whose spool the printer reports.
 3. If neither applies, Spooler falls back to the RFID tag, then vendor, material and colour. When
    u1control links a spool it also writes the spool's vendor, material, name and colour to the head,
    so that fallback lands on the same spool.
