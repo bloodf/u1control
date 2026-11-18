@@ -2,16 +2,18 @@
 
 ## [Unreleased]
 
+## [0.13.0] - 2026-11-18
+
 ### Changed
 
-- Spools are drawn as spools, filled as far as Spoolman says is left: the toolhead cards, the Spoolman spool pickers on the Dashboard and in the print setup's Heads settings, and the head under each filament in the print setup. A toolhead without a linked Spoolman spool (or a spool without a full weight) shows the bare reel instead of a reel drawn about two-thirds full; the U1 reports no amount left (an RFID tag carries the spool's nominal weight only). The head picker in the print setup keeps its colour chip.
+- Spool pictures show how much filament is left, as Spoolman reports it: on the toolhead cards, in the Spoolman spool pickers on the Dashboard and in the print setup's Heads settings, and under each filament in the print setup. A toolhead with no linked Spoolman spool, or a spool without a full weight, shows an empty reel instead of a guessed amount. The printer itself doesn't report what's left: an RFID tag only carries the spool's full weight.
 
 ### Fixed
 
-- Without Spoolman, "Spoolman usage for <file> waits for a retry: Spoolman not configured" kept coming back, even with **Report filament use to Spoolman** off (u1control#47). A print is only queued for Spoolman when a Spoolman URL is set and reporting is on. Turning reporting off, or clearing the URL, drops the prints still waiting, silently. Prints already stuck in `usage_ledger.json` with no URL or with reporting off are dropped when U1 Control loads, so there is no need to delete the file.
-- With the camera on, OrcaSlicer asked for a new network permission for every picture (u1control#48). The camera and the remote screen now ask one fixed address each, and U1 Control asks OrcaSlicer at load for the printers and Spoolman it has used, as one grant per host (every port and path on it).
-- A printer address behind a reverse proxy works: `https://u1.example.com`, another port, and a path prefix such as `https://example.com/u1`. Requests, uploads, the camera and the websocket (wss over https) keep the scheme, port and prefix; a plain IP or hostname works as before.
-- **Sync heads to project** on OrcaSlicer 2.5: every filament failed with `Unknown filament preset setting "filament_colour"`. OrcaSlicer 2.5 keeps a project filament's colour outside the filament preset and has no plugin call to set it, so the sync now applies the presets and leaves the colours as they are instead of reporting a problem per filament.
+- Without Spoolman, the message "Spoolman usage for <file> waits for a retry: Spoolman not configured" kept coming back, even with **Report filament use to Spoolman** turned off. Prints are now only kept for Spoolman when a Spoolman address is set and reporting is on, and turning reporting off or clearing the address quietly drops the ones still waiting. Old waiting prints are cleared when U1 Control starts, so there is nothing to delete by hand. Thanks to @rehlers for reporting it (#47).
+- With the camera on, OrcaSlicer asked for network permission again for every picture. Now it asks once for each printer and for Spoolman. Thanks to @rp86 for reporting it (#48).
+- Printer addresses behind a reverse proxy work: `https://host`, `https://host:port` and addresses with a path such as `https://example.com/u1`. Plain IP addresses and bare hostnames work as before.
+- **Sync heads to project** no longer fails on OrcaSlicer 2.5 because of filament colours. OrcaSlicer 2.5 doesn't let a plugin set a project filament's colour, so the sync applies the filament presets and leaves the colours as they are.
 
 ## [0.12.2] - 2026-11-17
 
