@@ -10,6 +10,7 @@ import { t } from '../core/i18n';
 
 // One visible spool source per screen (X03): when Spooler's stock uses the same Spoolman, say so.
 const source = computed(() => {
+  if (s.spoolsRetrying) return t('sm.retrying');
   if (s.spoolsError) return t('heads.source.error', { error: s.spoolsError });
   if (!s.spoolsLoaded) return '';
   const n = s.spools.length;

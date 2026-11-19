@@ -596,6 +596,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             if gen == self.generation:
                 self.bindings = {h: s for h, s in self.bindings.items() if s != spool_id and h != head}
                 self.bindings[head] = spool_id
+        self.links_changed()
 
     def _reconcile(self):
         try:
@@ -829,6 +830,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             self._client().gcode("SET_SPOOL_ID CHANNEL=%d SPOOL_ID=0" % head)
         elif sid:
             self._spoolman().set_location(sid, "")
+        self.links_changed()
         with self.lock:
             if gen == self.generation and self.bindings.get(head) == sid:
                 self.bindings.pop(head, None)

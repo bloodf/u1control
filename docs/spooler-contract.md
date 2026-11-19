@@ -21,13 +21,32 @@ bindings, but the Dashboard shows no Spooler stock.
    writes one. Assign writes `"<printer model> T<n>"`, for example `Snapmaker U1 T1`, the form
    u1control reads. It also clears that location from any other spool that held it, so each head has
    one spool. Unassign clears the location only when it binds that head. Spooler sends nothing to the
-   printer. While the printer prints, it asks first. If you renamed the printer in u1control so the
-   name no longer ends in "U1", a link Spooler writes doesn't match it: rename it back or link the
-   spool from u1control. On Extended Firmware, `filament_spool_id` still wins, so Spooler offers no
-   Assign on a head whose spool the printer reports.
+   printer. While the printer prints, it asks first. u1control stores a printer name ending in "U1"
+   (a rename to "Workshop" is kept as "Workshop U1"), so a link Spooler writes with the model name
+   still matches a renamed printer. On Extended Firmware, `filament_spool_id` still wins, so Spooler
+   offers no Assign on a head whose spool the printer reports.
+
+   **One rule for both sides:** on stock firmware the spool's Spoolman location is the only record of
+   which spool is on a toolhead. Neither plugin keeps links of its own, so a head linked from both
+   sides holds whichever location was written last, and both tabs show that after their next read.
 3. If neither applies, Spooler falls back to the RFID tag, then vendor, material and colour. When
    u1control links a spool it also writes the spool's vendor, material, name and colour to the head,
    so that fallback lands on the same spool.
+
+## Keeping both tabs in step
+
+- **Timed re-read.** The U1 Control tab re-reads spools and toolhead links from Spoolman every 30 s
+  while it is visible (Settings > Connection > **Refresh Spoolman every**: 10 to 300 s, or off; stored
+  as `spoolman_refresh_s`). Hidden, it pauses, and it reads at once when shown again. One read at a
+  time; after a failed read it waits 30, 60, 120 s and so on, up to 5 minutes, and the Toolheads card
+  says "Spoolman unreachable, retrying" instead of raising a notice each time. It waits while a
+  dialog or picker is open or a field of a form has focus. Spooler does the same in its tab.
+- **Right away.** Each presence file carries `"links"`: the time (unix ms) that plugin last linked or
+  unlinked a spool, 0 before the first. u1control moves its own on every bind and unbind (the
+  automatic one included) and rewrites its presence at once; it reads Spooler's with the stock list
+  (every 5 s while the Dashboard shows) and re-reads Spoolman when it moved. Spooler reads u1control's
+  on its 5 s beat and refreshes its open page. A plugin without `"links"` is followed by the timed
+  re-read only.
 
 ## Filament profiles
 

@@ -41,9 +41,15 @@ AUTOMATIONS = [
 ]
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
 EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto", "camera_fps": 5,
-         "network_origins": []}   # scheme://host of printers and Spoolman used: the network grants asked for at load
+         "network_origins": [],   # scheme://host of printers and Spoolman used: the network grants asked for at load
+         "spoolman_refresh_s": 30}   # the page re-reads Spoolman this often while it shows (0 = off; 10-300)
 UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl")   # "auto": OrcaSlicer's language, then the system's
 CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
+REFRESH_RANGE = (10, 300)      # spoolman_refresh_s: 0 (off) or seconds in this range
+
+
+def valid_refresh(value):
+    return type(value) is int and (value == 0 or REFRESH_RANGE[0] <= value <= REFRESH_RANGE[1])
 
 
 def automagic_values():
@@ -103,6 +109,8 @@ class Store:
                 out["print_dialog"] = False
             if out["camera_fps"] not in CAMERA_FPS:
                 out["camera_fps"] = EXTRA["camera_fps"]
+            if not valid_refresh(out["spoolman_refresh_s"]):
+                out["spoolman_refresh_s"] = EXTRA["spoolman_refresh_s"]
             return {k: dict(v) if isinstance(v, dict) else v for k, v in out.items()}
 
     def raw(self):
@@ -123,6 +131,9 @@ class Store:
                         data[key] = value
                 elif key == "camera_fps":
                     if type(value) is int and value in CAMERA_FPS:
+                        data[key] = value
+                elif key == "spoolman_refresh_s":
+                    if valid_refresh(value):
                         data[key] = value
                 elif key in CONNECTION or key in EXTRA:
                     default = {**CONNECTION, **EXTRA}[key]

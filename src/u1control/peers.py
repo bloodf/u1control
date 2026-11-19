@@ -232,11 +232,12 @@ class Presence:
         self._poke = threading.Event()
         self._thread = None
         self._failed = False
+        self.links = 0   # unix ms of this plugin's last spool link change: peers re-read Spoolman when it moves
 
     def doc(self, state="active"):
         return {"schema": SCHEMA, "version": VERSION, "plugin": self.plugin, "plugin_version": self.version,
                 "session": self.session, "pid": os.getpid(), "started": int(self.started), "ts": self.clock(),
-                "state": state, **({"wants": self.wants()} if state == "active" else {})}
+                "state": state, "links": self.links, **({"wants": self.wants()} if state == "active" else {})}
 
     def write(self, state="active"):
         if not self.path:
@@ -300,8 +301,14 @@ class SpoolerLink:
                 self.stock_request += 1
         self.presence.poke()
 
+    def links_changed(self):
+        """A spool link changed here: say so in the presence now, so Spooler's open tab re-reads Spoolman."""
+        self.presence.links = int(self.clock() * 1000)
+        self.presence.poke()
+
     def spooler(self):
-        """{"state", "text", "detail", "version", "session", "origin"} of the Spooler plugin."""
+        """{"state", "text", "detail", "version", "session", "origin", "links"} of the Spooler plugin. "links" moves
+        whenever Spooler linked or unlinked a spool (0 from a Spooler that doesn't say)."""
         doc, _ = read_json(peer_file(self.root, SPOOLER))
         state, detail = peer_status(doc, self.clock())
         spoolman = (doc or {}).get("spoolman") if isinstance((doc or {}).get("spoolman"), dict) else {}
@@ -311,7 +318,8 @@ class SpoolerLink:
         return {"state": state, "text": STATE_TEXT[state], "detail": detail,
                 "version": _text((doc or {}).get("plugin_version")),
                 "session": (doc or {}).get("session") if state == "active" else "",
-                "origin": normalize_origin(spoolman.get("origin")) if state == "active" else ""}
+                "origin": normalize_origin(spoolman.get("origin")) if state == "active" else "",
+                "links": _num((doc or {}).get("links")) or 0 if state == "active" else 0}
 
     def stock(self):
         """(spooler, stock): the peer and, while it runs, its stock list."""
