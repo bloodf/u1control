@@ -132,6 +132,34 @@ class WindowTests(unittest.TestCase):   # noqa: D101
         self.assertEqual(titles, ["U1 Control — print setup"])
         self.assertEqual(posted, [{"type": "show_tab", "tab": "settings"}])
 
+    def test_preview_left_out_when_the_page_would_be_too_big(self):
+        real = self.ns["preview"]
+        big = {"bounds": [0, 0, 1, 1], "tools": {"0": [0.0, 0.0, 1.0, 1.0] * 50000}}   # ~1 MB of JSON
+        self.ns["preview"] = type("P", (), {"paths": staticmethod(lambda lines: big),
+                                            "tool_changes": staticmethod(real.tool_changes)})
+        self.addCleanup(self.ns.__setitem__, "preview", real)
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertIsNone(boot(windows[0])["job"]["preview"])   # over the default limit
+        self.ns["SETUP_PAGE_LIMIT"], limit = 10 ** 9, self.ns["SETUP_PAGE_LIMIT"]
+        self.addCleanup(self.ns.__setitem__, "SETUP_PAGE_LIMIT", limit)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertEqual(boot(windows[1])["job"]["preview"], big)   # kept when the page fits
+        self.assertEqual(boot(windows[0])["job"]["tool_changes"], 1)   # the other job facts stay
+
+    def test_long_plate_page_stays_under_the_limit_with_its_preview(self):
+        # A long plate (300 layers of 1000 moves, two heads): the sampled preview keeps the page small enough for
+        # OrcaSlicer's WebView2 on Windows, so the preview is kept, not dropped by the safety net.
+        with open(self.path, "a", newline="") as f:   # "\n" as written, also on Windows
+            f.write("\nM83\n")   # SAMPLE has no final newline
+            for layer in range(300):
+                f.write(";LAYER_CHANGE\nT%d\n" % (layer % 2))
+                f.writelines("G1 X%.3f Y%.3f E0.04\n" % (i % 250 + 0.123, layer % 250 + 0.456) for i in range(1000))
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertIsNotNone(boot(windows[0])["job"]["preview"])
+        self.assertLess(len(windows[0].html.encode("utf-8")), self.ns["SETUP_PAGE_LIMIT"])
+
     def test_heads_settings_need_the_tab_for_this_printer(self):
         windows = []
 
