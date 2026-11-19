@@ -14,10 +14,9 @@ import { heaterPhase, parseTarget } from '../core/logic';
 // The bed is a row of its panel; a toolhead's heater sits inside its toolhead card (`card`).
 // Safety rules kept here: a blank field never sends 0, an out-of-range value is refused with the limit (not clamped),
 // heating always asks first, Off asks during a print, and Off stays available whatever target the page last saw.
-// foundation-gap: OuiSetpoint (5.0.3) has `validate`, `inputId` and `offAlways` now, but its field keeps what is typed
-// out of its model until it is left: a status tick redraws the field from the model and erases the typing (page test
-// B-01), Set stays off until then, and "2.5" can't be typed in a comma language (decimal-input.ts). Until it follows
-// every keystroke, this is its row (same columns, same phase colours) with those rules.
+// This is OuiSetpoint's row (same columns, same phase colours) with those rules. OuiSetpoint 5.0.6 can carry them now
+// (v-model:draft, invalid, error-id, validate, input-props, off-always): moving to it is a later change, with the
+// page tests of these rules (B-01, U02, the decimal input ones) as its check.
 const dot = computed(() => acceptDot(locale.value));
 const props = defineProps<{ id: string; card?: boolean }>();
 const isBed = props.id === 'bed';

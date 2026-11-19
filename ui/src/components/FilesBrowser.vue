@@ -34,8 +34,8 @@ async function each(ids: string[], done: string, send: (id: string) => Promise<{
   if (ok < ids.length) throw new Error(`${ok} of ${ids.length}`);
 }
 const backend: OuiFileBackend = {
-  // ponytail: the plugin walks a root one folder at a time (cmd_folders, at most 200 folders a root), before the files
-  // show. One flat server.files.list a root would be a single request, but it leaves empty folders out.
+  // ponytail: the plugin walks a root one folder at a time (cmd_folders, at most 200 folders a root); the open folder's
+  // files are read beside it. One flat server.files.list a root would be a single request, but it leaves empty folders out.
   // A root that can't be walked is still listed: opening it says what is wrong.
   folders: async () => folderTree((await Promise.all(['gcodes', 'camera'].map(root => command('folders', { root }).then(l => (Array.isArray(l) ? l as string[] : [root]), () => [root])))).flat(), rootLabel, READ_ONLY),
   async list(folder) {

@@ -11,11 +11,6 @@
   .oui-appbar-tab > .oui-icon { display: none; }
 }
 
-/* A long panel title (Spanish) next to its icon wraps instead of widening a narrow page. */
-.oui-panel-head > .oui-panel-title { flex-shrink: 1; min-width: 0; }
-/* Longer labels (German, Spanish) on a narrow tab: a panel's buttons wrap under each other instead of pushing the page wider. */
-.oui-panel-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
-
 /* The top of every page: its header, then the page-level banners (PageMessages is moved under the open tab's header)
    and the page's own. One grid item of .oui-page, so an empty banner place takes no room. The live regions stay in
    the DOM while empty (what is added later is then announced); each banner brings its own 12 px above it. */

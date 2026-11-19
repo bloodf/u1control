@@ -4,7 +4,7 @@ import { OuiIcon } from '../../shared/src/components';
 import { video } from '../../shared/src/icons';
 import { covers } from '../app/thumbs';
 // A time-lapse's cover picture, asked for only once its row is on screen (app/thumbs); the video icon without one.
-// foundation-gap: OuiThumb (5.0.3) is a square box with one `size`; a video cover is 16:9 and, fitted into a square
+// foundation-gap: OuiThumb (5.0.6) is a square box with one `size`; a video cover is 16:9 and, fitted into a square
 // that keeps the row low, it is a sliver. This is OuiThumb's box with a width and a height.
 // OuiThumb should take a width and a height (or a ratio).
 const props = defineProps<{ gen: number; path?: string | null }>();

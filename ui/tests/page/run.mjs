@@ -1148,10 +1148,11 @@ const FILES_OPEN = `
   await tab('files');
   const TREE = ['gcodes', 'gcodes/sub', 'gcodes/sub/deep'];
   await trees(TREE);
-  await until(() => last('cmd', 'files'), 'the open folder asked for once the trees are known');
+  await until(() => last('cmd', 'files'), 'the open folder asked for');
   await reply(last('cmd', 'files'), ${JSON.stringify(ABC)});
-  // After a change the browser reads the trees and the open folder again.
-  const again = async (tree, answer) => { const n = cmds('files').length; await trees(tree); await until(() => cmds('files').length > n, 'listed again'); if (answer) await reply(last('cmd', 'files'), answer); };
+  // After a change the browser reads the trees and the open folder again, side by side.
+  let listed = last('cmd', 'files').id;
+  const again = async (tree, answer) => { await trees(tree); await until(() => last('cmd', 'files').id !== listed, 'listed again'); listed = last('cmd', 'files').id; if (answer) await reply(last('cmd', 'files'), answer); };
   const row = n => q('[data-file="gcodes/' + n + '.gcode"]');
   const picked = () => qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file.split('/').pop());
   const folderEl = id => q('[data-folder="' + id + '"]');
@@ -1227,7 +1228,9 @@ test('files: Delete asks once, with the names; the camera folder is read only an
   eq(cmds('delete')[1].args, {path: 'gcodes/b.gcode'}, 'then the other');
   await reply(cmds('delete')[1], true);
   await until(() => toasts().includes('Deleted 2 files'), 'one message: ' + toasts());
+  assert(document.activeElement && document.activeElement.dataset.file === 'gcodes/b.gcode', 'the question closed before the printer answered: the keyboard is back on a row that is about to go');
   await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(2))}});
+  await until(() => document.activeElement && document.activeElement.dataset.file === 'gcodes/c.gcode', 'the keyboard stays in the list, on the row that is left');
   // Enter on a row is the page's main action for it: Print, which asks first.
   await click(row('c'));
   assert(btn('Print c.gcode') && !btn('Print c.gcode').classList.contains('p-button-secondary'), 'Print is the one primary action');
@@ -1288,6 +1291,7 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], ${JSON.stringify(ABC)});
   assert(folderEl('gcodes/Spares'), 'in the tree once it is read again');
   await click(folderEl('gcodes/sub'));
+  listed = last('cmd', 'files').id;
   await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [{name: 'deep'}], files: []});
   assert(text(byTest('files')).includes('No files in this folder'), 'an empty folder says so');
   await click(byTest('folder-move'));
