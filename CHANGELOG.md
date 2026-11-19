@@ -2,14 +2,16 @@
 
 ## [Unreleased]
 
+## [0.14.0] - 2026-11-19
+
 ### Changed
 
-- Settings is a set of pages: a list of pages beside the open one, or in a narrow window the list first and one page at a time with a Back button. The last page opens again next time, a page that needs attention is marked in the list, and focus moves to the page heading when a page opens. "Open Settings" with no printer opens Connection, and the print setup's "Plugin settings" opens Print setup.
-- A toolhead with filament loaded but no linked Spoolman spool (or a spool without a full weight) shows a full reel in its colour with a small "?" badge, the amount unknown. It used to show the bare reel, which looked exactly like a head with nothing loaded; that one keeps the bare reel (shared UI foundation 4.2.2).
+- Settings is split into pages: a list of pages beside the open one, or in a narrow window the list first and one page at a time with a Back button. Settings opens on the page you used last, and a page that needs attention is marked in the list. "Open Settings" with no printer set up opens Connection, and the print setup's "Plugin settings" opens Print setup.
+- A toolhead with filament loaded but no linked Spoolman spool (or a spool without a full weight) shows a full reel in its colour with a small "?" badge, because the amount is unknown. Before, it showed the bare reel, which looked just like a toolhead with nothing loaded; an empty toolhead still shows the bare reel.
 
 ### Fixed
 
-- **U1 Control — print setup** stayed blank on Windows and gave up with "the print setup window didn't open (OrcaSlicer was busy); nothing was sent". The plate's path preview (up to ~0.6 MB) made the page about 1.8 MB, which OrcaSlicer's WebView2 on Windows does not show. The preview is now sampled to ~150 KB, and a page that would still be too big is shown without it (the thumbnail stays). Thanks to @xtronets for the fix (#53).
+- On Windows, **U1 Control — print setup** stayed blank and gave up with "the print setup window didn't open (OrcaSlicer was busy); nothing was sent". The plate's path preview made the page too big for OrcaSlicer on Windows. The preview is now smaller, and a page that would still be too big opens without it (the thumbnail stays). Thanks to @xtronets for the fix (#53).
 
 ## [0.13.0] - 2026-11-18
 
