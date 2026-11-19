@@ -20,9 +20,15 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "u1control"
 MODULES = ("i18n_text_pl", "i18n_text", "i18n", "moonraker", "u1", "gcode", "preview", "agent", "extended", "spoolman", "settings", "spooler_bridge", "peers", "usage", "files", "stockview", "requirements", "service")  # dependency order
+PAGE_LIMIT = int(1_572_864 * 0.9)   # 90% of what OrcaSlicer's WebView2 on Windows shows (plugin.WEBVIEW_PAGE_LIMIT)
+
+
 def page_html(name):
     """ui/<name> as shipped: the compiled page draws its icons from the shared foundation (no icon map to inject)."""
-    return (SRC / "ui" / name).read_text("utf-8")
+    text = (SRC / "ui" / name).read_text("utf-8")
+    if len(text.encode("utf-8")) > PAGE_LIMIT:   # the boot data still has to fit, or Windows shows a blank window
+        raise SystemExit("ui/%s is %d bytes, over the %d-byte page limit" % (name, len(text.encode("utf-8")), PAGE_LIMIT))
+    return text
 
 
 def packed(text):

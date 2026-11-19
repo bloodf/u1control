@@ -820,6 +820,8 @@ def _clean_answer(answer, filaments, mapping, shown, prefs, purifier, remember_d
 # The print setup page, boot data included. OrcaSlicer 2.5.1 on Windows (WebView2) showed a blank window for a
 # 1.78 MB page (1.2 MB app + a 540 KB path preview) and the page as expected at 1.24 MB.
 SETUP_PAGE_LIMIT = 1_450_000
+# WebView2 takes a page as at most 2 MiB of base64, so 1,572,864 bytes of HTML; a bigger page renders blank.
+WEBVIEW_PAGE_LIMIT = 1_572_864
 
 
 def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client, extras=None, language="auto",
@@ -843,6 +845,10 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
         # A page this big stays blank in OrcaSlicer's WebView2 on Windows (never "ready": the window times out).
         log("print setup: the plate preview makes the page %d bytes; shown without it" % len(html.encode("utf-8")))
         data["job"] = {**data["job"], "preview": None}
+        html = page_html("setup", data, language=language)
+    if len(html.encode("utf-8")) > WEBVIEW_PAGE_LIMIT and (data["job"] or {}).get("thumbnail"):
+        log("print setup: the G-code thumbnail makes the page %d bytes; shown without it" % len(html.encode("utf-8")))
+        data["job"] = {**data["job"], "thumbnail": None}
         html = page_html("setup", data, language=language)
     done, ready, wanted, stop = (threading.Event() for _ in range(4))
     result = {}

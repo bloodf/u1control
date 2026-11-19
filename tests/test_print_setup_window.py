@@ -147,6 +147,21 @@ class WindowTests(unittest.TestCase):   # noqa: D101
         self.assertEqual(boot(windows[1])["job"]["preview"], big)   # kept when the page fits
         self.assertEqual(boot(windows[0])["job"]["tool_changes"], 1)   # the other job facts stay
 
+    def test_thumbnail_left_out_when_the_page_would_still_be_too_big(self):
+        # A 614,400-character thumbnail (the first 8000 lines are its only bound) is too big even without the preview
+        with open(self.path, encoding="utf-8") as f:
+            sliced = f.read()
+        with open(self.path, "w", newline="") as f:
+            f.write("; thumbnail begin 900x900 614400\n" + "; %s\n" % ("A" * 1024) * 600 + "; thumbnail end\n" + sliced)
+        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertIsNone(boot(windows[0])["job"]["thumbnail"])
+        self.assertLessEqual(len(windows[0].html.encode("utf-8")), self.ns["WEBVIEW_PAGE_LIMIT"])
+        self.ns["WEBVIEW_PAGE_LIMIT"], limit = 10 ** 9, self.ns["WEBVIEW_PAGE_LIMIT"]
+        self.addCleanup(self.ns.__setitem__, "WEBVIEW_PAGE_LIMIT", limit)
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
+        self.assertEqual(len(boot(windows[1])["job"]["thumbnail"]), 614400)   # kept when the page fits
+
     def test_long_plate_page_stays_under_the_limit_with_its_preview(self):
         # A long plate (300 layers of 1000 moves, two heads): the sampled preview keeps the page small enough for
         # OrcaSlicer's WebView2 on Windows, so the preview is kept, not dropped by the safety net.
