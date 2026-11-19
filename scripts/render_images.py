@@ -66,10 +66,17 @@ SCROLL_TO = ('document.querySelector("main").style.paddingBottom="600px";'   # t
              'scrollTo(0,Math.round(scrollY));')
 CAMERA_ON = ('document.querySelector(\'[data-test="camera"]\').click();'      # start the camera, answer with the mock picture
              'setTimeout(()=>emit({type:"frame",image:DATA.frame}),50);setTimeout(()=>{%s},300);')
+# The toolhead cards without their heater row, feeder line and buttons: the spools are what they show here.
+COMPACT_HEADS = 'document.querySelectorAll(".hc .oui-slot-extra>[data-heater-row],.hc .oui-slot-extra>p.oui-meta,.hc .oui-slot-actions").forEach(e=>e.remove());'
+# The main and hero images: the print card without the printer photo or its buttons, the four toolheads and their spools right under it
+# (without their spool pickers too, so both rows fit).
+REELS_UNDER_JOB = ('const job=document.querySelector(\'[data-test="job-card"]\');job.querySelectorAll(".u1-figure,.u1-job-actions").forEach(e=>e.remove());'
+                   'job.after(document.querySelector("#heads-h").closest(".oui-panel"));' + COMPACT_HEADS
+                   + 'document.querySelectorAll(".hc .hc-pick").forEach(e=>e.remove());')
 SCREENS = {
-    "dash": dict(page="app", section="dash", width=640),
+    "dash": dict(page="app", section="dash", width=640, spools=True, js=REELS_UNDER_JOB),
     "camera": dict(page="app", section="dash", width=640, js=CAMERA_ON % (SCROLL_TO % "#bed-h")),
-    "heads": dict(page="app", section="dash", width=640, spools=True, js=SCROLL_TO % "#heads-h"),
+    "heads": dict(page="app", section="dash", width=640, spools=True, js=SCROLL_TO % "#heads-h" + COMPACT_HEADS),   # all four fit the square
     "files": dict(page="app", section="files", width=880),
     "setup": dict(page="setup", width=680),
     "wide": dict(page="app", section="dash", spools=True),
@@ -165,6 +172,9 @@ def printer_status(fakes, u1, tags=False):
         fp.close()
 
 
+DEMO_LEFT = {7: {"remaining_weight": 85}}   # grams left on a demo spool, where the fake printer's own amount is not the picture wanted
+
+
 def app_data(fakes, mods, scenario):
     u1, sm, st = mods["u1"], mods["spoolman"], mods["settings"]
     status = printer_status(fakes, u1, tags=True)
@@ -172,7 +182,8 @@ def app_data(fakes, mods, scenario):
     fp = fakes.FakePrinter()
     try:
         # demo spools are 1 kg spools, so the images show each reel's fill and level bar
-        spools = [sm.spool_view({"initial_weight": 1000, **s}) for s in fp.spools]
+        # and a believable mix: T1 half, T2 nearly full, T4 low; T3 has no spool linked, so its amount is unknown
+        spools = [sm.spool_view({"initial_weight": 1000, **s, **DEMO_LEFT.get(s["id"], {})}) for s in fp.spools]
     finally:
         fp.close()
     view["bindings"] = {"0": 9, "1": 11, "3": 7} if scenario.get("spools") else {}
