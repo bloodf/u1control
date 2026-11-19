@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
 import ToggleSwitch from 'primevue/toggleswitch';
-import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiRequirement, OuiSettings, OuiStatus, type OuiSettingsSection } from '../../shared/src/components';
+import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiRequirement, OuiStatus, type OuiSettingsSection } from '../../shared/src/components';
 import { circleCheck, clipboard, info, languages, plug, printer, save as saveIcon, target, wrench, zap } from '../../shared/src/icons';
 import FirmwareCard from './FirmwareCard.vue';
+import SettingsPages from './SettingsPages.vue';
 import { s, run, tracker, controlsOff, busy, loadSpools, printerName, targetKnown, loadRequirements, checkRequirements } from '../app/store';
 import { config, form, dirty, saving, save, discard, valueOf } from '../app/settings';
 import { ask } from '../core/dialog';
@@ -98,13 +99,22 @@ const sections = computed<OuiSettingsSection[]>(() => [
   { id: 'language', label: t('lang.title'), icon: languages },
   { id: 'about', label: t('about.title'), icon: info },
 ]);
+// A "Settings" link elsewhere (openSettings(page)) opens its page once Settings shows and the page is on it (some
+// wait for the plugin's config).
+const pages = ref<InstanceType<typeof SettingsPages>>();
+watch(() => [s.settingsPage, s.tab, !!config.value], () => {
+  const id = s.settingsPage;
+  if (!id || s.tab !== 'settings' || !document.getElementById(id)) return;
+  s.settingsPage = '';
+  pages.value?.select(id);
+}, { immediate: true, flush: 'post' });
 // Enter in a text field saves, as the form's own button did.
 function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement && e.target.type !== 'checkbox') { e.preventDefault(); void save(); } }
 </script>
 
 
 <template>
-  <OuiSettings :sections="sections" :nav-label="t('settings.nav')">
+  <SettingsPages ref="pages" :sections="sections" :nav-label="t('settings.nav')" :back-label="t('settings.back')" :error-label="t('settings.hasError')">
     <div class="oui-stack">
       <OuiFormSection id="mode" :icon="zap" :title="t('mode.title')" :aria-label="t('mode.title')"
                       :description="config ? (form.mode === 'expert' ? t('mode.help.expert') : t('mode.help.automagic')) : undefined">
@@ -199,7 +209,7 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
       <Button severity="secondary" text :label="t('settings.discard')" :disabled="!dirty || saving" data-test="discard" @click="discard" />
       <Button :label="saving ? t('mode.saving') : t('common.save')" :loading="saving" :disabled="!config" data-test="save" @click="save"><template #icon><OuiIcon :icon="saveIcon" :size="14" /></template></Button>
     </template>
-  </OuiSettings>
+  </SettingsPages>
 </template>
 <style>
 /* The install steps are one line each (per step, per OS). */

@@ -1470,6 +1470,62 @@ test('notices: dismissals are keyed on the condition, survive a remount and are 
   eq(sessionStorage.getItem('oui-banner:unconfirmed:a'), '1', 'keyed on the entry ids');
 `);
 
+// ------------------------------------------------------------------ settings pages (one page per section)
+const PAGES = ['mode', 'print-setup', 'options', 'calibration', 'connection', 'firmware', 'requirements', 'language', 'about'];
+const PAGES_JS = `
+const PAGES = ${JSON.stringify(PAGES)};
+const link = id => q('.oui-settings-link[data-section="' + id + '"]');
+const shown = () => PAGES.filter(id => q('#' + id) && !q('#' + id).hidden);
+const onHeading = id => document.activeElement === q('#' + id + ' .oui-panel-title');
+const listShown = () => getComputedStyle(q('.oui-settings-nav')).display !== 'none';
+const pageShown = () => getComputedStyle(q('.oui-settings-body')).display !== 'none';
+const CFG = () => post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [], settings: {mode: 'automagic'}});
+`;
+test('settings pages: list beside one page; a page opens with focus on its heading and is remembered', PAGES_JS + `
+  await connect(); await CFG();
+  await tab('settings');
+  eq(qa('.oui-settings-link').map(e => e.dataset.section), PAGES, 'one page per section');
+  eq(shown(), ['mode'], 'only the first page');
+  assert(listShown() && pageShown() && !byTest('settings-back').getClientRects().length, 'wide: list and page side by side, no Back');
+  await click(link('calibration'));
+  eq(shown(), ['calibration'], 'only Calibration');
+  assert(onHeading('calibration'), 'focus on the page heading');
+  assert(Object.entries(localStorage).some(([k, v]) => k.startsWith('oui-settings:') && v === 'calibration'), 'last page stored');
+  link('calibration').focus(); await press('ArrowDown'); await settle();
+  eq([shown(), document.activeElement.dataset.section], [['connection'], 'connection'], 'arrow keys move along the list');
+  assert(byTest('save'), 'one save bar');
+`);
+test('settings pages: narrow shows the list, then one page with Back', PAGES_JS + `
+  await connect(); await CFG();
+  await tab('settings');
+  assert(listShown() && !pageShown(), 'narrow: the list first');
+  await click(link('connection'));
+  assert(!listShown() && pageShown(), 'then the page alone');
+  eq(shown(), ['connection'], 'Connection only');
+  assert(onHeading('connection'), 'focus on its heading');
+  assert(byTest('settings-back').getClientRects().length, 'Back shown');
+  await click(byTest('settings-back'));
+  assert(listShown() && !pageShown(), 'Back returns to the list');
+  eq(document.activeElement, link('connection'), 'focus back on the page it came from');
+`, { size: [600, 900] });
+test('settings pages: the last page opens again; Plugin settings opens Print setup, also before the config came', PAGES_JS + `
+  await connect();
+  await tab('settings');
+  eq(shown(), ['language'], 'remembered page');
+  await tab('dash');
+  await post({type: 'show_tab', tab: 'settings'});
+  eq(shown(), ['language'], 'Print setup is not there yet: the page stays');
+  await CFG();
+  await until(() => shown()[0] === 'print-setup', 'Print setup opened once it exists');
+  assert(onHeading('print-setup'), 'heading focused');
+`, { lastPage: 'language' });
+test('settings pages: Open Settings with no printer opens Connection', PAGES_JS + `
+  await until(() => last('hello'));
+  await fail(last('hello'), 'Select a Snapmaker U1 printer', {no_target: true});
+  await click(btn('Open Settings'));
+  eq(shown(), ['connection'], 'Connection page');
+  assert(onHeading('connection'), 'heading focused');
+`, { lastPage: 'about' });
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');
@@ -1492,7 +1548,9 @@ try {
       const started = Date.now();
       try {
         await p.size(...(sc.size ?? [1280, 900]));
-        await p.init(MOCK_HOST + 'try { localStorage.clear(); } catch {}');
+        // seed: the settings page remembered from an earlier visit (OuiSettings' own key: page path and its page ids)
+        const seed = sc.lastPage ? `localStorage.setItem('oui-settings:' + location.pathname + ':' + ${JSON.stringify(PAGES.join(','))}, ${JSON.stringify(sc.lastPage)});` : '';
+        await p.init(MOCK_HOST + `try { localStorage.clear(); ${seed} } catch {}`);
         await p.goto(pathToFileURL(file).href);
         const body = `(async () => { ${HELPERS} ${PRELUDE} const GROUPS = ${JSON.stringify(GROUPS)}; const HEADS = ${JSON.stringify(SETUP_DATA.heads)};
           await until(() => document.querySelector('#app > *'), 'app mounted');

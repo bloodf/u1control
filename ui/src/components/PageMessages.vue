@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import Button from 'primevue/button';
 import { OuiBanner, OuiIcon } from '../../shared/src/components';
 import { refresh, settings } from '../../shared/src/icons';
-import { s, tracker, hello, printerName, statusAge, controlsOff, busy, STALE_STATUS_S } from '../app/store';
+import { s, openSettings, tracker, hello, printerName, statusAge, controlsOff, busy, STALE_STATUS_S } from '../app/store';
 import { t, fmt } from '../core/i18n';
 import { split } from '../core/tracker';
 
@@ -49,7 +49,7 @@ const close = computed(() => t('common.close'));
       <OuiBanner :show="show.none" :id="firstRun ? undefined : 'heads-why'" :style="firstRun ? 'display: none' : undefined" role="none" tone="warn" dismissible dismiss-key="no-target" :close-label="close" :title="t('target.none.title')">
         {{ t('target.none.body') }}
         <template #actions>
-          <Button v-if="s.tab !== 'settings'" size="small" severity="secondary" :label="t('common.openSettings')" @click="s.tab = 'settings'"><template #icon><OuiIcon :icon="settings" :size="14" /></template></Button>
+          <Button v-if="s.tab !== 'settings'" size="small" severity="secondary" :label="t('common.openSettings')" @click="openSettings('connection')"><template #icon><OuiIcon :icon="settings" :size="14" /></template></Button>
           <Button size="small" severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
         </template>
       </OuiBanner>

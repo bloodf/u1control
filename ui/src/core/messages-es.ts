@@ -680,6 +680,7 @@ export const es: Record<MessageKey, string> = {
   'files.deleteLabel': 'Borrar {name}',
   'files.printLabel': 'Imprimir {name}',
   'files.saveLabel': 'Guardar {name}',
+  'settings.back': 'Volver', 'settings.hasError': 'tiene un valor que corregir',
   'settings.nav': 'Secciones de los ajustes',
   'settings.discard': 'Descartar',
   'about.title': 'Acerca de',

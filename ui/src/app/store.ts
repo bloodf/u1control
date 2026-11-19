@@ -12,6 +12,9 @@ export const STALE_STATUS_S = 10;
 export const HISTORY_EVERY_MS = 5000;
 export const HISTORY_MAX = 120;
 
+/** Open Settings at one page (conn-h, print-h, ...): a "Settings" link elsewhere on the page. */
+export function openSettings(page: string): void { s.settingsPage = page; s.tab = 'settings'; }
+
 export const s = reactive({
   phase: 'connecting' as Phase,
   epoch: 0,
@@ -31,6 +34,7 @@ export const s = reactive({
   spoolsLoaded: false,
   config: null as Config | null,
   tab: 'dash',
+  settingsPage: '',                 // the settings page a link asked for, opened once Settings shows
   hidden: document.hidden,
   camOn: false,
   frame: '',
@@ -208,7 +212,7 @@ function onMessage(m: any): void {
     case 'config': configHandlers.forEach(h => h(m)); break;
     case 'rfid': rfidHandlers.forEach(h => h(m)); break;
     case 'selection_changed': void hello(); break;
-    case 'show_tab': if (m.tab === 'settings') s.tab = 'settings'; break;   // the print setup's "Plugin settings"
+    case 'show_tab': if (m.tab === 'settings') openSettings('print-setup'); break;   // the print setup's "Plugin settings"
     case 'reply': if (m.error) tracker.notify('error', t('msg.plugin', { error: String(m.error) })); break;
   }
 }
