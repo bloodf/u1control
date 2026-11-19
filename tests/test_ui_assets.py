@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 UI = ROOT / "src" / "u1control" / "ui"
-MAX_BUILT_BYTES = 650_000   # ~450 kB with the photo spool (foundation 4.1.0), ~50 kB with the Dashboard printer photo, ~60 kB with the print setup window
+MAX_BUILT_BYTES = 650_000   # the packed page: ~450 kB with the photo spool (foundation 4.1.0 on), ~50 kB with the Dashboard printer photo, ~60 kB with the print setup window
 
 
 class UiAssets(unittest.TestCase):

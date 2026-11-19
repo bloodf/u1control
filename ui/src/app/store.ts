@@ -63,6 +63,14 @@ export const run = (o: RunOptions) => tracker.run(o);
 bridge.setErrorSink(e => tracker.notify('error', t('msg.plugin', { error: message(e) })));
 
 export const printerName = computed(() => s.info?.printer || 'U1');
+/** The firmware in words ("Official firmware 2.0.0"), for the Dashboard's page header. */
+export const fwText = computed(() => {
+  if (s.phase === 'connecting') return t('fw.connecting');
+  if (!s.info) return t('fw.none');
+  const v = s.info.firmware.version ?? '';
+  return s.info.firmware.kind === 'extended' ? t('fw.extended', { version: v })
+    : s.info.firmware.kind === 'stock' ? t('fw.stock', { version: v }) : t('fw.unknown');
+});
 export const targetKnown = computed(() => s.phase === 'connected' || s.phase === 'unreachable');
 export const statusAge = computed(() => (s.statusAt ? (s.now - s.statusAt) / 1000 : Infinity));
 /** Last known values of a printer the page no longer hears from: drawn grey, never as live. */
@@ -183,6 +191,11 @@ export async function loadUsage(): Promise<void> {
   }
 }
 
+/** Spools in Spooler's stock list, for the Stock tab's count; null while there is no list to count. */
+export const stockCount = computed(() => {
+  const st = s.stock;
+  return !s.stockError && st?.spooler.state === 'active' && Array.isArray(st.stock?.rows) && !['unavailable', 'missing', 'error', 'mismatch'].includes(st.stock.state) ? st.stock.rows.length : null;
+});
 export const stockVisible = computed(() => {
   const st = s.stock;
   if (s.stockError) return true;
@@ -227,9 +240,11 @@ const rfidHandlers = new Set<(m: any) => void>();
 export const onConfig = (h: (m: Config) => void) => { configHandlers.add(h); return () => configHandlers.delete(h); };
 export const onRfid = (h: (m: any) => void) => { rfidHandlers.add(h); return () => rfidHandlers.delete(h); };
 
+/** The tabs that show Spooler's stock or what depends on it: the Dashboard (spool links follow Spooler's) and Stock. */
+const stockShown = () => !s.hidden && (s.tab === 'dash' || s.tab === 'stock');
 export function lease(): void {
   const vis = !s.hidden && s.tab === 'dash';
-  bridge.post({ type: 'lease', camera: s.camOn && vis, screen: s.scrOn && vis, stock: vis && stockVisible.value });
+  bridge.post({ type: 'lease', camera: s.camOn && vis, screen: s.scrOn && vis, stock: stockShown() && stockVisible.value });
 }
 
 export function start(): () => void {
@@ -240,7 +255,7 @@ export function start(): () => void {
   const timers = [
     window.setInterval(lease, 2000),
     window.setInterval(() => { s.now = Date.now(); }, 1000),
-    window.setInterval(() => { if (s.tab === 'dash' && !s.hidden) void loadStock(false); }, 5000),
+    window.setInterval(() => { if (stockShown()) void loadStock(false); }, 5000),
     window.setInterval(() => { if (s.tab === 'dash' && !s.hidden) void loadUsage(); }, 10000),
   ];
   // Spoolman can change from elsewhere (Spooler, Spoolman's own page): re-read the links while the page shows.

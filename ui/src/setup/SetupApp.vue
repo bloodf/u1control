@@ -55,14 +55,6 @@ const warnFor = (f: SetupFilament) => warnings.value.find(w => w.f === f.index);
 const colourHint = (f: SetupFilament) => { const h = headOf(f);
   return !!h && h.loaded && family(h.type) === family(f.type) && colourFar(f.colour, headColour(h.index)); };
 const toolColours = computed(() => Object.fromEntries(D.filaments.map(f => [String(f.index), headColour(map[String(f.index)]) || f.colour || '#888'])));
-// Readable text on a filament-coloured header.
-function ink(hex?: string) {
-  const m = /^#?([0-9a-f]{6})/i.exec(hex ?? '');
-  if (!m) return '#111';
-  const [r, g, b] = [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255).map(c => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.3 ? '#111' : '#fff';
-}
-
 // ---------------------------------------------------------------- warnings (same rule and ids as the plugin)
 const ackFor = ref('');
 const ackReset = ref(false);
@@ -193,7 +185,9 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
                     :aria-label="t('setup.cardLabel', { f: f.index + 1, type: f.type, n: map[String(f.index)] + 1,
                                    loaded: headOf(f)?.loaded ? headOf(f)!.type : t('setup.empty') }) + (warnFor(f) ? '. ' + warnText(warnFor(f)!) : '')"
                     @click="openPicker($event, f)">
-              <span class="su-card-top" :style="{ background: f.colour || '#888', color: ink(f.colour) }">
+              <!-- The project filament's colour is a 4 px strip, as on every slot card; the card itself is neutral. -->
+              <span class="oui-slot-strip su-card-strip" :data-unknown="!f.colour || undefined" :style="f.colour ? { background: f.colour } : undefined" aria-hidden="true" />
+              <span class="su-card-top">
                 <span class="oui-num">[{{ f.index + 1 }}]</span> <strong>{{ f.type }}</strong>
                 <span v-if="f.weight" class="su-card-g oui-num">{{ t('setup.grams', { g: f.weight }) }}</span></span>
               <HeadPicture :n="map[String(f.index)] + 1" :strand="headColour(map[String(f.index)])" />
@@ -262,7 +256,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
       <p class="oui-strong">{{ t('setup.pickHead', { n: picking.index + 1 }) }}</p>
       <button v-for="h in heads" :key="h.index" type="button" role="radio" class="su-pick-head" :aria-checked="map[String(picking.index)] === h.index"
               :data-pick="h.index" @click="pick(h.index)">
-        <span class="u1-tool" :data-tool="h.index + 1">T{{ h.index + 1 }}</span>
+        <span class="oui-slot-badge oui-num" :data-tool="h.index + 1">T{{ h.index + 1 }}</span>
         <!-- A colour chip, not the spool: picking a head is matching colours, and a head without a Spoolman spool would draw a colourless bare reel. -->
         <OuiSwatch :color="headColour(h.index)" :size="16" />
         <span class="su-pick-text"><span class="oui-strong"><em v-if="!h.loaded" class="su-empty">{{ t('setup.empty') }}</em><template v-else>{{ [h.type, h.sub_type].filter(Boolean).join(' ') }}</template></span>
@@ -334,10 +328,12 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
 .su-cards > li { display: grid; }
 .su-card { all: unset; box-sizing: border-box; display: grid; justify-items: center; align-content: start; gap: var(--oui-s2); width: 100%; height: 100%; padding: var(--oui-s2) var(--oui-s2) var(--oui-s3); cursor: pointer;
   border-radius: var(--oui-radius-lg); background: var(--oui-surface); box-shadow: inset 0 0 0 1px var(--oui-border), var(--oui-shadow-panel); }
-.su-card:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--oui-primary), var(--oui-shadow-panel); }
-.su-card:focus-visible { outline: 2px solid var(--oui-primary); outline-offset: 2px; }
+.su-card:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--oui-primary-mark), var(--oui-shadow-panel); }
+.su-card:focus-visible { outline: 2px solid var(--oui-primary-mark); outline-offset: 2px; }
 .su-card:disabled { cursor: default; opacity: .75; }
-.su-card-top { display: flex; align-items: baseline; gap: 6px; width: 100%; box-sizing: border-box; padding: 8px 12px; border-radius: var(--oui-radius); font-size: var(--oui-text-lg); }
+.su-card-strip { justify-self: stretch; margin: 0; }
+.su-card-top { display: flex; align-items: baseline; gap: 6px; width: 100%; box-sizing: border-box; padding: 0 var(--oui-s2); font-size: var(--oui-text-lg); }
+.su-card-g { color: var(--oui-muted); }
 .su-card-g { margin-inline-start: auto; font-size: var(--oui-text-sm); }
 .su-card-foot { display: flex; align-items: center; gap: var(--oui-s2); width: 100%; padding-inline: var(--oui-s2); box-sizing: border-box; }
 .su-card-id { display: grid; min-width: 0; }
@@ -357,7 +353,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
 .su-pick { display: grid; gap: 4px; min-width: 15rem; }
 .su-pick-head { all: unset; box-sizing: border-box; display: flex; align-items: center; gap: var(--oui-s2); padding: 6px 8px; border-radius: var(--oui-radius); cursor: pointer; }
 .su-pick-head:hover, .su-pick-head[aria-checked="true"] { background: var(--oui-primary-soft); }
-.su-pick-head:focus-visible { outline: 2px solid var(--oui-primary); }
+.su-pick-head:focus-visible { outline: 2px solid var(--oui-primary-mark); }
 .su-pick-text { display: grid; flex: 1; min-width: 0; }
 .su-pop { display: grid; gap: var(--oui-s2); min-width: 15rem; border: 0; margin: 0; padding: 0; }
 .su-slider { display: flex; align-items: center; gap: var(--oui-s3); }

@@ -104,8 +104,8 @@ Page to plugin:
 | type | fields | effect |
 |---|---|---|
 | `hello` | `id` | resolve the printer, connect, send `config`; with no usable U1 the error reply has `no_target: true` |
-| `lease` | `camera`, `screen`, `stock` | keep the monitor running; camera and remote screen on or off; `stock`: the Stock card is on screen, so Spooler keeps its list fresh |
-| `cmd` | `id`, `cmd`, `args`, `gen` | run `Service.cmd_<cmd>(**args)` for printer generation `gen`; `stock` and `stock_assign` (`head`, `spool_id`, `key`, `force`) are the Stock card's |
+| `lease` | `camera`, `screen`, `stock` | keep the monitor running; camera and remote screen on or off; `stock`: the Stock tab or the Dashboard is on screen, so Spooler keeps its list fresh |
+| `cmd` | `id`, `cmd`, `args`, `gen` | run `Service.cmd_<cmd>(**args)` for printer generation `gen`; `stock` and `stock_assign` (`head`, `spool_id`, `key`, `force`) are the Stock tab's |
 | `frame_ack` | | the page has shown the last camera frame |
 | `camera_fps` | `value` | store the camera frame rate (5, 10, 15 or 30) and use it at once |
 | `save_settings` | `settings` | validate and store settings |

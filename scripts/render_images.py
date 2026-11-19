@@ -70,7 +70,7 @@ CAMERA_ON = ('document.querySelector(\'[data-test="camera"]\').click();'      # 
 COMPACT_HEADS = 'document.querySelectorAll(".hc .oui-slot-extra>[data-heater-row],.hc .oui-slot-extra>p.oui-meta,.hc .oui-slot-actions").forEach(e=>e.remove());'
 # The main and hero images: the print card without the printer photo or its buttons, the four toolheads and their spools right under it
 # (without their spool pickers too, so both rows fit).
-REELS_UNDER_JOB = ('const job=document.querySelector(\'[data-test="job-card"]\');job.querySelectorAll(".u1-figure,.u1-job-actions").forEach(e=>e.remove());'
+REELS_UNDER_JOB = ('const job=document.querySelector(\'[data-test="job-card"]\');job.querySelectorAll(".oui-job-thumb,.oui-job-actions").forEach(e=>e.remove());job.querySelector(".oui-job-block")?.removeAttribute("data-thumb");'
                    'job.after(document.querySelector("#heads-h").closest(".oui-panel"));' + COMPACT_HEADS
                    + 'document.querySelectorAll(".hc .hc-pick").forEach(e=>e.remove());')
 SCREENS = {

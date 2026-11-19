@@ -16,7 +16,7 @@ import map4 from '../assets/printer/t4.webp';
  * outline) painted with the colour of the Spoolman spool linked to that toolhead, else the printer's filament colour,
  * and mixed with hard-light the way OuiSpool tints its "fio" layer: mid-grey gives the exact colour, shadows and the
  * wound strands stay. The photo itself has the filament in grey, so an empty holder shows a faded grey reel.
- * Its label says what each toolhead holds; the grams are in the toolhead cards.
+ * Its label says what each toolhead holds; the grams are in the toolhead cards. Shown in the status block's 72 px box.
  */
 const props = defineProps<{ /** Active toolhead 1..4 while printing. */ active?: number | null; stale?: boolean }>();
 
@@ -68,13 +68,11 @@ const label = computed(() => t('figure.label', { heads: spools.value.map(sp => {
 /* The photo scales with its box; each reel's paint is masked by its light map and the map is mixed over it. */
 .pf { position: relative; isolation: isolate; width: 100%; aspect-ratio: 520 / 562; user-select: none; }
 .pf-photo { position: relative; display: block; width: 100%; height: 100%; }
-.pf::after { content: ''; position: absolute; z-index: -1; left: 14%; right: 14%; bottom: -1%; height: 4%; border-radius: 50%;
-  background: radial-gradient(closest-side, rgb(0 0 0 / .32), transparent); }
 .pf-reel { position: absolute; background: var(--pf-paint); -webkit-mask: var(--pf-map) center / 100% 100% no-repeat; mask: var(--pf-map) center / 100% 100% no-repeat; }
 .pf-reel img { display: block; width: 100%; height: 100%; mix-blend-mode: hard-light; }
 /* An empty holder: the bare grey reel, faded. */
 .pf-reel[data-empty] { opacity: .5; }
-/* The active toolhead's spool: a soft light behind it. */
-.pf-halo { position: absolute; z-index: -1; border-radius: 50%; background: radial-gradient(closest-side, rgb(255 255 255 / .55), rgb(255 255 255 / .18) 55%, transparent); }
+/* The active toolhead's spool: marked in OrcaSlicer's teal, as every selected thing is. */
+.pf-halo { position: absolute; z-index: -1; border-radius: 30%; background: var(--oui-primary-soft); box-shadow: 0 0 0 1px var(--oui-primary-mark); }
 .pf[data-stale] { filter: grayscale(1); opacity: .7; }
 </style>

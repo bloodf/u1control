@@ -64,6 +64,27 @@ export function moveTargets(folders: string[], path: string, name: string): stri
   return folders.filter(f => f !== path && f !== src && !f.startsWith(src + '/'));
 }
 
+/** The file root a printer path is under ("gcodes/sub/a.gcode" -> "gcodes"). */
+export const rootOf = (path: string): string => path.split('/')[0];
+
+export interface TreeFolder { id: string; name: string; parent: string | null; locked: boolean }
+/** The printer's folders (full paths, a root has no "/") as the file browser's tree. A folder can take the files being
+ *  shown only inside their own root (the printer never moves a file to another root) and never in a read-only root. */
+export function folderTree(paths: string[], open: string, rootName: (root: string) => string, readOnly: string[] = []): TreeFolder[] {
+  const all = new Set<string>();
+  // every folder with its parents, so a path listed alone still hangs under its root
+  for (const p of paths) for (let at = p.length; at > 0; at = p.lastIndexOf('/', at - 1)) all.add(p.slice(0, at));
+  const roots = [...new Set(paths.map(rootOf))];   // the roots keep the order they were given in
+  return [...all].sort((a, b) => roots.indexOf(rootOf(a)) - roots.indexOf(rootOf(b)) || a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })).map(id => {
+    const at = id.lastIndexOf('/');
+    return { id, name: at < 0 ? rootName(id) : id.slice(at + 1), parent: at < 0 ? null : id.slice(0, at),
+      locked: rootOf(id) !== rootOf(open) || readOnly.includes(rootOf(id)) };
+  });
+}
+
+/** A file's kind for its chip: its extension in capitals ("GCODE", "MP4"), or none. */
+export const fileKind = (name: string): string | undefined => /\.([A-Za-z0-9]{1,5})$/.exec(name)?.[1].toUpperCase();
+
 /** Map each bound spool id to its toolhead label ("T2"), preferring the live bindings. */
 export function boundHeads(live: Record<string, number>, fromStock: Record<string, number>): Record<number, string> {
   const src = Object.keys(live).length ? live : fromStock;

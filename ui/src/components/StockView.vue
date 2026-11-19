@@ -1,13 +1,15 @@
 <script setup lang="ts">
+// The Stock tab: Spooler's Spoolman stock, linked to this U1's toolheads. Choose the toolhead once, in the rail; every
+// row then has one action, named with it. Every link still checks the spool in Spoolman and asks first.
 import { computed, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
-import { OuiBanner, OuiEmpty, OuiIcon, OuiLevel, OuiPanel, OuiSpool, OuiStatus, OuiToolbar, materialTone } from '../../shared/src/components';
+import { OuiBanner, OuiEmpty, OuiHint, OuiIcon, OuiLevel, OuiPageHeader, OuiPanel, OuiSpool, OuiStatus, OuiToolbar } from '../../shared/src/components';
 import { boxes, link as linkIcon, refresh } from '../../shared/src/icons';
-import { spoolFraction } from '../core/spool-level';
-import { s, run, tracker, loadStock, loadSpools, busy, controlsOff, targetKnown, printerName, stockVisible, reqStatus } from '../app/store';
+import { headFraction, levelTone, spoolFraction } from '../core/spool-level';
+import { s, run, tracker, loadStock, loadSpools, busy, controlsOff, targetKnown, printerName, reqStatus } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, tMaybe, fmt } from '../core/i18n';
 import { family, boundHeads } from '../core/logic';
@@ -50,7 +52,21 @@ const bound = computed(() => boundHeads(s.bindings, s.stock?.bindings ?? {}));
 const why = computed(() => (!targetKnown.value || !s.info ? t('stock.why.connect') : controlsOff.value ? controlsOff.value : busy.value ? t('stock.why.busy')
   : s.stock?.same_spoolman === false ? t('stock.why.spoolman') : noSpoolman.value ? t('stock.why.noSpoolman') : ''));
 const whyId = computed(() => (!why.value ? undefined : !targetKnown.value || !s.info || controlsOff.value || busy.value ? 'heads-why' : 'stock-why'));
-const heads = [0, 1, 2, 3].map(h => ({ value: h, label: `T${h + 1}` }));
+// The places a spool can go: the four toolheads, each with what is in it now (its linked Spoolman spool, else what the printer reports).
+const targets = computed(() => [0, 1, 2, 3].map(i => {
+  const h = s.status?.heads[i], id = s.bindings[String(i)];
+  const sp = id == null ? null : s.spools.find(x => x.id === id) ?? null;
+  return { i, n: (i + 1) as 1 | 2 | 3 | 4, loaded: !!h?.loaded, colour: sp?.colour || h?.colour || null, colours: sp?.colours && sp.colours.length > 1 ? sp.colours : null,
+    fraction: headFraction(h?.loaded, sp), name: sp?.name || [h?.type, h?.sub_type].filter(Boolean).join(' '),
+    meta: [sp?.material || h?.vendor, sp?.remaining != null ? fmt.grams(sp.remaining) : ''].filter(Boolean).join(' · ') };
+}));
+function onTargetKey(e: KeyboardEvent) {
+  const d = { ArrowDown: 1, ArrowRight: 1, ArrowUp: -1, ArrowLeft: -1 }[e.key];
+  if (!d) return;
+  e.preventDefault();
+  head.value = (head.value + d + 4) % 4;
+  (e.currentTarget as HTMLElement).querySelector<HTMLElement>(`[data-stock-target="${head.value}"]`)?.focus();
+}
 function clear() { q.value = ''; mat.value = null; fit.value = false; }
 
 async function link(r: Spool) {
@@ -69,33 +85,54 @@ async function link(r: Spool) {
 </script>
 
 <template>
-  <OuiPanel v-if="stockVisible" :icon="boxes" tone="lime" flush aria-labelledby="stock-h" data-test="stock-card">
-    <template #title><span id="stock-h">{{ t('stock.title') }}</span></template>
-    <template v-if="usable" #meta>
-      <OuiStatus v-if="isStale" id="stock-meta" state="stale">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</OuiStatus>
-      <span v-else id="stock-meta">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</span>
-    </template>
-    <template #actions>
-      <Button severity="secondary" size="small" :label="t('common.refresh')" :aria-label="t('stock.refresh')" :loading="s.stockLoading" data-focus-key="stock-refresh" @click="loadStock(true)">
-        <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
-    </template>
-
-    <div role="status" aria-live="polite" class="sc-notes">
-      <OuiEmpty v-if="blocker" compact :state="blocker.state" :icon="boxes" tone="lime" :title="blocker.text" />
+  <div class="u1-head">
+    <OuiPageHeader :title="t('stock.title')">
+      <template v-if="usable" #meta>
+        <OuiStatus v-if="isStale" id="stock-meta" state="stale" :title="t('stock.stale', { age: fmt.ago(sk?.ts, s.now / 1000) })" data-test="stock-stale">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</OuiStatus>
+        <span v-else id="stock-meta">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</span>
+      </template>
+      <template #actions>
+        <!-- What sat under the stock list: how Spoolman is reached, who records filament use, why there are two tabs. -->
+        <OuiHint end :label="t('stock.about')"><span class="sv-about" data-test="stock-about">
+          <span v-if="isStale">{{ t('stock.stale', { age: fmt.ago(sk?.ts, s.now / 1000) }) }}</span>
+          <span v-if="viaPrinter" data-test="stock-via">{{ t('stock.viaPrinter') }}</span>
+          <span v-if="usable && s.stock?.usage && s.stock.usage !== 'unknown'">{{ tMaybe(`stock.usage.${s.stock.usage}`, '') }}</span>
+          <details class="u1-details"><summary>{{ t('stock.tabs.summary') }}</summary><span>{{ t('stock.tabs.body') }}</span></details>
+        </span></OuiHint>
+        <Button severity="secondary" :label="t('common.refresh')" :aria-label="t('stock.refresh')" :loading="s.stockLoading" data-focus-key="stock-refresh" @click="loadStock(true)">
+          <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
+      </template>
+    </OuiPageHeader>
+    <div id="u1-banner-stock" />
+    <div role="status" aria-live="polite" class="u1-live sc-notes">
       <OuiBanner :show="otherSpoolman" id="stock-why" role="none" data-test="stock-why" tone="error" dismissible dismiss-key="other-spoolman" :close-label="t('common.close')" :title="t('stock.blocked', { reason: t('stock.why.spoolman') })">{{ t('stock.otherSpoolman') }}</OuiBanner>
       <OuiBanner :show="noSpoolman" id="stock-why" role="none" data-test="stock-why" tone="warn" dismissible dismiss-key="no-spoolman" :close-label="t('common.close')" :title="t('stock.blocked', { reason: t('stock.why.noSpoolman') })">{{ t('stock.noSpoolman') }}</OuiBanner>
     </div>
-    <template v-if="usable">
-      <OuiToolbar class="sc-bar" :summary="t('stock.count', { shown: shown.length, n: rows.length })" :label="t('stock.searchLabel')">
+  </div>
+
+  <!-- No list to show: one row saying why, in the list's place. -->
+  <OuiPanel v-if="blocker" flush data-test="stock-card">
+    <div role="status" aria-live="polite"><OuiEmpty compact :state="blocker.state" :icon="boxes" tone="lime" :title="blocker.text" /></div>
+  </OuiPanel>
+  <div v-else class="oui-split" data-rail data-test="stock-card">
+    <OuiPanel :icon="linkIcon" :title="t('stock.linkTo')" :hint="t('stock.linkHint')" :hint-label="t('stock.linkAbout')">
+      <div class="sv-targets" role="radiogroup" :aria-label="t('stock.linkTo')" data-test="stock-head" @keydown="onTargetKey">
+        <button v-for="x in targets" :key="x.i" type="button" role="radio" class="sv-target" :aria-checked="head === x.i" :tabindex="head === x.i ? 0 : -1" :data-stock-target="x.i" @click="head = x.i">
+          <span class="oui-slot-badge oui-num" :data-tool="x.n">T{{ x.n }}</span>
+          <OuiSpool :color="x.loaded ? x.colour : null" :colors="x.loaded ? x.colours : null" :fraction="x.fraction" :size="32" />
+          <span v-if="x.loaded" class="sv-target-id"><span class="oui-strong oui-truncate">{{ x.name || t('common.unknown') }}</span><span class="oui-meta oui-num oui-truncate">{{ x.meta }}</span></span>
+          <span v-else class="sv-target-id oui-muted">{{ s.status ? t('heads.empty') : t('common.unknown') }}</span>
+        </button>
+      </div>
+    </OuiPanel>
+
+    <OuiPanel flush class="sv-list" :aria-label="t('stock.title')">
+      <OuiToolbar :summary="t('stock.count', { shown: shown.length, n: rows.length })" :label="t('stock.searchLabel')">
         <InputText v-model="q" type="search" size="small" :placeholder="t('stock.search')" :aria-label="t('stock.searchLabel')" />
         <Select v-model="mat" :options="materials" option-label="label" option-value="value" show-clear size="small" :placeholder="t('stock.allMaterials')" :aria-label="t('stock.material')" />
-        <label class="u1-inline" for="stock-fit"><Checkbox v-model="fit" input-id="stock-fit" binary />{{ t('stock.sameMaterial') }}</label>
-        <template #end>
-          <span class="u1-inline"><span id="stock-head-l">{{ t('stock.linkTo') }}</span>
-            <Select v-model="head" :options="heads" option-label="label" option-value="value" size="small" aria-labelledby="stock-head-l" data-test="stock-head" /></span>
-        </template>
+        <label class="u1-inline" for="stock-fit"><Checkbox v-model="fit" input-id="stock-fit" binary />{{ t('stock.sameAs', { n: head + 1 }) }}</label>
       </OuiToolbar>
-      <div class="sc-wrap u1-scroll">
+      <div class="sc-wrap">
         <table class="u1-table sc-table">
           <thead><tr><th scope="col">{{ t('stock.col.spool') }}</th><th scope="col" class="sc-mat">{{ t('stock.col.material') }}</th>
             <th scope="col" class="sc-loc">{{ t('stock.col.location') }}</th><th scope="col" class="sc-left oui-num">{{ t('stock.col.left') }}</th>
@@ -104,15 +141,17 @@ async function link(r: Spool) {
             <tr v-for="r in shown" :key="r.id">
               <td><div class="sc-nm"><OuiSpool :color="r.colour" :colors="r.colours" :fraction="spoolFraction(r.remaining, r.initial)" :size="40" />
                 <div class="sc-id"><p class="oui-truncate" :title="`${r.vendor} ${r.name}`"><span class="oui-strong">{{ r.name }}</span> <span class="oui-muted oui-num">#{{ r.id }}</span></p>
-                  <p class="oui-meta sc-meta"><span v-if="bound[r.id]" class="oui-chip" data-tone="accent" data-solid>{{ t('stock.on', { n: bound[r.id].slice(1) }) }}</span>
-                    <span v-if="r.use_first" class="oui-chip">{{ t('stock.useFirst') }}</span><span class="oui-truncate">{{ r.vendor }}</span></p></div></div></td>
-              <td class="sc-mat"><span class="oui-chip" :data-tone="materialTone(r.material)">{{ r.material }}</span></td>
-              <td class="sc-loc" :class="{ 'oui-muted': !r.location }">{{ r.location || '—' }}</td>
-              <td class="sc-left oui-num"><div class="sc-amount"><span :class="{ 'u1-low': r.low }">{{ r.remaining == null ? '—' : fmt.grams(r.remaining) }}<template v-if="r.low"> · {{ t('stock.low') }}</template></span>
-                <OuiLevel :fraction="spoolFraction(r.remaining, r.initial)" :tone="r.low ? 'low' : 'normal'" /></div></td>
-              <td class="sc-act oui-end"><Button size="small" severity="secondary" text :label="t('stock.linkBtn', { n: head + 1 })" :disabled="!!why || tracker.isBusy(`bind:${head}`)" :aria-describedby="whyId"
-                          :data-focus-key="`stock:${r.id}`" :data-stock="r.id" :aria-label="t('stock.linkLabel', { id: r.id, name: `${r.vendor} ${r.name}`, n: head + 1 })" @click="link(r)">
-                <template #icon><OuiIcon :icon="linkIcon" :size="14" /></template></Button></td>
+                  <p class="oui-meta sc-meta"><span v-if="r.use_first" class="oui-chip">{{ t('stock.useFirst') }}</span><span class="oui-truncate">{{ r.vendor }}</span></p></div></div></td>
+              <td class="sc-mat"><span class="oui-chip">{{ r.material }}</span></td>
+              <td class="sc-loc"><span class="sc-where"><span v-if="bound[r.id]" class="oui-slot-badge oui-num" :data-tool="bound[r.id].slice(1)" :title="t('stock.on', { n: bound[r.id].slice(1) })">{{ bound[r.id] }}</span>
+                <span v-if="r.location" class="oui-truncate" :title="r.location">{{ r.location }}</span><span v-else-if="!bound[r.id]" class="oui-muted">—</span></span></td>
+              <td class="sc-left oui-num"><div class="sc-amount"><span :class="{ 'u1-low': r.low }">{{ r.remaining == null ? t('common.unknown') : fmt.grams(r.remaining) }}<template v-if="r.low"> · {{ t('stock.low') }}</template></span>
+                <OuiLevel :fraction="spoolFraction(r.remaining, r.initial)" :tone="levelTone(spoolFraction(r.remaining, r.initial), r.low)" /></div></td>
+              <td class="sc-act oui-end">
+                <OuiStatus v-if="bound[r.id] === `T${head + 1}`" state="ok" :data-linked="r.id">{{ t('stock.linked') }}</OuiStatus>
+                <Button v-else size="small" severity="secondary" :label="t('stock.linkBtn', { n: head + 1 })" :disabled="!!why || tracker.isBusy(`bind:${head}`)" :aria-describedby="whyId"
+                        :data-focus-key="`stock:${r.id}`" :data-stock="r.id" :aria-label="t('stock.linkLabel', { id: r.id, name: `${r.vendor} ${r.name}`, n: head + 1 })" @click="link(r)">
+                  <template #icon><OuiIcon :icon="linkIcon" :size="14" /></template></Button></td>
             </tr>
             <tr v-if="!shown.length"><td colspan="5" class="oui-muted">
               <template v-if="rows.length">{{ t('stock.noMatch') }} <Button text size="small" severity="secondary" :label="t('stock.clearFilters')" @click="clear" /></template>
@@ -120,31 +159,30 @@ async function link(r: Spool) {
           </tbody>
         </table>
       </div>
-    </template>
-    <template #footer>
-      <div class="sc-foot">
-        <p v-if="isStale" class="u1-note" data-tone="warn" data-test="stock-stale">{{ t('stock.stale', { age: fmt.ago(sk?.ts, s.now / 1000) }) }}</p>
-        <p v-if="viaPrinter" class="oui-meta" data-test="stock-via">{{ t('stock.viaPrinter') }}</p>
-        <p v-if="usable && s.stock?.usage && s.stock.usage !== 'unknown'" class="oui-meta">{{ tMaybe(`stock.usage.${s.stock.usage}`, '') }}</p>
-        <details class="sc-tabs"><summary>{{ t('stock.tabs.summary') }}</summary><p class="oui-meta">{{ t('stock.tabs.body') }}</p></details>
-      </div>
-    </template>
-  </OuiPanel>
+    </OuiPanel>
+  </div>
 </template>
 
 <style>
-.sc-notes:empty { display: none; }
-.sc-notes > .oui-banner { margin: var(--oui-s3) var(--oui-s3) 0; }
-.sc-bar { border-bottom: 1px solid var(--oui-border); }
-.sc-wrap { max-height: 420px; }
+/* The rail: where a spool can go. The chosen place is the selected row, in OrcaSlicer's teal. */
+.sv-targets { display: grid; gap: var(--oui-s1); }
+.sv-target { display: flex; align-items: center; gap: var(--oui-s2); width: 100%; min-height: 48px; padding: 6px var(--oui-s2); border: 0; border-radius: var(--oui-radius); text-align: start;
+  font: inherit; color: var(--oui-text); background: none; cursor: pointer; box-shadow: inset 0 0 0 1px var(--oui-border); }
+.sv-target:hover { background: var(--oui-raised); }
+.sv-target[aria-checked='true'] { background: var(--oui-primary-soft); box-shadow: inset 0 0 0 2px var(--oui-primary-mark); }
+.sv-target-id { display: grid; min-width: 0; }
+.sv-about { display: grid; gap: var(--oui-s2); }
+/* The list fills the window under the bars (app bar, page header, one banner) and scrolls inside, so the toolbar and
+   the rail stay in view. */
+.sv-list { max-height: calc(100vh - 172px); min-height: 320px; }
+@supports (height: 100dvh) { .sv-list { max-height: calc(100dvh - 172px); } }
+.sv-list > .oui-panel-body { display: flex; flex-direction: column; min-height: 0; }
+.sc-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; border-top: 1px solid var(--oui-border); }
 /* Fixed layout: a long spool name is cut, never widens the table. */
-.sc-table { table-layout: fixed; min-width: 560px; }
-.sc-mat { width: 92px; } .sc-loc { width: 120px; } .sc-left { width: 124px; } .sc-act { width: 132px; }
+.sc-table { table-layout: fixed; min-width: 600px; }
+.sc-mat { width: 92px; } .sc-loc { width: 140px; } .sc-left { width: 124px; } .sc-act { width: 140px; }
 .sc-nm { display: flex; align-items: center; gap: var(--oui-s3); min-width: 0; }
 .sc-id { display: grid; gap: 1px; min-width: 0; }
-.sc-meta { display: flex; align-items: center; gap: var(--oui-s1); min-width: 0; }
+.sc-meta, .sc-where { display: flex; align-items: center; gap: var(--oui-s1); min-width: 0; }
 .sc-amount { display: grid; gap: 4px; }
-.sc-foot { display: grid; gap: var(--oui-s1); min-width: 0; }
-.sc-tabs summary { cursor: pointer; font-size: var(--oui-text-sm); font-weight: 600; color: var(--oui-primary); }
-.sc-tabs p { margin-top: var(--oui-s1); max-width: 96ch; }
 </style>

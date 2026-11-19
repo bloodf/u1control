@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import Button from 'primevue/button';
-import { OuiEmpty, OuiIcon, OuiPanel } from '../../shared/src/components';
-import { check, toolhead } from '../../shared/src/icons';
+import { OuiEmpty, OuiPanel } from '../../shared/src/components';
+import { toolhead } from '../../shared/src/icons';
 import HeadCard from './HeadCard.vue';
-import * as bridge from '../core/bridge';
-import { s, controlsOff } from '../app/store';
+import { s } from '../app/store';
 import { t } from '../core/i18n';
 
 // One visible spool source per screen (X03): when Spooler's stock uses the same Spoolman, say so.
@@ -19,18 +17,22 @@ const source = computed(() => {
 });
 </script>
 <template>
-  <OuiPanel :icon="toolhead" tone="magenta" :flush="!s.status" aria-labelledby="heads-h">
+  <OuiPanel :icon="toolhead" tone="magenta" aria-labelledby="heads-h">
     <template #title><span id="heads-h">{{ t('heads.title') }}</span></template>
     <template #meta><span data-test="spool-source" :title="source">{{ source }}</span></template>
-    <template #actions>
-      <Button size="small" :label="t('heads.sync')" :disabled="!!controlsOff" data-focus-key="sync" :aria-describedby="controlsOff ? 'heads-why' : 'sync-help'" @click="bridge.post({ type: 'sync_project' })">
-        <template #icon><OuiIcon :icon="check" :size="14" /></template></Button>
-    </template>
-    <!-- Why Edit, Load and Unload are off is said once for the page (#heads-why, under the app bar), not in each card. -->
+    <!-- Why Edit, Load and Unload are off is said once for the page (#heads-why, under the page header), not in each card. -->
     <div v-if="s.status" class="oui-cards">
       <HeadCard v-for="(h, i) in s.status.heads" :key="i" :index="i" />
     </div>
-    <OuiEmpty v-else compact tone="magenta" :icon="toolhead" :title="t('heads.noStatus')" />
-    <template #footer><p id="sync-help" class="oui-meta">{{ t('heads.syncHelp') }}</p></template>
+    <OuiEmpty v-else-if="s.phase === 'unreachable'" compact state="offline" :title="t('heads.noStatus')" />
+    <div v-else class="oui-cards" aria-busy="true" :aria-label="t('heads.noStatus')">
+      <div v-for="n in 4" :key="n" class="u1-skelcard"><span class="oui-skeleton" /><span class="oui-skeleton" /><span class="oui-skeleton" /></div>
+    </div>
   </OuiPanel>
 </template>
+<style>
+.u1-skelcard { display: grid; gap: var(--oui-s3); align-content: start; min-height: 180px; padding: var(--oui-s3); border-radius: var(--oui-radius-lg); background: var(--oui-raised); }
+.u1-skelcard > .oui-skeleton:nth-child(1) { width: 30%; }
+.u1-skelcard > .oui-skeleton:nth-child(2) { width: 80%; }
+.u1-skelcard > .oui-skeleton:nth-child(3) { width: 55%; }
+</style>

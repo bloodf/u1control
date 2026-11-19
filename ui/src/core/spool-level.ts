@@ -8,3 +8,9 @@ export function spoolFraction(remaining: number | null | undefined, initial: num
 export function headFraction(loaded: boolean | undefined, spool: { remaining?: number | null; initial?: number | null } | null | undefined): number | null {
   return loaded && spool ? spoolFraction(spool.remaining, spool.initial) : null;
 }
+
+/** A level bar's colour: red when almost empty (under 5 % of the spool), amber when Spoolman marks it low, else green. */
+export const CRITICAL_FRACTION = 0.05;
+export function levelTone(fraction: number | null, low?: boolean): 'normal' | 'low' | 'critical' {
+  return fraction != null && fraction < CRITICAL_FRACTION ? 'critical' : low ? 'low' : 'normal';
+}

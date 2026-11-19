@@ -92,10 +92,10 @@ const facts = computed(() => Object.entries(status.value).map(([label, v]) => ({
 </script>
 <template>
   <!-- Built like a settings section (OuiFormSection), with its heading id kept for the section's label. -->
-  <OuiPanel id="firmware" class="oui-formsection" :icon="wrench" tone="violet" flush tabindex="-1" aria-labelledby="fw-h">
+  <OuiPanel id="firmware" class="oui-formsection" :icon="wrench" flush tabindex="-1" aria-labelledby="fw-h">
     <template #title><span id="fw-h">{{ t('ext.title') }}</span></template>
     <OuiEmpty v-if="!targetKnown || !s.info" compact :state="s.phase === 'connecting' ? 'loading' : 'offline'" :title="s.phase === 'connecting' ? t('ext.detecting') : t('ext.noTarget')" />
-    <OuiEmpty v-else-if="s.info.firmware.kind !== 'extended'" compact tone="violet" :icon="wrench" :title="t('ext.stock')">
+    <OuiEmpty v-else-if="s.info.firmware.kind !== 'extended'" compact :icon="wrench" :title="t('ext.stock')">
       <template #actions><a class="u1-inline" href="https://github.com/paxx12-snapmaker-u1/SnapmakerU1-Extended-Firmware"><OuiIcon :icon="external" :size="14" />{{ t('ext.link') }}</a></template>
     </OuiEmpty>
     <OuiEmpty v-else-if="state === 'loading'" compact state="loading" :title="t('ext.detecting')" role="status" />

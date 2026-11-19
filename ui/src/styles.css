@@ -1,57 +1,44 @@
-/* U1 Control's own layout on top of the shared foundation (ui/shared): the page grid, rows inside a panel, the plain
-   tables and the printer drawing. Colours are the foundation's --oui-* roles only; nothing here defines a colour. */
+/* U1 Control's own layout on top of the shared foundation (ui/shared): where the page's banners sit, the plain tables and
+   a few lines the pages share. Colours are the foundation's --oui-* roles only; nothing here defines a colour. */
 
 /* Narrow bar: the tabs wrap under Emergency stop. Keep a clear gap so a tab press never lands on it. */
 @container oui-appbar (max-width: 760px) { .oui-appbar-actions { padding-bottom: var(--oui-s3); } }
-/* Phone-narrow bar with a long Emergency stop label (es, de): the state chip and printer name take their own line
-   instead of being cut, and the tabs drop their icons so the longest label (German "Einstellungen") still fits. */
+/* Phone-narrow bar with a long Emergency stop label (es, de): the state chip takes its own line instead of being cut,
+   and the tabs drop their icons so the five labels still fit. */
 @container oui-appbar (max-width: 480px) {
   .oui-appbar .oui-appbar-status { order: 4; flex: 1 0 100%; padding-bottom: var(--oui-s2); }
   .oui-appbar .oui-appbar-actions { padding-bottom: 0; }
-  .oui-appbar-tab { padding: 0 10px; }
   .oui-appbar-tab > .oui-icon { display: none; }
 }
 
 /* A long panel title (Spanish) next to its icon wraps instead of widening a narrow page. */
 .oui-panel-head > .oui-panel-title { flex-shrink: 1; min-width: 0; }
-
 /* Longer labels (German, Spanish) on a narrow tab: a panel's buttons wrap under each other instead of pushing the page wider. */
 .oui-panel-actions { flex-wrap: wrap; justify-content: flex-end; min-width: 0; }
 
-/* Page-level messages, under the app bar on every tab. The live regions stay in the DOM while empty (what is added
-   later is then announced); only filled ones take space. */
-.u1-top { padding: 0 var(--oui-s4); }
-/* Each banner keeps its own 12 px above it: the live regions hold Vue's list anchors, so they are never :empty. */
-.u1-top .oui-banner { margin-top: var(--oui-s3); }
+/* The top of every page: its header, then the page-level banners (PageMessages is moved under the open tab's header)
+   and the page's own. One grid item of .oui-page, so an empty banner place takes no room. The live regions stay in
+   the DOM while empty (what is added later is then announced); each banner brings its own 12 px above it. */
+.u1-head { min-width: 0; }
+.u1-head .oui-banner { margin-top: var(--oui-s3); }
+.u1-head-settings { padding: 0 var(--oui-s4); }
 .u1-live { display: grid; gap: var(--oui-s2); min-width: 0; }
-.u1-top .u1-live { gap: 0; }
+.u1-head .u1-live { gap: 0; }
 
-/* Dashboard: the machine on the left, what is loaded and in stock on the right; one column when narrow. */
-.u1-grid { display: grid; gap: var(--oui-s3); grid-template-columns: minmax(0, 1fr); align-items: start; }
-@container oui-page (min-width: 1100px) { .u1-grid { grid-template-columns: minmax(360px, 4fr) minmax(0, 8fr); } }
-
-/* Rows of one panel, separated by hairlines. */
-.u1-rows { display: grid; margin-block: calc(-1 * var(--oui-s2)); }
-.u1-rows > * + * { border-top: 1px solid var(--oui-border); }
-.u1-rows > * { padding-block: var(--oui-s1); }
-.u1-line { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--oui-s1) var(--oui-s2); min-height: 44px; }
-.u1-line-label { display: flex; align-items: center; gap: var(--oui-s2); margin-inline-end: auto; font-weight: 600; }
 .u1-inline { display: inline-flex; align-items: center; gap: var(--oui-s2); font-size: var(--oui-text-sm); color: var(--oui-muted); white-space: nowrap; }
 .u1-note { font-size: var(--oui-text-sm); color: var(--oui-muted); }
 .u1-note[data-tone] { color: var(--oui-tone); }
 .u1-pad { padding: var(--oui-s3) var(--oui-s4); }
 .u1-low { color: var(--oui-warning); font-weight: 600; }
+.u1-skel > .oui-skeleton:nth-child(1) { width: 60%; }
+.u1-skel > .oui-skeleton:nth-child(2) { width: 85%; }
+.u1-skel > .oui-skeleton:nth-child(3) { width: 45%; }
+/* More to read, on request: the question is a link in OrcaSlicer's teal. */
+.u1-details summary { cursor: pointer; font-size: var(--oui-text-sm); font-weight: 600; color: var(--oui-primary-text); }
+.u1-details > :not(summary) { display: block; margin-top: var(--oui-s1); max-width: 96ch; }
 
-/* Toolhead identity: the same fixed colours as the toolhead cards' badges. Always carries its label. */
-.u1-tool { display: inline-grid; place-items: center; flex: none; min-width: 26px; height: 20px; padding: 0 6px; border-radius: var(--oui-radius-sm);
-  font-size: var(--oui-text-sm); font-weight: 700; color: var(--oui-on-tool); box-shadow: 0 0 0 1px color-mix(in srgb, var(--oui-text) 30%, transparent); }
-.u1-tool[data-tool='1'] { background: var(--oui-tool1); }
-.u1-tool[data-tool='2'] { background: var(--oui-tool2); }
-.u1-tool[data-tool='3'] { background: var(--oui-tool3); }
-.u1-tool[data-tool='4'] { background: var(--oui-tool4); }
-
-/* Lists of files, spools and prints. Plain tables (rows are dragged, keep keyboard focus across refreshes and can be
-   500 long) drawn with the same measures as the foundation's small data table. */
+/* Lists of spools, prints and time-lapses. Plain tables (rows keep keyboard focus across refreshes and can be 500 long)
+   drawn with the same measures as the foundation's small data table. */
 .u1-table { width: 100%; border-collapse: collapse; }
 .u1-table th { position: sticky; top: 0; z-index: 1; padding: 6px 12px; text-align: start; white-space: nowrap; font-size: var(--oui-text-xs); font-weight: 600;
   letter-spacing: .05em; text-transform: uppercase; color: var(--oui-muted); background: var(--oui-raised); box-shadow: inset 0 -1px 0 var(--oui-border); }
@@ -59,5 +46,3 @@
 .u1-table tbody tr:last-child > td { border-bottom-width: 0; }
 .u1-table tbody tr:hover > td { background: var(--oui-raised); }
 .u1-table :is(th, td).oui-num, .u1-table :is(th, td).oui-end { text-align: end; }
-.u1-scroll { overflow: auto; }
-

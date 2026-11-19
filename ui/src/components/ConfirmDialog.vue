@@ -7,9 +7,8 @@ import { t } from '../core/i18n';
 
 // Every protected decision of the page: a question with both answers named, a question with a field (rename, a
 // firmware input) or a list to pick from (move). Focus starts on the way back, or in the field, never on the action.
-// foundation-gap: OuiConfirm (4.0.1) has two buttons and no field or choice list (MIGRATION-4.0 known limit 8), so
-// this stays a PrimeVue Dialog with OuiConfirm's hooks (data-dlg yes/no). 4.0.2 should add an input slot and a
-// choices slot to OuiConfirm.
+// foundation-gap: OuiConfirm (5.0.0) has two buttons and no field or choice list, so this stays a PrimeVue Dialog with
+// OuiConfirm's hooks (data-dlg yes/no). The file browser's own delete question is OuiConfirm's.
 function onVisible(v: boolean) { if (!v) close(dialog.cancelValue); }
 function confirm() { close(dialog.input ? dialog.inputValue : true); }
 </script>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick } from 'vue';
+import { computed } from 'vue';
 import Button from 'primevue/button';
 import { OuiEmpty, OuiIcon, OuiPanel } from '../../shared/src/components';
 import { hand, x } from '../../shared/src/icons';
@@ -9,11 +9,7 @@ import { t } from '../core/i18n';
 /** The remote screen is the Extended Firmware's: on other firmware the card stays, off, and says why. */
 const off = computed(() => (s.info?.firmware.kind === 'extended' ? '' : s.info?.firmware.kind === 'stock' ? t('scr.needsExt') : t('reason.waiting')));
 
-async function toggle() {
-  s.scrOn = !s.scrOn; if (!s.scrOn) { s.screen = ''; s.screenError = ''; } lease();
-  await nextTick();
-  if (document.activeElement === document.body) document.querySelector<HTMLElement>('[data-focus-key="screen"]')?.focus();
-}
+function toggle() { s.scrOn = !s.scrOn; if (!s.scrOn) { s.screen = ''; s.screenError = ''; } lease(); }
 function tap(e: MouseEvent) {
   const img = e.currentTarget as HTMLImageElement;
   const r = img.getBoundingClientRect(), w = img.naturalWidth, h = img.naturalHeight;
@@ -24,24 +20,22 @@ function tap(e: MouseEvent) {
 }
 </script>
 <template>
-  <OuiPanel :icon="hand" tone="violet" flush aria-labelledby="scr-h">
+  <OuiPanel :icon="hand" flush aria-labelledby="scr-h" :hint="t('scr.hint')" :hint-label="t('scr.about')">
     <template #title><span id="scr-h">{{ t('scr.title') }}</span></template>
-    <template v-if="s.scrOn && !off" #actions>
-      <Button severity="secondary" size="small" :label="t('scr.hide')" data-focus-key="screen" @click="toggle"><template #icon><OuiIcon :icon="x" :size="14" /></template></Button>
+    <template #actions>
+      <Button severity="secondary" size="small" :label="s.scrOn && !off ? t('scr.hide') : t('scr.show')" :disabled="!!off" data-focus-key="screen" data-test="screen-show" @click="toggle">
+        <template #icon><OuiIcon :icon="s.scrOn && !off ? x : hand" :size="14" /></template></Button>
     </template>
-    <OuiEmpty v-if="!s.scrOn || off" compact tone="violet" :icon="hand" :title="t('scr.off')" :text="off || t('scr.hint')" data-test="screen-card">
-      <template #actions><Button severity="secondary" :label="t('scr.show')" :disabled="!!off" data-focus-key="screen" data-test="screen-show" @click="toggle"><template #icon><OuiIcon :icon="hand" :size="14" /></template></Button></template>
-    </OuiEmpty>
-    <template v-else>
-      <div class="u1-view u1-view-screen">
-        <img v-if="s.screen" :src="s.screen" :alt="t('scr.alt')" @click="tap">
-        <div v-else class="oui-on-band u1-view-wait" role="status"><OuiEmpty :state="s.screenError ? 'error' : 'loading'" :title="s.screenError || t('scr.connecting')" /></div>
-      </div>
-      <p class="oui-meta u1-pad">{{ t('scr.hint') }}</p>
-    </template>
+    <OuiEmpty v-if="!s.scrOn || off" compact :icon="hand" :title="t('scr.off')" :text="off || undefined" data-test="screen-card" />
+    <div v-else class="u1-view-screen" :role="s.screen ? undefined : 'status'">
+      <img v-if="s.screen" :src="s.screen" :alt="t('scr.alt')" @click="tap">
+      <OuiEmpty v-else :state="s.screenError ? 'error' : 'loading'" :title="s.screenError || t('scr.connecting')" />
+    </div>
   </OuiPanel>
 </template>
 <style>
-.u1-view-screen { aspect-ratio: 1024 / 600; }
-.u1-view-screen img { cursor: pointer; }
+/* The touchscreen's own 1024 x 600, on the neutral track every picture sits on. The picture is fitted, never cropped: a
+   click is mapped back to the screen's pixels. */
+.u1-view-screen { display: grid; place-items: center; overflow: hidden; aspect-ratio: 1024 / 600; background: var(--oui-inset); border-radius: 0 0 var(--oui-radius-lg) var(--oui-radius-lg); }
+.u1-view-screen img { width: 100%; height: 100%; object-fit: contain; cursor: pointer; }
 </style>

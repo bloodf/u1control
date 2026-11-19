@@ -49,10 +49,9 @@ async function ack(e: UsageEntry) {
           <template #icon><OuiIcon :icon="eye" :size="14" /></template></Button>
       </template>
     </OuiBanner>
-    <OuiPanel v-if="open && list.length" id="usage-list" :icon="warning" tone="warn" flush aria-labelledby="usage-h">
+    <OuiPanel v-if="open && list.length" id="usage-list" :icon="warning" tone="warn" flush aria-labelledby="usage-h" :hint="t('usage.intro')" :hint-label="t('usage.title')">
       <template #title><span id="usage-h">{{ t('usage.title') }}</span></template>
       <template #meta><span class="oui-chip" data-tone="warn">{{ tn('usage.count', list.length) }}</span></template>
-      <p class="oui-meta u1-pad">{{ t('usage.intro') }}</p>
       <div class="oui-table-wrap">
         <table class="u1-table">
           <thead><tr><th scope="col">{{ t('usage.col.file') }}</th><th scope="col">{{ t('usage.col.head') }}</th><th scope="col" class="oui-num">{{ t('usage.col.grams') }}</th>
@@ -61,7 +60,7 @@ async function ack(e: UsageEntry) {
           <tbody>
             <tr v-for="e in list" :key="e.id">
               <td class="uc-file"><span class="oui-strong">{{ fileName(e) }}</span><div class="oui-meta">{{ e.printer_name || e.printer }}</div></td>
-              <td><span class="u1-tool" :data-tool="(e.head ?? 0) + 1">T{{ (e.head ?? 0) + 1 }}</span></td>
+              <td><span class="oui-slot-badge oui-num" :data-tool="(e.head ?? 0) + 1">T{{ (e.head ?? 0) + 1 }}</span></td>
               <td class="oui-num">{{ fmt.number(e.grams ?? 0, 1) }} g</td>
               <td :class="{ 'oui-muted': e.spool == null }">{{ e.spool != null ? '#' + e.spool : t('usage.noSpool') }}</td>
               <td>{{ when(e) }}</td>
@@ -76,7 +75,7 @@ async function ack(e: UsageEntry) {
     </OuiPanel>
     <div v-if="(open || !list.length) && (u?.pending.length || u?.acknowledged.length)" class="oui-stack uc-more">
       <p v-if="u?.pending.length" class="oui-meta">{{ tn('usage.tracking', u.pending.length) }}</p>
-      <details v-if="u?.acknowledged.length" class="sc-tabs"><summary>{{ t('usage.recent', { total: u.acknowledged_total }) }}</summary>
+      <details v-if="u?.acknowledged.length" class="u1-details"><summary>{{ t('usage.recent', { total: u.acknowledged_total }) }}</summary>
         <ul class="oui-meta uc-recent"><li v-for="e in u.acknowledged" :key="e.id">{{ fileName(e) }} · T{{ (e.head ?? 0) + 1 }} · {{ fmt.number(e.grams ?? 0, 1) }} g ·
           {{ t('usage.checkedAt', { when: e.acknowledged_at ? fmt.dateTime(e.acknowledged_at) : t('usage.unknownTime') }) }}</li></ul></details>
     </div>

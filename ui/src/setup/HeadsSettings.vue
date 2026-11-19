@@ -68,7 +68,7 @@ const spoolOptions = () => [{ id: 0, label: t('setup.noSpool') }, ...spools.valu
     <p class="oui-meta">{{ t('setup.headsHint') }}</p>
     <p v-if="status[-1]?.error" class="u1-note" data-tone="error" role="alert">{{ status[-1].text }}</p>
     <form v-for="(h, i) in heads" :key="h.index" class="hs-row" :data-head="i" @submit.prevent="save(i)">
-      <span class="hs-name"><span class="u1-tool" :data-tool="i + 1">T{{ i + 1 }}</span></span>
+      <span class="hs-name"><span class="oui-slot-badge oui-num" :data-tool="i + 1">T{{ i + 1 }}</span></span>
       <label class="oui-sr" :for="`hs-v-${i}`">{{ t('edit.vendor') }}</label>
       <InputText :id="`hs-v-${i}`" v-model="forms[i].vendor" size="small" class="hs-vendor" :placeholder="t('edit.vendor')" :disabled="disabled" />
       <Select v-model="forms[i].type" :options="TYPES" size="small" :aria-label="t('edit.type') + ' T' + (i + 1)" :disabled="disabled" />

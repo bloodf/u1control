@@ -39,9 +39,15 @@ __t.handler({type: 'config', mode: 'expert', stored: {}, version: '0.5.0', spool
 await settle();
 // Toasts (bottom-left): what a command answered, one that leaves and an error that stays.
 if (SCN === 'dash') { __t.handler({type: 'notice', text: 'Project filaments updated: T1 PLA, T2 PETG'}); __t.handler({type: 'reply', id: 424242, error: 'Spoolman timed out'}); }
-if (SCN === 'settings' || SCN === 'files' || SCN === 'console') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
+if (SCN === 'settings' || SCN === 'stock' || SCN === 'files' || SCN === 'console') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
 if (SCN === 'settings') { document.querySelector('.oui-settings-link[data-section="connection"]').click(); await sleep(100); }
-if (SCN === 'files') { ans('files', {path: 'gcodes', dirs: [{name: 'archive'}], files: [{name: 'desk_organiser_plate_1.gcode', size: 4200000, modified: Date.now()/1000 - 3600, time: 7440}, {name: 'benchy.gcode', size: 900000, modified: Date.now()/1000 - 86400, time: 2700}], disk: {free: 5.2e9}}); }
+if (SCN === 'files') {
+  ans('folders', ['gcodes', 'gcodes/archive', 'gcodes/archive/2025', 'gcodes/calibration']);
+  ans('files', {path: 'gcodes', dirs: [{name: 'archive'}, {name: 'calibration'}], files: [{name: 'desk_organiser_plate_1.gcode', size: 4200000, modified: Date.now()/1000 - 3600, time: 7440, weight: 84.4},
+    {name: 'benchy.gcode', size: 900000, modified: Date.now()/1000 - 86400, time: 2700, weight: 12.1}, {name: 'cable_clip_x8.gcode', size: 310000, modified: Date.now()/1000 - 200000, time: 1500, weight: 6}], disk: {free: 5.2e9}});
+  ans('timelapses', {supported: true, videos: [{path: 'timelapse/benchy_20261116130921.mp4', file: 'benchy_20261116130921.mp4', name: 'benchy', size: 375588, modified: Date.now()/1000 - 90000, cover: null}]});
+  await settle(); document.querySelector('[data-file="gcodes/benchy.gcode"]')?.click();
+}
 if (SCN === 'console') { const i = document.querySelector('#console-cmd'); i.value = 'M105'; i.dispatchEvent(new Event('input')); }
 if (SCN === 'dialog') { document.querySelector('[data-test="cancel"]').focus(); document.querySelector('[data-test="cancel"]').click(); await until(() => document.querySelector('.p-dialog')); }
 await sleep(400);
@@ -50,7 +56,7 @@ const SCENES = [
   ['dash', 'light', 'en', 1280, 1], ['dash', 'dark', 'pt_BR', 1280, 1], ['dash', 'light', 'pt_BR', 720, 1], ['dash', 'dark', 'en', 640, 2], ['dash', 'light', 'en', 380, 1],
   ['notarget', 'light', 'pt_BR', 1280, 1], ['notarget', 'dark', 'en', 720, 1], ['dialog', 'dark', 'pt_BR', 720, 1], ['dialog', 'light', 'en', 640, 2],
   ['settings', 'light', 'en', 1280, 1], ['settings', 'dark', 'pt_BR', 720, 1], ['files', 'light', 'pt_BR', 1280, 1], ['files', 'dark', 'en', 640, 2],
-  ['console', 'dark', 'en', 1280, 1], ['dash', 'light', 'en', 380, 1], ['dash', 'dark', 'en', 380, 1],
+  ['stock', 'light', 'en', 1280, 1], ['stock', 'dark', 'pt_BR', 720, 1], ['console', 'dark', 'en', 1280, 1], ['dash', 'light', 'en', 380, 1], ['dash', 'dark', 'en', 380, 1],
   ['idle', 'light', 'en', 1280, 1], ['idle', 'dark', 'en', 1280, 1], ['idle', 'light', 'pt_BR', 380, 1], ['idle', 'dark', 'en', 380, 1], ['setup', 'light', 'pt_BR', 720, 1], ['setup', 'dark', 'en', 1280, 1], ['setup', 'light', 'en', 360, 2],
   ['setup', 'light', 'en', 1280, 1], ['setup', 'dark', 'en', 380, 1], ['setup', 'light', 'en', 380, 1],
 ];
@@ -58,7 +64,7 @@ const SCENES = [
 // SCENES=<json>: these scenes only, [scene, theme, lang, width, scale].
 if (process.env.SCENES) SCENES.splice(0, SCENES.length, ...JSON.parse(process.env.SCENES));
 if (process.env.LANGS) SCENES.splice(0, SCENES.length, ...process.env.LANGS.split(',').flatMap(lang =>
-  ['dash', 'notarget', 'dialog', 'settings', 'files', 'console', 'setup'].flatMap(scn =>
+  ['dash', 'notarget', 'dialog', 'settings', 'stock', 'files', 'console', 'setup'].flatMap(scn =>
     [[scn, 'light', lang, 1280, 1], [scn, 'dark', lang, 400, 1], [scn, 'dark', lang, 1280, 1], [scn, 'light', lang, 400, 1]])));
 // ONLY=dash,idle: just those scenes.
 if (process.env.ONLY) { const only = process.env.ONLY.split(','); SCENES.splice(0, SCENES.length, ...SCENES.filter(x => only.includes(x[0]))); }

@@ -4,16 +4,17 @@ import Button from 'primevue/button';
 import InputNumber from 'primevue/inputnumber';
 import Select from 'primevue/select';
 import ToggleSwitch from 'primevue/toggleswitch';
-import { OuiIcon, OuiPanel } from '../../shared/src/components';
-import { bed, light, speed as speedIcon, wind } from '../../shared/src/icons';
+import { OuiControlRow, OuiEmpty, OuiPanel } from '../../shared/src/components';
+import { light, speed as speedIcon, thermometer, wind } from '../../shared/src/icons';
 import HeaterControl from './HeaterControl.vue';
 import { s, run, tracker, controlsOff } from '../app/store';
 import { locale, t } from '../core/i18n';
 import { acceptDot } from '../core/decimal-input';
 import { parseSpeed } from '../core/logic';
 
-// What belongs to the machine as a whole: the bed heater, print speed, the top cover and the chamber light.
-// The four nozzle heaters are in their toolhead cards.
+// The Dashboard's one Controls module, a group per task: Temperature (the bed heater; the four nozzle heaters are in
+// their toolhead cards) and Machine (print speed, the top cover and its fans, the chamber light). Each row says what it
+// reads now; a refused value or a fan that is held off says so in that place.
 const dot = computed(() => acceptDot(locale.value));
 const st = computed(() => s.status);
 const why = computed(() => (controlsOff.value ? 'heads-why' : undefined));
@@ -48,44 +49,52 @@ async function setLight(on: boolean) {
 </script>
 
 <template>
-  <OuiPanel v-if="st" :icon="bed" tone="orange" aria-labelledby="bed-h">
-    <template #title><span id="bed-h">{{ t('bed.title') }}</span></template>
-    <div class="u1-rows">
-      <HeaterControl id="bed" />
-      <div class="u1-line">
-        <label for="speed" class="u1-line-label"><OuiIcon :icon="speedIcon" :size="14" tile tone="cobalt" />{{ t('speed.label') }}</label>
-        <span id="speed-why" class="u1-note" data-tone="danger" role="status">{{ speedDraft != null && speedValue == null ? t('speed.invalid') : '' }}</span>
-        <InputNumber v-bind="dot" :locale="locale" :max-fraction-digits="1" :model-value="speedDraft" input-id="speed" :min="10" :max="300" :step="5" suffix=" %" :placeholder="`${speedNow} %`" :use-grouping="false" size="small"
-                     :input-style="{ width: '72px' }" :invalid="speedDraft != null && speedValue == null" :disabled="!!controlsOff"
-                     :pt="{ pcInputText: { root: { 'aria-describedby': why ?? 'speed-why' } } }"
-                     @input="e => (speedDraft = asNumber(e.value))" @update:model-value="v => (speedDraft = v)" @keydown.enter="setSpeed" />
-        <Button severity="secondary" size="small" :label="t('temps.set')" :aria-label="t('speed.set')" :disabled="!!controlsOff || speedValue == null" :aria-describedby="why"
-                :loading="tracker.isBusy('speed')" data-focus-key="speed" @click="setSpeed" />
+  <OuiPanel :icon="thermometer" tone="orange" aria-labelledby="bed-h">
+    <template #title><span id="bed-h">{{ t('controls.title') }}</span></template>
+    <div v-if="st" class="oui-controls">
+      <div class="oui-controls-group">
+        <p class="oui-label">{{ t('controls.temperature') }}</p>
+        <HeaterControl id="bed" />
       </div>
-      <div class="u1-line">
-        <span id="pur-l" class="u1-line-label"><OuiIcon :icon="wind" :size="14" tile tone="sky" />{{ t('purifier.label') }}</span>
-        <span v-if="st.purifier?.fitted === false" class="u1-note">{{ t('purifier.notFitted') }}</span>
-        <Select v-model="purMode" :options="purOptions" option-label="label" option-value="value" :placeholder="t('purifier.choose')" size="small"
-                aria-labelledby="pur-l" :disabled="!!controlsOff" :pt="{ label: { 'aria-describedby': why } }" />
-        <Button severity="secondary" size="small" :label="t('common.apply')" :disabled="!!controlsOff || !purMode" :aria-describedby="why" :loading="tracker.isBusy('purifier')"
-                data-focus-key="purifier" @click="setPurifier" />
-      </div>
-      <template v-if="fansShown">
-        <div v-for="f in fans" :key="f.id" class="u1-line">
-          <label :for="`fan-${f.id}`" class="u1-line-label"><OuiIcon :icon="wind" :size="14" tile tone="sky" />{{ t(f.label) }}</label>
-          <span :id="`fan-${f.id}-why`" class="u1-note" role="status">{{ f.id === 'exhaust' && exhaustBlocked ? t('fan.exhaustBlocked') : '' }}</span>
-          <InputNumber :model-value="fanDraft[f.id]" :input-id="`fan-${f.id}`" :min="0" :max="100" :step="5" suffix=" %" placeholder="%" :use-grouping="false" size="small"
-                       :input-style="{ width: '72px' }" :disabled="fanOff(f.id)" :pt="{ pcInputText: { root: { 'aria-describedby': why ?? `fan-${f.id}-why` } } }"
-                       @update:model-value="v => (fanDraft = { ...fanDraft, [f.id]: v })" @keydown.enter="setFan(f.id)" />
-          <Button severity="secondary" size="small" :label="t('temps.set')" :aria-label="t('fan.set', { fan: t(f.label) })" :disabled="fanOff(f.id) || fanDraft[f.id] == null"
-                  :aria-describedby="why ?? `fan-${f.id}-why`" :loading="tracker.isBusy(`fan:${f.id}`)" :data-focus-key="`fan-${f.id}`" @click="setFan(f.id)" />
-        </div>
-      </template>
-      <div class="u1-line">
-        <label for="light" class="u1-line-label"><OuiIcon :icon="light" :size="14" tile tone="lime" />{{ t('light.label') }}</label>
-        <span v-if="st.light == null" class="u1-note">{{ t('common.unknown') }}</span>
-        <ToggleSwitch input-id="light" :model-value="!!st.light" :disabled="!!controlsOff || tracker.isBusy('light')" :aria-describedby="why" @update:model-value="setLight" />
+      <div class="oui-controls-group">
+        <p class="oui-label">{{ t('controls.machine') }}</p>
+        <OuiControlRow :label="t('speed.label')" :icon="speedIcon" tone="cobalt" for="speed">
+          <template #value><span id="speed-why" role="status" class="u1-row-note" :class="{ 'u1-refused': speedDraft != null && speedValue == null }">{{ speedDraft != null && speedValue == null ? t('speed.invalid') : `${speedNow} %` }}</span></template>
+          <InputNumber v-bind="dot" :locale="locale" :max-fraction-digits="1" :model-value="speedDraft" input-id="speed" :min="10" :max="300" :step="5" suffix=" %" placeholder="10–300" :use-grouping="false" size="small"
+                       :input-style="{ width: '72px' }" :invalid="speedDraft != null && speedValue == null" :disabled="!!controlsOff"
+                       :pt="{ pcInputText: { root: { 'aria-describedby': why ?? 'speed-why' } } }"
+                       @input="e => (speedDraft = asNumber(e.value))" @update:model-value="v => (speedDraft = v)" @keydown.enter="setSpeed" />
+          <Button severity="secondary" size="small" :label="t('temps.set')" :aria-label="t('speed.set')" :disabled="!!controlsOff || speedValue == null" :aria-describedby="why"
+                  :loading="tracker.isBusy('speed')" data-focus-key="speed" @click="setSpeed" />
+        </OuiControlRow>
+        <OuiControlRow :label="t('purifier.label')" :icon="wind" tone="sky" :value="st.purifier?.fitted === false ? t('purifier.notFitted') : undefined">
+          <Select v-model="purMode" :options="purOptions" option-label="label" option-value="value" :placeholder="t('purifier.choose')" size="small"
+                  :aria-label="t('purifier.label')" :disabled="!!controlsOff" :pt="{ label: { 'aria-describedby': why } }" />
+          <Button severity="secondary" size="small" :label="t('common.apply')" :disabled="!!controlsOff || !purMode" :aria-describedby="why" :loading="tracker.isBusy('purifier')"
+                  data-focus-key="purifier" @click="setPurifier" />
+        </OuiControlRow>
+        <template v-if="fansShown">
+          <OuiControlRow v-for="f in fans" :key="f.id" :label="t(f.label)" :icon="wind" tone="sky" :for="`fan-${f.id}`">
+            <template #value><span :id="`fan-${f.id}-why`" role="status" class="u1-row-note">{{ f.id === 'exhaust' && exhaustBlocked ? t('fan.exhaustBlocked') : '' }}</span></template>
+            <InputNumber :model-value="fanDraft[f.id]" :input-id="`fan-${f.id}`" :min="0" :max="100" :step="5" suffix=" %" placeholder="%" :use-grouping="false" size="small"
+                         :input-style="{ width: '72px' }" :disabled="fanOff(f.id)" :pt="{ pcInputText: { root: { 'aria-describedby': why ?? `fan-${f.id}-why` } } }"
+                         @update:model-value="v => (fanDraft = { ...fanDraft, [f.id]: v })" @keydown.enter="setFan(f.id)" />
+            <Button severity="secondary" size="small" :label="t('temps.set')" :aria-label="t('fan.set', { fan: t(f.label) })" :disabled="fanOff(f.id) || fanDraft[f.id] == null"
+                    :aria-describedby="why ?? `fan-${f.id}-why`" :loading="tracker.isBusy(`fan:${f.id}`)" :data-focus-key="`fan-${f.id}`" @click="setFan(f.id)" />
+          </OuiControlRow>
+        </template>
+        <OuiControlRow :label="t('light.label')" :icon="light" tone="lime" for="light" :value="st.light == null ? t('common.unknown') : t(st.light ? 'mode.on' : 'mode.off')">
+          <ToggleSwitch input-id="light" :model-value="!!st.light" :disabled="!!controlsOff || tracker.isBusy('light')" :aria-describedby="why" @update:model-value="setLight" />
+        </OuiControlRow>
       </div>
     </div>
+    <OuiEmpty v-else-if="s.phase === 'unreachable'" compact state="offline" :title="t('status.noStatus')" />
+    <div v-else class="oui-stack u1-skel" aria-busy="true"><span class="oui-skeleton" /><span class="oui-skeleton" /><span class="oui-skeleton" /></div>
   </OuiPanel>
 </template>
+<style>
+/* A value the row refused (a speed outside 10 to 300 %) is said in the row, in the error colour. */
+.u1-refused { color: var(--oui-danger); font-weight: 600; }
+/* A reason in a row (speed refused, exhaust held off) is a sentence: it wraps instead of being cut. */
+.u1-row-note { display: block; white-space: normal; }
+</style>

@@ -86,7 +86,7 @@ A partir de um arquivo:
 | Console | Envie G-code e leia as respostas da impressora. `M112` aciona a parada de emergência. |
 | Ajustes | Malha da mesa, input shaper e calibração de fluxo, os ajustes do Extended Firmware, reiniciar o Klipper, reiniciar o Moonraker e reiniciar a impressora. |
 | Plugins > Run | **Check U1 connection**, **Sync U1 toolheads to project filaments** e **Apply Snapmaker Orca U1 process tuning**. |
-| Spooler | Com o [Spooler](https://github.com/bloodf/spooler) instalado, cada cabeça recebe o perfil de filamento do Spooler e o Painel lista o estoque do Spooler. |
+| Spooler | Com o [Spooler](https://github.com/bloodf/spooler) instalado, cada cabeça recebe o perfil de filamento do Spooler e a aba **Estoque** lista o estoque do Spooler. |
 
 Quase tudo funciona no firmware original:
 

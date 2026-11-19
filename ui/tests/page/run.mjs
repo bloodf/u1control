@@ -219,7 +219,7 @@ test('thumbnails only for visible rows, two at a time, dropped on folder change'
   await reply(asked[0], 'data:image/png;base64,AA');
   await until(() => cmds('thumbnail').length === 3, 'next one after a reply');
   const old = cmds('thumbnail')[1];
-  await click(btn('Open folder sub'));
+  await click(q('[data-folder="gcodes/sub"]'));
   eq(last('cmd', 'files').args.path, 'gcodes/sub', 'opened the folder');
   await reply(old, 'data:image/png;base64,BB');
   await reply(cmds('thumbnail')[2], 'data:image/png;base64,CC');
@@ -448,13 +448,15 @@ test('setup: remembers on request and in Portuguese at 380 px', `
   eq(__t.submits.map(m => m.remember), [false], 'sends the remember choice');
 `, { mode: 'setup', data: SETUP_FULL, lang: 'pt_BR', size: [380, 900] });
 
-test('stock card stays hidden without Spooler', `
+test('stock: without Spooler the tab stays, says why in one row and asks for no stock lease', `
   await connect();
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), {spooler: {...SP('absent'), text: "Spooler isn't running"}, stock: {state: 'unavailable', rows: [], key: ''}, same_spoolman: null, usage: 'u1control', bindings: {}});
-  assert(!byTest('stock-card'), 'solo U1 Control shows no stock card');
+  assert(q('[data-tab="stock"]') && !q('[data-tab="stock"] .oui-appbar-count'), 'the Stock tab stays, with no count');
+  await tab('stock');
+  assert(!stockRows().length && !q('.sc-table') && text(byTest('stock-card')).includes('Spooler isn’t running'), 'solo U1 Control: one row saying why, no list: ' + text(byTest('stock-card')));
   await sleep(2100);
-  eq(last('lease').stock, false, 'no stock lease while hidden');
+  eq(last('lease').stock, false, 'no stock lease without Spooler');
 `);
 
 test('stock lists, filters and links with the list key and printer generation', `
@@ -462,16 +464,29 @@ test('stock lists, filters and links with the list key and printer generation', 
   await post({type: 'status', data: VIEW()});
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), STOCK());
-  assert(byTest('stock-card'), 'card shown while Spooler runs');
-  assert(text(q('#stock-h')).includes('Stock (Spooler)'), 'named as stock of Spooler (X02)');
+  assert(!byTest('stock-card').checkVisibility() && !q('[aria-labelledby="oui-tab-dash"] [data-stock]'), 'the stock is not on the Dashboard');
+  eq(text(q('[data-tab="stock"] .oui-appbar-count')), '2', 'the Stock tab counts the spools');
+  await sleep(2100);
+  eq(last('lease').stock, true, 'the Dashboard keeps the stock lease: its spool links follow Spooler');
+  await tab('stock');
+  const page = q('[aria-labelledby="oui-tab-stock"]');
+  assert(byTest('stock-card').checkVisibility(), 'list shown while Spooler runs');
+  assert(text(q('.oui-pagehead-title', page)).includes('Stock (Spooler)'), 'named as stock of Spooler (X02)');
   eq(stockRows().length, 2, 'both spools listed');
-  assert(text(byTest('stock-card')).includes('recorded in Spoolman by U1 Control'), 'says who records filament use');
-  await type(q('input[type=search]'), 'white');
+  assert(text(byTest('stock-about')).includes('recorded in Spoolman by U1 Control'), 'says who records filament use, behind the (i)');
+  assert(!qa('p', page).some(e => text(e).includes('recorded in Spoolman')), 'no helper paragraph under the list');
+  await type(q('input[type=search]', page), 'white');
   eq(stockRows().length, 1, 'search filters');
-  await type(q('input[type=search]'), '');
+  await type(q('input[type=search]', page), '');
   await pick(q('[aria-label="Material"]').closest('.p-select') || q('[aria-label="Material"]'), 'PLA');
   eq(stockRows().map(b => b.dataset.stock), ['7'], 'material filter');
-  await pick(byTest('stock-head'), 'T2');
+  eq(byTest('stock-head').getAttribute('role'), 'radiogroup', 'the link target is a list of the four toolheads');
+  eq(qa('[data-stock-target]').map(b => [text(b.querySelector('.oui-slot-badge')), b.getAttribute('aria-checked')]), [['T1', 'true'], ['T2', 'false'], ['T3', 'false'], ['T4', 'false']], 'T1 chosen at first');
+  q('[data-stock-target="0"]').focus();
+  await press('ArrowDown');
+  eq(qa('[data-stock-target]').map(b => b.getAttribute('aria-checked')), ['false', 'true', 'false', 'false'], 'arrow keys move the choice');
+  eq(document.activeElement.dataset.stockTarget, '1', 'and the keyboard with it');
+  assert(text(q('label[for="stock-fit"]')).includes('T2'), 'the same-material filter names the chosen toolhead');
   const b7 = q('[data-stock="7"]');
   eq(text(b7), 'Link to T2', 'the button names the full target (U07)');
   assert(b7.getAttribute('aria-label').includes('T2'), 'accessible name names the toolhead');
@@ -482,6 +497,12 @@ test('stock lists, filters and links with the list key and printer generation', 
   await click(q('[data-stock="7"]'));
   await yes();
   eq(cmds('stock_assign').map(m => [m.args, m.gen]), [[{head: 1, spool_id: 7, key: 's1:3', force: false}, 4]], 'one link, keyed');
+  await reply(last('cmd', 'stock_assign'), {bindings: {'1': 7}});
+  await until(() => q('[data-linked="7"]'), 'the spool now in T2 says so instead of offering the same link');
+  eq([text(q('[data-linked="7"]')), !!q('[data-stock="7"]')], ['Linked', false], 'Linked, no button');
+  eq(text(q('.sc-table .oui-slot-badge')), 'T2', 'and its row carries the toolhead badge');
+  await click(q('[data-stock-target="0"]'));
+  eq(text(q('[data-stock="7"]')), 'Link to T1', 'another target: the link is offered again');
 `);
 
 test('stock: a tagged head needs FORCE confirmation', `
@@ -489,6 +510,7 @@ test('stock: a tagged head needs FORCE confirmation', `
   await post({type: 'status', data: VIEW({rfid: [{uid: 'AA'}, null, null, null]})});
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), STOCK());
+  await tab('stock');
   await click(q('[data-stock="11"]'));
   assert(dialogText().includes('RFID'), 'warns about the tag');
   await yes();
@@ -501,11 +523,12 @@ test('stock: a late answer for the previous printer is dropped, older answers ne
   const before = last('cmd', 'stock');
   await post({type: 'selection_changed'});
   await reply(before, STOCK({bindings: {'0': 7}}));
-  assert(!byTest('stock-card'), 'an answer asked before the printer changed is not shown');
+  await tab('stock');
+  assert(!stockRows().length && !q('.sc-table'), 'an answer asked before the printer changed is not shown');
   await connect('stock', 2);
   await until(() => cmds('stock').length >= 2);
   await reply(last('cmd', 'stock'), STOCK());
-  assert(byTest('stock-card') && !text(byTest('stock-card')).includes('on T1'), 'only the new answer counts');
+  assert(stockRows().length === 2 && !q('.sc-table .oui-slot-badge') && !q('[data-linked]'), 'only the new answer counts');
   await click(btn('Refresh stock'));
   const a = last('cmd', 'stock');
   await click(btn('Refresh stock'));
@@ -519,20 +542,23 @@ test('stock: other Spoolman, stale and stopped states, each with its own severit
   await post({type: 'status', data: VIEW()});
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), STOCK({same_spoolman: false}));
+  await tab('stock');
   assert(stockRows().every(b => b.disabled), 'no link from another Spoolman');
   assert(q('.sc-notes .oui-banner[data-tone="danger"]') && text(q('.sc-notes .oui-banner[data-tone="danger"]')).includes('different Spoolman'), 'blocking reason as an error');
   assert(text(byTest('stock-why')).includes('Linking unavailable'), 'visible reason (U06)');
   await click(btn('Refresh stock'));
   eq(last('cmd', 'stock').args, {refresh: true}, 'Refresh asks Spooler for a new list');
   await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, state: 'stale', ts: Date.now() / 1000 - 600}}));
-  assert(byTest('stock-stale') && byTest('stock-stale').dataset.tone === 'warn' && text(byTest('stock-stale')).includes('out of date') && stockRows().length === 2, 'stale list stays, marked as a warning');
+  const stale = byTest('stock-stale');
+  assert(stale && stale.dataset.state === 'stale' && stale.closest('.oui-pagehead') && text(stale).includes('read') && stockRows().length === 2, 'stale list stays; the page header says its age as a stale state');
+  assert(text(byTest('stock-about')).includes('out of date'), 'what stale means is behind the (i)');
   assert(!q('[data-test="stock-card"] [data-tone="danger"], [data-test="stock-card"] [data-state="error"]'), 'stale is not shown as an error (U09)');
   await click(btn('Refresh stock'));
   await reply(last('cmd', 'stock'), STOCK({spooler: SP('stopped'), stock: {state: 'unavailable', rows: [], key: '', text: 'x'}}));
   assert(byTest('stock-card') && !stockRows().length && text(byTest('stock-card')).includes('unloaded'), 'stopped Spooler explained');
   await click(btn('Refresh stock'));
   await fail(last('cmd', 'stock'), 'the selected printer changed; nothing was sent to it');
-  assert(q('.sc-notes .oui-empty[data-state="error"]') && text(q('.sc-notes')).includes('printer changed'), 'errors are shown, not swallowed');
+  assert(q('[data-test="stock-card"] .oui-empty[data-state="error"]') && text(byTest('stock-card')).includes('printer changed'), 'errors are shown, not swallowed');
 `);
 
 test('stock: busy printer disables links with a visible reason; refresh keeps focus', `
@@ -540,6 +566,7 @@ test('stock: busy printer disables links with a visible reason; refresh keeps fo
   await post({type: 'status', data: VIEW({busy: true, state: 'printing'})});
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), STOCK());
+  await tab('stock');
   assert(stockRows().every(b => b.disabled), 'busy printer: no link');
   assert(text(q('#heads-why')).includes('busy') && stockRows().every(b => b.getAttribute('aria-describedby') === 'heads-why'), 'reason visible once for the page, and the links point at it (U06/B-06)');
   await post({type: 'status', data: VIEW()});
@@ -557,6 +584,7 @@ test('stock: many spools scroll inside the table; the reel never sets the row he
   await until(() => last('cmd', 'stock'));
   const many = Array.from({length: 55}, (_, k) => ({...ROWS[k % 2], id: 100 + k, remaining: 20 * k, initial: 1000}));
   await reply(last('cmd', 'stock'), STOCK({same_spoolman: null, usage: 'printer', stock: {...STOCK().stock, rows: many}}));
+  await tab('stock');
   eq(stockRows().length, 55, 'all spools listed');
   // OrcaSlicer's WebKit did not resolve the reel images' height: 100% in a table cell and used their 160 px source
   // height, which grew the reel to 40 x 160 and each row to ~177 px. Force that height: the box must not follow.
@@ -569,11 +597,12 @@ test('stock: many spools scroll inside the table; the reel never sets the row he
   assert(qa('.sc-wrap .oui-spool img').every(e => Math.round(e.getBoundingClientRect().height) <= 40), 'reel pictures contained in their 40 px box');
   const wrap = q('.sc-wrap');
   assert(wrap.scrollHeight > wrap.clientHeight + 100 && getComputedStyle(wrap).overflowY === 'auto', 'long list scrolls inside the table');
-  const after = q('[data-test="stock-card"] .oui-panel-foot');
-  assert(after && after.getBoundingClientRect().top >= wrap.getBoundingClientRect().bottom - 0.5, 'what follows the table starts below it');
+  const list = q('.sv-list').getBoundingClientRect();
+  assert(list.bottom <= innerHeight + 0.5 && wrap.getBoundingClientRect().bottom <= list.bottom + 0.5, 'the list stays inside the window and its rows scroll inside it');
+  const rail = q('[data-test="stock-head"]').getBoundingClientRect();
+  assert(rail.right <= q('.sv-list').getBoundingClientRect().left && rail.top < innerHeight, 'the link target stays beside the list');
   const note = byTest('stock-via');
-  assert(note && text(note).includes('through the printer') && !note.closest('.oui-banner'), 'via-printer note is a plain line');
-  eq(getComputedStyle(note).borderTopStyle, 'none', 'no border around the note');
+  assert(note && text(note).includes('through the printer') && note.closest('.oui-hint') && !note.closest('.oui-banner'), 'the via-printer note is behind the (i), not a box');
   assert(q('#heads-why').classList.contains('oui-banner'), 'the busy reason keeps its box');
 `);
 
@@ -591,6 +620,28 @@ test('U01/U12: destructive dialogs name both answers; E-stop apart from Cancel',
   assert(!dialogText().includes('Klipper will halt'), 'plain language (U10)');
   await no();
   assert(byTest('estop').closest('.oui-appbar') && !byTest('cancel').closest('.oui-appbar'), 'E-stop in its own group, in the app bar, away from Cancel');
+`);
+
+test('status block: Pause only while printing, Resume only while paused, Cancel a red outline; the picture is the small box', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  eq([byTest('pause'), byTest('resume'), byTest('cancel')], [null, null, null], 'idle: no print controls');
+  const box = () => { const r = q('[data-test="job-card"] .oui-job-thumb').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
+  eq(box(), [72, 72], 'idle: the printer picture is the 72 px box');
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, filename: 'a.gcode', progress: 0.2})});
+  assert(byTest('pause') && !byTest('resume') && byTest('cancel'), 'printing: Pause and Cancel');
+  eq(box(), [72, 72], 'printing: still the 72 px box');
+  const fig = q('[data-test="job-card"] [data-test="printer-figure"]').getBoundingClientRect();
+  assert(fig.height <= 72 && fig.width <= 72 && fig.height > 40, 'the photo is sized by the box, not the other way round: ' + fig.width + 'x' + fig.height);
+  assert(byTest('job-card').getBoundingClientRect().height < 140, 'the status block stays compact: ' + byTest('job-card').getBoundingClientRect().height);
+  const cancel = byTest('cancel');
+  assert(cancel.classList.contains('p-button-danger') && cancel.classList.contains('p-button-outlined'), 'Cancel is a red outline: ' + cancel.className);
+  assert(!byTest('estop').classList.contains('p-button-outlined'), 'the only solid red is Emergency stop');
+  await post({type: 'status', data: VIEW({state: 'paused', busy: true, filename: 'a.gcode', progress: 0.2})});
+  assert(!byTest('pause') && byTest('resume') && byTest('cancel'), 'paused: Resume and Cancel');
+  await post({type: 'offline', error: 'timed out'});
+  assert(byTest('resume').disabled && byTest('cancel').disabled, 'offline with a print known: shown, off');
+  eq(byTest('cancel').getAttribute('aria-describedby'), 'heads-why', 'and pointing at the reason');
 `);
 
 test('U02: Off while printing confirms; declining keeps heating', `
@@ -623,12 +674,13 @@ test('U03: no target disables every physical command with a visible reason', `
 
 test('E-stop: in the app bar and usable on every tab; while connecting it is shown, off, with the reason', `
   await until(() => last('hello'));
-  assert(byTest('estop') && byTest('estop').disabled && byTest('pause').disabled, 'connecting: E-stop and Pause shown, off');
+  assert(byTest('estop') && byTest('estop').disabled, 'connecting: E-stop shown, off');
+  eq([byTest('pause'), byTest('cancel')], [null, null], 'no print known: nothing to pause or cancel on the page');
   eq(byTest('estop').getAttribute('aria-describedby'), 'heads-why', 'connecting: E-stop points at the reason');
   assert(text(q('#heads-why')).includes('Connecting'), 'the reason says it is connecting: ' + text(q('#heads-why')));
   await connect();
   await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
-  for (const name of ['dash', 'files', 'console', 'settings']) {
+  for (const name of ['dash', 'stock', 'files', 'console', 'settings']) {
     await tab(name);
     const b = byTest('estop');
     assert(b && b.closest('.oui-appbar') && !b.disabled, name + ': E-stop present, enabled and in the app bar');
@@ -673,6 +725,7 @@ test('offline after a status: the reason is announced assertively; stock links o
   await post({type: 'status', data: VIEW()});
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), STOCK());
+  await tab('stock');
   assert(stockRows().length === 2 && stockRows().every(b => !b.disabled), 'online and idle: links on');
   await post({type: 'offline', error: 'timed out'});
   assert(text(byTest('target-alert')).includes('doesn') && byTest('target-alert').getAttribute('aria-live') === 'assertive', 'offline: assertive reason: ' + text(byTest('target-alert')));
@@ -720,7 +773,8 @@ test('U03: known target offline keeps E-stop on the urgent path; other commands 
   eq(byTest('target-alert').getAttribute('aria-live'), 'assertive', 'unreachable is announced at once, as before 0.9.0');
   eq(q('#heads-why').closest('[aria-live]'), byTest('target-alert'), 'the reason is in the assertive region');
   eq(q('#heads-why').getAttribute('role'), 'none', 'the banner does not add a second live region');
-  assert(byTest('pause').disabled && byTest('cancel').disabled, 'normal commands off');
+  eq([byTest('pause'), byTest('cancel')], [null, null], 'no print known: nothing to pause or cancel');
+  assert(byTest('sync').disabled && byTest('sync').getAttribute('aria-describedby') === 'heads-why', 'normal commands off, pointing at the reason');
   assert(!byTest('estop').disabled, 'E-stop available for the known target');
   await click(byTest('estop'));
   await yes();
@@ -813,7 +867,8 @@ test('U05: a failed acknowledgement keeps the entry and says why', `
 test('X02: official firmware is named, never "stock"', `
   await connect('stock');
   eq(text(byTest('firmware')), 'Official firmware 1', 'firmware pill');
-  assert(!text(q('header')).toLowerCase().includes('stock'), 'header has no "stock"');
+  assert(byTest('firmware').closest('.oui-pagehead') && !text(q('.oui-pagehead')).toLowerCase().includes('stock'), 'the page header never calls the firmware "stock"');
+  assert(!text(q('.oui-appbar-status')).includes('firmware') && !text(q('.oui-appbar-status')).includes('u1:80'), 'the app bar holds the state only');
 `);
 
 test('X04: host language pt_BR gives Portuguese, including safety dialogs', `
@@ -973,7 +1028,7 @@ test('B-11: theme follows the host colour while the page runs', `
   await until(() => !root.classList.contains('orca-dark'), 'light', 4000);
   root.style.setProperty('--orca-bg', '#151515');
   await until(() => root.classList.contains('orca-dark'), 'dark after the host changed', 4000);
-  eq(getComputedStyle(document.body).backgroundColor, 'rgb(17, 24, 42)', 'dark palette background (cobalt-tinted 4.0 palette)');
+  eq(getComputedStyle(document.body).backgroundColor, 'rgb(36, 36, 40)', "dark palette background (OrcaSlicer's neutral, foundation 5.0)");
 `);
 
 // ------------------------------------------------------------------ 2026-11 audit: firmware, files, camera
@@ -1015,7 +1070,7 @@ test('files: a newly selected printer starts at the top folder', `
   await tab('files');
   await until(() => last('cmd', 'files'));
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
-  await click(btn('Open folder sub'));
+  await click(q('[data-folder="gcodes/sub"]'));
   eq(last('cmd', 'files').args.path, 'gcodes/sub', 'in the folder');
   await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [], files: []});
   const before = cmds('files').length;
@@ -1030,6 +1085,8 @@ test('files: rename asks for the new name and never sends an unchanged one', `
   await tab('files');
   await until(() => last('cmd', 'files'));
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  assert(!btn('Rename benchy.gcode'), 'the actions of one file show once it is selected');
+  await click(q('[data-file="gcodes/benchy.gcode"]'));
   await click(btn('Rename benchy.gcode'));
   await until(dialogOpen);
   eq(q('#dlg-input').value, 'benchy.gcode', 'starts from the current name');
@@ -1044,6 +1101,9 @@ test('files: rename asks for the new name and never sends an unchanged one', `
   await reply(last('cmd', 'rename'), {path: 'gcodes/boat.gcode'});
   await until(() => cmds('files').length > listed, 'listed again after the rename');
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  assert(!byTest('folder-rename'), 'a file root is never renamed');
+  await click(q('[data-folder="gcodes/sub"]'));
+  await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [], files: []});
   await click(btn('Rename sub'));
   await until(dialogOpen);
   await no();
@@ -1055,14 +1115,174 @@ test('files: filter by name and show each file\'s filament', `
   await tab('files');
   await until(() => last('cmd', 'files'));
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
-  assert(text(q('.u1-table')).includes('12 g'), 'filament weight shown: ' + text(q('.u1-table')));
+  const rows = () => qa('.oui-files-row').map(r => r.dataset.file);
+  await click(q('[data-file="gcodes/benchy.gcode"]'));
+  assert(text(q('.oui-files-detail')).includes('12 g'), 'filament weight in the details of the file: ' + text(q('.oui-files-detail')));
   await type(q('#files-filter'), 'BEN');
-  eq(qa('.fv-name').map(text), ['benchy.gcode'], 'case-insensitive match');
-  assert(!btn('Open folder sub'), 'folders filtered too');
+  eq(rows(), ['gcodes/benchy.gcode'], 'case-insensitive match');
+  assert(q('[data-folder="gcodes/sub"]'), 'the folder tree is not filtered');
   await type(q('#files-filter'), 'zzz');
-  assert(text(q('.u1-table')).includes('No file or folder matches'), 'says nothing matches');
+  assert(text(byTest('files')).includes('No file or folder matches'), 'says nothing matches');
   await type(q('#files-filter'), '');
-  eq(qa('.fv-name').length, 2, 'all back');
+  eq(rows().length, 2, 'all back');
+`);
+
+// ------------------------------------------------------------------ 0.15.0: the file browser (foundation 5.0)
+const ABC = {path: 'gcodes', dirs: [{name: 'sub'}], disk: {free: 2e9},
+  files: ['a', 'b', 'c'].map((n, i) => ({name: n + '.gcode', size: 1000 * (i + 1), modified: 100 - i, time: 60}))};
+const FILES_OPEN = `
+  await connect();
+  await tab('files');
+  await until(() => last('cmd', 'files') && cmds('folders').length === 2, 'the open folder and both folder trees asked for');
+  const treeOf = root => cmds('folders').filter(m => m.args.root === root).pop();
+  await reply(treeOf('gcodes'), ['gcodes', 'gcodes/sub', 'gcodes/sub/deep']);
+  await reply(treeOf('camera'), ['camera']);
+  await reply(last('cmd', 'files'), ${JSON.stringify(ABC)});
+  const row = n => q('[data-file="gcodes/' + n + '.gcode"]');
+  const picked = () => qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file.split('/').pop());
+  const folderEl = id => q('[data-folder="' + id + '"]');
+  const bar = () => q('.oui-files-bar');
+`;
+test('files: a tree of the printer\'s folders, several files selected, moved by the menu and by dragging onto a folder', `
+  ${FILES_OPEN}
+  eq(cmds('folders').map(m => [m.args.root, m.gen]).sort(), [['camera', 1], ['gcodes', 1]], 'one walk a root, for the selected printer');
+  eq(qa('[data-folder]').map(f => [f.dataset.folder, text(f.querySelector('.oui-files-foldername')), f.getAttribute('aria-level')]),
+    [['gcodes', 'Print files', '1'], ['gcodes/sub', 'sub', '2'], ['camera', 'Timelapses & camera', '1']], 'roots named and open, print files first; a folder inside a closed one is not shown');
+  eq(folderEl('gcodes').getAttribute('aria-selected'), 'true', 'the open folder is marked');
+  eq(text(q('[aria-labelledby="oui-tab-files"] .oui-pagehead-meta')), '2 GB free', 'free space in the page header');
+  assert(text(bar()).includes('3 files'), 'the bar counts the files: ' + text(bar()));
+  await click(row('a'));
+  eq(picked(), ['a.gcode'], 'a click selects one');
+  row('c').dispatchEvent(new MouseEvent('click', {bubbles: true, shiftKey: true})); await settle();
+  eq(picked(), ['a.gcode', 'b.gcode', 'c.gcode'], 'Shift-click selects the range');
+  assert(text(bar()).includes('3 selected') && !btn('Print a.gcode'), 'the bar says how many; the actions of one file are gone: ' + text(bar()));
+  await pick(q('.oui-files-move'), 'Print files / sub');
+  await until(() => cmds('move').length === 1, 'the first move sent');
+  await settle();
+  eq(cmds('move').map(m => [m.args, m.gen]), [[{path: 'gcodes/a.gcode', folder: 'gcodes/sub'}, 1]], 'one file at a time, with the folder it goes to');
+  await reply(cmds('move')[0], {path: 'gcodes/sub/a.gcode'});
+  await until(() => cmds('move').length === 2, 'then the second');
+  await fail(cmds('move')[1], 'gcodes/sub already has something named b.gcode; nothing was moved');
+  await until(() => cmds('move').length === 3, 'a failure does not stop the rest');
+  const listed = cmds('files').length;
+  await reply(cmds('move')[2], {path: 'gcodes/sub/c.gcode'});
+  await until(() => toasts().includes('Moved 2 files'), 'one message for the files that went: ' + toasts());
+  assert(alerts().includes('Move failed') && alerts().includes('b.gcode'), 'the one that stayed says why: ' + alerts());
+  await until(() => cmds('files').length > listed, 'listed again');
+  await reply(last('cmd', 'files'), {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1, 2))}});
+  eq(qa('.oui-files-row').map(r => r.dataset.file), ['gcodes/b.gcode'], 'what is left');
+  // Drag and drop, with the events a browser sends (the same code runs for a real drag).
+  const dt = new DataTransfer();
+  row('b').dispatchEvent(new DragEvent('dragstart', {bubbles: true, cancelable: true, dataTransfer: dt})); await settle();
+  assert(folderEl('gcodes/sub').hasAttribute('data-target'), 'while dragging, a folder that can take the file is offered');
+  assert(!folderEl('camera').hasAttribute('data-target') && !folderEl('gcodes').hasAttribute('data-target'), 'another root and the open folder are not');
+  const over = new DragEvent('dragover', {bubbles: true, cancelable: true, dataTransfer: dt});
+  folderEl('camera').dispatchEvent(over);
+  assert(!over.defaultPrevented, 'a folder that cannot take it refuses the drop');
+  folderEl('gcodes/sub').dispatchEvent(new DragEvent('dragover', {bubbles: true, cancelable: true, dataTransfer: dt})); await settle();
+  assert(folderEl('gcodes/sub').hasAttribute('data-drop'), 'the folder under the pointer is marked');
+  folderEl('gcodes/sub').dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dt})); await settle();
+  eq(cmds('move').length, 4, 'the drop moves it');
+  eq(last('cmd', 'move').args, {path: 'gcodes/b.gcode', folder: 'gcodes/sub'}, 'into the folder it was dropped on');
+  await reply(last('cmd', 'move'), {path: 'gcodes/sub/b.gcode'});
+  await until(() => toasts().includes('Moved 1 file'), 'said once: ' + toasts());
+`);
+
+test('files: Delete asks once, with the names; the camera folder is read only and says why', `
+  ${FILES_OPEN}
+  await click(row('a'));
+  row('b').dispatchEvent(new MouseEvent('click', {bubbles: true, ctrlKey: true})); await settle();
+  eq(picked(), ['a.gcode', 'b.gcode'], 'Ctrl-click adds one');
+  const del = btn('Delete', bar());
+  assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-outlined'), 'Delete is a red outline in the page');
+  await click(del);
+  await until(dialogOpen, 'asks first');
+  assert(dialogText().includes('Delete 2 files?') && dialogText().includes('a.gcode') && dialogText().includes('b.gcode') && dialogText().includes('cannot be undone'), 'the count and the names: ' + dialogText());
+  const confirm = q('[data-dlg="confirm"]', dialogEl());
+  assert(confirm.classList.contains('p-button-danger') && !confirm.classList.contains('p-button-outlined'), 'the solid red is the confirmation');
+  await click(q('[data-dlg="cancel"]', dialogEl()));
+  await until(() => !dialogOpen(), 'left');
+  eq([cmds('delete').length, picked().length], [0, 2], 'Go back deletes nothing and keeps the selection');
+  await click(btn('Delete', bar()));
+  await until(dialogOpen);
+  await click(q('[data-dlg="confirm"]', dialogEl()));
+  await until(() => cmds('delete').length === 1, 'the first delete sent');
+  await until(() => !dialogOpen(), 'the question closes');
+  eq(cmds('delete')[0].args, {path: 'gcodes/a.gcode'}, 'a file, not a folder');
+  await reply(cmds('delete')[0], true);
+  assert(!dialogOpen(), 'no second question from the page');
+  await until(() => cmds('delete').length === 2);
+  eq(cmds('delete')[1].args, {path: 'gcodes/b.gcode'}, 'then the other');
+  await reply(cmds('delete')[1], true);
+  await until(() => toasts().includes('Deleted 2 files'), 'one message: ' + toasts());
+  await reply(last('cmd', 'files'), {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(2))}});
+  // Enter on a row is the page's main action for it: Print, which asks first.
+  await click(row('c'));
+  assert(btn('Print c.gcode') && !btn('Print c.gcode').classList.contains('p-button-secondary'), 'Print is the one primary action');
+  row('c').focus();
+  await press('Enter');
+  await until(dialogOpen, 'Enter prints, and asks');
+  assert(dialogText().includes('c.gcode') && dialogText().includes('Bench U1'), dialogText());
+  await no();
+  eq(cmds('print_file'), [], 'Go back prints nothing');
+  await click(folderEl('camera'));
+  eq(last('cmd', 'files').args.path, 'camera', 'the other root');
+  await reply(last('cmd', 'files'), {path: 'camera', dirs: [], files: [{name: 'shot.jpg', size: 2000, modified: 9}]});
+  await click(q('[data-file="camera/shot.jpg"]'));
+  assert(q('#files-ro') && text(q('#files-ro')) === 'Read only', 'says it is read only, once');
+  assert(btn('Delete', bar()).disabled && btn('Delete', bar()).getAttribute('aria-describedby') === 'files-ro', 'Delete off, pointing at the reason');
+  assert(q('.oui-files-move').classList.contains('p-disabled') && byTest('files-mkdir').disabled, 'Move and New folder off too');
+  assert(q('[data-file="camera/shot.jpg"]').getAttribute('draggable') === 'false', 'nothing to drag');
+  assert(btn('Save shot.jpg') && !btn('Print shot.jpg') && !btn('Rename shot.jpg'), 'a picture can be saved, not printed or renamed');
+  await click(btn('Save shot.jpg'));
+  eq(last('cmd', 'download').args, {path: 'camera/shot.jpg'}, 'saved from its own root');
+`);
+
+test('files: a new folder, and the open folder renamed, moved and deleted', `
+  ${FILES_OPEN}
+  await click(byTest('files-mkdir'));
+  await until(() => document.activeElement === q('#dlg-input'), 'asks for the name');
+  assert(dialogText().includes('gcodes'), 'says where: ' + dialogText());
+  await type(q('#dlg-input'), 'Spares');
+  await yes();
+  eq(last('cmd', 'mkdir').args, {path: 'gcodes/Spares'}, 'in the open folder');
+  await reply(last('cmd', 'mkdir'), true);
+  assert(folderEl('gcodes/Spares'), 'in the tree at once');
+  await until(() => cmds('folders').length === 4, 'the tree is read again');
+  await reply(treeOf('gcodes'), ['gcodes', 'gcodes/Spares', 'gcodes/sub', 'gcodes/sub/deep']);
+  await click(folderEl('gcodes/sub'));
+  await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [{name: 'deep'}], files: []});
+  assert(text(byTest('files')).includes('No files in this folder'), 'an empty folder says so');
+  await click(byTest('folder-move'));
+  await until(dialogOpen);
+  eq(qa('.dlg-choice').map(text), ['Spares'], 'every folder of the root but the one it is in, itself and what is inside it');
+  await click(btn('Spares', dialogEl()));
+  eq(last('cmd', 'move').args, {path: 'gcodes/sub', folder: 'gcodes/Spares'}, 'the folder moves whole');
+  await reply(last('cmd', 'move'), {path: 'gcodes/Spares/sub'});
+  await until(() => last('cmd', 'files').args.path === 'gcodes/Spares/sub', 'the page follows it');
+  await reply(last('cmd', 'files'), {path: 'gcodes/Spares/sub', dirs: [{name: 'deep'}], files: []});
+  eq(folderEl('gcodes/Spares/sub').getAttribute('aria-selected'), 'true', 'open and marked where it is now');
+  assert(!folderEl('gcodes/sub'), 'gone from where it was');
+  await click(byTest('folder-rename'));
+  await until(() => document.activeElement === q('#dlg-input'));
+  await type(q('#dlg-input'), 'old');
+  await yes();
+  eq(last('cmd', 'rename').args, {path: 'gcodes/Spares/sub', name: 'old'}, 'renamed where it is');
+  await reply(last('cmd', 'rename'), {path: 'gcodes/Spares/old'});
+  await until(() => last('cmd', 'files').args.path === 'gcodes/Spares/old', 'the page follows the new name');
+  await reply(last('cmd', 'files'), {path: 'gcodes/Spares/old', dirs: [], files: []});
+  const del = byTest('folder-delete');
+  assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-outlined'), 'deleting a folder is a red outline');
+  await click(del);
+  assert(dialogOpen() && dialogText().includes('old') && dialogText().includes('everything in it'), 'asks, naming the folder: ' + dialogText());
+  await no();
+  eq(cmds('delete'), [], 'Go back deletes nothing');
+  await click(byTest('folder-delete'));
+  await yes();
+  eq(last('cmd', 'delete').args, {path: 'gcodes/Spares/old', is_dir: true}, 'the folder and what is in it');
+  await reply(last('cmd', 'delete'), true);
+  await until(() => last('cmd', 'files').args.path === 'gcodes/Spares', 'back in the folder above');
+  assert(!folderEl('gcodes/Spares/old'), 'and out of the tree');
 `);
 
 // ------------------------------------------------------------------ 0.11.0: time-lapses
@@ -1092,7 +1312,7 @@ test('time-lapses: one row per video with its cover; saving says where the file 
   await until(() => cmds('timelapse_cover').length === 2, 'covers asked for');
   eq(cmds('timelapse_cover').map(m => m.args), [{path: 'timelapse/benchy_20261116130921_cover.jpg'}, {path: 'timelapse/vase_20261115080000.jpg'}], 'only the videos that have a picture');
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
-  await click(btn('Refresh', q('#files-h').closest('section')));
+  await click(byTest('files-refresh'));
   await reply(cmds('timelapse_cover')[0], ${JSON.stringify(PIXEL)});
   await until(() => q('.tl-cover img', row('benchy_20261116130921.mp4')), 'cover shown, although the print files were listed again meanwhile');
   eq(q('.tl-cover img', row('benchy_20261116130921.mp4')).getAttribute('alt'), '', 'decorative: the name is next to it');
@@ -1203,8 +1423,17 @@ test('camera: save the picture on screen', `
   await connect();
   await post({type: 'status', data: VIEW()});
   eq(byTest('cam-save'), null, 'no button while the camera is off');
+  const box = () => { const r = q('.oui-camera').getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
+  const off = box();
+  assert(text(q('.oui-camera')).includes('Camera off') && Math.abs(off[0] / off[1] - 16 / 9) < 0.02, 'off: one sentence in the 16:9 box: ' + off);
   await click(byTest('camera'));
   eq(byTest('cam-save'), null, 'no button before the first picture');
+  eq([box(), text(q('.oui-camera'))], [off, 'Starting the camera…'], 'starting: the same box, saying so');
+  assert(!sent().some(m => m.type === 'frame_ack'), 'nothing acknowledged before a picture is shown');
+  await post({type: 'frame', image: ${JSON.stringify(PIXEL)}});
+  await until(() => last('frame_ack'), 'the picture on screen is acknowledged, so the plugin sends the next one');
+  eq(box(), off, 'turning the camera on does not move the page');
+  assert(text(q('.oui-camera-overlay')).includes('Live'), 'live is said over the picture');
   await post({type: 'frame', image: 'data:image/jpeg;base64,/9j/'});
   await click(byTest('cam-save'));
   const cmd = last('cmd', 'snapshot');
@@ -1323,6 +1552,7 @@ test('requirements: no Spoolman turns stock links off with the reason', `
   await post({type: 'status', data: VIEW()});
   await until(() => last('cmd', 'stock'));
   await reply(last('cmd', 'stock'), STOCK({same_spoolman: null}));
+  await tab('stock');
   assert(stockRows().length && stockRows().every(b => !b.disabled), 'links on while Spoolman is not known missing');
   await post({type: 'requirements', items: REQS('unknown', 'missing', 'missing')});
   assert(stockRows().every(b => b.disabled && b.getAttribute('aria-describedby') === 'stock-why'), 'links off, pointing at the reason');
@@ -1331,7 +1561,7 @@ test('requirements: no Spoolman turns stock links off with the reason', `
   assert(stockRows().every(b => !b.disabled) && !byTest('stock-why'), 'Spoolman set: links on again');
 `);
 
-// ------------------------------------------------------------------ foundation 4.2.0: toasts, dismissible notices, requirements
+// ------------------------------------------------------------------ foundation 4.2.0 on: toasts, dismissible notices, requirements
 test('toasts: bottom-left, each with a Close button, gone once closed', `
   await connect();
   await post({type: 'notice', text: 'Project filaments updated'});

@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- The whole tab is redrawn on the shared interface 5.0: OrcaSlicer's own greys and teal on every page, with U1 Control's blue only on its mark and under the open tab. Colour is kept for what it tells you: icons, states, alerts, level bars (green, amber when low, red when almost empty) and the 4 px strip of a filament's colour on its toolhead card.
+- **Dashboard**: one page header with the printer's name, address and firmware and **Apply to project filaments**; a compact status block with the small printer picture, the progress, the times and the print's own buttons (**Pause** only while it prints, **Resume** only while it is paused, **Cancel print** as a red outline); the four toolheads; one **Controls** module (Temperature, Machine); the camera in a box that keeps its size, with the frame rate and **Save picture** in its header.
+- **Stock** is its own tab, with the number of spools on it: choose the toolhead on the left, then **Link to T1** on a spool's row. A spool already there says **Linked**. It is no longer on the Dashboard.
+- **Files**: the printer's folders are a tree beside the list. Select several files, **Move to…** a folder or drag them onto one in the tree, or **Delete** them with one question that names them. The selected file's details, **Print**, **Save** and **Rename** are beside the list; a print file can now be saved to the computer too. The open folder can be renamed, moved or deleted, and the camera folder is marked read only.
+- Explanations that sat under a module (the frame rate, how Spoolman is reached, what the project sync does) are behind an (i) next to its title.
+- The print setup window shows each project filament's colour as the same thin strip.
+- The print setup's plate preview is drawn from at most 6,000 moves (was 8,000), so a long plate still shows it now that the page is larger. It is 160 px wide: nothing visible is lost.
+
 ## [0.14.1] - 2026-11-19
 
 ### Fixed

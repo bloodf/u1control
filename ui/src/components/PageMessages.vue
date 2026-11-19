@@ -7,7 +7,7 @@ import { s, openSettings, tracker, hello, printerName, statusAge, controlsOff, b
 import { t, fmt } from '../core/i18n';
 import { split } from '../core/tracker';
 
-// What the whole page has to say, once, under the app bar on every tab: why the printer's controls are off (no
+// What the whole page has to say, once, under the page header of the open tab (App.vue moves it there): why the printer's controls are off (no
 // printer, offline, still connecting, busy) and which commands are still waiting for an answer. What a command
 // answered is a toast (App.vue's OuiToastHost). Controls that are off for one of these reasons point at it
 // (#heads-why) instead of repeating it.
@@ -17,7 +17,7 @@ import { split } from '../core/tracker';
 // Live regions are the persistent wrappers below (polite, assertive, status): they are in the page before anything
 // is added, so additions are announced. Each banner inside drops its own role (role="none") so nothing is announced
 // twice.
-// foundation-gap: OuiBanner (4.2.0) still always sets role alert/status; it should take `live: false` (and use
+// foundation-gap: OuiBanner (5.0.0) still always sets role alert/status; it should take `live: false` (and use
 // role="note" for static banners itself). Until then the role is overridden here and on static banners (role="note").
 const offline = computed(() => s.phase === 'unreachable' || !!s.offline);
 const firstRun = computed(() => s.phase === 'noTarget' && s.tab === 'dash');   // the Dashboard says it itself, with the way out

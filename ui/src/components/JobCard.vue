@@ -8,8 +8,9 @@ import { s, run, tracker, controlsOff, printing, printerName, stale } from '../a
 import { ask } from '../core/dialog';
 import { t, tMaybe, fmt } from '../core/i18n';
 
-// The page's hero: the print (file, percentage, times) on the plugin's colour, or the idle printer. Last known
-// values of a printer the page no longer hears from are drawn grey. Pause, Resume and Cancel sit under it.
+// The Dashboard's status block: the printer picture in the job's 72 px box, the print (file, percentage, times) or the
+// idle printer, and the print's own actions at its right: Pause while printing, Resume while paused, Cancel for both.
+// Last known values of a printer the page no longer hears from are drawn grey.
 const st = computed(() => s.status);
 const state = computed(() => st.value?.state ?? '');
 const stateName = computed(() => tMaybe(`status.state.${state.value}`, state.value));
@@ -31,9 +32,9 @@ const detail = computed(() => [stale.value ? stateName.value : '', st.value?.mes
 const active = computed(() => { const i = st.value?.extruders.findIndex(e => e.active) ?? -1; return printing.value && i >= 0 ? i + 1 : null; });
 const lastKnown = computed(() => t('bar.lastKnown', { age: fmt.ago(s.statusAt / 1000, s.now / 1000) }));
 
-const pauseWhy = computed(() => controlsOff.value || (state.value !== 'printing' ? t('reason.notPrinting') : tracker.isBusy('pause') ? t('reason.pending') : ''));
-const resumeWhy = computed(() => controlsOff.value || (state.value !== 'paused' ? t('reason.notPaused') : tracker.isBusy('resume') ? t('reason.pending') : ''));
-const cancelWhy = computed(() => controlsOff.value || (!printing.value ? t('reason.noPrint') : tracker.isBusy('cancel') ? t('reason.pending') : ''));
+const pauseWhy = computed(() => controlsOff.value || (tracker.isBusy('pause') ? t('reason.pending') : ''));
+const resumeWhy = computed(() => controlsOff.value || (tracker.isBusy('resume') ? t('reason.pending') : ''));
+const cancelWhy = computed(() => controlsOff.value || (tracker.isBusy('cancel') ? t('reason.pending') : ''));
 const why = computed(() => (controlsOff.value ? 'heads-why' : undefined));
 const pause = () => run({ key: 'pause', label: t('act.pause'), cmd: 'pause', okText: t('ok.pause'), timeoutMs: 15000 });
 const resume = () => run({ key: 'resume', label: t('act.resume'), cmd: 'resume', okText: t('ok.resume'), timeoutMs: 15000 });
@@ -45,10 +46,13 @@ async function cancel() {
 </script>
 
 <template>
-  <OuiPanel class="u1-job" flush :aria-label="t('status.title')" data-test="job-card">
-    <OuiEmpty v-if="!st" compact :state="s.phase === 'unreachable' ? 'offline' : 'loading'" :title="t('status.noStatus')" />
-    <OuiJob v-else-if="job" hero :stale="stale" :name="st.filename || stateName" :progress="pct" :progress-label="t('status.progress')" :detail="detail">
-      <template #thumb><div class="u1-figure"><PrinterFigure :active="active" :stale="stale" /></div></template>
+  <OuiPanel class="oui-dash-top u1-job" :aria-label="t('status.title')" data-test="job-card">
+    <div v-if="!st && s.phase !== 'unreachable'" class="u1-job-skel" aria-busy="true" :aria-label="t('status.noStatus')">
+      <span class="oui-skeleton" /><div class="oui-stack"><span class="oui-skeleton" /><span class="oui-skeleton" /><span class="oui-skeleton" /></div>
+    </div>
+    <OuiEmpty v-else-if="!st" compact state="offline" :title="t('status.noStatus')" />
+    <OuiJob v-else-if="job" :stale="stale" :name="st.filename || stateName" :progress="pct" :progress-label="t('status.progress')" :detail="detail">
+      <template #thumb><PrinterFigure :active="active" :stale="stale" /></template>
       <template #status>
         <OuiStatus v-if="stale" state="stale">{{ lastKnown }}</OuiStatus>
         <OuiStatus v-else :state="chip" data-test="state">{{ stateName }}</OuiStatus>
@@ -58,38 +62,38 @@ async function cancel() {
         <OuiReadout :icon="hourglass" :label="t('status.left')" :value="left == null ? null : fmt.duration(left)" size="sm" :stale="stale" :unknown-label="t('common.unknown')" />
         <OuiReadout :icon="calendar" :label="t('status.finishes')" :value="finishes" size="sm" :stale="stale" :unknown-label="t('common.unknown')" />
       </template>
+      <!-- One button per choice: Pause while it prints, Resume while it is paused. Cancel is the destructive one: red
+           outline, last, and it asks first. Emergency stop is in the app bar. -->
+      <template v-if="printing" #actions>
+        <Button v-if="state === 'paused'" severity="secondary" :label="t('act.resume')" :disabled="!!resumeWhy" :aria-describedby="why" :loading="tracker.isBusy('resume')" data-focus-key="resume" data-test="resume" @click="resume">
+          <template #icon><OuiIcon :icon="play" :size="14" /></template></Button>
+        <Button v-else severity="secondary" :label="t('act.pause')" :disabled="!!pauseWhy" :aria-describedby="why" :loading="tracker.isBusy('pause')" data-focus-key="pause" data-test="pause" @click="pause">
+          <template #icon><OuiIcon :icon="pauseIcon" :size="14" /></template></Button>
+        <Button severity="danger" outlined :label="t('act.cancel')" :disabled="!!cancelWhy" :aria-describedby="why" :loading="tracker.isBusy('cancel')" data-focus-key="cancel" data-test="cancel" @click="cancel">
+          <template #icon><OuiIcon :icon="x" :size="14" /></template></Button>
+      </template>
     </OuiJob>
-    <div v-else class="oui-hero u1-idle" :class="{ 'oui-on-band': !stale }" :data-tone="stale ? 'neutral' : undefined">
-      <div class="u1-figure"><PrinterFigure :stale="stale" /></div>
-      <div class="u1-idle-id">
-        <OuiStatus v-if="stale" state="stale">{{ lastKnown }}</OuiStatus>
-        <OuiStatus v-else :state="chip" data-test="state">{{ stateName }}</OuiStatus>
-        <p class="u1-idle-name oui-truncate" :title="printerName">{{ printerName }}</p>
-        <p class="u1-idle-detail">{{ detail || t('reason.noPrint') }}</p>
+    <!-- Idle: the job block's own parts without a percentage (OuiJob always draws one). -->
+    <div v-else class="oui-job" :data-stale="stale || undefined"><div class="oui-job-block" data-thumb>
+      <div class="oui-job-thumb"><PrinterFigure :stale="stale" /></div>
+      <div class="oui-job-id">
+        <div class="oui-job-status">
+          <OuiStatus v-if="stale" state="stale">{{ lastKnown }}</OuiStatus>
+          <OuiStatus v-else :state="chip" data-test="state">{{ stateName }}</OuiStatus>
+        </div>
+        <p class="oui-job-name" :title="printerName">{{ printerName }}</p>
+        <p class="oui-job-detail oui-truncate">{{ detail || t('reason.noPrint') }}</p>
       </div>
-    </div>
-    <!-- Cancel is the destructive one: solid red, at the far end, and it asks first. Emergency stop is in the app bar. -->
-    <div class="u1-job-actions" role="group" :aria-label="t('status.controls')">
-      <Button severity="secondary" :label="t('act.pause')" :disabled="!!pauseWhy" :aria-describedby="why" :loading="tracker.isBusy('pause')" data-focus-key="pause" data-test="pause" @click="pause">
-        <template #icon><OuiIcon :icon="pauseIcon" :size="14" /></template></Button>
-      <Button severity="secondary" :label="t('act.resume')" :disabled="!!resumeWhy" :aria-describedby="why" :loading="tracker.isBusy('resume')" data-focus-key="resume" data-test="resume" @click="resume">
-        <template #icon><OuiIcon :icon="play" :size="14" /></template></Button>
-      <span class="oui-spacer" />
-      <Button severity="danger" :label="t('act.cancel')" :disabled="!!cancelWhy" :aria-describedby="why" :loading="tracker.isBusy('cancel')" data-focus-key="cancel" data-test="cancel" @click="cancel">
-        <template #icon><OuiIcon :icon="x" :size="14" /></template></Button>
-    </div>
+    </div></div>
   </OuiPanel>
 </template>
 
 <style>
-.u1-idle { display: flex; flex-direction: column; gap: var(--oui-s3); border-radius: var(--oui-radius-lg) var(--oui-radius-lg) 0 0; }
-.u1-figure { width: min(100%, 248px); margin-inline: auto; padding-block: var(--oui-s1) var(--oui-s2); }
-/* The printer photo gets its own row over the job's name and figure. */
-.u1-job .oui-job-head { flex-wrap: wrap; }
-.u1-job .oui-job-thumb { flex: 1 0 100%; }
-.u1-idle-id { display: grid; gap: 2px; min-width: 0; }
-.u1-idle-id > .oui-status { margin-bottom: 4px; }
-.u1-idle-name { font-size: var(--oui-text-lg); font-weight: 700; line-height: 1.3; }
-.u1-idle-detail { font-size: var(--oui-text-sm); }
-.u1-job-actions { display: flex; flex-wrap: wrap; gap: var(--oui-s2); padding: var(--oui-s3) var(--oui-s4); }
+/* The printer photo in the job's 72 px picture box: as high as the box allows, never sized by the photo. */
+.oui-job-thumb > .pf { width: auto; height: 64px; }
+.u1-job-skel { display: grid; grid-template-columns: 72px minmax(0, 1fr); align-items: center; gap: var(--oui-s4); }
+.u1-job-skel > .oui-skeleton { height: 72px; }
+.u1-job-skel > .oui-stack > .oui-skeleton:nth-child(1) { width: 30%; }
+.u1-job-skel > .oui-stack > .oui-skeleton:nth-child(2) { width: 60%; }
+.u1-job-skel > .oui-stack > .oui-skeleton:nth-child(3) { height: 8px; }
 </style>

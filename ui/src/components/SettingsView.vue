@@ -156,7 +156,7 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
         </div>
       </OuiFormSection>
 
-      <OuiFormSection id="options" :icon="clipboard" tone="cobalt" :title="t('prefs.title')" :aria-label="t('prefs.title')" :description="t('prefs.help')">
+      <OuiFormSection id="options" :icon="clipboard" :title="t('prefs.title')" :aria-label="t('prefs.title')" :description="t('prefs.help')">
         <OuiFormRow v-for="[k, v] in prefs" :key="k" :label="prefLabel(k)" :for="`pref-${k}`" :hint="k === 'unload_when_done' ? t('prefs.inSetup') : undefined">
           <ToggleSwitch :input-id="`pref-${k}`" :model-value="!!v" :disabled="k === 'unload_when_done' || !!controlsOff || busy || tracker.isBusy(`pref:${k}`)"
                         :aria-describedby="k === 'unload_when_done' ? undefined : why" :data-pref="k" @update:model-value="setPref(k, $event)" />
@@ -173,7 +173,7 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
     </div>
 
     <div class="oui-stack">
-      <OuiFormSection id="connection" :icon="plug" tone="cobalt" :title="t('conn.title')" :aria-label="t('conn.title')">
+      <OuiFormSection id="connection" :icon="plug" :title="t('conn.title')" :aria-label="t('conn.title')">
         <form class="oui-formsection-rows" @submit.prevent="save" @keydown.enter="onEnter">
           <OuiFormRow :label="t('conn.host')" for="c-host"><InputText id="c-host" v-model="form.host" class="oui-mono" :placeholder="t('conn.hostPh')" /></OuiFormRow>
           <OuiFormRow :label="t('conn.key')" for="c-key">

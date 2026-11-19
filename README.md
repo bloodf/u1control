@@ -86,7 +86,7 @@ From a file:
 | Console | Send G-code and read the printer's replies. `M112` runs the emergency stop. |
 | Settings | Bed mesh, input shaper and flow calibration, the Extended Firmware's settings, restart Klipper, restart Moonraker and reboot. |
 | Plugins > Run | **Check U1 connection**, **Sync U1 toolheads to project filaments** and **Apply Snapmaker Orca U1 process tuning**. |
-| Spooler | With [Spooler](https://github.com/bloodf/spooler) installed, each toolhead gets Spooler's filament profile and the Dashboard lists Spooler's stock. |
+| Spooler | With [Spooler](https://github.com/bloodf/spooler) installed, each toolhead gets Spooler's filament profile and the **Stock** tab lists Spooler's stock. |
 
 Most of it works on the stock firmware:
 

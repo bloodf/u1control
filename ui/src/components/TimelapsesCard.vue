@@ -71,8 +71,8 @@ async function del(v: Video) {
       <Button severity="secondary" size="small" :label="t('common.refresh')" :loading="state === 'loading'" :disabled="!targetKnown" data-focus-key="timelapses" data-test="tl-refresh" @click="load">
         <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
     </template>
-    <OuiEmpty v-if="!targetKnown" state="offline" :title="t('tl.noTarget')" />
-    <OuiEmpty v-else-if="state === 'error'" state="error" :title="t('tl.error', { error })">
+    <OuiEmpty v-if="!targetKnown" compact state="offline" :title="t('tl.noTarget')" />
+    <OuiEmpty v-else-if="state === 'error'" compact state="error" :title="t('tl.error', { error })">
       <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="load"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
     </OuiEmpty>
     <div v-else-if="videos.length" class="oui-table-wrap">
@@ -90,23 +90,23 @@ async function del(v: Video) {
             <td class="oui-end"><div class="tl-acts">
               <Button size="small" severity="secondary" :label="t('files.save')" :aria-label="t('tl.saveLabel', { name: v.file })" :loading="tracker.isBusy(saveKey(v))"
                       :disabled="tracker.isBusy(delKey(v))" @click="save(v)"><template #icon><OuiIcon :icon="downloadIcon" :size="14" /></template></Button>
-              <Button size="small" severity="danger" text class="tl-del" :aria-label="t('tl.deleteLabel', { name: v.file })" :title="t('files.delete')" :loading="tracker.isBusy(delKey(v))"
+              <Button size="small" severity="danger" outlined class="tl-del" :aria-label="t('tl.deleteLabel', { name: v.file })" :title="t('files.delete')" :loading="tracker.isBusy(delKey(v))"
                       :disabled="tracker.isBusy(saveKey(v))" @click="del(v)"><template #icon><OuiIcon :icon="trash" :size="14" /></template></Button>
             </div></td>
           </tr>
         </tbody>
       </table>
     </div>
-    <OuiEmpty v-else-if="state === 'loading'" state="loading" :title="t('tl.loading')" role="status" />
-    <OuiEmpty v-else-if="state === 'ok' && !supported" tone="sky" :icon="video" :title="t('tl.unsupported')" :text="t('tl.unsupportedHint')" />
-    <OuiEmpty v-else-if="state === 'ok'" tone="sky" :icon="video" :title="t('tl.empty')" :text="t('tl.emptyHint')" />
+    <OuiEmpty v-else-if="state === 'loading'" compact state="loading" :title="t('tl.loading')" role="status" />
+    <OuiEmpty v-else-if="state === 'ok' && !supported" compact tone="sky" :icon="video" :title="t('tl.unsupported')" :text="t('tl.unsupportedHint')" />
+    <OuiEmpty v-else-if="state === 'ok'" compact tone="sky" :icon="video" :title="t('tl.empty')" :text="t('tl.emptyHint')" />
   </OuiPanel>
 </template>
 <style>
 .tl-cover-col { width: 120px; }
 .tl-name, .tl-file { overflow-wrap: anywhere; }
 .tl-date { white-space: nowrap; }
-/* As in the file list: Delete is the destructive one, red, last and a gap away from Save. It always asks first. */
+/* Delete is the destructive one: a red outline, last and a gap away from Save. It always asks first. */
 .tl-acts { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--oui-s1); white-space: nowrap; }
 .tl-del { margin-inline-start: var(--oui-s3); }
 /* A narrow tab: the date and the size move under the name and the cover shrinks, so the name keeps its room and

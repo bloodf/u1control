@@ -3,18 +3,18 @@ import { computed, reactive, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { OuiIcon, OuiLevel, OuiSlot, OuiSpool, OuiStatus } from '../../shared/src/components';
+import { OuiHint, OuiIcon, OuiLevel, OuiSlot, OuiSpool, OuiStatus } from '../../shared/src/components';
 import { download, edit as editIcon, rfid as rfidIcon, upload } from '../../shared/src/icons';
 import HeaterControl from './HeaterControl.vue';
 import { s, run, tracker, controlsOff, loadSpools, guidedWhy } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, fmt } from '../core/i18n';
 import { family } from '../core/logic';
-import { headFraction, spoolFraction } from '../core/spool-level';
+import { headFraction, levelTone, spoolFraction } from '../core/spool-level';
 import type { Spool, Tag } from '../app/types';
 
-// One toolhead as an object card: its filament's colour across the top, the spool, what is left of the linked
-// Spoolman spool, its nozzle heater, and Load / Unload / Edit / Read RFID.
+// One toolhead as a neutral card: a 4 px strip of its filament's colour, the spool, what is left of the linked
+// Spoolman spool, the spool chooser, its nozzle heater, and Load / Unload / Edit / Read RFID.
 const props = defineProps<{ index: number }>();
 const i = props.index, n = i + 1;
 const TYPES = ['PLA', 'PLA+', 'PLA-CF', 'PETG', 'PETG-CF', 'PCTG', 'ABS', 'ASA', 'TPU', 'PA', 'PA-CF', 'PC', 'PVA', 'HIPS'];
@@ -68,7 +68,7 @@ const bound = computed(() => s.bindings[String(i)] ?? null);
 const linked = computed(() => (bound.value != null ? s.spools.find(x => x.id === bound.value) ?? null : null));
 const colours = computed(() => (linked.value?.colours && linked.value.colours.length > 1 ? linked.value.colours : null));
 // Filament left (headFraction), given to OuiSlot as remaining/initial; null when unknown, which draws the full reel with
-// the unknown badge (ui-foundation 4.2.2). The weight line below is ours.
+// the unknown badge. The weight line below is ours.
 const fraction = computed(() => headFraction(head.value?.loaded, linked.value));
 const grams = (v: number) => Math.round(v).toLocaleString(document.documentElement.lang || undefined);
 const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material, grams: fmt.grams(sp.remaining) });
@@ -116,7 +116,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
       <div v-if="linked" class="oui-slot-amount">
         <p v-if="linked.remaining == null" class="oui-muted">—</p>
         <p v-else class="oui-num"><strong>{{ grams(linked.remaining) }}</strong> g<span v-if="linked.initial != null" class="oui-muted"> / {{ grams(linked.initial) }} g</span></p>
-        <OuiLevel :fraction="fraction" :tone="linked.low ? 'low' : 'normal'" />
+        <OuiLevel :fraction="fraction" :tone="levelTone(fraction, linked.low)" />
       </div>
     </template>
 
@@ -142,14 +142,13 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
       <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feed.state || '—' }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
     </template>
     <form v-else :id="`hc-form-${i}`" class="hc-form" @submit.prevent="saveEdit">
-      <p class="oui-strong">{{ t('edit.title', { n }) }}</p>
+      <p class="oui-strong hc-form-title">{{ t('edit.title', { n }) }}<OuiHint v-if="tagged" :label="t('heads.tag')" :text="t('edit.rfidNote')" /></p>
       <div class="hc-grid">
         <label :for="`e${i}-v`">{{ t('edit.vendor') }}</label><InputText :id="`e${i}-v`" v-model="form.vendor" size="small" />
         <label :id="`e${i}-tl`">{{ t('edit.type') }}</label><Select v-model="form.type" :options="TYPES" :aria-labelledby="`e${i}-tl`" size="small" />
         <label :for="`e${i}-s`">{{ t('edit.subtype') }}</label><InputText :id="`e${i}-s`" v-model="form.sub" size="small" />
         <label :for="`e${i}-c`">{{ t('edit.colour') }}</label><input :id="`e${i}-c`" v-model="form.colour" type="color" class="hc-colour">
       </div>
-      <p v-if="tagged" class="oui-meta">{{ t('edit.rfidNote') }}</p>
       <div class="oui-row">
         <Button type="submit" size="small" :label="t('common.save')" :loading="tracker.isBusy(`edit:${i}`)" :disabled="!!guidedWhy" :aria-describedby="why" />
         <Button severity="secondary" size="small" :label="t('common.cancel')" @click="editing = false" />
@@ -174,6 +173,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 .hc-tag { margin-inline-start: var(--oui-s2); }
 .hc-pick { width: 100%; min-width: 0; }
 .hc-opt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.hc-form-title { display: flex; align-items: center; gap: var(--oui-s1); }
 .hc-form { display: grid; gap: var(--oui-s2); padding-top: var(--oui-s2); border-top: 1px solid var(--oui-border); }
 .hc-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--oui-s2); align-items: center; }
 .hc-grid > label { font-size: var(--oui-text-sm); font-weight: 600; color: var(--oui-muted); }

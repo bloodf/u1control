@@ -152,10 +152,16 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
     [the Spooler contract](spooler-contract.md#filament-use) for what is and isn't covered).
   - With the Extended Firmware: the printer's touchscreen (Remote Screen), live, and tappable.
   - Resume or discard a print interrupted by a power cut, and see the printer's error list.
-- **Files:** browse, print and delete G-code files. Create
-  folders, rename and move files and folders (**Move**, or drag a row onto a folder), and filter the
-  list by name. Each print file shows its estimated time and filament. Nothing is ever replaced: a
-  rename or move onto a name the folder already has is refused.
+- **Stock:** Spooler's stock, when Spooler runs in the same OrcaSlicer. Choose a toolhead on the left
+  (T1 to T4, each with the spool that is in it), then **Link to T1** on a spool's row. Search, filter
+  by material or by the chosen toolhead's material. The tab shows how many spools there are.
+- **Files:** the printer's folders as a tree, the open folder's files as a list, and the selected
+  file's picture, details and actions (**Print**, **Save**, **Rename**) beside it. Select several
+  files (click, Ctrl or Cmd-click, Shift-click, or the checkboxes), then **Move to…** a folder or
+  drag them onto a folder in the tree, or **Delete** them: one question, with the names. Create a
+  folder, and rename, move or delete the open one. Filter the list by name. Nothing is ever replaced:
+  a rename or move onto a name the folder already has is refused. The printer's camera folder is read
+  only: its files can be saved.
   - **Time-lapses:** every video the U1 recorded, newest first, with its cover picture, the print's
     name, the date and the size. **Save** copies the video to `Downloads/u1control` on your computer;
     **Delete** asks first, then removes the video and its cover pictures from the printer. Both work
@@ -195,7 +201,7 @@ Automagic is on. See [settings.md](settings.md) for every setting.
 profiles. With Spooler installed, u1control applies Spooler's profile for the spool in each toolhead
 and steps aside while Spooler's "Keep Slots Synced" runs. Without it, u1control's own Spoolman tools
 do the job. The two plugins agree on which spool is in which toolhead and record filament use only
-once. While Spooler runs in the same OrcaSlicer, the U1 Control Dashboard also lists Spooler's stock
+once. While Spooler runs in the same OrcaSlicer, U1 Control's **Stock** tab lists Spooler's stock
 (search, filters, low stock) and links a spool to a toolhead from there. OrcaSlicer can't hide a
 plugin's tab, so Spooler's own tab stays unless you turn its page off in the Plugins dialog. The
 details are in [spooler-contract.md](spooler-contract.md).

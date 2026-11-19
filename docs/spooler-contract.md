@@ -1,10 +1,10 @@
 # Spooler contract
 
 [Spooler](https://github.com/bloodf/spooler) (0.10.0 or newer) and u1control can run side by side.
-Spooler is optional. This is what each side does so the two never fight. The stock list in the U1 Control
-Dashboard uses Spooler's presence and stock-list API, which first shipped in Spooler 0.21.0; the joint tests of
+Spooler is optional. This is what each side does so the two never fight. The stock list in U1 Control's
+Stock tab uses Spooler's presence and stock-list API, which first shipped in Spooler 0.21.0; the joint tests of
 u1control 0.4.0 run against the Spooler release `v0.21.0`. With an older Spooler the two still share profiles and
-bindings, but the Dashboard shows no Spooler stock.
+bindings, but the Stock tab shows no Spooler stock.
 
 ## Which spool is in which toolhead
 
@@ -44,7 +44,7 @@ bindings, but the Dashboard shows no Spooler stock.
 - **Right away.** Each presence file carries `"links"`: the time (unix ms) that plugin last linked or
   unlinked a spool, 0 before the first. u1control moves its own on every bind and unbind (the
   automatic one included) and rewrites its presence at once; it reads Spooler's with the stock list
-  (every 5 s while the Dashboard shows) and re-reads Spoolman when it moved. Spooler reads u1control's
+  (every 5 s while the Dashboard or the Stock tab shows) and re-reads Spoolman when it moved. Spooler reads u1control's
   on its 5 s beat and refreshes its open page. A plugin without `"links"` is followed by the timed
   re-read only.
 
@@ -165,12 +165,12 @@ without user name or password.
 
 ## Stock from Spooler in the U1 Control tab
 
-While Spooler runs in this OrcaSlicer, the Dashboard of the U1 Control tab gets a **Stock from
-Spooler** card next to the camera, print status and toolheads: search, material filter, "same material
-as the toolhead", remaining grams (low stock from Spooler's setting, "use first" from Spooler), and a
-button per spool to link it to the chosen toolhead. Without Spooler the card isn't shown.
+While Spooler runs in this OrcaSlicer, the **Stock** tab of U1 Control lists Spooler's stock: the four
+toolheads to choose from on the left, and on the right search, material filter, "same material as T1",
+remaining grams (low stock from Spooler's setting, "use first" from Spooler), and a button per spool to
+link it to the chosen toolhead. Without Spooler the tab says so in one line and lists nothing.
 
-- U1 Control's presence says when its tab shows that card (`"wants": {"stock_until": <unix s>,
+- U1 Control's presence says when its tab shows that list or the Dashboard (`"wants": {"stock_until": <unix s>,
   "stock_request": <n>}`). Only then does Spooler write `<OrcaSlicer data folder>/spooler/stock.json`,
   from its own Spoolman reads and at most every 30 s (or when Refresh raises `stock_request`). Spooler
   writes nothing to Spoolman or a printer for it.
