@@ -358,7 +358,6 @@ export const zhCN: Record<MessageKey, string> = {
   'files.delete': '删除',
   'files.empty': '此文件夹中没有文件。',
   'files.loading': '正在列出文件…',
-  'files.error': '无法列出文件：{error}',
   'files.noTarget': '连接 U1 后才能查看其文件。',
   'files.top': '{root}（顶层）',
   'files.noFolder': '没有其他可移入的文件夹。请用“新建文件夹”创建一个。',
@@ -751,4 +750,5 @@ export const zhCN: Record<MessageKey, string> = {
   'files.deleted_other': '已删除 {n} 个文件',
   'files.readOnly': '只读',
   'files.readOnlyWhy': '打印机只允许保存这些文件，不能移动或删除。延时摄影可在下方列表中删除。',
+  'files.loadFailed': '无法读取文件',
 };

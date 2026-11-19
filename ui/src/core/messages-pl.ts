@@ -350,7 +350,6 @@ export const pl: Record<PolishKey, string> = {
   'files.delete': 'Usuń',
   'files.empty': 'Brak plików w tym folderze.',
   'files.loading': 'Wczytywanie listy plików…',
-  'files.error': 'Nie udało się pobrać listy plików: {error}',
   'files.noTarget': 'Połącz się z U1, aby zobaczyć jej pliki.',
   'files.top': '{root} (najwyższy poziom)',
   'files.noFolder': 'Brak innego folderu, do którego można przenieść. Utwórz go przyciskiem Nowy folder.',
@@ -756,4 +755,5 @@ export const pl: Record<PolishKey, string> = {
   'files.deleted_many': 'Usunięto {n} plików',
   'files.readOnly': 'Tylko do odczytu',
   'files.readOnlyWhy': 'Drukarka pozwala te pliki zapisać, ale nie przesunąć ani usunąć. Nagrania timelapse można usunąć na liście poniżej.',
+  'files.loadFailed': 'Nie udało się odczytać plików',
 };

@@ -56,6 +56,13 @@ const REQS = (agents, ext, sm, spooler = 'ok') => [{id: 'printer_agents', status
   {id: 'extended_firmware', status: ext, details: ext === 'unknown' ? {} : {version: '1.0'}},
   {id: 'spoolman', status: sm, details: sm === 'ok' ? {url: 'http://box:7912', via: 'direct'} : {}},
   {id: 'spooler', status: spooler, details: {url: 'https://example.invalid/spooler'}}];
+// The Files tab reads both folder trees, then the open folder: answer the trees not yet answered.
+const treesAnswered = new Set();
+async function trees(gcodes = ['gcodes', 'gcodes/sub'], camera = ['camera']) {
+  const waiting = () => cmds('folders').filter(m => !treesAnswered.has(m.id));
+  await until(() => waiting().length >= 2, 'both folder trees asked for');
+  for (const m of waiting()) { treesAnswered.add(m.id); await reply(m, m.args.root === 'gcodes' ? gcodes : camera); }
+}
 const reqRow = name => byTest('req-' + name);
 const reqStatus = name => text(q('.oui-status', reqRow(name)));
 const reqSteps = name => { const el = q('.oui-req-install > span', reqRow(name)); return el ? el.textContent.split('\\n').map(x => x.trim()).filter(Boolean) : []; };
@@ -209,6 +216,7 @@ test('the printer photo: spools in the Spoolman colour, else the printer colour,
 test('thumbnails only for visible rows, two at a time, dropped on folder change', `
   await connect();
   await tab('files');
+  await trees();
   await until(() => last('cmd', 'files'), 'files listed');
   const files = Array.from({length: 500}, (_, i) => ({name: 'f' + i + '.gcode', size: 1, modified: 500 - i, time: 60, thumb: '.thumbs/f' + i + '-300x300.png'}));
   await reply(last('cmd', 'files'), {path: 'gcodes', dirs: [{name: 'sub'}], files, disk: {free: 2e9}});
@@ -1068,6 +1076,7 @@ const FILES = {path: 'gcodes', dirs: [{name: 'sub'}], disk: {free: 2e9},
 test('files: a newly selected printer starts at the top folder', `
   await connect();
   await tab('files');
+  await trees();
   await until(() => last('cmd', 'files'));
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
   await click(q('[data-folder="gcodes/sub"]'));
@@ -1076,6 +1085,7 @@ test('files: a newly selected printer starts at the top folder', `
   const before = cmds('files').length;
   await post({type: 'selection_changed'});
   await connect('stock', 2);
+  await trees();
   await until(() => cmds('files').length > before, 'listed again');
   eq(last('cmd', 'files').args.path, 'gcodes', 'top folder of the new printer');
 `);
@@ -1083,6 +1093,7 @@ test('files: a newly selected printer starts at the top folder', `
 test('files: rename asks for the new name and never sends an unchanged one', `
   await connect();
   await tab('files');
+  await trees();
   await until(() => last('cmd', 'files'));
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
   assert(!btn('Rename benchy.gcode'), 'the actions of one file show once it is selected');
@@ -1099,6 +1110,7 @@ test('files: rename asks for the new name and never sends an unchanged one', `
   eq(last('cmd', 'rename').args, {path: 'gcodes/benchy.gcode', name: 'boat.gcode'}, 'path and new name');
   const listed = cmds('files').length;
   await reply(last('cmd', 'rename'), {path: 'gcodes/boat.gcode'});
+  await trees();
   await until(() => cmds('files').length > listed, 'listed again after the rename');
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
   assert(!byTest('folder-rename'), 'a file root is never renamed');
@@ -1113,6 +1125,7 @@ test('files: rename asks for the new name and never sends an unchanged one', `
 test('files: filter by name and show each file\'s filament', `
   await connect();
   await tab('files');
+  await trees();
   await until(() => last('cmd', 'files'));
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
   const rows = () => qa('.oui-files-row').map(r => r.dataset.file);
@@ -1133,11 +1146,12 @@ const ABC = {path: 'gcodes', dirs: [{name: 'sub'}], disk: {free: 2e9},
 const FILES_OPEN = `
   await connect();
   await tab('files');
-  await until(() => last('cmd', 'files') && cmds('folders').length === 2, 'the open folder and both folder trees asked for');
-  const treeOf = root => cmds('folders').filter(m => m.args.root === root).pop();
-  await reply(treeOf('gcodes'), ['gcodes', 'gcodes/sub', 'gcodes/sub/deep']);
-  await reply(treeOf('camera'), ['camera']);
+  const TREE = ['gcodes', 'gcodes/sub', 'gcodes/sub/deep'];
+  await trees(TREE);
+  await until(() => last('cmd', 'files'), 'the open folder asked for once the trees are known');
   await reply(last('cmd', 'files'), ${JSON.stringify(ABC)});
+  // After a change the browser reads the trees and the open folder again.
+  const again = async (tree, answer) => { const n = cmds('files').length; await trees(tree); await until(() => cmds('files').length > n, 'listed again'); if (answer) await reply(last('cmd', 'files'), answer); };
   const row = n => q('[data-file="gcodes/' + n + '.gcode"]');
   const picked = () => qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file.split('/').pop());
   const folderEl = id => q('[data-folder="' + id + '"]');
@@ -1164,12 +1178,10 @@ test('files: a tree of the printer\'s folders, several files selected, moved by 
   await until(() => cmds('move').length === 2, 'then the second');
   await fail(cmds('move')[1], 'gcodes/sub already has something named b.gcode; nothing was moved');
   await until(() => cmds('move').length === 3, 'a failure does not stop the rest');
-  const listed = cmds('files').length;
   await reply(cmds('move')[2], {path: 'gcodes/sub/c.gcode'});
   await until(() => toasts().includes('Moved 2 files'), 'one message for the files that went: ' + toasts());
   assert(alerts().includes('Move failed') && alerts().includes('b.gcode'), 'the one that stayed says why: ' + alerts());
-  await until(() => cmds('files').length > listed, 'listed again');
-  await reply(last('cmd', 'files'), {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1, 2))}});
+  await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1, 2))}});
   eq(qa('.oui-files-row').map(r => r.dataset.file), ['gcodes/b.gcode'], 'what is left');
   // Drag and drop, with the events a browser sends (the same code runs for a real drag).
   const dt = new DataTransfer();
@@ -1215,7 +1227,7 @@ test('files: Delete asks once, with the names; the camera folder is read only an
   eq(cmds('delete')[1].args, {path: 'gcodes/b.gcode'}, 'then the other');
   await reply(cmds('delete')[1], true);
   await until(() => toasts().includes('Deleted 2 files'), 'one message: ' + toasts());
-  await reply(last('cmd', 'files'), {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(2))}});
+  await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(2))}});
   // Enter on a row is the page's main action for it: Print, which asks first.
   await click(row('c'));
   assert(btn('Print c.gcode') && !btn('Print c.gcode').classList.contains('p-button-secondary'), 'Print is the one primary action');
@@ -1231,11 +1243,37 @@ test('files: Delete asks once, with the names; the camera folder is read only an
   await click(q('[data-file="camera/shot.jpg"]'));
   assert(q('#files-ro') && text(q('#files-ro')) === 'Read only', 'says it is read only, once');
   assert(btn('Delete', bar()).disabled && btn('Delete', bar()).getAttribute('aria-describedby') === 'files-ro', 'Delete off, pointing at the reason');
-  assert(q('.oui-files-move').classList.contains('p-disabled') && byTest('files-mkdir').disabled, 'Move and New folder off too');
+  assert(q('.oui-files-move').classList.contains('p-disabled') && !byTest('files-mkdir') && !byTest('folder-delete'), 'Move off; no folder is made, renamed or deleted here');
   assert(q('[data-file="camera/shot.jpg"]').getAttribute('draggable') === 'false', 'nothing to drag');
   assert(btn('Save shot.jpg') && !btn('Print shot.jpg') && !btn('Rename shot.jpg'), 'a picture can be saved, not printed or renamed');
   await click(btn('Save shot.jpg'));
   eq(last('cmd', 'download').args, {path: 'camera/shot.jpg'}, 'saved from its own root');
+`);
+
+test('files: newest first; a read that fails says so, keeps the tree and reads again on Try again', `
+  await connect();
+  await tab('files');
+  await trees();
+  await until(() => last('cmd', 'files'));
+  await fail(last('cmd', 'files'), 'the U1 did not answer in 5 s');
+  assert(text(byTest('files')).includes('The files could not be read') && text(byTest('files')).includes('did not answer'), 'what failed and why: ' + text(byTest('files')));
+  assert(q('[data-folder="gcodes/sub"]') && !q('.oui-files-row'), 'the folders stay; no rows are made up');
+  await click(q('[data-files-retry]'));
+  await trees();
+  await until(() => cmds('files').length === 2, 'read again');
+  await reply(last('cmd', 'files'), {path: 'gcodes', dirs: [], files: [{name: 'old.gcode', modified: 1}, {name: 'new.gcode', modified: 9}, {name: 'mid.gcode', modified: 5}]});
+  const rows = () => qa('.oui-files-row').map(r => r.dataset.file.split('/').pop());
+  eq(rows(), ['new.gcode', 'mid.gcode', 'old.gcode'], 'newest first, as the printer lists them');
+  await click(q('.oui-files-sort'));
+  eq(rows(), ['mid.gcode', 'new.gcode', 'old.gcode'], 'any column can still be sorted');
+  // a camera root the firmware does not share is still listed: opening it says what is wrong
+  await click(byTest('files-refresh'));
+  const walks = cmds('folders').slice(-2);
+  await reply(walks.find(m => m.args.root === 'gcodes'), ['gcodes']);
+  await fail(walks.find(m => m.args.root === 'camera'), 'no such root');
+  await until(() => cmds('files').length === 3);
+  await reply(last('cmd', 'files'), {path: 'gcodes', dirs: [], files: []});
+  assert(q('[data-folder="camera"]') && !alerts(), 'a root that cannot be walked stays in the tree, without an error');
 `);
 
 test('files: a new folder, and the open folder renamed, moved and deleted', `
@@ -1247,9 +1285,8 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   await yes();
   eq(last('cmd', 'mkdir').args, {path: 'gcodes/Spares'}, 'in the open folder');
   await reply(last('cmd', 'mkdir'), true);
-  assert(folderEl('gcodes/Spares'), 'in the tree at once');
-  await until(() => cmds('folders').length === 4, 'the tree is read again');
-  await reply(treeOf('gcodes'), ['gcodes', 'gcodes/Spares', 'gcodes/sub', 'gcodes/sub/deep']);
+  await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], ${JSON.stringify(ABC)});
+  assert(folderEl('gcodes/Spares'), 'in the tree once it is read again');
   await click(folderEl('gcodes/sub'));
   await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [{name: 'deep'}], files: []});
   assert(text(byTest('files')).includes('No files in this folder'), 'an empty folder says so');
@@ -1259,8 +1296,8 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   await click(btn('Spares', dialogEl()));
   eq(last('cmd', 'move').args, {path: 'gcodes/sub', folder: 'gcodes/Spares'}, 'the folder moves whole');
   await reply(last('cmd', 'move'), {path: 'gcodes/Spares/sub'});
-  await until(() => last('cmd', 'files').args.path === 'gcodes/Spares/sub', 'the page follows it');
-  await reply(last('cmd', 'files'), {path: 'gcodes/Spares/sub', dirs: [{name: 'deep'}], files: []});
+  await again(['gcodes', 'gcodes/Spares', 'gcodes/Spares/sub', 'gcodes/Spares/sub/deep'], {path: 'gcodes/Spares/sub', dirs: [{name: 'deep'}], files: []});
+  eq(last('cmd', 'files').args.path, 'gcodes/Spares/sub', 'the page follows it');
   eq(folderEl('gcodes/Spares/sub').getAttribute('aria-selected'), 'true', 'open and marked where it is now');
   assert(!folderEl('gcodes/sub'), 'gone from where it was');
   await click(byTest('folder-rename'));
@@ -1269,8 +1306,8 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   await yes();
   eq(last('cmd', 'rename').args, {path: 'gcodes/Spares/sub', name: 'old'}, 'renamed where it is');
   await reply(last('cmd', 'rename'), {path: 'gcodes/Spares/old'});
-  await until(() => last('cmd', 'files').args.path === 'gcodes/Spares/old', 'the page follows the new name');
-  await reply(last('cmd', 'files'), {path: 'gcodes/Spares/old', dirs: [], files: []});
+  await again(['gcodes', 'gcodes/Spares', 'gcodes/Spares/old'], {path: 'gcodes/Spares/old', dirs: [], files: []});
+  eq(last('cmd', 'files').args.path, 'gcodes/Spares/old', 'the page follows the new name');
   const del = byTest('folder-delete');
   assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-outlined'), 'deleting a folder is a red outline');
   await click(del);
@@ -1281,7 +1318,8 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   await yes();
   eq(last('cmd', 'delete').args, {path: 'gcodes/Spares/old', is_dir: true}, 'the folder and what is in it');
   await reply(last('cmd', 'delete'), true);
-  await until(() => last('cmd', 'files').args.path === 'gcodes/Spares', 'back in the folder above');
+  await again(['gcodes', 'gcodes/Spares'], {path: 'gcodes/Spares', dirs: [], files: []});
+  eq(last('cmd', 'files').args.path, 'gcodes/Spares', 'back in the folder above');
   assert(!folderEl('gcodes/Spares/old'), 'and out of the tree');
 `);
 
@@ -1311,6 +1349,8 @@ test('time-lapses: one row per video with its cover; saving says where the file 
   eq(panel.getAttribute('aria-labelledby'), 'timelapses-h', 'labelled by its title');
   await until(() => cmds('timelapse_cover').length === 2, 'covers asked for');
   eq(cmds('timelapse_cover').map(m => m.args), [{path: 'timelapse/benchy_20261116130921_cover.jpg'}, {path: 'timelapse/vase_20261115080000.jpg'}], 'only the videos that have a picture');
+  await trees();
+  await until(() => last('cmd', 'files'), 'print files asked for');
   await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
   await click(byTest('files-refresh'));
   await reply(cmds('timelapse_cover')[0], ${JSON.stringify(PIXEL)});

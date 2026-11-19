@@ -51,7 +51,7 @@ async function send() {
 <template>
   <div class="u1-head">
     <OuiPageHeader :title="t('console.title')" :meta="targetKnown ? printerName : t('console.noTarget')">
-      <template #actions><OuiHint end :label="t('console.title')"><span id="console-help">{{ t('console.help') }}</span></OuiHint></template>
+      <template #actions><OuiHint id="console-help" end :label="t('console.title')" :text="t('console.help')" /></template>
     </OuiPageHeader>
     <div id="u1-banner-console" />
   </div>

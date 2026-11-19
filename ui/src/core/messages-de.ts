@@ -359,7 +359,6 @@ export const de: Record<MessageKey, string> = {
   'files.delete': 'Löschen',
   'files.empty': 'Keine Dateien in diesem Ordner.',
   'files.loading': 'Dateien werden aufgelistet…',
-  'files.error': 'Die Dateien konnten nicht aufgelistet werden: {error}',
   'files.noTarget': 'Verbinden Sie sich mit einem U1, um seine Dateien zu sehen.',
   'files.top': '{root} (oberste Ebene)',
   'files.noFolder': 'Kein anderer Ordner als Ziel vorhanden. Legen Sie mit Neuer Ordner einen an.',
@@ -752,4 +751,5 @@ export const de: Record<MessageKey, string> = {
   'files.deleted_other': '{n} Dateien gelöscht',
   'files.readOnly': 'Schreibgeschützt',
   'files.readOnlyWhy': 'Der Drucker lässt diese Dateien speichern, aber nicht verschieben oder löschen. Zeitraffer lassen sich in der Liste darunter löschen.',
+  'files.loadFailed': 'Die Dateien konnten nicht gelesen werden',
 };

@@ -357,7 +357,6 @@ export const en = {
   'files.delete': 'Delete',
   'files.empty': 'No files in this folder.',
   'files.loading': 'Listing files…',
-  'files.error': 'Couldn’t list the files: {error}',
   'files.noTarget': 'Connect to a U1 to see its files.',
   'files.top': '{root} (top level)',
   'files.noFolder': 'No other folder to move to. Create one with New folder.',
@@ -750,6 +749,7 @@ export const en = {
   'files.deleted_other': 'Deleted {n} files',
   'files.readOnly': 'Read only',
   'files.readOnlyWhy': 'The printer lets these files be saved, not moved or deleted. Time-lapses can be deleted in the list below.',
+  'files.loadFailed': 'The files could not be read',
 } as const;
 
 export type MessageKey = keyof typeof en;
@@ -1110,7 +1110,6 @@ export const ptBR: Record<MessageKey, string> = {
   'files.delete': 'Excluir',
   'files.empty': 'Nenhum arquivo nesta pasta.',
   'files.loading': 'Listando arquivos…',
-  'files.error': 'Não foi possível listar os arquivos: {error}',
   'files.noTarget': 'Conecte-se a uma U1 para ver os arquivos.',
   'files.top': '{root} (raiz)',
   'files.noFolder': 'Não há outra pasta para onde mover. Crie uma com Nova pasta.',
@@ -1502,4 +1501,5 @@ export const ptBR: Record<MessageKey, string> = {
   'files.deleted_other': '{n} arquivos excluídos',
   'files.readOnly': 'Somente leitura',
   'files.readOnlyWhy': 'A impressora permite salvar estes arquivos, não mover nem excluir. Os timelapses podem ser excluídos na lista abaixo.',
+  'files.loadFailed': 'Não foi possível ler os arquivos',
 };

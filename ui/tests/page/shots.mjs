@@ -42,7 +42,9 @@ if (SCN === 'dash') { __t.handler({type: 'notice', text: 'Project filaments upda
 if (SCN === 'settings' || SCN === 'stock' || SCN === 'files' || SCN === 'console') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
 if (SCN === 'settings') { document.querySelector('.oui-settings-link[data-section="connection"]').click(); await sleep(100); }
 if (SCN === 'files') {
-  ans('folders', ['gcodes', 'gcodes/archive', 'gcodes/archive/2025', 'gcodes/calibration']);
+  // the browser reads both folder trees, then the open folder
+  for (const m of __t.sent.filter(x => x.type === 'cmd' && x.cmd === 'folders')) __t.handler({type: 'reply', id: m.id, result: m.args.root === 'gcodes' ? ['gcodes', 'gcodes/archive', 'gcodes/archive/2025', 'gcodes/calibration'] : ['camera']});
+  await until(() => __t.sent.some(x => x.type === 'cmd' && x.cmd === 'files'));
   ans('files', {path: 'gcodes', dirs: [{name: 'archive'}, {name: 'calibration'}], files: [{name: 'desk_organiser_plate_1.gcode', size: 4200000, modified: Date.now()/1000 - 3600, time: 7440, weight: 84.4},
     {name: 'benchy.gcode', size: 900000, modified: Date.now()/1000 - 86400, time: 2700, weight: 12.1}, {name: 'cable_clip_x8.gcode', size: 310000, modified: Date.now()/1000 - 200000, time: 1500, weight: 6}], disk: {free: 5.2e9}});
   ans('timelapses', {supported: true, videos: [{path: 'timelapse/benchy_20261116130921.mp4', file: 'benchy_20261116130921.mp4', name: 'benchy', size: 375588, modified: Date.now()/1000 - 90000, cover: null}]});

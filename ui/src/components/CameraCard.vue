@@ -26,17 +26,14 @@ function setFps(n: number) {
   fpsChoice.value = n;
   bridge.post({ type: 'camera_fps', value: n });
 }
-// load does not bubble: it is listened for on its way down to the picture. Icons (svg) send one too and don't count.
-function shown(e: Event) { if (e.target instanceof HTMLImageElement) bridge.post({ type: 'frame_ack' }); }
 const state = computed(() => (!s.camOn ? 'off' : s.frame ? 'live' : s.camError ? 'error' : 'loading'));
 const title = computed(() => (!s.camOn ? t('cam.off') : s.camError ? t('cam.unavailable', { error: s.camError }) : t('cam.starting')));
 </script>
 <template>
   <!-- The picture box keeps its 16:9 whatever the camera does, so turning it on does not move the page. The rate, the
        snapshot and on/off are the module's header; what the rate means is its (i). -->
-  <OuiPanel :icon="camera" tone="sky" flush aria-labelledby="cam-h" :hint-label="t('cam.about')">
+  <OuiPanel :icon="camera" tone="sky" flush aria-labelledby="cam-h" :hint="t('cam.fpsHelp')" hint-id="cam-fps-help" :hint-label="t('cam.about')">
     <template #title><span id="cam-h">{{ t('cam.title') }}</span></template>
-    <template #hint><span id="cam-fps-help">{{ t('cam.fpsHelp') }}</span></template>
     <template #actions>
       <Select v-if="s.camOn" :model-value="fps" :options="FPS" option-label="label" option-value="value" size="small" :aria-label="t('cam.fps')"
               :pt="{ label: { 'aria-describedby': 'cam-fps-help' } }" data-test="cam-fps" @update:model-value="setFps" />
@@ -45,9 +42,9 @@ const title = computed(() => (!s.camOn ? t('cam.off') : s.camError ? t('cam.unav
       <Button severity="secondary" size="small" :label="s.camOn ? t('cam.stop') : t('cam.start')" :disabled="!s.camOn && !targetKnown" data-focus-key="camera" data-test="camera" @click="toggle">
         <template #icon><OuiIcon :icon="s.camOn ? cameraOff : camera" :size="14" /></template></Button>
     </template>
-    <!-- Every picture shown is acknowledged, so the plugin sends the next one. -->
-    <OuiCamera :src="s.frame" :alt="t('cam.alt', { printer: printerName })" :state="state" :title="title" :text="s.camOn ? undefined : targetKnown ? t('cam.offHint') : t('cam.noTarget')"
-               @load.capture="shown">
+    <!-- Every picture shown is acknowledged, so the plugin sends the next one. The camera's picture is shown whole. -->
+    <OuiCamera fit="contain" :src="s.frame" :alt="t('cam.alt', { printer: printerName })" :state="state" :title="title" :text="s.camOn ? undefined : targetKnown ? t('cam.offHint') : t('cam.noTarget')"
+               @frame="bridge.post({ type: 'frame_ack' })">
       <template #overlay><span class="oui-chip">{{ t('cam.live') }}</span><span class="oui-chip oui-num">{{ t('cam.fpsOption', { n: fps }) }}</span></template>
     </OuiCamera>
   </OuiPanel>

@@ -17,7 +17,7 @@ import { split } from '../core/tracker';
 // Live regions are the persistent wrappers below (polite, assertive, status): they are in the page before anything
 // is added, so additions are announced. Each banner inside drops its own role (role="none") so nothing is announced
 // twice.
-// foundation-gap: OuiBanner (5.0.0) still always sets role alert/status; it should take `live: false` (and use
+// foundation-gap: OuiBanner (5.0.3) still always sets role alert/status; it should take `live: false` (and use
 // role="note" for static banners itself). Until then the role is overridden here and on static banners (role="note").
 const offline = computed(() => s.phase === 'unreachable' || !!s.offline);
 const firstRun = computed(() => s.phase === 'noTarget' && s.tab === 'dash');   // the Dashboard says it itself, with the way out

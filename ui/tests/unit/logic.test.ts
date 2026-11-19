@@ -76,15 +76,13 @@ test('colourFar: the print setup hints only at clearly different colours', () =>
   assert.equal(colourFar('#fff', '#000000'), false);
 });
 
-test('the folder tree: parents from paths, roots named, only the open root\'s writable folders take files', () => {
+test('the folder tree: parents from paths, roots named and in the order given, a read-only root read only throughout', () => {
   const name = (r: string) => ({ gcodes: 'Print files', camera: 'Camera' } as Record<string, string>)[r] ?? r;
-  const tree = folderTree(['gcodes', 'camera', 'gcodes/b/deep', 'gcodes/a', 'camera/shots'], 'gcodes/a', name, ['camera']);
-  // roots in the order given, their folders by name; gcodes/b was never listed: added as a parent
+  const tree = folderTree(['gcodes', 'camera', 'gcodes/b/deep', 'gcodes/a', 'camera/shots'], name, ['camera']);
+  // gcodes/b was never listed: added as a parent
   assert.deepEqual(tree.map(f => f.id), ['gcodes', 'gcodes/a', 'gcodes/b', 'gcodes/b/deep', 'camera', 'camera/shots']);
   assert.deepEqual(tree.map(f => [f.name, f.parent]), [['Print files', null], ['a', 'gcodes'], ['b', 'gcodes'], ['deep', 'gcodes/b'], ['Camera', null], ['shots', 'camera']]);
-  assert.deepEqual(tree.filter(f => !f.locked).map(f => f.id), ['gcodes', 'gcodes/a', 'gcodes/b', 'gcodes/b/deep']);
-  // inside the read-only root nothing can take a file, not even its own folders
-  assert.deepEqual(folderTree(['gcodes', 'camera', 'camera/shots'], 'camera', name, ['camera']).filter(f => !f.locked), []);
+  assert.deepEqual(tree.filter(f => f.readonly).map(f => f.id), ['camera', 'camera/shots']);
   assert.equal(rootOf('gcodes/sub/a.gcode'), 'gcodes');
 });
 

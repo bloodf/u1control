@@ -358,7 +358,6 @@ export const es: Record<MessageKey, string> = {
   'files.delete': 'Borrar',
   'files.empty': 'No hay archivos en esta carpeta.',
   'files.loading': 'Listando archivos…',
-  'files.error': 'No se pudieron listar los archivos: {error}',
   'files.noTarget': 'Conecte con una U1 para ver sus archivos.',
   'files.top': '{root} (nivel superior)',
   'files.noFolder': 'No hay otra carpeta a la que mover. Cree una con Nueva carpeta.',
@@ -751,4 +750,5 @@ export const es: Record<MessageKey, string> = {
   'files.deleted_other': '{n} archivos borrados',
   'files.readOnly': 'Solo lectura',
   'files.readOnlyWhy': 'La impresora permite guardar estos archivos, no moverlos ni borrarlos. Los timelapses se pueden borrar en la lista de abajo.',
+  'files.loadFailed': 'No se pudieron leer los archivos',
 };

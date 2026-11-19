@@ -38,7 +38,7 @@ async function powerDiscard() {
       <span v-else :class="{ 'u1-stale': stale }"><template v-if="s.info">{{ s.info.address }} · </template><span data-test="firmware">{{ fwText }}</span></span>
     </template>
     <template #actions>
-      <OuiHint end :label="t('heads.syncAbout')"><span id="sync-help">{{ t('heads.syncHelp') }}</span></OuiHint>
+      <OuiHint id="sync-help" end :label="t('heads.syncAbout')" :text="t('heads.syncHelp')" />
       <Button severity="secondary" :label="t('heads.sync')" :disabled="!!controlsOff" data-focus-key="sync" data-test="sync" :aria-describedby="controlsOff ? 'heads-why' : 'sync-help'" @click="bridge.post({ type: 'sync_project' })">
         <template #icon><OuiIcon :icon="check" :size="14" /></template></Button>
     </template>
