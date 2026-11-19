@@ -681,6 +681,7 @@ export const de: Record<MessageKey, string> = {
   'files.deleteLabel': '{name} löschen',
   'files.printLabel': '{name} drucken',
   'files.saveLabel': '{name} speichern',
+  'settings.back': 'Zurück', 'settings.hasError': 'enthält einen Wert zum Korrigieren',
   'settings.nav': 'Bereiche der Einstellungen',
   'settings.discard': 'Verwerfen',
   'about.title': 'Über',

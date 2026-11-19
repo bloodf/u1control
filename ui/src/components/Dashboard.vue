@@ -11,7 +11,7 @@ import ToolheadsCard from './ToolheadsCard.vue';
 import StockCard from './StockCard.vue';
 import UsageCard from './UsageCard.vue';
 import SpoolerHint from './SpoolerHint.vue';
-import { s, run, hello, controlsOff } from '../app/store';
+import { s, openSettings, run, hello, controlsOff } from '../app/store';
 import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
 import firstRunArt from '../assets/u1-toolheads.webp';
@@ -46,7 +46,7 @@ async function powerDiscard() {
     <OuiPanel :id="s.tab === 'dash' ? 'heads-why' : undefined" class="u1-first" flush role="status" :data-test="s.tab === 'dash' ? 'target-banner' : undefined">
       <OuiEmpty :image="firstRunArt" :title="t('target.none.title')" :text="t('target.none.body')">
         <template #actions>
-          <Button :label="t('common.openSettings')" @click="s.tab = 'settings'"><template #icon><OuiIcon :icon="settings" :size="14" /></template></Button>
+          <Button :label="t('common.openSettings')" @click="openSettings('connection')"><template #icon><OuiIcon :icon="settings" :size="14" /></template></Button>
           <Button severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
         </template>
       </OuiEmpty>
