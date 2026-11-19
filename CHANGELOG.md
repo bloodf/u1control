@@ -6,6 +6,7 @@
 
 ### Fixed
 
+- A spool assigned to a toolhead in Spooler now shows in U1 Control without reconnecting: the tab re-reads Spoolman every 30 s while it is visible (Settings > Connection > **Refresh Spoolman every**: 10 to 300 s, or off), and at once when Spooler says it changed a link. Hidden, it pauses; after failed reads it waits longer, up to 5 minutes, and says "Spoolman unreachable, retrying". A link made in U1 Control likewise shows in Spooler's open tab at once.
 - On Windows, **U1 Control — print setup** could still stay blank for a G-code file with a very large embedded thumbnail: the page was too big for OrcaSlicer on Windows even without the path preview. Such a page now opens without the thumbnail, and shows the printer icon in its place.
 
 ## [0.14.0] - 2026-11-19

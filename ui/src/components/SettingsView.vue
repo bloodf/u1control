@@ -17,6 +17,11 @@ import { LOCALES } from '../core/i18n-core';
 import type { Automation, Requirement } from '../app/types';
 import type { LangPref } from '../core/i18n-core';
 import { boot } from '../core/boot';
+import * as bridge from '../core/bridge';
+
+// Settings > Connection: how often the page re-reads Spoolman (stored by the plugin as spoolman_refresh_s; 0 = off).
+const REFRESH = computed(() => [0, 10, 15, 30, 60, 120, 300].map(n => ({ value: n, label: n ? t('sm.refreshOption', { n }) : t('sm.refreshOff') })));
+function setRefresh(n: number) { bridge.post({ type: 'spoolman_refresh', value: n }); }
 
 const autos = computed(() => config.value?.automations ?? []);
 const autoLabel = (a: Automation) => tMaybe(`auto.${a.key}`, a.label);
@@ -178,6 +183,10 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
           <OuiFormRow :label="t('conn.name')" for="c-name"><InputText id="c-name" v-model="form.name" /></OuiFormRow>
           <OuiFormRow :label="t('conn.sm')" for="c-sm"><InputText id="c-sm" v-model="form.spoolman" class="oui-mono" :placeholder="t('conn.smPh')" /></OuiFormRow>
         </form>
+        <OuiFormRow :label="t('sm.refresh')" :hint="t('sm.refreshHelp')">
+          <Select :model-value="s.refreshS" :options="REFRESH" option-label="label" option-value="value" :aria-label="t('sm.refresh')" data-test="sm-refresh"
+                  @update:model-value="setRefresh($event as number)" />
+        </OuiFormRow>
       </OuiFormSection>
 
 

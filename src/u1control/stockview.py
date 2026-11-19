@@ -22,6 +22,10 @@ class StockMixin:
 
     peers = None
 
+    def links_changed(self):
+        if self.peers is not None:
+            self.peers.links_changed()
+
     def want_stock(self, refresh=False):
         if self.peers is not None:
             self.peers.want_stock(refresh)

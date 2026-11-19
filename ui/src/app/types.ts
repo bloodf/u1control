@@ -15,7 +15,7 @@ export interface Info { address: string; firmware: { kind: string; version?: str
 export interface Spool { id: number; name: string; vendor: string; material: string; colour?: string; colours?: string[];
   remaining?: number | null; initial?: number | null; location?: string; filament_id?: number; low?: boolean; use_first?: boolean }
 export interface StockView {
-  spooler: { state: string; text: string; detail?: string; version?: string };
+  spooler: { state: string; text: string; detail?: string; version?: string; links?: number };
   stock: { state: string; code?: string; text: string; detail?: string; rows: Spool[]; key: string; ts?: number };
   same_spoolman: boolean | null; usage: string; bindings: Record<string, number>;
 }
