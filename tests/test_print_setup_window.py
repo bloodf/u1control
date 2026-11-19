@@ -150,7 +150,7 @@ class WindowTests(unittest.TestCase):   # noqa: D101
     def test_long_plate_page_stays_under_the_limit_with_its_preview(self):
         # A long plate (300 layers of 1000 moves, two heads): the sampled preview keeps the page small enough for
         # OrcaSlicer's WebView2 on Windows, so the preview is kept, not dropped by the safety net.
-        with open(self.path, "a") as f:
+        with open(self.path, "a", newline="") as f:   # "\n" as written, also on Windows
             f.write("\nM83\n")   # SAMPLE has no final newline
             for layer in range(300):
                 f.write(";LAYER_CHANGE\nT%d\n" % (layer % 2))
