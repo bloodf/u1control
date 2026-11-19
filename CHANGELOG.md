@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.14.1] - 2026-11-19
+
 ### Fixed
 
 - On Windows, **U1 Control — print setup** could still stay blank for a G-code file with a very large embedded thumbnail: the page was too big for OrcaSlicer on Windows even without the path preview. Such a page now opens without the thumbnail, and shows the printer icon in its place.
