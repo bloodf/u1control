@@ -179,7 +179,7 @@ Every main page, in every plugin, is the same four things in the same order:
    - `.oui-split` (a list with a rail and/or a detail): `data-rail` adds a 260 px column on the left, `data-detail` a 320 px one on the right; they stack under 900 px.
    - `OuiSettings` (settings).
 
-A module is always an `OuiPanel`: a 40 px header (toned icon, title, one line of meta, an (i) when it needs one, actions at the right in small controls), a 12 px body (or `flush` for tables and media), an optional footer. Modules never nest.
+A module is always an `OuiPanel`: a 40 px header (toned icon, title, one line of meta, an (i) when it needs one, actions at the right in small controls; in a narrow column it wraps to a second line inside the panel rather than widening the page, and a state chip in it keeps its word), a 12 px body (or `flush` for tables and media), an optional footer. Modules never nest.
 
 ### The dashboard standard (Kobra Control, U1 Control)
 
@@ -262,7 +262,7 @@ Import each from `shared/src/components` (or its own `.vue` file).
 | `OuiHint` | **new.** The (i): opens on hover and focus, closes on Escape, and is the button's description for a screen reader. Closed it takes no room; open it places itself inside the window, whichever edge its button is near |
 | `OuiStatus` | a state, as a tinted chip (default) or `plain` coloured text |
 | `OuiJob` | the compact status block: picture, state, name, percentage or count, bar, stats, actions. `compact` for the dock; `stale` is grey. `hero` is accepted and ignored |
-| `OuiSetpoint` | a controlled value: reading in its phase colour, target, chart, input, Set, Off. Opt-in: `validate` (refuse a value, with a reason line), `error`, `inputId`, `offAlways` |
+| `OuiSetpoint` | a controlled value: reading in its phase colour, target, chart, input, Set, Off. Opt-in: `validate` (refuse a value at Set, with a reason line), `v-model:draft` with `invalid` (refuse it while it is typed), `error`, `inputId`, `offAlways`, decimals and `locale` |
 | `OuiControlRow` | **new.** A line of a controls module: icon, label, current value, control. With `.oui-controls` and `.oui-controls-group` |
 | `OuiCamera` | **new.** The 16:9 picture box with its live, off, loading and error states; `fit`, a `frame` event per picture, `#picture` for the page's own player |
 | `OuiSlot` | a toolhead or slot as a neutral card: a 4 px strip of the filament's colour, badge and state, drawn spool, filament, amount with its level, extra rows, actions; `active` |

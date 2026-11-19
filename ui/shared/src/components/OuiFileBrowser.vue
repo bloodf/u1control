@@ -188,9 +188,11 @@ const one = computed(() => (pickedRows.value.length === 1 ? pickedRows.value[0] 
 // question has closed and the row it would give focus back to is already gone.
 const list = ref<HTMLElement>();
 let hadFocus = false;
-onBeforeUpdate(() => { hadFocus = !!list.value?.contains(document.activeElement); });
+// Sticky until onUpdated has read it: one change of the files can update this component twice in the same flush (the rows,
+// then the selection that the gone rows leave), and by the second time the focused row has already been removed.
+onBeforeUpdate(() => { hadFocus ||= !!list.value?.contains(document.activeElement); });
 function holdFocus() { if (!list.value?.contains(document.activeElement)) (table.value?.querySelector<HTMLElement>('.oui-files-row[tabindex="0"]') ?? list.value)?.focus(); }
-onUpdated(() => { if (hadFocus) holdFocus(); });
+onUpdated(() => { if (hadFocus) holdFocus(); hadFocus = false; });
 </script>
 <template>
   <div class="oui-files"><div class="oui-files-grid" :data-flat="!hasTree || undefined" :data-dragging="dragging.length ? true : undefined">

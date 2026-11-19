@@ -1,4 +1,45 @@
-# Orca UI foundation 5.0.3 — Vue and PrimeVue
+# Orca UI foundation 5.0.6 — Vue and PrimeVue
+
+Version 5.0.6 fixes what the U1 Control migration found in `OuiSetpoint` and the file browser. Nothing is removed.
+
+`OuiSetpoint`, fixes:
+
+- A reading that changed while the user typed erased the field: every render gave PrimeVue's number field new objects for two of its props, so it redrew itself from its model, which did not yet hold what was being typed. A printer's status tick did it every second or two. The objects are now the same between renders and the model follows every keystroke.
+- Set stayed disabled until the field was left. It is enabled from the first digit, and a click that does not take focus from the field (a test, a script) sends what was typed.
+- Without `validate`, what is sent is always within `min`..`max`, however Set was reached.
+
+`OuiSetpoint`, new and optional:
+
+- `v-model:draft`: what the field holds at every keystroke (a number, or null when blank), so the page can judge a value while it is typed, and clear the field.
+- `invalid`: the page's verdict on what is typed. Set is disabled and the field marked at once, with no press of Set; the reason goes in `error`. `errorId` sets the id of that reason line.
+- `maxFractionDigits` (decimals; default none, as before), `locale` (the language numbers are typed in), `inputProps` (more props, attributes and listeners for the number field).
+- `setAriaLabel` and `offAriaLabel`: accessible names for Set and Off on a page with several rows.
+
+File browser:
+
+- Focus after a delete or a move was lost when the storage answered after the question had closed (any real printer): the component could update twice in one flush and forget that it had focus. It now remembers until it has acted.
+- `useFileBackend` asks for the open folder's files alongside the folder tree instead of after it.
+
+To update from 5.0.5, replace `ui/shared/` with the 5.0.6 snapshot and rebuild.
+
+## 5.0.5
+
+Version 5.0.5 keeps a state chip whole in a narrow `OuiPanel` header; nothing else changes:
+
+- In 5.0.4 the meta gave way first, so an `OuiStatus` in the header's meta could shrink to just its mark when the title and the actions still fitted on the line ("1 needs attention" became a lone warning triangle at 380 px). A meta that holds a state chip is now as wide as the chip, and it is the actions that go to the second line. Text meta still shortens with an ellipsis.
+- This uses `:has()`. In a web view without it (WebKit before 15.4) the chip shrinks as it did in 5.0.4; nothing else is affected.
+
+To update from 5.0.4, replace `ui/shared/` with the 5.0.5 snapshot and rebuild. A header with a state chip, a title and actions can be one line taller in a narrow dock than it was.
+
+## 5.0.4
+
+Version 5.0.4 fixes `OuiPanel`'s header in narrow places; nothing else changes:
+
+- A header that could not shrink (a title, a state chip and two buttons; or one holding a select) set the least width of its whole column: a page in the 380 px dock came out about 445 px wide and scrolled sideways. The header now wraps inside its panel: the meta gives way first, then the actions go to a second line, then they wrap among themselves, and a long title breaks beside its icon. Where there is room it is one 40 px line, as before.
+
+To update from 5.0.3, replace `ui/shared/` with the 5.0.4 snapshot and rebuild. Remove any `flex-wrap` a plugin put on `.oui-panel-head`.
+
+## 5.0.3
 
 Version 5.0.3 takes in what the Kobra Control and U1 Control migrations found. It is additive: no prop, slot or event is removed, and a component given none of the new props behaves as in 5.0.2, apart from the fixes.
 
