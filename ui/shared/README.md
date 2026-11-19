@@ -1,4 +1,44 @@
-# Orca UI foundation 5.0.0 — Vue and PrimeVue
+# Orca UI foundation 5.0.3 — Vue and PrimeVue
+
+Version 5.0.3 takes in what the Kobra Control and U1 Control migrations found. It is additive: no prop, slot or event is removed, and a component given none of the new props behaves as in 5.0.2, apart from the fixes.
+
+Fixes:
+
+- `OuiFileBrowser`, detail pane: when its content was taller than the browser, the picture's row shrank to nothing and the picture was drawn over the name and facts. Rows are now as tall as their content and the pane scrolls.
+- `OuiFileBrowser`, Delete key: on a focused row with nothing selected, the first press selected the row and asked nothing. It now asks at once.
+- `OuiFileBrowser`, focus: after a delete or a move, focus stays in the list (the first row, or the list when it is empty) instead of falling to the page.
+- `OuiFileBrowser`, the last column is 168 px (was 132): a short date and time fits in English and pt-BR.
+- `OuiConfirm`: once closed, focus goes back to what had it when the dialog opened, if that is still on the page; then it emits the new `closed` event.
+- `OuiSetpoint`: `describedby` now reaches the number field itself (PrimeVue was putting it on the field's wrapper).
+
+New, all optional:
+
+- `OuiSetpoint`: `inputId` (an id for the field, and a real `<label>`), `error` (a line under the row, from the page), `validate` (asked before every `set`; it can refuse a value, with a reason shown in that line, and may be async; with it the field no longer clamps to `min`..`max`), `offAlways` (Off stays enabled with no target).
+- `OuiFileBrowser`: `sort` (the order the list opens in, e.g. `{ key: 'modified', down: true }`); a `#folder` slot beside the path for what can be done to the open folder (rename, move, delete, new folder); `readonly` on a folder (its files can be looked at, not moved, deleted or added to).
+- `OuiCamera`: a `frame` event each time the built-in picture has loaded; `fit="contain"` to show a picture that is not 16:9 whole; a `#picture` slot for a page's own player (`<video>`, canvas).
+- `OuiPanel`: `hintId`, the id of the hint's text, for a control's `aria-describedby` (`OuiHint` takes `id`).
+
+To update from 5.0.2, replace `ui/shared/` with the 5.0.3 snapshot and rebuild. Then remove what a plugin added to work around these: its own heater row, CSS on `.oui-files-detail`, `.oui-files-move` or the date column, a click on a column header at mount, folder actions in `#toolbar`, a `<video>` laid over `OuiCamera`, a captured `load` listener on the camera, and focus moved by hand after a delete.
+
+## 5.0.2
+
+Version 5.0.2 fixes `OuiHint` (and so every `OuiPanel` with a `hint`); nothing else changes:
+
+- A closed bubble was only invisible, and still counted toward the page's width: an (i) near the right edge gave the page a horizontal scrollbar, and its open bubble was cut off by the window. Closed, the bubble is now `display: none` (it is still the button's `aria-describedby` text).
+- Each time it opens, the bubble is placed against the window: under the button and starting at it when that fits, moved left as far as it must, and above the button when there is no room below. No prop is needed for an (i) near an edge. `end` still exists and is now only a preference.
+
+To update from 5.0.1, replace `ui/shared/` with the 5.0.2 snapshot and rebuild. Remove any CSS a plugin added to move or hide `.oui-hint-bubble`, and any `end` added only to avoid the overflow.
+
+## 5.0.1
+
+Version 5.0.1 makes the Files tab one component for both printer plugins; nothing that 5.0.0 pages rely on changes:
+
+- `useFileBackend(backend, options)` (new, `src/components/fileBackend.ts`) turns a storage adapter (`OuiFileBackend`: `folders()`, `list()`, `remove()`, `move()`) into the props and handlers of `OuiFileBrowser`: reading, the failure state with its retry, running a move or delete and reading again afterwards.
+- `OuiFileBrowser` works over a storage with no folders (`folders` omitted or empty): no tree, no path, no "Move to", no dragging; the table takes the rail's place and multi-select, delete and the detail panel are unchanged. `movable` false keeps the tree and drops moving. New props `error`, `busy`, `movable`; new event `retry`; new optional labels `loadFailed`, `retry`. `folders` and `folder` are now optional.
+
+To update from 5.0.0, replace `ui/shared/` with the 5.0.1 snapshot (one more file) and rebuild. `MIGRATION-5.0.md` has the adapter's contract.
+
+## 5.0.0
 
 Version 5.0.0 is a redesign and a breaking release: the pages take OrcaSlicer's own colours. `DESIGN.md` is the specification, `MIGRATION-5.0.md` the procedure for a plugin. In short:
 
