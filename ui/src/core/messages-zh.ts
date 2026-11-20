@@ -740,7 +740,7 @@ export const zhCN: Record<MessageKey, string> = {
   'files.moveToFolder': '移动到…',
   'files.deleteTitle_one': '删除 1 个文件？',
   'files.deleteTitle_other': '删除 {n} 个文件？',
-  'files.deleteText': '它们将从打印机中移除，无法撤销。',
+  'files.deleteText': '从打印机删除后无法撤销。',
   'files.andMore': '以及另外 {n} 个',
   'files.none': '未选择文件',
   'files.noneHint': '选择一个文件以查看详情并打印。',
