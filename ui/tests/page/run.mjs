@@ -1014,6 +1014,25 @@ test('i18n: host language pl_PL gives pl, including safety dialogs and errors', 
   assert(alerts().includes('Wstrzymaj – błąd') && alerts().includes('timeout'), 'errors in pl, printer text as given: ' + alerts());
 `, { lang: 'pl_PL' });
 
+test('i18n: host language cs_CZ gives cs, including safety dialogs and errors', `
+  await until(() => last('hello'));
+  eq(document.documentElement.lang, 'cs', 'lang attribute');
+  assert(text(q('[data-tab="dash"]')).includes('Přehled') && text(q('[data-tab="settings"]')).includes('Nastavení'), 'nav in cs');
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  assert(text(byTest('state')).startsWith('Tiskne'), 'state translated: ' + text(byTest('state')));
+  await click(byTest('cancel'));
+  assert(btn('Zrušit tisk', dialogEl()) && btn('Pokračovat v tisku', dialogEl()), 'cancel dialog in cs');
+  await no();
+  await click(byTest('estop'));
+  assert(btn('Zastavit hned (E-stop)', dialogEl()) && btn('Zpět', dialogEl()), 'E-stop dialog in cs');
+  await no();
+  await fail(last('cmd', 'spools') || {id: -1}, 'x');
+  await click(byTest('pause'));
+  await fail(last('cmd', 'pause'), 'timeout');
+  assert(alerts().includes('Pozastavit selhalo') && alerts().includes('timeout'), 'errors in cs, printer text as given: ' + alerts());
+`, { lang: 'cs_CZ' });
+
 test('i18n: Traditional Chinese OrcaSlicer reads Simplified Chinese', `
   await until(() => last('hello'));
   eq(document.documentElement.lang, 'zh-CN', 'zh_TW -> zh-CN');
@@ -1026,7 +1045,7 @@ test('i18n: unknown host language falls back to English', `
   assert(text(q('[data-tab="settings"]')).includes('Settings'), 'nav in English');
 `, { lang: 'fr_FR' });
 
-test('i18n: Deutsch, Español, 简体中文 and Polski can be chosen by hand and are kept', `
+test('i18n: Deutsch, Español, 简体中文, Polski and Čeština can be chosen by hand and are kept', `
   await connect();
   await tab('settings');
   await pick(byTest('lang'), 'Deutsch');
@@ -1041,6 +1060,10 @@ test('i18n: Deutsch, Español, 简体中文 and Polski can be chosen by hand and
   await pick(byTest('lang'), 'Polski');
   assert(text(q('[data-tab="settings"]')).includes('Ustawienia'), 'switched to Polish');
   eq(last('ui_language').value, 'pl', 'Polish kept');
+  await pick(byTest('lang'), 'Čeština');
+  assert(text(q('[data-tab="settings"]')).includes('Nastavení'), 'switched to Czech');
+  eq(last('ui_language').value, 'cs', 'Czech kept');
+  await pick(byTest('lang'), 'Polski');
   await pick(byTest('lang'), 'Automatycznie (English)');
   eq(last('ui_language').value, 'auto', 'automatic from Polish');
   await pick(byTest('lang'), '简体中文');
@@ -1576,7 +1599,7 @@ test('settings: says whether the process preset runs the toolhead choice and whe
 `);
 
 // PrimeVue's InputNumber reads only the locale's decimal sign; '.' typed or pasted must not turn 2.5 into 25.
-for (const [lang, shown] of [['de_DE', '2,5'], ['es_ES', '2,5'], ['pt_BR', '2,5'], ['pl_PL', '2,5'], ['en', '2.5']]) {
+for (const [lang, shown] of [['de_DE', '2,5'], ['es_ES', '2,5'], ['pt_BR', '2,5'], ['pl_PL', '2,5'], ['cs_CZ', '2,5'], ['en', '2.5']]) {
   test(`decimal input: "2.5" typed or pasted is 2.5 in ${lang}`, `
     await connect();
     await post({type: 'status', data: VIEW()});

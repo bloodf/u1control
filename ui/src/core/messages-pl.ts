@@ -554,6 +554,7 @@ export const pl: Record<PolishKey, string> = {
   'lang.de': 'Deutsch',
   'lang.zh-CN': '简体中文',
   'lang.pl': 'Polski',
+  'lang.cs': 'Čeština',
   'lang.help': 'Automatycznie oznacza język OrcaSlicer, a potem systemu. Twój wybór jest zapisywany tylko w tym OrcaSlicer.',
   'about.text': 'U1 Control {version} · Niezależny projekt, niezwiązany ze Snapmaker.',
   'auto.auto_add_pipeline': 'Dodawaj „Ustawienia druku U1” do profili procesu U1',
