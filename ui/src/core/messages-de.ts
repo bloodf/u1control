@@ -741,7 +741,7 @@ export const de: Record<MessageKey, string> = {
   'files.moveToFolder': 'Verschieben nach…',
   'files.deleteTitle_one': '1 Datei löschen?',
   'files.deleteTitle_other': '{n} Dateien löschen?',
-  'files.deleteText': 'Sie werden vom Drucker entfernt. Das lässt sich nicht rückgängig machen.',
+  'files.deleteText': 'Das Löschen vom Drucker lässt sich nicht rückgängig machen.',
   'files.andMore': 'und {n} weitere',
   'files.none': 'Keine Datei ausgewählt',
   'files.noneHint': 'Wählen Sie eine Datei, um ihre Details zu sehen und sie zu drucken.',

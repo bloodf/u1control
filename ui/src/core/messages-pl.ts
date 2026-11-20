@@ -741,7 +741,7 @@ export const pl: Record<PolishKey, string> = {
   'files.deleteTitle_other': 'Usunąć {n} pliku?',
   'files.deleteTitle_few': 'Usunąć {n} pliki?',
   'files.deleteTitle_many': 'Usunąć {n} plików?',
-  'files.deleteText': 'Zostaną usunięte z drukarki. Tego nie da się cofnąć.',
+  'files.deleteText': 'Usunięcia z drukarki nie da się cofnąć.',
   'files.andMore': 'i jeszcze {n}',
   'files.none': 'Nie zaznaczono pliku',
   'files.noneHint': 'Zaznacz plik, aby zobaczyć jego szczegóły i go wydrukować.',

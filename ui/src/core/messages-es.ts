@@ -740,7 +740,7 @@ export const es: Record<MessageKey, string> = {
   'files.moveToFolder': 'Mover a…',
   'files.deleteTitle_one': '¿Borrar 1 archivo?',
   'files.deleteTitle_other': '¿Borrar {n} archivos?',
-  'files.deleteText': 'Se quitan de la impresora. No se puede deshacer.',
+  'files.deleteText': 'Borrar de la impresora no se puede deshacer.',
   'files.andMore': 'y {n} más',
   'files.none': 'Ningún archivo seleccionado',
   'files.noneHint': 'Seleccione un archivo para ver sus detalles e imprimirlo.',
