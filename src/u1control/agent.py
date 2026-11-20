@@ -230,30 +230,35 @@ GUARDED = {"G28": None, "M104": u1.HOTEND_MAX, "M140": u1.BED_MAX, "M106": 255} 
 
 
 def guarded_line(script):
-    """(code, {letter: number or None}) for a Device tab home, heater or fan line, else None (the line runs as given)."""
-    words = str(script or "").upper().split()
-    if not words or words[0] not in GUARDED:
-        return None
-    args = {}
-    for w in words[1:]:
-        try:
-            args[w[0]] = float(w[1:]) if len(w) > 1 else None
-        except ValueError:
-            args[w[0]] = None
-    return words[0], args
+    """[(line, code, {letter: number or None})] for the Device tab home, heater and fan lines in script (any line of
+    it, comments dropped); empty when there are none and the script runs as given."""
+    out = []
+    for line in str(script or "").splitlines():
+        words = line.split(";", 1)[0].upper().split()
+        if not words or words[0] not in GUARDED:
+            continue
+        args = {}
+        for w in words[1:]:
+            try:
+                args[w[0]] = float(w[1:]) if len(w) > 1 else None
+            except ValueError:
+                args[w[0]] = None
+        out.append((" ".join(line.split()), words[0], args))
+    return out
 
 
 def line_refusal(script, view):
-    """Why the Device tab may not run this guarded_line now (translated), or None. Only while the U1 is idle, as the
-    tab's commands; heater targets 0..the U1 limit, fan 0..255, toolhead T0..T3."""
-    if u1.machine_busy(view):
+    """Why the Device tab may not run the guarded_line lines of script now (translated), or None. Only while the U1
+    is idle, as the tab's commands; heater targets 0..the U1 limit, fan 0..255, toolhead T0..T3."""
+    lines = guarded_line(script)
+    if lines and u1.machine_busy(view):
         return tr("the U1 is busy (%s)") % (view.get("machine_state") or view.get("state") or "").lower()
-    code, args = guarded_line(script)
-    top, s, t = GUARDED[code], args.get("S"), args.get("T", 0)
-    if top is not None and (s is None or not 0 <= s <= top):
-        return tr("%s out of range (0 to %d)") % (" ".join(script.split()), top)
-    if code == "M104" and (t is None or t != int(t) or not 0 <= t < u1.TOOLHEADS):
-        return tr("bad toolhead")
+    for text, code, args in lines:
+        top, s, t = GUARDED[code], args.get("S"), args.get("T", 0)
+        if top is not None and (s is None or not 0 <= s <= top):
+            return tr("%s out of range (0 to %d)") % (text, top)
+        if code == "M104" and (t is None or t != int(t) or not 0 <= t < u1.TOOLHEADS):
+            return tr("bad toolhead")
     return None
 
 

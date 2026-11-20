@@ -111,10 +111,14 @@ class CommandTests(unittest.TestCase):
 
     def test_device_tab_home_heater_and_fan_lines_are_guarded(self):
         idle, printing = view(), view(state="printing")
-        self.assertEqual(agent.guarded_line("G28 \n"), ("G28", {}))
-        self.assertEqual(agent.guarded_line("m140 s60"), ("M140", {"S": 60.0}))
-        self.assertIsNone(agent.guarded_line("M117 hi"))          # anything else runs as given
-        self.assertIsNone(agent.guarded_line("G91 \nG1 X10 F3000\nG90 \n"))
+        self.assertEqual(agent.guarded_line("G28 \n"), [("G28", "G28", {})])
+        self.assertEqual(agent.guarded_line("m140 s60 ; warm"), [("m140 s60 ; warm", "M140", {"S": 60.0})])
+        self.assertEqual(agent.guarded_line("M117 hi"), [])          # anything else runs as given
+        self.assertEqual(agent.guarded_line("G91 \nG1 X10 F3000\nG90 \n"), [])
+        for script in ("G28\nM104 S900", "M104 S900\nM104 S200", "M117 x\nM140 S500"):   # every line is checked
+            self.assertIn("out of range", agent.line_refusal(script, idle), script)
+        self.assertIn("busy", agent.line_refusal("M117 x\nG28", printing))
+        self.assertIsNone(agent.line_refusal("M117 x", printing))
         for line in ("G28 \n", "G28 X\n", "M140 S60\n", "M104 S200\n", "M104 T3 S200", "M106 P1 S255 \n", "M140 S0"):
             self.assertIsNone(agent.line_refusal(line, idle), line)
         for line in ("G28 \n", "M140 S60\n", "M104 S200\n", "M106 P1 S128 \n"):
