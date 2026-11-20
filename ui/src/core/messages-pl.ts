@@ -368,6 +368,8 @@ export const pl: Record<PolishKey, string> = {
   'files.moveTo': 'Przenieś {name} do:',
   'files.newFolderIn': 'Nowy folder w {path}',
   'files.folderName': 'Nazwa folderu',
+  'files.view.list': 'Lista',
+  'files.view.grid': 'Siatka',
   'files.nameErr.empty': 'Wpisz nazwę.',
   'files.nameErr.invalid': 'Nazwa nie może zawierać / ani być . lub ..',
   'files.nameErr.spaces': 'Nazwa nie może zaczynać się ani kończyć spacją.',

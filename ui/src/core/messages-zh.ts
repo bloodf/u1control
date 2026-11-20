@@ -376,6 +376,8 @@ export const zhCN: Record<MessageKey, string> = {
   'files.moveTo': '把 {name} 移动到：',
   'files.newFolderIn': '在 {path} 中新建文件夹',
   'files.folderName': '文件夹名称',
+  'files.view.list': '列表',
+  'files.view.grid': '网格',
   'files.nameErr.empty': '请输入名称。',
   'files.nameErr.invalid': '名称不能包含 /，也不能是 . 或 ..',
   'files.nameErr.spaces': '名称不能以空格开头或结尾。',

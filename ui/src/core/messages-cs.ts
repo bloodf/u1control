@@ -366,6 +366,8 @@ export const cs: Record<CzechKey, string> = {
   'files.moveTo': 'Přesunout {name} do:',
   'files.newFolderIn': 'Nová složka v {path}',
   'files.folderName': 'Název složky',
+  'files.view.list': 'Seznam',
+  'files.view.grid': 'Mřížka',
   'files.nameErr.empty': 'Zadejte název.',
   'files.nameErr.invalid': 'Název nesmí obsahovat / ani být . nebo ..',
   'files.nameErr.spaces': 'Název nesmí začínat ani končit mezerou.',

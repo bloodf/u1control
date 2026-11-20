@@ -29,7 +29,9 @@ export function interpolate(text: string, params?: Record<string, unknown>): str
 /** "<base>_one" for the language's singular, "<base>_other" otherwise (Chinese has no singular form). A language with
  *  more forms has them in its dictionary (Polish "_few", "_many"; Czech "_few"), picked by the same Intl rule when `dict` holds them. */
 export function pluralKey(locale: Locale, base: string, n: number, dict?: Record<string, string>): string {
-  const form = new Intl.PluralRules(locale).select(n);
+  // "_one" texts are written for exactly one ("1 arquivo"); Portuguese also puts 0 in "one", which read "1 arquivo" for no files.
+  const rule = new Intl.PluralRules(locale).select(n);
+  const form = rule === 'one' && n !== 1 ? 'other' : rule;
   if (dict && `${base}_${form}` in dict) return `${base}_${form}`;
   return form === 'one' ? `${base}_one` : `${base}_other`;
 }
