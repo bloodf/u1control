@@ -80,6 +80,21 @@ class PushTests(unittest.TestCase):
         self.assertEqual(trays[3]["tray_type"], "PLA MATTE")
         self.assertEqual(trays[3]["tray_color"], "000000FF")
 
+    def test_toolheads_reach_orcaslicers_filament_parser(self):
+        """Regression: with print.ams a flat list, OrcaSlicer took the pushes but found no trays, so Sync said "no
+        filament system ... was found on it" (Plater.cpp NO_FILAMENT_SYSTEM: pushes seen, filament_ams_list empty)
+        and the Device tab showed one external spool. DM parse_json calls DevFilaSystemParser::ParseV1_0 when print
+        has "ams"; it reads only jj["ams"]["ams"] (an object's key: nlohmann contains() is false on a list) and the
+        bits as hex strings beside it (DevFilaSystem.cpp:389-401). Replayed here on the JSON text the agent sends."""
+        jj = json.loads(json.dumps(agent.push_status(view())))["print"]
+        self.assertIsInstance(jj["ams"], dict)
+        self.assertIn("ams", jj["ams"])
+        self.assertEqual(int(jj["ams"]["ams_exist_bits"], 16), 0b1)       # one unit
+        self.assertEqual(int(jj["ams"]["tray_exist_bits"], 16), 0b1011)   # T1, T2, T4 loaded
+        unit, = jj["ams"]["ams"]
+        self.assertEqual(len(unit["tray"]), u1.TOOLHEADS)
+        self.assertNotIn("ams_exist_bits", jj)                              # not beside print.ams, where it is ignored
+
     def test_state_progress_and_light(self):
         p = agent.push_status(view(state="printing"))["print"]
         self.assertEqual((p["gcode_state"], p["mc_percent"], p["mc_remaining_time"]), ("RUNNING", 25, 30))
