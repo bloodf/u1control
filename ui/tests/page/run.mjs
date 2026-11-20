@@ -149,6 +149,16 @@ test('editing a tagged head asks before FORCE', `
   eq(cmds('set_filament')[1].args.force, false, 'untagged head: no FORCE');
 `);
 
+test('feeder: a spool unloaded from the head but still in the feeder says so', `
+  await connect();
+  await post({type: 'status', data: VIEW({feed: [{state: 'preload_finish', detected: true}, {state: 'load_finish', detected: true}, {}, {}]})});
+  await until(() => q('[data-not-in-head="0"]'), 'T1 says it is not in the head');
+  eq(qa('[data-not-in-head]').length, 1, 'only T1');
+  const cards = qa('.hc');
+  assert(text(cards[0]).includes('at the inlet, not in the head'), 'feeder line in words: ' + text(cards[0]));
+  assert(text(cards[1]).includes('in the head') && !text(cards[1]).includes('load_finish'), 'no raw state for T2');
+`);
+
 test('busy machine disables guided commands; unload-when-done is read-only; E-stop stays', `
   await connect();
   await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING', options: {bed_level: true, unload_when_done: true}})});

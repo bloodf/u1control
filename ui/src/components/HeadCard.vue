@@ -8,7 +8,7 @@ import { download, edit as editIcon, rfid as rfidIcon, upload } from '../../shar
 import HeaterControl from './HeaterControl.vue';
 import { s, run, tracker, controlsOff, loadSpools, guidedWhy } from '../app/store';
 import { ask } from '../core/dialog';
-import { t, fmt } from '../core/i18n';
+import { t, fmt, tMaybe } from '../core/i18n';
 import { family } from '../core/logic';
 import { headFraction, levelTone, spoolFraction } from '../core/spool-level';
 import type { Spool, Tag } from '../app/types';
@@ -23,6 +23,10 @@ const head = computed(() => s.status?.heads[i]);
 const tag = computed<Tag | null>(() => s.status?.rfid?.[i] ?? null);
 const feed = computed(() => s.status?.feed?.[i] ?? {});
 const active = computed(() => !!s.status?.extruders[i]?.active);
+// The feeder knows whether the filament went all the way into the toolhead (load_finish) or only waits at the
+// inlet (preload_finish, e.g. after Unload): the RFID tag and filament_exist stay set either way.
+const notInHead = computed(() => !!head.value?.loaded && ['preload_finish', 'wait_insert', 'unload_finish'].includes(feed.value.state || ''));
+const feedText = computed(() => (feed.value.state ? tMaybe(`heads.feedState.${feed.value.state}`, feed.value.state) : '—'));
 const tagged = computed(() => !!(head.value?.official || tag.value));
 const tagText = computed(() => {
   const g = tag.value;
@@ -107,6 +111,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
     <template #state>
       <OuiStatus v-if="!head.loaded" state="idle">{{ t('heads.empty') }}</OuiStatus>
       <OuiStatus v-else-if="active && s.status?.state === 'printing'" state="busy">{{ t('status.state.printing') }}</OuiStatus>
+      <OuiStatus v-else-if="notInHead" state="idle" :data-not-in-head="i">{{ t('heads.notInHead') }}</OuiStatus>
       <OuiStatus v-else-if="linked?.low" state="warn">{{ t('heads.low') }}</OuiStatus>
       <OuiStatus v-else-if="active" state="ok">{{ t('heads.activeChip') }}</OuiStatus>
     </template>
@@ -139,7 +144,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
     </template>
     <HeaterControl :id="String(i)" card />
     <template v-if="!editing">
-      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feed.state || '—' }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
+      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
     </template>
     <form v-else :id="`hc-form-${i}`" class="hc-form" @submit.prevent="saveEdit">
       <p class="oui-strong hc-form-title">{{ t('edit.title', { n }) }}<OuiHint v-if="tagged" :label="t('heads.tag')" :text="t('edit.rfidNote')" /></p>

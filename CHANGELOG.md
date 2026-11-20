@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- A toolhead whose filament was unloaded but whose spool still sits in the feeder (feeder state `preload_finish`) now says **Not in the head** instead of looking loaded, and the feeder line reads in words (in the head, at the inlet, waiting for filament, unloaded) instead of the raw firmware state.
+
 ## [0.15.1] - 2026-11-20
 
 ### Changed
