@@ -1279,6 +1279,24 @@ test('files: newest first; a read that fails says so, keeps the tree and reads a
   assert(q('[data-folder="camera"]') && !alerts(), 'a root that cannot be walked stays in the tree, without an error');
 `);
 
+// A narrow tab: the folders go above the list and the open file's details under it. The list keeps its rows.
+for (const size of [[420, 900], [600, 720]]) test(`files: at ${size.join('x')} the rows stay in sight with a file's details open`, `
+  ${FILES_OPEN}
+  await click(row('b'));
+  await until(() => btn('Print b.gcode'), 'the details of the file are open');
+  await settle();
+  const box = sel => q(sel).getBoundingClientRect();
+  const rows = box('.oui-files-scroll'), tools = box('.oui-files-toolbar'), bulk = box('.oui-files-bar'), detail = box('.oui-files-detail'), all = box('.oui-files-grid');
+  assert(rows.height >= 110, 'room for the column heads and at least two rows: ' + rows.height);
+  for (const n of ['a', 'b']) { const r = row(n).getBoundingClientRect(); assert(r.top >= rows.top - 1 && r.bottom <= rows.bottom + 1, n + '.gcode is in sight: ' + r.top + '..' + r.bottom + ' in ' + rows.top + '..' + rows.bottom); }
+  assert(tools.bottom <= bulk.top + 1 && box('#files-filter').bottom <= tools.bottom + 1, 'the path, New folder and the filter keep their own lines: ' + tools.bottom + ' / ' + bulk.top);
+  assert(bulk.bottom <= rows.top + 1 && box('.oui-files-bar .p-button-danger').bottom <= bulk.bottom + 1, 'Move to and Delete are whole, over the rows');
+  assert(detail.top >= rows.bottom - 1 && detail.height <= all.height * 0.42, 'the details sit under the list and take no more than their share: ' + detail.height + ' of ' + all.height);
+  const pane = q('.oui-files-detail');
+  assert(pane.scrollHeight <= pane.clientHeight + 1 || getComputedStyle(pane).overflowY === 'auto', 'details that do not fit scroll inside their pane');
+  assert(document.documentElement.scrollWidth <= innerWidth, 'no sideways scrolling');
+`, { size });
+
 test('files: a new folder, and the open folder renamed, moved and deleted', `
   ${FILES_OPEN}
   await click(byTest('files-mkdir'));

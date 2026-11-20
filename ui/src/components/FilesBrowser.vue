@@ -179,5 +179,9 @@ async function deleteFolder() {
 /* The browser fills the window under the bars and leaves the time-lapses' header in sight below it. */
 .fv { --oui-files-height: clamp(360px, calc(100vh - 300px), 720px); min-width: 0; }
 @supports (height: 100dvh) { .fv { --oui-files-height: clamp(360px, calc(100dvh - 300px), 720px); } }
+/* A narrow tab stacks the folders, the list and the details: in a short window they need more than what is left under
+   the bars, so the browser keeps 560 px and the page scrolls to the time-lapses. */
+@container oui-page (max-width: 660px) { .fv { --oui-files-height: clamp(560px, calc(100vh - 300px), 720px); } }
+@supports (height: 100dvh) { @container oui-page (max-width: 660px) { .fv { --oui-files-height: clamp(560px, calc(100dvh - 300px), 720px); } } }
 .fv-q { width: 220px; max-width: 100%; }
 </style>

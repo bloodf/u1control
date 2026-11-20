@@ -63,7 +63,7 @@ const SCENES = [
   ['setup', 'light', 'en', 1280, 1], ['setup', 'dark', 'en', 380, 1], ['setup', 'light', 'en', 380, 1],
 ];
 // LANGS=de_DE,zh_CN,...: every scene in those languages instead, wide light and narrow dark (and the reverse).
-// SCENES=<json>: these scenes only, [scene, theme, lang, width, scale].
+// SCENES=<json>: these scenes only, [scene, theme, lang, width, scale, height (900 when left out)].
 if (process.env.SCENES) SCENES.splice(0, SCENES.length, ...JSON.parse(process.env.SCENES));
 if (process.env.LANGS) SCENES.splice(0, SCENES.length, ...process.env.LANGS.split(',').flatMap(lang =>
   ['dash', 'notarget', 'dialog', 'settings', 'stock', 'files', 'console', 'setup'].flatMap(scn =>
@@ -74,13 +74,13 @@ const dir = await mkdtemp(join(tmpdir(), 'u1-shots-'));
 const browser = await launch();
 const metrics = [];
 try {
-  for (const [scn, theme, lang, width, scale] of SCENES) {
+  for (const [scn, theme, lang, width, scale, height = 900] of SCENES) {
     const boot = scn === 'setup-busy' ? { mode: 'setup', version: '0.5.0', lang, data: { ...SETUP, printer: { ...SETUP.printer, busy: true } } }
       : scn === 'setup' ? { mode: 'setup', version: '0.5.0', lang, data: SETUP } : { mode: 'app', version: '0.5.0', lang };
     const file = join(dir, `${scn}.html`);
     await writeFile(file, preparePage(page, boot));
     const p = await browser.newPage();
-    await p.size(width, 900, scale);
+    await p.size(width, height, scale);
     await p.init(MOCK_HOST);
     await p.goto(pathToFileURL(file).href + '?theme=' + theme);
     const m = await p.evaluate(`(async () => { ${HELPERS} const SCN = ${JSON.stringify(scn)};
@@ -93,7 +93,7 @@ try {
         dom: document.getElementsByTagName('*').length, lang: document.documentElement.lang, dark: document.documentElement.classList.contains('orca-dark'),
         bodyFont: getComputedStyle(document.body).fontSize, buttonRadius: cs && cs.borderRadius, buttonFont: cs && cs.fontSize,
         violations: __t.violations, errors: __t.errors, rejections: __t.rejections }; })()`);
-    const name = `MOCK-u1-${scn}-${theme}-${lang}-${width}${scale > 1 ? '-zoom200' : ''}.png`;
+    const name = `MOCK-u1-${scn}-${theme}-${lang}-${width}${height === 900 ? '' : 'x' + height}${scale > 1 ? '-zoom200' : ''}.png`;
     await writeFile(join(OUT, name), await p.screenshot());
     metrics.push({ name, ...m });
     console.log(name, JSON.stringify({ overflowX: m.overflowX, dom: m.dom, lang: m.lang, dark: m.dark }));

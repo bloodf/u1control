@@ -10,6 +10,7 @@
 - **Files**: the printer's folders are a tree beside the list. Select several files, **Move to…** a folder or drag them onto one in the tree, or **Delete** them with one question that names them. The selected file's details, **Print**, **Save** and **Rename** are beside the list; a print file can now be saved to the computer too. The open folder can be renamed, moved or deleted, and the camera folder is marked read only.
 - **Files** opens newest first again (any column can still be sorted). When the files can't be read, the list says so with **Try again** and keeps the folder tree. **New folder** and the open folder's rename, move and delete sit beside the folder's name.
 - After files are deleted or moved, the keyboard stays in the list instead of going back to the top of the page.
+- In a narrow tab, the file list keeps its rows in sight when a file's details are open under it: the details take a share of the height and scroll inside it.
 - The camera picture is shown whole, with bars when it is not 16:9, instead of being cropped to the box.
 - Explanations that sat under a module (the frame rate, how Spoolman is reached, what the project sync does) are behind an (i) next to its title.
 - The print setup window shows each project filament's colour as the same thin strip.
