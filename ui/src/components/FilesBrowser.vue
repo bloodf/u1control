@@ -8,7 +8,7 @@ import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import { fuzzyFilter, OuiFileBrowser, OuiHint, OuiIcon, useFileBackend, type OuiFile, type OuiFileBackend, type OuiFileBrowserLabels, type OuiFileMenuItem } from '@orca-plugins/ui-foundation/src/components';
-import { download as downloadIcon, edit, move as moveIcon, printer, trash } from '@orca-plugins/ui-foundation/src/icons';
+import { download as downloadIcon, folderMove, printer, rename, trash } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, printerName } from '../app/store';
 import { newFolder, watchThumb } from '../app/thumbs';
@@ -100,7 +100,7 @@ const labels = computed<OuiFileBrowserLabels>(() => ({
   loadFailed: t('files.loadFailed'), retry: t('common.retry'),
   newFolder: t('files.newFolder'), folderName: t('files.newName'), folderError: reason => t(`files.nameErr.${reason}` as const),
   rename: t('files.rename'), move: t('files.move'), moveTitle: () => t('files.moveToFolder'), removeFolderTitle: name => t('confirm.deleteDir.text', { name }), removeFolderText: t('files.deleteText'),
-  listView: t('files.view.list'), gridView: t('files.view.grid'),
+  listView: t('files.view.list'), gridView: t('files.view.grid'), refresh: t('common.refresh'),
 }));
 
 // A print file's preview is asked for only once its row is on screen (app/thumbs): the rows are the browser's, found by
@@ -145,9 +145,9 @@ const fileMenu = (ids: string[]): OuiFileMenuItem[] => ids.length !== 1 ? [] : [
         <template v-if="folder?.readonly"><span id="files-ro" class="oui-chip">{{ t('files.readOnly') }}</span><OuiHint :label="t('files.readOnly')" :text="t('files.readOnlyWhy')" /></template>
         <template v-else-if="folder">
           <template v-if="folder.parent">
-            <Button size="small" severity="secondary" text :aria-label="t('files.renameLabel', { name: folder.name })" :title="t('files.renameLabel', { name: folder.name })" data-test="folder-rename" @click="browser?.rename(folder.id)"><template #icon><OuiIcon :icon="edit" :size="14" /></template></Button>
-            <Button size="small" severity="secondary" text :aria-label="t('files.moveLabel', { name: folder.name })" :title="t('files.moveLabel', { name: folder.name })" data-test="folder-move" @click="browser?.moveFolder(folder.id)"><template #icon><OuiIcon :icon="moveIcon" :size="14" /></template></Button>
-            <Button size="small" severity="danger" outlined :aria-label="t('files.deleteLabel', { name: folder.name })" :title="t('files.deleteLabel', { name: folder.name })" data-test="folder-delete" @click="browser?.deleteFolder(folder.id)"><template #icon><OuiIcon :icon="trash" :size="14" /></template></Button>
+            <Button size="small" severity="secondary" text :aria-label="t('files.renameLabel', { name: folder.name })" :title="t('files.renameLabel', { name: folder.name })" data-test="folder-rename" @click="browser?.rename(folder.id)"><template #icon><OuiIcon :icon="rename" :size="16" /></template></Button>
+            <Button size="small" severity="secondary" text :aria-label="t('files.moveLabel', { name: folder.name })" :title="t('files.moveLabel', { name: folder.name })" data-test="folder-move" @click="browser?.moveFolder(folder.id)"><template #icon><OuiIcon :icon="folderMove" :size="16" /></template></Button>
+            <Button size="small" severity="danger" text :aria-label="t('files.deleteLabel', { name: folder.name })" :title="t('files.deleteLabel', { name: folder.name })" data-test="folder-delete" @click="browser?.deleteFolder(folder.id)"><template #icon><OuiIcon :icon="trash" :size="16" /></template></Button>
           </template>
         </template>
       </template>
@@ -158,7 +158,7 @@ const fileMenu = (ids: string[]): OuiFileMenuItem[] => ids.length !== 1 ? [] : [
         <Button severity="secondary" :label="t('files.save')" :aria-label="t('files.saveLabel', { name: file.name })" :loading="tracker.isBusy(`dl:${file.id}`)" data-test="file-save" @click="download(file.id)">
           <template #icon><OuiIcon :icon="downloadIcon" :size="14" /></template></Button>
         <Button v-if="root === 'gcodes'" severity="secondary" text :label="t('files.rename')" :aria-label="t('files.renameLabel', { name: file.name })" data-test="file-rename" @click="browser?.rename(file.id)">
-          <template #icon><OuiIcon :icon="edit" :size="14" /></template></Button>
+          <template #icon><OuiIcon :icon="rename" :size="14" /></template></Button>
       </template>
     </OuiFileBrowser>
   </div>
