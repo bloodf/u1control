@@ -1679,6 +1679,23 @@ test('requirements: no Spoolman turns stock links off with the reason', `
   assert(stockRows().every(b => !b.disabled) && !byTest('stock-why'), 'Spoolman set: links on again');
 `);
 
+test('Apply to project filaments: busy until the plugin answers, then says what it applied or why not', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('sync'));
+  const m = last('sync_project');
+  assert(typeof m.id === 'number', 'asked with an id, so the plugin answers this click');
+  assert(byTest('sync').disabled, 'busy while OrcaSlicer applies');
+  await click(byTest('sync'));
+  eq(sent().filter(x => x.type === 'sync_project').length, 1, 'a second click sends nothing');
+  await reply(m, {text: 'Project filaments 1: Generic PLA, 2: Generic PETG', done: 2, problems: 0});
+  await until(() => toasts().includes('Generic PETG'), 'what was applied is shown: ' + toasts());
+  assert(!byTest('sync').disabled, 'free again');
+  await click(byTest('sync'));
+  await reply(last('sync_project'), {text: 'Project filaments unchanged. Problems: filament 1: no preset', done: 0, problems: 1});
+  await until(() => q('.oui-toast[role=alert]') && toasts().includes('no preset'), 'why not is shown, as an error: ' + toasts());
+`);
+
 // ------------------------------------------------------------------ foundation 4.2.0 on: toasts, dismissible notices, requirements
 test('toasts: bottom-left, each with a Close button, gone once closed', `
   await connect();
@@ -1867,6 +1884,22 @@ test('settings pages: the last page opens again; Plugin settings opens Print set
   await until(() => shown()[0] === 'print-setup', 'Print setup opened once it exists');
   assert(onHeading('print-setup'), 'heading focused');
 `, { lastPage: 'language' });
+test('settings pages: with no printer the address entered in Connection is saved and connects', PAGES_JS + `
+  await until(() => last('hello'));
+  const first = last('hello');
+  // The plugin sends the config along with the no-target answer (plugin.py hello), so Settings can save.
+  await CFG();
+  await fail(first, 'Select a Snapmaker U1 printer', {no_target: true});
+  await click(btn('Open Settings'));
+  eq(shown(), ['connection'], 'Connection page');
+  await type(q('#c-host'), '192.0.2.10');
+  assert(!byTest('save').disabled, 'Save is on');
+  await click(byTest('save'));
+  const save = last('save_settings');
+  eq(save.settings.host, '192.0.2.10', 'address sent');
+  await reply(save, {saved: true});
+  await until(() => last('hello') !== first, 'saved: the page says hello again, which connects');
+`, { lastPage: 'about' });
 test('settings pages: Open Settings with no printer opens Connection', PAGES_JS + `
   await until(() => last('hello'));
   await fail(last('hello'), 'Select a Snapmaker U1 printer', {no_target: true});

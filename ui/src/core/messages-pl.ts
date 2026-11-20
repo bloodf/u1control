@@ -234,6 +234,7 @@ export const pl: Record<PolishKey, string> = {
   'heads.rfidLabel': 'Odczytaj ponownie tag RFID T{n}',
   'heads.sync': 'Zastosuj do filamentów projektu',
   'heads.syncHelp': 'Dobiera pasujący profil filamentu OrcaSlicer i kolor dla każdego slotu projektu na podstawie załadowanych szpul / tagów RFID.',
+  'heads.syncSlow': 'Zastosuj do filamentów projektu: OrcaSlicer jeszcze nie skończył. Jeśli pyta o niezapisane zmiany profilu, odpowiedz, a filamenty zostaną zastosowane.',
   'heads.source.direct': 'Spoolman (bezpośrednio), szpule: {n}',
   'heads.source.printer': 'Spoolman (przez drukarkę), szpule: {n}',
   'heads.source.same': 'Szpule: ten sam Spoolman co magazyn Spoolera ({n})',

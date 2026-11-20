@@ -243,6 +243,7 @@ export const es: Record<MessageKey, string> = {
   'heads.rfidLabel': 'Leer de nuevo la etiqueta RFID de T{n}',
   'heads.sync': 'Aplicar a los filamentos del proyecto',
   'heads.syncHelp': 'Elige, a partir de las bobinas cargadas y las etiquetas RFID, el perfil de filamento de OrcaSlicer y el color que corresponden a cada ranura del proyecto.',
+  'heads.syncSlow': 'Aplicar a los filamentos del proyecto: OrcaSlicer aún no ha terminado. Si está preguntando por cambios sin guardar en el perfil, responda y se aplicarán los filamentos.',
   'heads.source.direct': 'Spoolman: {n} bobinas (directo)',
   'heads.source.printer': 'Spoolman: {n} bobinas (a través de la impresora)',
   'heads.source.same': 'Bobinas: el mismo Spoolman que el inventario de Spooler ({n})',

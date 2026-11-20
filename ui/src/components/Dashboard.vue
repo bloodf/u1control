@@ -13,8 +13,7 @@ import ScreenCard from './ScreenCard.vue';
 import ToolheadsCard from './ToolheadsCard.vue';
 import UsageCard from './UsageCard.vue';
 import SpoolerHint from './SpoolerHint.vue';
-import * as bridge from '../core/bridge';
-import { s, openSettings, run, hello, controlsOff, printerName, fwText, stale } from '../app/store';
+import { s, openSettings, run, hello, controlsOff, printerName, fwText, stale, syncProject } from '../app/store';
 import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
 import firstRunArt from '../assets/u1-toolheads.webp';
@@ -39,7 +38,7 @@ async function powerDiscard() {
     </template>
     <template #actions>
       <OuiHint id="sync-help" end :label="t('heads.syncAbout')" :text="t('heads.syncHelp')" />
-      <Button severity="secondary" :label="t('heads.sync')" :disabled="!!controlsOff" data-focus-key="sync" data-test="sync" :aria-describedby="controlsOff ? 'heads-why' : 'sync-help'" @click="bridge.post({ type: 'sync_project' })">
+      <Button severity="secondary" :label="t('heads.sync')" :loading="s.syncing" :disabled="!!controlsOff || s.syncing" data-focus-key="sync" data-test="sync" :aria-describedby="controlsOff ? 'heads-why' : 'sync-help'" @click="syncProject">
         <template #icon><OuiIcon :icon="check" :size="14" /></template></Button>
     </template>
   </OuiPageHeader>
