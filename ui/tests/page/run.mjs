@@ -1358,6 +1358,10 @@ test('files: the context menu of a file of the selection acts for the selection'
   await until(() => q('.oui-files-menu'));
   eq(qa('.oui-files-menu [role=menuitem]').map(text), ['Move to…', 'Delete'], 'for two files: no rename, no print');
   eq(picked(), ['a.gcode', 'c.gcode'], 'the selection is kept');
+  await mouse(q('.oui-files-detail'));
+  await until(() => !q('.oui-files-menu'), 'a press outside closes it');
+  row('c').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('c'))[0], clientY: centre(row('c'))[1]}));
+  await until(() => q('.oui-files-menu') && document.activeElement === q('.oui-files-menu [role=menuitem]'), 'open again, its first item focused');
   await press('ArrowDown');
   eq(text(document.activeElement), 'Delete', 'arrow keys move through the menu');
   await press('Enter');
