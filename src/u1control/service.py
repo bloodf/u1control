@@ -733,6 +733,12 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self._require_idle()
         return self._gcode(u1.unload_command(head))
 
+    def cmd_park(self, head):
+        """Put toolhead `head` back in its dock (the screen's park), e.g. after a manual bed mesh left it picked up."""
+        head = _head(head)
+        self._require_idle()
+        return self._gcode(u1.park_command(head))
+
     def cmd_reread_rfid(self, head):
         return self._gcode("FILAMENT_DT_UPDATE CHANNEL=%d" % _head(head))
 

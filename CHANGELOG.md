@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Park** on the toolhead card of the head that is on the carriage puts it back in its dock (`PARK_EXTRUDER`, `PARK_EXTRUDER1`..`3`), for example after a manual bed mesh left it picked up. It asks first and, like Load and Unload, waits until the U1 is idle.
+
 ## [0.15.1] - 2026-11-20
 
 ### Changed

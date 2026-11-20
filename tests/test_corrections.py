@@ -623,13 +623,20 @@ class BusyAndTagTests(unittest.TestCase):
 
     def test_guided_commands_refuse_a_busy_machine(self):
         with_machine(self.fake, "BED_LEVELING")
-        for cmd, args in (("cmd_load", (1,)), ("cmd_unload", (1,)), ("cmd_preferences", ({"bed_level": True},)),
+        for cmd, args in (("cmd_load", (1,)), ("cmd_unload", (1,)), ("cmd_park", (1,)), ("cmd_preferences", ({"bed_level": True},)),
                           ("cmd_set_filament", (1, "Generic", "PLA", "#FFFFFF")), ("cmd_bind_spool", (1, 7))):
             with self.assertRaises(PrinterError, msg=cmd):
                 getattr(self.svc, cmd)(*args)
         self.assertEqual(self.fake.scripts, [])
         self.svc.cmd_temperature(0, 200)      # adjustments stay allowed
         self.assertEqual(self.fake.scripts, ["M104 T0 S200"])
+
+    def test_park_puts_the_head_back_in_its_dock(self):
+        self.svc.cmd_park(0)
+        self.svc.cmd_park(2)
+        self.assertEqual(self.fake.scripts, ["PARK_EXTRUDER", "PARK_EXTRUDER2"])
+        with self.assertRaises(ValueError):
+            self.svc.cmd_park(4)
 
     def test_tag_needs_confirmation_and_is_checked_right_before_writing(self):
         self.fake.tags[1] = {"VENDOR": "Polymaker", "MAIN_TYPE": "PLA", "RGB_1": 0x112233, "COLOR_NUMS": 1}

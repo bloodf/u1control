@@ -149,6 +149,22 @@ test('editing a tagged head asks before FORCE', `
   eq(cmds('set_filament')[1].args.force, false, 'untagged head: no FORCE');
 `);
 
+test('park: only the head on the carriage offers Park, and it asks first', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  eq(qa('[data-park]').length, 0, 'no Park while every head is in its dock');
+  await post({type: 'status', data: VIEW({extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1, picked: i === 1}))})});
+  await until(() => q('[data-park="1"]'), 'Park on the picked-up head');
+  eq(qa('[data-park]').length, 1, 'only that head');
+  await click(q('[data-park="1"]'));
+  assert(dialogOpen(), 'asks before moving the head');
+  await no();
+  eq(cmds('park'), [], 'cancel sends nothing');
+  await click(q('[data-park="1"]'));
+  await yes();
+  eq(cmds('park')[0].args.head, 1, 'parks T2');
+`);
+
 test('busy machine disables guided commands; unload-when-done is read-only; E-stop stays', `
   await connect();
   await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING', options: {bed_level: true, unload_when_done: true}})});
