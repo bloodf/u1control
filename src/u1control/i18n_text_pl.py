@@ -87,6 +87,7 @@ PL = {
     "bad action": "nieprawidłowa akcja",
     "bad toolhead": "nieprawidłowa głowica",
     "%s out of range (0 to %d)": "%s poza zakresem (0 do %d)",
+    "unknown fan %r": "nieznany wentylator: %r",
     "spool #%s not found": "nie znaleziono szpuli #%s",
     "this needs the U1 Extended Firmware (with Advanced Mode on)": "to wymaga U1 Extended Firmware (z włączonym Advanced Mode)",
     "the U1 is busy (%s); changing %s restarts Klipper or reboots the printer, which would end the print. Try again once it has finished.": "U1 jest zajęta (%s); zmiana %s uruchamia ponownie Klipper lub drukarkę, co zakończyłoby wydruk. Spróbuj ponownie po jego zakończeniu.",

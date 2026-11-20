@@ -88,6 +88,7 @@ CS = {
     "bad action": "neplatná akce",
     "bad toolhead": "neplatná hlava",
     "%s out of range (0 to %d)": "%s mimo rozsah (0 až %d)",
+    "unknown fan %r": "neznámý ventilátor: %r",
     "spool #%s not found": "cívka #%s nebyla nalezena",
     "this needs the U1 Extended Firmware (with Advanced Mode on)": "vyžaduje U1 Extended Firmware (se zapnutým Advanced Mode)",
     "the U1 is busy (%s); changing %s restarts Klipper or reboots the printer, which would end the print. Try again once it has finished.": "U1 je zaneprázdněná (%s); změna %s restartuje Klipper nebo tiskárnu, což by tisk ukončilo. Zkus to znovu, až skončí.",

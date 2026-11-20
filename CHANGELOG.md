@@ -6,6 +6,7 @@
 
 - Czech translation (thanks @Veisen, from #72). The tab, the U1 print setup window and the messages in OrcaSlicer's Print dialog follow an OrcaSlicer set to Czech (cs_CZ), or pick **Čeština** under **Settings > Language**. Counts use Czech plural forms (1 video, 3 videa, 5 videí).
 - **Park** on the toolhead card of the head that is on the carriage puts it back in its dock (`PARK_EXTRUDER`, `PARK_EXTRUDER1`..`3`), for example after a manual bed mesh left it picked up. It asks first, is hidden while a print runs and, like Load and Unload, waits until the U1 is idle. The plugin checks the head is still on the carriage right before sending, so a card that is out of date can't make the printer home for nothing.
+- **Temperatures & fans** on the Dashboard (thanks @Veisen, from #72): the chamber temperature, each stepper driver (temperature of the X and Y drivers, and OK, **Hot (warning)** or **Overheated** for every driver, a dash while its motor is off), and the speed of every fan: part cooling, auxiliary, and the top cover's exhaust and recirculation fans. The part cooling and auxiliary fans can be set there, only while the U1 is idle; the top-cover fans stay in **Controls**.
 
 ### Changed
 
