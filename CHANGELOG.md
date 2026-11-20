@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-11-19
+
 ### Changed
 
 - The whole tab is redrawn on the shared interface 5.0: OrcaSlicer's own greys and teal on every page, with U1 Control's blue only on its mark and under the open tab. Colour is kept for what it tells you: icons, states, alerts, level bars (green, amber when low, red when almost empty) and the 4 px strip of a filament's colour on its toolhead card.
@@ -16,6 +18,7 @@
 - Explanations that sat under a module (the frame rate, how Spoolman is reached, what the project sync does) are behind an (i) next to its title.
 - The print setup window shows each project filament's colour as the same thin strip.
 - The print setup's plate preview is drawn from at most 6,000 moves (was 8,000), so a long plate still shows it now that the page is larger. It is 160 px wide: nothing visible is lost.
+- The README and Orca Cloud pictures show the new look, in English and Brazilian Portuguese. The README's Dashboard picture shows the whole page, and the print setup one the whole window.
 
 ## [0.14.1] - 2026-11-19
 
