@@ -238,6 +238,27 @@ class ServicePreferences(unittest.TestCase):
             self.svc.cmd_cover_fan("side", 50)
         self.assertIn("top-cover fan", str(e.exception))
 
+    def test_part_and_aux_fan_now(self):
+        self.svc.cmd_fan("part", 50)
+        self.svc.cmd_fan("aux", 100)
+        self.svc.cmd_fan("aux", 0)
+        self.assertEqual(self.fake.scripts, ["M106 S128", "SET_FAN_SPEED FAN=cavity_fan SPEED=1.00",
+                                             "SET_FAN_SPEED FAN=cavity_fan SPEED=0.00"])
+
+    def test_fan_refusals_send_nothing(self):
+        for fan, percent in (("side", 50), ("exhaust", 50), ("part", 101), ("part", -1), ("aux", "50"), ("aux", True), ("part", None)):
+            with self.assertRaises(ValueError, msg=(fan, percent)):
+                self.svc.cmd_fan(fan, percent)
+        for state in ("printing", "paused"):
+            self.fake.state = state
+            with self.assertRaises(PrinterError, msg=state):
+                self.svc.cmd_fan("part", 30)
+        self.fake.state = "standby"
+        with_machine(self.fake, "FLOW_CALIBRATION")
+        with self.assertRaises(PrinterError):
+            self.svc.cmd_fan("aux", 30)
+        self.assertEqual(self.fake.scripts, [])
+
     def test_exhaust_refused_while_the_cover_recirculates(self):
         base = self.fake.status
         self.fake.status = lambda: {**base(), "purifier": {"power_detected": True, "mode": 3}}
@@ -258,6 +279,35 @@ class ServicePreferences(unittest.TestCase):
         with self.assertRaises(PrinterError):
             self.svc.cmd_cover_fan("exhaust", 50)
         self.assertEqual(self.fake.scripts, [])
+
+
+
+class TempsAndFansStatus(unittest.TestCase):
+    """The Temperatures & fans panel's readings (u1-klipper temperature_sensor, fan_generic, purifier, tmc)."""
+
+    def test_status_objects_ask_for_them(self):
+        for obj in ("temperature_sensor cavity", "fan_generic cavity_fan", "tmc2240 stepper_x", "tmc2240 stepper_y",
+                    "tmc2209 stepper_z", "tmc2209 extruder", "tmc2209 extruder3"):
+            self.assertIn(obj, u1.STATUS_OBJECTS)
+
+    def test_readings(self):
+        view = u1.summarize({
+            "temperature_sensor cavity": {"temperature": 38.0}, "fan": {"speed": 0.5}, "fan_generic cavity_fan": {"speed": 0.25},
+            "purifier": {"power_detected": True, "exhaust_fan": {"speed": 0.6}, "inner_fan": {"speed": 0.0}},
+            "tmc2240 stepper_x": {"temperature": 45.0, "drv_status": {"cs_actual": 20}},
+            "tmc2240 stepper_y": {"temperature": None, "drv_status": None},            # motor off
+            "tmc2209 stepper_z": {"temperature": None, "drv_status": {"otpw": 1}},
+            "tmc2209 extruder1": {"temperature": None, "drv_status": {"ot": 1, "otpw": 1}}})
+        self.assertEqual((view["chamber"], view["fan"], view["aux_fan"]), (38.0, 0.5, 0.25))
+        self.assertEqual((view["purifier"]["exhaust"], view["purifier"]["inner"]), (0.6, 0.0))
+        self.assertEqual([(d["name"], d["temp"], d["state"]) for d in view["drivers"]],
+                         [("X", 45.0, "ok"), ("Y", None, None), ("Z", None, "otpw"), ("T1", None, None), ("T2", None, "ot"),
+                          ("T3", None, None), ("T4", None, None)])
+
+    def test_missing_objects_read_as_unknown(self):
+        view = u1.summarize({})
+        self.assertEqual((view["chamber"], view["aux_fan"], view["purifier"]["exhaust"]), (None, None, None))
+        self.assertTrue(all(d["temp"] is None and d["state"] is None for d in view["drivers"]))
 
 
 if __name__ == "__main__":

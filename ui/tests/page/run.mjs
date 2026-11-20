@@ -178,6 +178,30 @@ test('park: only the head on the carriage offers Park, and it asks first', `
   await until(() => !q('[data-park]'), 'no Park while printing');
 `);
 
+test('temperatures & fans: chamber, drivers and fan readings; part and aux fan set only when idle', `
+  await connect();
+  const drivers = [['X', 45, 'ok'], ['Y', null, null], ['Z', null, 'otpw'], ['T1', null, 'ok'], ['T2', null, 'ot'], ['T3', null, null], ['T4', null, null]]
+    .map(([name, temp, state]) => ({name, temp, state}));
+  await post({type: 'status', data: VIEW({chamber: 38.4, fan: 0.5, aux_fan: 0.25, drivers, purifier: {fitted: true, exhaust: 0.6, inner: 0}})});
+  const card = byTest('temps-fans');
+  assert(card && text(card).includes('Temperatures & fans'), 'the panel is on the Dashboard');
+  const kv = label => { const dt = qa('dt', card).find(d => text(d) === label); return dt ? text(dt.nextElementSibling) : null; };
+  eq([kv('Chamber'), kv('X driver'), kv('Y driver'), kv('Z driver'), kv('T1 driver'), kv('T2 driver')],
+     ['38 °C', '45 °C', '—', 'Hot (warning)', 'OK', 'Overheated'], 'temperatures and driver states');
+  eq([kv('Top cover exhaust fan'), kv('Top cover recirculation fan')], ['60 %', '0 %'], 'top-cover fan readings');
+  assert(text(card).includes('50 %') && text(card).includes('25 %'), 'part and aux fan readings');
+  const set = id => q('[data-focus-key="tf-' + id + '"]');
+  assert(set('part').disabled, 'Set waits for a value');
+  await type(q('#tf-part'), '40');
+  await click(set('part'));
+  eq(cmds('fan').map(m => m.args), [{fan: 'part', percent: 40}], 'part fan sent');
+  await reply(last('cmd', 'fan'), true);
+  await post({type: 'status', data: VIEW({busy: true, state: 'printing', drivers})});
+  await until(() => q('#tf-aux').disabled, 'fan fields off while printing');
+  assert(set('aux').disabled && set('aux').getAttribute('aria-describedby') === 'heads-why', 'Set off, pointing at the reason');
+  eq(cmds('fan').length, 1, 'nothing more sent');
+`);
+
 test('busy machine disables guided commands; unload-when-done is read-only; E-stop stays', `
   await connect();
   await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING', options: {bed_level: true, unload_when_done: true}})});
