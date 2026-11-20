@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
 import Button from 'primevue/button';
-import { OuiEmpty, OuiIcon, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { OuiEmpty, OuiIcon, OuiMenu, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
 import { download as downloadIcon, refresh, trash, video } from '@orca-plugins/ui-foundation/src/icons';
 import TimelapseCover from './TimelapseCover.vue';
 import * as bridge from '../core/bridge';
@@ -62,6 +62,11 @@ async function del(v: Video) {
   if (document.activeElement !== document.body) return;
   (document.querySelector<HTMLElement>(`[data-timelapse="${CSS.escape(v.path)}"] .tl-del`) ?? document.querySelector<HTMLElement>('[data-focus-key="timelapses"]'))?.focus();
 }
+// A time-lapse's context menu: what its row's buttons do.
+const menu = ref<InstanceType<typeof OuiMenu>>();
+const rowMenu = (event: MouseEvent, v: Video) => menu.value?.open(event, [
+  { label: t('files.save'), icon: downloadIcon, id: 'save', disabled: tracker.isBusy(saveKey(v)) || tracker.isBusy(delKey(v)), run: () => void save(v) },
+  { label: t('files.delete'), icon: trash, id: 'delete', danger: true, disabled: tracker.isBusy(saveKey(v)) || tracker.isBusy(delKey(v)), run: () => void del(v) }]);
 </script>
 <template>
   <OuiPanel :icon="video" tone="sky" flush aria-labelledby="timelapses-h" data-test="timelapses">
@@ -81,7 +86,7 @@ async function del(v: Video) {
           <th scope="col" class="tl-wide">{{ t('tl.col.date') }}</th><th scope="col" class="tl-wide oui-num">{{ t('files.col.size') }}</th>
           <th scope="col" class="oui-end"><span class="oui-sr">{{ t('files.col.actions') }}</span></th></tr></thead>
         <tbody>
-          <tr v-for="v in videos" :key="`${v.path}|${v.cover ?? ''}`" :data-timelapse="v.path">
+          <tr v-for="v in videos" :key="`${v.path}|${v.cover ?? ''}`" :data-timelapse="v.path" @contextmenu="rowMenu($event, v)">
             <td class="tl-cover-col"><TimelapseCover :gen="coverGen" :path="v.cover" /></td>
             <td><div class="tl-name oui-strong">{{ v.name }}</div><div class="tl-file oui-meta oui-mono">{{ v.file }}</div>
               <div class="tl-narrow oui-meta">{{ [when(v), fmt.bytes(v.size)].filter(Boolean).join(' · ') }}</div></td>
@@ -100,6 +105,7 @@ async function del(v: Video) {
     <OuiEmpty v-else-if="state === 'loading'" compact state="loading" :title="t('tl.loading')" role="status" />
     <OuiEmpty v-else-if="state === 'ok' && !supported" compact tone="sky" :icon="video" :title="t('tl.unsupported')" :text="t('tl.unsupportedHint')" />
     <OuiEmpty v-else-if="state === 'ok'" compact tone="sky" :icon="video" :title="t('tl.empty')" :text="t('tl.emptyHint')" />
+    <OuiMenu ref="menu" />
   </OuiPanel>
 </template>
 <style>

@@ -1204,10 +1204,10 @@ test('files: rename in place, from the details or the context menu; an unchanged
   assert(!byTest('folder-rename'), 'a file root is never renamed');
   // The context menu of a file, and F2.
   q('[data-file="gcodes/clip.gcode"]').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(q('[data-file="gcodes/clip.gcode"]'))[0], clientY: centre(q('[data-file="gcodes/clip.gcode"]'))[1]}));
-  await until(() => q('.oui-files-menu'), 'a menu');
-  eq(qa('.oui-files-menu [role=menuitem]').map(text), ['Print', 'Save', 'Rename', 'Move to…', 'Delete'], 'the page\\u2019s actions, then rename, move and delete');
+  await until(() => q('.oui-menu'), 'a menu');
+  eq(qa('.oui-menu [role=menuitem]').map(text), ['Print', 'Save', 'Rename', 'Move to…', 'Delete'], 'the page\\u2019s actions, then rename, move and delete');
   eq(qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file), ['gcodes/clip.gcode'], 'a file outside the selection is selected alone');
-  await click(qa('.oui-files-menu [role=menuitem]').find(b => text(b) === 'Rename'));
+  await click(qa('.oui-menu [role=menuitem]').find(b => text(b) === 'Rename'));
   await until(() => document.activeElement === field() && field().value === 'clip.gcode', 'renamed from the menu');
   await press('Escape');
   await until(() => !field(), 'Escape leaves');
@@ -1354,13 +1354,13 @@ test('files: the context menu of a file of the selection acts for the selection'
   await click(row('a'));
   row('c').dispatchEvent(new MouseEvent('click', {bubbles: true, ctrlKey: true})); await settle();
   row('c').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('c'))[0], clientY: centre(row('c'))[1]}));
-  await until(() => q('.oui-files-menu'));
-  eq(qa('.oui-files-menu [role=menuitem]').map(text), ['Move to…', 'Delete'], 'for two files: no rename, no print');
+  await until(() => q('.oui-menu'));
+  eq(qa('.oui-menu [role=menuitem]').map(text), ['Move to…', 'Delete'], 'for two files: no rename, no print');
   eq(picked(), ['a.gcode', 'c.gcode'], 'the selection is kept');
   await mouse(q('.oui-files-detail'));
-  await until(() => !q('.oui-files-menu'), 'a press outside closes it');
+  await until(() => !q('.oui-menu'), 'a press outside closes it');
   row('c').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('c'))[0], clientY: centre(row('c'))[1]}));
-  await until(() => q('.oui-files-menu') && document.activeElement === q('.oui-files-menu [role=menuitem]'), 'open again, its first item focused');
+  await until(() => q('.oui-menu') && document.activeElement === q('.oui-menu [role=menuitem]'), 'open again, its first item focused');
   await press('ArrowDown');
   eq(text(document.activeElement), 'Delete', 'arrow keys move through the menu');
   await press('Enter');
@@ -1376,8 +1376,8 @@ test('files: the context menu of a file of the selection acts for the selection'
   await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1, 2))}});
   // Move to… from the menu: the folders the file can go to.
   row('b').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('b'))[0], clientY: centre(row('b'))[1]}));
-  await until(() => q('.oui-files-menu'));
-  await click(qa('.oui-files-menu [role=menuitem]').find(b => text(b) === 'Move to…'));
+  await until(() => q('.oui-menu'));
+  await click(qa('.oui-menu [role=menuitem]').find(b => text(b) === 'Move to…'));
   await until(() => q('[data-files-moveto]'));
   await pick(q('[data-files-moveto]'), 'Print files / sub');
   await click(q('[data-dlg="confirm"]'));
@@ -1403,8 +1403,8 @@ test('files: a grid of pictures, kept for next time; selecting, the menu, rename
   row('a').focus(); await press('Escape');
   eq(picked(), [], 'Escape clears');
   row('b').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('b'))[0], clientY: centre(row('b'))[1]}));
-  await until(() => q('.oui-files-menu'));
-  await click(qa('.oui-files-menu [role=menuitem]').find(b => text(b) === 'Rename'));
+  await until(() => q('.oui-menu'));
+  await click(qa('.oui-menu [role=menuitem]').find(b => text(b) === 'Rename'));
   const field = () => q('[data-files-newname]');
   await until(() => document.activeElement === field() && field().closest('.oui-files-card'), 'renamed on its card');
   await type(field(), 'bee.gcode'); await press('Enter');
@@ -1444,6 +1444,129 @@ test('files: no files left after a move says 0 files, in every language', `
   assert(text(byTest('files')).includes('Nenhum arquivo nesta pasta.'), 'the folder is empty');
   eq(text(q('.oui-files-bar [aria-live]')), '0 arquivos', 'and the count says so (Portuguese puts 0 in the plural rule "one", which read "1 arquivo")');
 `, { lang: 'pt-BR' });
+
+test('files: right-click anywhere: the empty list, the empty tree, a root, a time-lapse', `
+  ${FILES_OPEN}
+  const menuAt = (el, x, y) => { const [cx, cy] = centre(el); el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: x ?? cx, clientY: y ?? cy})); };
+  const items = () => qa('.oui-menu [role=menuitem]').map(text);
+  const close = async () => { await press('Escape'); await until(() => !q('.oui-menu'), 'closed'); };
+  // The empty part of the list (under the rows).
+  const scroll = q('.oui-files-scroll'), sr = scroll.getBoundingClientRect();
+  menuAt(scroll, sr.left + sr.width / 2, sr.bottom - 8);
+  await until(() => q('.oui-menu'), 'a menu on the empty list');
+  eq(items(), ['New folder', 'Select all files', 'Grid', 'Refresh'], 'what can be done in the open folder');
+  await click(q('.oui-menu [data-menu="select-all"]'));
+  eq(picked(), ['a.gcode', 'b.gcode', 'c.gcode'], 'Select all');
+  menuAt(scroll, sr.left + sr.width / 2, sr.bottom - 8);
+  await until(() => q('.oui-menu'));
+  await click(q('.oui-menu [data-menu="view"]'));
+  assert(q('.oui-files-cards') && q('[data-files-view="grid"]').getAttribute('aria-pressed') === 'true', 'the grid, from the menu');
+  menuAt(q('.oui-files-scroll'), sr.left + sr.width / 2, sr.bottom - 8);
+  await until(() => q('.oui-menu'));
+  eq(items()[2], 'List', 'and back');
+  await click(q('.oui-menu [data-menu="view"]'));
+  assert(q('.oui-files-table'), 'the list again');
+  menuAt(scroll, sr.left + sr.width / 2, sr.bottom - 8);
+  await until(() => q('.oui-menu'));
+  await click(q('.oui-menu [data-menu="new-folder"]'));
+  await until(() => q('[data-files-newname]') && q('[data-files-newname]').closest('.oui-files-newrow'), 'New folder from the empty list: at the top of the list');
+  await press('Escape');
+  menuAt(scroll, sr.left + sr.width / 2, sr.bottom - 8);
+  await until(() => q('.oui-menu'));
+  await click(q('.oui-menu [data-menu="refresh"]'));
+  await again(TREE, ${JSON.stringify(ABC)});
+  // The empty part of the tree, and a root.
+  const tree = q('.oui-files-tree'), tr = tree.getBoundingClientRect();
+  menuAt(tree, tr.left + 20, tr.bottom - 6);
+  await until(() => q('.oui-menu'), 'a menu on the empty tree');
+  eq(items(), ['New folder', 'Refresh'], 'a new folder in the open one, or read again');
+  await close();
+  menuAt(folderEl('gcodes'));
+  await until(() => q('.oui-menu'));
+  eq(items(), ['New folder', 'Refresh'], 'a root: no rename, move or delete');
+  await close();
+  menuAt(folderEl('camera'));
+  await until(() => q('.oui-menu'));
+  eq([items(), q('.oui-menu [data-menu="new-folder"]').disabled], [['New folder', 'Refresh'], true], 'the read-only root: nothing can be made there');
+  await close();
+  // A row of the time-lapses card.
+  await until(() => last('cmd', 'timelapses'), 'time-lapses asked for');
+  await reply(last('cmd', 'timelapses'), {supported: true, videos: [{path: 'timelapse/v.mp4', file: 'v.mp4', name: 'v', size: 1000, modified: 1794842000, cover: null}]});
+  const tl = () => q('[data-timelapse="timelapse/v.mp4"]');
+  await until(tl, 'a time-lapse row');
+  menuAt(tl());
+  await until(() => q('.oui-menu'), 'its menu');
+  eq(items(), ['Save', 'Delete'], 'what its buttons do');
+  await click(q('.oui-menu [data-menu="save"]'));
+  eq(last('cmd', 'download').args, {path: 'timelapse/v.mp4'}, 'Save from the menu');
+  await reply(last('cmd', 'download'), '/tmp/v.mp4');
+  menuAt(tl());
+  await until(() => q('.oui-menu'));
+  await click(q('.oui-menu [data-menu="delete"]'));
+  await until(dialogOpen, 'Delete asks first');
+  await no();
+  eq(cmds('timelapse_delete'), [], 'Go back deletes nothing');
+`);
+
+test('files: a folder dragged in the tree goes into another folder; itself, inside itself and where it is are refused', `
+  ${FILES_OPEN}
+  await click(byTest('files-refresh'));
+  await again(['gcodes', 'gcodes/Spares', 'gcodes/sub', 'gcodes/sub/deep'], ${JSON.stringify(ABC)});
+  await click(q('[data-folder="gcodes/sub"] .oui-files-twisty'));
+  assert(folderEl('gcodes/sub/deep'), 'the folder inside is shown');
+  await mdown(folderEl('gcodes/sub')); await mmove(folderEl('gcodes/Spares'));
+  eq(text(q('.oui-files-ghost .oui-truncate')), 'sub', 'the folder follows the pointer');
+  assert(folderEl('gcodes/sub').hasAttribute('data-dragged'), 'and dims in the tree');
+  eq(qa('[data-refused]').map(f => f.dataset.folder).sort(), ['camera', 'gcodes', 'gcodes/sub', 'gcodes/sub/deep'], 'itself, inside itself, where it is and another root are refused');
+  eq(qa('[data-drop]').map(f => f.dataset.folder), ['gcodes/Spares'], 'the folder under the pointer is marked');
+  await mmove(folderEl('gcodes/sub/deep')); await mup(folderEl('gcodes/sub/deep'));
+  await until(() => !q('.oui-files-ghost'), 'dropped inside itself: back');
+  eq(cmds('move'), [], 'nothing moved');
+  eq(last('cmd', 'files').args.path, 'gcodes', 'and the release is not a click that opens the folder');
+  await mdown(folderEl('gcodes/sub')); await mmove(folderEl('gcodes/Spares')); await press('Escape');
+  await until(() => !q('.oui-files-ghost'), 'Escape ends it'); await mup(folderEl('gcodes/Spares'));
+  eq(cmds('move'), [], 'still nothing');
+  await mdown(folderEl('gcodes/sub')); await mmove(folderEl('gcodes/Spares')); await mup(folderEl('gcodes/Spares'));
+  await until(() => last('cmd', 'move'), 'the drop moves it');
+  eq(last('cmd', 'move').args, {path: 'gcodes/sub', folder: 'gcodes/Spares'}, 'the folder, whole, into the one it was dropped on');
+  await reply(last('cmd', 'move'), {path: 'gcodes/Spares/sub'});
+  await again(['gcodes', 'gcodes/Spares', 'gcodes/Spares/sub', 'gcodes/Spares/sub/deep'], ${JSON.stringify(ABC)});
+  assert(!folderEl('gcodes/sub'), 'gone from where it was');
+  await click(q('[data-folder="gcodes/Spares"] .oui-files-twisty'));
+  assert(folderEl('gcodes/Spares/sub'), 'inside the folder it was dropped on');
+  // Back to the root: a root takes a folder dropped on it.
+  await mdown(folderEl('gcodes/Spares/sub')); await mmove(folderEl('gcodes'));
+  eq(qa('[data-drop]').map(f => f.dataset.folder), ['gcodes'], 'the root takes it');
+  await mup(folderEl('gcodes'));
+  await until(() => cmds('move').length === 2);
+  eq(last('cmd', 'move').args, {path: 'gcodes/Spares/sub', folder: 'gcodes'}, 'to the top');
+  await reply(last('cmd', 'move'), {path: 'gcodes/sub'});
+  await again(['gcodes', 'gcodes/Spares', 'gcodes/sub', 'gcodes/sub/deep'], ${JSON.stringify(ABC)});
+  // Files still drop on folders of the tree.
+  await mdown(row('a')); await mmove(folderEl('gcodes/Spares')); await mup(folderEl('gcodes/Spares'));
+  await until(() => cmds('move').length === 3);
+  eq(last('cmd', 'move').args, {path: 'gcodes/a.gcode', folder: 'gcodes/Spares'}, 'a file onto a folder');
+`);
+
+test('files: a card shows its name on two lines at most, broken between words, with the extension under it', `
+  ${FILES_OPEN}
+  const long = 'CHROMA_V8_50_slots_pull_tray_PLA_84.4g_2h52m_with_a_very_long_tail_name.gcode';
+  await click(byTest('files-refresh'));
+  await again(TREE, {...${JSON.stringify(ABC)}, files: [{name: 'cable_clip_x10.gcode', size: 2e6, modified: 2}, {name: long, size: 3e6, modified: 1}]});
+  await click(q('[data-files-view="grid"]'));
+  const card = n => q('.oui-files-card[data-file="gcodes/' + n + '"]');
+  const name = n => q('.oui-files-cardname', card(n));
+  eq([name('cable_clip_x10.gcode').textContent.replace(/\\u200b/g, ''), text(q('.oui-files-cardmeta', card('cable_clip_x10.gcode')))], ['cable_clip_x10', '.gcode · 2 MB'], 'the name, then the extension and the size');
+  eq(card(long).getAttribute('title'), long, 'the whole name in the tooltip');
+  const lines = el => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
+  assert(lines(name(long)) <= 2 && name(long).scrollHeight > name(long).clientHeight, 'a long name is cut at two lines: ' + lines(name(long)));
+  // Every line of a short name ends at a separator, never inside a word.
+  const range = document.createRange(), node = name('cable_clip_x10.gcode').firstChild;
+  const tops = []; for (let i = 0; i < node.length; i++) { range.setStart(node, i); range.setEnd(node, i + 1); tops.push(Math.round(range.getBoundingClientRect().top)); }
+  const chars = [...node.textContent];
+  for (let i = 1; i < tops.length; i++) if (tops[i] !== tops[i - 1]) assert(/[\\u200b_]/.test(chars[i - 1]), 'a line ends inside a word at ' + i + ': ' + node.textContent);
+  await click(q('[data-files-view="list"]'));
+`);
 
 test('files: Delete asks once, with the names; the camera folder is read only and says why', `
   ${FILES_OPEN}
@@ -1593,18 +1716,18 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   // A folder's context menu in the tree: New folder there, named in the tree.
   const menuAt = el => el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(el)[0], clientY: centre(el)[1]}));
   menuAt(folderEl('gcodes/sub'));
-  await until(() => q('.oui-files-menu [role=menuitem]'), 'a menu');
-  eq(qa('.oui-files-menu [role=menuitem]').map(text), ['New folder', 'Rename', 'Move to…', 'Delete'], 'what can be done with a folder');
-  eq(document.activeElement, q('.oui-files-menu [role=menuitem]'), 'the first item has focus');
+  await until(() => q('.oui-menu [role=menuitem]'), 'a menu');
+  eq(qa('.oui-menu [role=menuitem]').map(text), ['New folder', 'Rename', 'Move to…', 'Delete', 'Refresh'], 'what can be done with a folder');
+  eq(document.activeElement, q('.oui-menu [role=menuitem]'), 'the first item has focus');
   await press('Escape');
-  await until(() => !q('.oui-files-menu'), 'Escape closes it');
+  await until(() => !q('.oui-menu'), 'Escape closes it');
   menuAt(folderEl('gcodes'));
-  await until(() => q('.oui-files-menu'));
-  eq(qa('.oui-files-menu [role=menuitem]').map(text), ['New folder'], 'a root is never renamed, moved or deleted');
+  await until(() => q('.oui-menu'));
+  eq(qa('.oui-menu [role=menuitem]').map(text), ['New folder', 'Refresh'], 'a root is never renamed, moved or deleted');
   await press('Escape');
   menuAt(folderEl('gcodes/sub'));
-  await until(() => q('.oui-files-menu'));
-  await mouse(q('.oui-files-menu [role=menuitem]'));
+  await until(() => q('.oui-menu'));
+  await mouse(q('.oui-menu [role=menuitem]'));
   await until(() => field() && document.activeElement === field(), 'the name field');
   eq(field().closest('[role=treeitem]').previousElementSibling.dataset.folder, 'gcodes/sub', 'in the tree, under that folder');
   await type(field(), 'inner'); await press('Enter');
@@ -1637,7 +1760,7 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   await again(['gcodes', 'gcodes/Spares', 'gcodes/Spares/old'], {path: 'gcodes/Spares/old', dirs: [], files: []});
   eq(last('cmd', 'files').args.path, 'gcodes/Spares/old', 'the page follows the new name');
   const del = byTest('folder-delete');
-  assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-outlined'), 'deleting a folder is a red outline');
+  assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-text'), 'deleting a folder is red, an icon like its neighbours');
   await click(del);
   await until(dialogOpen);
   assert(dialogText().includes('old') && dialogText().includes('everything in it'), 'asks, naming the folder and what goes with it: ' + dialogText());
@@ -1645,8 +1768,8 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   await until(() => !dialogOpen());
   eq(cmds('delete'), [], 'Keep deletes nothing');
   menuAt(folderEl('gcodes/Spares/old'));
-  await until(() => q('.oui-files-menu'));
-  await click(qa('.oui-files-menu [role=menuitem]').find(b => text(b) === 'Delete'));
+  await until(() => q('.oui-menu'));
+  await click(qa('.oui-menu [role=menuitem]').find(b => text(b) === 'Delete'));
   await until(dialogOpen, 'the menu asks too');
   await click(q('[data-dlg="confirm"]', dialogEl()));
   await until(() => last('cmd', 'delete'));
