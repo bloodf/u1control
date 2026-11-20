@@ -2,13 +2,12 @@
 import { computed, onBeforeUnmount, watch } from 'vue';
 import Button from 'primevue/button';
 import { OuiAppBar, OuiIcon, OuiStatus, OuiToastHost, type OuiState } from '@orca-plugins/ui-foundation/src/components';
-import { dashboard, files, power, settings, spool, terminal } from '@orca-plugins/ui-foundation/src/icons';
+import { dashboard, files, power, settings, spool } from '@orca-plugins/ui-foundation/src/icons';
 import ConfirmDialog from './components/ConfirmDialog.vue';
 import PageMessages from './components/PageMessages.vue';
 import Dashboard from './components/Dashboard.vue';
 import StockView from './components/StockView.vue';
 import FilesView from './components/FilesView.vue';
-import ConsoleView from './components/ConsoleView.vue';
 import SettingsView from './components/SettingsView.vue';
 import { s, start, lease, estop, estopReason, controlsOff, busy, statusAge, stockCount, STALE_STATUS_S } from './app/store';
 import { installSettings } from './app/settings';
@@ -37,10 +36,9 @@ const tabs = computed(() => [
   { value: 'dash', icon: dashboard, label: t('nav.dash') },
   { value: 'stock', icon: spool, label: t('nav.stock'), ...(stockCount.value == null ? {} : { count: stockCount.value }) },
   { value: 'files', icon: files, label: t('nav.files') },
-  { value: 'console', icon: terminal, label: t('nav.console') },
   { value: 'settings', icon: settings, label: t('nav.settings') },
 ]);
-const VIEWS = [['dash', Dashboard], ['stock', StockView], ['files', FilesView], ['console', ConsoleView]] as const;
+const VIEWS = [['dash', Dashboard], ['stock', StockView], ['files', FilesView]] as const;
 </script>
 
 <template>

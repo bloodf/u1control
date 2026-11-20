@@ -11,6 +11,10 @@ import { t } from '../core/i18n';
 // What the U1 reads besides the heaters: the chamber, the stepper drivers and every fan. The part cooling and
 // auxiliary fans can be set here, only on an idle U1 like Load and Park (the plugin checks again); the top-cover fans
 // are set in Controls.
+// Its settings say which readings show. In a small widget it is compact: the readings only, without the fan setters
+// (container query on the widget, below).
+const props = withDefaults(defineProps<{ config?: { chamber?: boolean; drivers?: boolean; fans?: boolean } }>(), { config: () => ({}) });
+const show = (k: 'chamber' | 'drivers' | 'fans') => props.config[k] !== false;
 const st = computed(() => s.status);
 const why = computed(() => (guidedWhy.value ? 'heads-why' : undefined));
 const pct = (v: unknown) => (typeof v === 'number' ? `${Math.round(v * 100)} %` : null);
@@ -21,8 +25,8 @@ function driverText(d: Driver): string | null {
   return parts.length ? parts.join(' · ') : null;
 }
 const temps = computed(() => [
-  { label: t('tf.chamber'), value: deg(st.value?.chamber) },
-  ...(st.value?.drivers ?? []).map(d => ({ label: t('tf.driver', { axis: d.name }), value: driverText(d) })),
+  ...(show('chamber') ? [{ label: t('tf.chamber'), value: deg(st.value?.chamber) }] : []),
+  ...(show('drivers') ? (st.value?.drivers ?? []).map(d => ({ label: t('tf.driver', { axis: d.name }), value: driverText(d) })) : []),
 ]);
 const coverFans = computed(() => [
   { label: t('pref.exhaust_fan'), value: pct(st.value?.purifier?.exhaust) },
@@ -42,11 +46,11 @@ async function setFan(id: string) {
   <OuiPanel :icon="fanIcon" tone="sky" aria-labelledby="tf-h" data-test="temps-fans">
     <template #title><span id="tf-h">{{ t('tf.title') }}</span></template>
     <div v-if="st" class="oui-controls">
-      <div class="oui-controls-group">
+      <div v-if="temps.length" class="oui-controls-group">
         <p class="oui-label">{{ t('tf.temps') }} <OuiHint id="tf-help" :label="t('tf.driversAbout')" :text="t('tf.driversHelp')" /></p>
         <OuiKeyValue :items="temps" />
       </div>
-      <div class="oui-controls-group">
+      <div v-if="show('fans')" class="oui-controls-group">
         <p class="oui-label">{{ t('tf.fans') }}</p>
         <OuiControlRow v-for="f in fans" :key="f.id" :label="t(f.label)" :icon="fanIcon" tone="sky" :for="`tf-${f.id}`" :value="pct(st[f.speed]) ?? '—'">
           <InputNumber :model-value="draft[f.id]" :input-id="`tf-${f.id}`" :min="0" :max="100" :step="5" suffix=" %" placeholder="%" :use-grouping="false" size="small"
@@ -63,3 +67,7 @@ async function setFan(id: string) {
     <div v-else class="oui-stack u1-skel" aria-busy="true"><span class="oui-skeleton" /><span class="oui-skeleton" /></div>
   </OuiPanel>
 </template>
+<style>
+/* Compact in a small widget: the readings, not the setters. */
+@container oui-widget (max-width: 300px) or (max-height: 180px) { [data-test="temps-fans"] .oui-control-row-control { display: none; } }
+</style>

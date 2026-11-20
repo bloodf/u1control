@@ -44,6 +44,8 @@ export const s = reactive({
   frame: '',
   camError: '',
   scrOn: false,
+  /** The widgets on the Dashboard's open layout: the camera and the screen stream only while theirs is there. */
+  widgets: [] as string[],
   screen: '',
   screenError: '',
   stock: null as StockView | null,
@@ -266,7 +268,7 @@ export const onRfid = (h: (m: any) => void) => { rfidHandlers.add(h); return () 
 const stockShown = () => !s.hidden && (s.tab === 'dash' || s.tab === 'stock');
 export function lease(): void {
   const vis = !s.hidden && s.tab === 'dash';
-  bridge.post({ type: 'lease', camera: s.camOn && vis, screen: s.scrOn && vis, stock: stockShown() && stockVisible.value });
+  bridge.post({ type: 'lease', camera: s.camOn && vis && s.widgets.includes('camera'), screen: s.scrOn && vis && s.widgets.includes('screen'), stock: stockShown() && stockVisible.value });
 }
 
 export function start(): () => void {

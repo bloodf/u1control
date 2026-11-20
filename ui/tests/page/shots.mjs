@@ -39,7 +39,7 @@ __t.handler({type: 'config', mode: 'expert', stored: {}, version: '0.5.0', spool
 await settle();
 // Toasts (bottom-left): what a command answered, one that leaves and an error that stays.
 if (SCN === 'dash') { __t.handler({type: 'notice', text: 'Project filaments updated: T1 PLA, T2 PETG'}); __t.handler({type: 'reply', id: 424242, error: 'Spoolman timed out'}); }
-if (SCN === 'settings' || SCN === 'stock' || SCN === 'files' || SCN === 'console') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
+if (SCN === 'settings' || SCN === 'stock' || SCN === 'files') { document.querySelector('[data-tab="' + SCN + '"]').click(); await sleep(300); }
 if (SCN === 'settings') { document.querySelector('.oui-settings-link[data-section="connection"]').click(); await sleep(100); }
 if (SCN === 'files') {
   // the browser reads both folder trees, then the open folder
@@ -51,6 +51,8 @@ if (SCN === 'files') {
   await settle(); document.querySelector('[data-file="gcodes/benchy.gcode"]')?.click();
 }
 if (SCN === 'console') { const i = document.querySelector('#console-cmd'); i.value = 'M105'; i.dispatchEvent(new Event('input')); }
+// The dashboard in edit mode: grid dots, frames and handles, one widget's settings open.
+if (SCN === 'edit') { document.querySelector('[data-test="dash-edit"]').click(); await sleep(100); document.querySelector('[data-settings="console"]')?.click(); }
 if (SCN === 'dialog') { document.querySelector('[data-test="cancel"]').focus(); document.querySelector('[data-test="cancel"]').click(); await until(() => document.querySelector('.p-dialog')); }
 await sleep(400);
 `;
@@ -58,7 +60,7 @@ const SCENES = [
   ['dash', 'light', 'en', 1280, 1], ['dash', 'dark', 'pt_BR', 1280, 1], ['dash', 'light', 'pt_BR', 720, 1], ['dash', 'dark', 'en', 640, 2], ['dash', 'light', 'en', 380, 1],
   ['notarget', 'light', 'pt_BR', 1280, 1], ['notarget', 'dark', 'en', 720, 1], ['dialog', 'dark', 'pt_BR', 720, 1], ['dialog', 'light', 'en', 640, 2],
   ['settings', 'light', 'en', 1280, 1], ['settings', 'dark', 'pt_BR', 720, 1], ['files', 'light', 'pt_BR', 1280, 1], ['files', 'dark', 'en', 640, 2],
-  ['stock', 'light', 'en', 1280, 1], ['stock', 'dark', 'pt_BR', 720, 1], ['console', 'dark', 'en', 1280, 1], ['dash', 'light', 'en', 380, 1], ['dash', 'dark', 'en', 380, 1],
+  ['stock', 'light', 'en', 1280, 1], ['stock', 'dark', 'pt_BR', 720, 1], ['console', 'dark', 'en', 1280, 1], ['edit', 'light', 'en', 1280, 1], ['edit', 'dark', 'en', 1280, 1], ['dash', 'light', 'en', 380, 1], ['dash', 'dark', 'en', 380, 1],
   ['idle', 'light', 'en', 1280, 1], ['idle', 'dark', 'en', 1280, 1], ['idle', 'light', 'pt_BR', 380, 1], ['idle', 'dark', 'en', 380, 1], ['setup', 'light', 'pt_BR', 720, 1], ['setup', 'dark', 'en', 1280, 1], ['setup', 'light', 'en', 360, 2],
   ['setup', 'light', 'en', 1280, 1], ['setup', 'dark', 'en', 380, 1], ['setup', 'light', 'en', 380, 1],
 ];
@@ -88,11 +90,12 @@ try {
       ${scn.startsWith('setup') ? 'await sleep(300);' : STATE}
       const over = [...document.querySelectorAll('body *')].filter(e => { const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 1 && getComputedStyle(e).position !== 'fixed'; })
         .slice(0, 5).map(e => e.tagName + '.' + String(e.className).slice(0, 40));
+      const natural = [...document.querySelectorAll('.oui-dash-cell')].map(c => { const p = c.querySelector('.oui-panel'); const b = p && p.querySelector(':scope > .oui-panel-body'); return [c.dataset.widget, Math.round(c.getBoundingClientRect().height), b && b.firstElementChild ? Math.round(b.firstElementChild.getBoundingClientRect().height + 41 + parseFloat(getComputedStyle(b).paddingTop) * 2) : 0]; });
       const b = document.querySelector('.p-button'); const cs = b ? getComputedStyle(b) : null;
       return { overflowX: document.documentElement.scrollWidth > innerWidth, scrollWidth: document.documentElement.scrollWidth, innerWidth, overflowing: over,
         dom: document.getElementsByTagName('*').length, lang: document.documentElement.lang, dark: document.documentElement.classList.contains('orca-dark'),
         bodyFont: getComputedStyle(document.body).fontSize, buttonRadius: cs && cs.borderRadius, buttonFont: cs && cs.fontSize,
-        violations: __t.violations, errors: __t.errors, rejections: __t.rejections }; })()`);
+        natural, violations: __t.violations, errors: __t.errors, rejections: __t.rejections }; })()`);
     const name = `MOCK-u1-${scn}-${theme}-${lang}-${width}${height === 900 ? '' : 'x' + height}${scale > 1 ? '-zoom200' : ''}.png`;
     await writeFile(join(OUT, name), await p.screenshot());
     metrics.push({ name, ...m });
