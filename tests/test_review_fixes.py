@@ -427,7 +427,8 @@ class PluginFixTests(unittest.TestCase):
         self.assertEqual(out.returncode, 0, out.stderr)
         bare, packaged = (json.loads(part) for part in out.stdout.strip().splitlines()[-1].split("|"))
         self.assertEqual(bare, [])   # no top-level u1 / gcode / settings / ... leaks into the shared interpreter
-        self.assertEqual(packaged, sorted(["u1control"] + ["u1control." + m for m in build_modules()]))
+        # _assets too: imported with the package, not on first use (tests/test_audit_open.py)
+        self.assertEqual(packaged, sorted(["u1control", "u1control._assets"] + ["u1control." + m for m in build_modules()]))
 
     def test_relative_imports(self):
         import build

@@ -6,6 +6,12 @@
 
 - **Park** on the toolhead card of the head that is on the carriage puts it back in its dock (`PARK_EXTRUDER`, `PARK_EXTRUDER1`..`3`), for example after a manual bed mesh left it picked up. It asks first and, like Load and Unload, waits until the U1 is idle.
 
+## [0.15.2] - 2026-11-20
+
+### Fixed
+- Deleting one file no longer says "They are removed from the printer". The confirmation now reads "Deleting from the printer can't be undone." in every language.
+- Activating the plugin no longer makes OrcaSlicer ask for the Python audit event "open" with no file named. The tab icon module is now loaded with the plugin, so OrcaSlicer no longer sees a write to its Python cache without a path, which it can only show as a permission prompt with no target.
+
 ## [0.15.1] - 2026-11-20
 
 ### Changed
