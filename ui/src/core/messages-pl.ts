@@ -238,7 +238,7 @@ export const pl: Record<PolishKey, string> = {
   'confirm.load.yes': 'Załaduj T{n}',
   'confirm.unload.text': 'Wyładować T{n}? Dysza się nagrzeje.',
   'confirm.unload.yes': 'Wyładuj T{n}',
-  'confirm.park.text': 'Odłożyć T{n} do doku? W razie potrzeby drukarka najpierw zbazuje osie X i Y.',
+  'confirm.park.text': 'Odłożyć T{n} do doku? W razie potrzeby drukarka najpierw się zbazuje.',
   'confirm.park.yes': 'Parkuj T{n}',
   'edit.title': 'Edycja T{n}',
   'edit.vendor': 'Producent',

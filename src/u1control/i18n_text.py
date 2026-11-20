@@ -306,6 +306,7 @@ MESSAGES = {
     "nothing to change": _m("nada a alterar", "nada que cambiar", "nichts zu ändern", "没有可更改的内容"),
     "touch outside the screen": _m("toque fora da tela", "el toque está fuera de la pantalla",
                                    "Berührung außerhalb des Bildschirms", "点击位置超出屏幕"),
+    "T%d is not on the carriage": _m("T%d não está no carro", "T%d no está en el carro", "T%d ist nicht auf dem Schlitten", "T%d 不在滑车上"),
     "the U1 is busy (%s)": _m("a U1 está ocupada (%s)", "la U1 está ocupada (%s)", "der U1 ist beschäftigt (%s)", "U1 正忙（%s）"),
     "unknown calibration": _m("calibração desconhecida", "calibración desconocida", "unbekannte Kalibrierung", "未知的校准"),
     "bad action": _m("ação inválida", "acción no válida", "ungültige Aktion", "操作无效"),

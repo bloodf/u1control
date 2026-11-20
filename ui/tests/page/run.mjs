@@ -163,6 +163,8 @@ test('park: only the head on the carriage offers Park, and it asks first', `
   await click(q('[data-park="1"]'));
   await yes();
   eq(cmds('park')[0].args.head, 1, 'parks T2');
+  await post({type: 'status', data: VIEW({busy: true, state: 'printing', extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1, picked: i === 1}))})});
+  await until(() => !q('[data-park]'), 'no Park while printing');
 `);
 
 test('busy machine disables guided commands; unload-when-done is read-only; E-stop stays', `

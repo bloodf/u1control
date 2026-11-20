@@ -632,11 +632,20 @@ class BusyAndTagTests(unittest.TestCase):
         self.assertEqual(self.fake.scripts, ["M104 T0 S200"])
 
     def test_park_puts_the_head_back_in_its_dock(self):
+        base = self.fake.status
+        self.fake.status = lambda: {**base(), "extruder": {"state": "ACTIVATE"}, "extruder2": {"state": "ACTIVATE"}}
         self.svc.cmd_park(0)
         self.svc.cmd_park(2)
         self.assertEqual(self.fake.scripts, ["PARK_EXTRUDER", "PARK_EXTRUDER2"])
         with self.assertRaises(ValueError):
             self.svc.cmd_park(4)
+
+    def test_park_refuses_a_head_in_its_dock(self):
+        base = self.fake.status
+        self.fake.status = lambda: {**base(), "extruder": {"state": "PARKED"}}
+        with self.assertRaises(PrinterError):
+            self.svc.cmd_park(0)
+        self.assertEqual(self.fake.scripts, [])
 
     def test_tag_needs_confirmation_and_is_checked_right_before_writing(self):
         self.fake.tags[1] = {"VENDOR": "Polymaker", "MAIN_TYPE": "PLA", "RGB_1": 0x112233, "COLOR_NUMS": 1}

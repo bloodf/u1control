@@ -6,7 +6,7 @@ import Select from 'primevue/select';
 import { OuiHint, OuiIcon, OuiLevel, OuiSlot, OuiSpool, OuiStatus } from '../../shared/src/components';
 import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload } from '../../shared/src/icons';
 import HeaterControl from './HeaterControl.vue';
-import { s, run, tracker, controlsOff, loadSpools, guidedWhy } from '../app/store';
+import { s, run, tracker, busy, controlsOff, loadSpools, guidedWhy } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, fmt } from '../core/i18n';
 import { family } from '../core/logic';
@@ -166,7 +166,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
               :loading="tracker.isBusy(`load:${i}`)" :data-focus-key="`load:${i}`" :data-load="i" @click="load"><template #icon><OuiIcon :icon="download" :size="14" /></template></Button>
       <Button size="small" severity="secondary" :label="t('heads.unload')" :aria-label="t('heads.unloadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`unload:${i}`)" :aria-describedby="why"
               :loading="tracker.isBusy(`unload:${i}`)" :data-focus-key="`unload:${i}`" :data-unload="i" @click="unload"><template #icon><OuiIcon :icon="upload" :size="14" /></template></Button>
-      <Button v-if="picked" size="small" severity="secondary" :label="t('heads.park')" :aria-label="t('heads.parkLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`park:${i}`)" :aria-describedby="why"
+      <Button v-if="picked && !busy" size="small" severity="secondary" :label="t('heads.park')" :aria-label="t('heads.parkLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`park:${i}`)" :aria-describedby="why"
               :loading="tracker.isBusy(`park:${i}`)" :data-focus-key="`park:${i}`" :data-park="i" @click="park"><template #icon><OuiIcon :icon="parkIcon" :size="14" /></template></Button>
       <span class="oui-spacer" />
       <Button size="small" severity="secondary" text :aria-label="t('heads.editLabel', { n })" :title="t('heads.editLabel', { n })" :disabled="!!guidedWhy" :aria-describedby="why"

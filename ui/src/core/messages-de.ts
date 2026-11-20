@@ -248,7 +248,7 @@ export const de: Record<MessageKey, string> = {
   'confirm.load.yes': 'T{n} laden',
   'confirm.unload.text': 'T{n} entladen? Die Düse heizt auf.',
   'confirm.unload.yes': 'T{n} entladen',
-  'confirm.park.text': 'T{n} zurück in die Halterung bringen? Der Drucker referenziert X und Y vorher, falls nötig.',
+  'confirm.park.text': 'T{n} zurück in die Halterung bringen? Der Drucker referenziert vorher, falls nötig.',
   'confirm.park.yes': 'T{n} parken',
   'edit.title': 'T{n} bearbeiten',
   'edit.vendor': 'Hersteller',

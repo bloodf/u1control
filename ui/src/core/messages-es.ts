@@ -247,7 +247,7 @@ export const es: Record<MessageKey, string> = {
   'confirm.load.yes': 'Cargar T{n}',
   'confirm.unload.text': '¿Descargar T{n}? La boquilla se calienta.',
   'confirm.unload.yes': 'Descargar T{n}',
-  'confirm.park.text': '¿Devolver T{n} a su soporte? La impresora hace homing de X e Y antes si hace falta.',
+  'confirm.park.text': '¿Devolver T{n} a su soporte? La impresora hace homing antes si hace falta.',
   'confirm.park.yes': 'Aparcar T{n}',
   'edit.title': 'Editar T{n}',
   'edit.vendor': 'Fabricante',

@@ -428,7 +428,7 @@ def unload_command(head):
 
 def park_command(head):
     """Put a picked-up toolhead back in its dock: PARK_<extruder name> (extruder.py registers PARK_EXTRUDER,
-    PARK_EXTRUDER1..3; it homes X/Y first when needed)."""
+    PARK_EXTRUDER1..3; it homes first if needed)."""
     return "PARK_" + EXTRUDERS[int(head)].upper()
 
 

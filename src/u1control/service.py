@@ -736,7 +736,10 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def cmd_park(self, head):
         """Put toolhead `head` back in its dock (the screen's park), e.g. after a manual bed mesh left it picked up."""
         head = _head(head)
-        self._require_idle()
+        view = self._require_idle()
+        # PARK_EXTRUDER homes before it checks the carriage, so a stale card must not send it for a docked head
+        if not view["extruders"][head]["picked"]:
+            raise PrinterError(tr("T%d is not on the carriage") % (head + 1))
         return self._gcode(u1.park_command(head))
 
     def cmd_reread_rfid(self, head):

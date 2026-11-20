@@ -247,7 +247,7 @@ export const zhCN: Record<MessageKey, string> = {
   'confirm.load.yes': 'T{n} 进料',
   'confirm.unload.text': 'T{n} 退料？喷嘴会升温。',
   'confirm.unload.yes': 'T{n} 退料',
-  'confirm.park.text': '将 T{n} 放回停靠位？如有需要，打印机会先回零 X 和 Y。',
+  'confirm.park.text': '将 T{n} 放回停靠位？如有需要，打印机会先回零。',
   'confirm.park.yes': 'T{n} 停靠',
   'edit.title': '编辑 T{n}',
   'edit.vendor': '供应商',

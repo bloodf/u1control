@@ -81,6 +81,7 @@ PL = {
     "Unload when done is chosen for each print, per toolhead, in the U1 print setup pop-up": "Wyładuj po zakończeniu wybiera się dla każdego wydruku, dla każdej głowicy, w oknie ustawień druku U1",
     "nothing to change": "nie ma nic do zmiany",
     "touch outside the screen": "dotknięcie poza ekranem",
+    "T%d is not on the carriage": "T%d nie jest na karetce",
     "the U1 is busy (%s)": "U1 jest zajęta (%s)",
     "unknown calibration": "nieznana kalibracja",
     "bad action": "nieprawidłowa akcja",
