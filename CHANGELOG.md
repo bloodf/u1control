@@ -14,6 +14,7 @@
 
 - The G-code console is now a Dashboard widget, part of the default layout, instead of a tab of its own.
 - Shared UI 5.4.0 (the dashboard grid).
+- The print setup's path preview samples 1600 segments instead of 4000 (still more than its 160 px drawing shows), so a long plate keeps its preview under the page limit with the bigger page.
 - A toolhead whose filament was unloaded but whose spool still sits in the feeder (feeder state `preload_finish`) now says **Not in the head** instead of looking loaded, and the feeder line reads in words (in the head, at the inlet, waiting for filament, unloaded) instead of the raw firmware state.
 
 ### Fixed
