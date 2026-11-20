@@ -6,6 +6,10 @@
 
 - **Park** on the toolhead card of the head that is on the carriage puts it back in its dock (`PARK_EXTRUDER`, `PARK_EXTRUDER1`..`3`), for example after a manual bed mesh left it picked up. It asks first, is hidden while a print runs and, like Load and Unload, waits until the U1 is idle. The plugin checks the head is still on the carriage right before sending, so a card that is out of date can't make the printer home for nothing.
 
+### Changed
+
+- A toolhead whose filament was unloaded but whose spool still sits in the feeder (feeder state `preload_finish`) now says **Not in the head** instead of looking loaded, and the feeder line reads in words (in the head, at the inlet, waiting for filament, unloaded) instead of the raw firmware state.
+
 ## [0.15.2] - 2026-11-20
 
 ### Fixed

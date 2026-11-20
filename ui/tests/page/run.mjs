@@ -149,6 +149,17 @@ test('editing a tagged head asks before FORCE', `
   eq(cmds('set_filament')[1].args.force, false, 'untagged head: no FORCE');
 `);
 
+test('feeder: a spool unloaded from the head but still in the feeder says so', `
+  await connect();
+  await post({type: 'status', data: VIEW({feed: [{state: 'preload_finish', detected: true}, {state: 'load_finish', detected: true}, {state: 'wait_insert'}, {}]})});
+  await until(() => q('[data-not-in-head="0"]'), 'T1 says it is not in the head');
+  eq(qa('[data-not-in-head]').map(e => e.dataset.notInHead), ['0', '2'], 'T1 and T3, not T2');
+  const meta = qa('.hc').map(c => qa('.oui-meta', c).map(text).find(x => x.startsWith('Feeder')));
+  eq(meta[0], 'Feeder: at the inlet, not in the head', 'feeder line in words, no repeated inlet note');
+  eq(meta[1], 'Feeder: in the head · filament at inlet', 'no raw state for T2');
+  eq(meta[2], 'Feeder: waiting for filament', 'T3 waits for filament');
+`);
+
 test('park: only the head on the carriage offers Park, and it asks first', `
   await connect();
   await post({type: 'status', data: VIEW()});
