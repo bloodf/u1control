@@ -1,13 +1,13 @@
 <script setup lang="ts">
 // One printer's files: the shared OuiFileBrowser over useFileBackend, which reads, shows a failed read with its way out,
 // runs a move or delete and reads again. This component gives the storage (the plugin's Moonraker file commands, with the
-// printer's own paths as ids: "gcodes/sub/a.gcode") and what the page adds: print, save and rename a file; make a
-// folder; rename, move and delete the open one. FilesView makes a new one for every printer.
+// printer's own paths as ids: "gcodes/sub/a.gcode") and what the page adds: print, save and rename a file; rename, move
+// and delete the open folder. A new folder is made in the browser's own tree, through createFolder. FilesView makes a new one for every printer.
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import { OuiFileBrowser, OuiHint, OuiIcon, useFileBackend, type OuiFile, type OuiFileBackend, type OuiFileBrowserLabels } from '@orca-plugins/ui-foundation/src/components';
-import { download as downloadIcon, edit, move as moveIcon, plus, printer, trash } from '@orca-plugins/ui-foundation/src/icons';
+import { download as downloadIcon, edit, move as moveIcon, printer, trash } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, printerName } from '../app/store';
 import { newFolder, watchThumb } from '../app/thumbs';
@@ -48,6 +48,12 @@ const backend: OuiFileBackend = {
   // The browser asked first (its own confirmation, with the count and the names).
   remove: ids => each(ids, 'files.deleted', id => run({ key: `del:${id}`, label: t('act.delete'), cmd: 'delete', args: { path: id } })),
   move: (ids, to) => each(ids, 'files.moved', id => run({ key: `mv:${id}`, label: t('act.move'), cmd: 'move', args: { path: id, folder: to } })),
+  // The browser checked the name and opens the new folder; a refusal has already said why (the tracker's message).
+  async createFolder(parent, name) {
+    const path = `${parent}/${name}`;
+    if (!(await run({ key: 'mkdir', label: t('act.mkdir'), cmd: 'mkdir', args: { path }, okText: t('ok.mkdir') })).ok) throw new Error(path);
+    return path;
+  },
 };
 // A file that failed has already said why (each, above): nothing to add here.
 const files = useFileBackend(backend, { folder: 'gcodes', onError: () => {} });
@@ -73,6 +79,7 @@ const labels = computed<OuiFileBrowserLabels>(() => ({
   empty: filter.value.trim() && files.files.length ? t('files.noMatch', { filter: filter.value.trim() }) : t('files.empty'), loading: t('files.loading'),
   nothingSelected: t('files.none'), nothingSelectedText: root.value === 'gcodes' ? t('files.noneHint') : undefined,
   loadFailed: t('files.loadFailed'), retry: t('common.retry'),
+  newFolder: t('files.newFolder'), folderName: t('files.folderName'), folderError: reason => t(`files.nameErr.${reason}` as const),
 }));
 
 // A print file's preview is asked for only once its row is on screen (app/thumbs): the rows are the browser's, found by
@@ -112,17 +119,10 @@ async function rename(id: string) {
   if (r.ok) void files.reload({ quiet: true });
 }
 
-// ---------------------------------------------------------------- folders: a new one, and the open one renamed, moved or deleted
+// ---------------------------------------------------------------- folders: the open one renamed, moved or deleted (a new one is the browser's)
 const parentOf = (id: string) => id.slice(0, Math.max(0, id.lastIndexOf('/')));
 /** The open folder is somewhere else now (or gone: its parent): open that, and read the tree again. */
 function folderNow(id: string) { files.folder = id; files.selected = []; void files.reload(); }
-async function mkdir() {
-  const n = ((await prompt({ title: t('files.newFolder'), text: t('files.newFolderIn', { path: files.folder }), yes: t('files.create'), no: t('common.goBack'),
-    input: { label: t('files.folderName'), value: '' } })) || '').trim();
-  if (!n) return;
-  const r = await run({ key: 'mkdir', label: t('act.mkdir'), cmd: 'mkdir', args: { path: `${files.folder}/${n}` }, okText: t('ok.mkdir') });
-  if (r.ok) void files.reload({ quiet: true });
-}
 async function renameFolder() {
   const was = files.folder, name = await newName(nameOf(was));
   if (!name) return;
@@ -160,7 +160,6 @@ async function deleteFolder() {
             <Button size="small" severity="secondary" text :aria-label="t('files.moveLabel', { name: folder.name })" :title="t('files.moveLabel', { name: folder.name })" data-test="folder-move" @click="moveFolder"><template #icon><OuiIcon :icon="moveIcon" :size="14" /></template></Button>
             <Button size="small" severity="danger" outlined :aria-label="t('files.deleteLabel', { name: folder.name })" :title="t('files.deleteLabel', { name: folder.name })" data-test="folder-delete" @click="deleteFolder"><template #icon><OuiIcon :icon="trash" :size="14" /></template></Button>
           </template>
-          <Button size="small" severity="secondary" text :label="t('files.newFolder')" data-test="files-mkdir" @click="mkdir"><template #icon><OuiIcon :icon="plus" :size="14" /></template></Button>
         </template>
       </template>
       <template #toolbar><InputText id="files-filter" v-model="filter" type="search" size="small" :placeholder="t('files.filter')" :aria-label="t('files.search')" class="fv-q" /></template>
