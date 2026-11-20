@@ -244,6 +244,7 @@ export const de: Record<MessageKey, string> = {
   'heads.rfidLabel': 'RFID-Tag von T{n} erneut lesen',
   'heads.sync': 'Auf Projektfilamente anwenden',
   'heads.syncHelp': 'Wählt anhand der geladenen Spulen und RFID-Tags für jeden Projektplatz das passende OrcaSlicer-Filamentprofil und die Farbe.',
+  'heads.syncSlow': 'Auf Projektfilamente anwenden: OrcaSlicer ist noch nicht fertig. Wenn es nach ungespeicherten Profiländerungen fragt, beantworten Sie die Frage, dann werden die Filamente übernommen.',
   'heads.source.direct': 'Spoolman: {n} Spulen (direkt)',
   'heads.source.printer': 'Spoolman: {n} Spulen (über den Drucker)',
   'heads.source.same': 'Spulen: dasselbe Spoolman wie der Spooler-Bestand ({n})',

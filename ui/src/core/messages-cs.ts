@@ -234,6 +234,7 @@ export const cs: Record<CzechKey, string> = {
   'heads.rfidLabel': 'Znovu přečíst RFID štítek T{n}',
   'heads.sync': 'Použít pro filamenty v projektu',
   'heads.syncHelp': 'Vybere odpovídající profil filamentu a barvu v OrcaSliceru pro každý slot projektu podle zavedených cívek / RFID štítků.',
+  'heads.syncSlow': 'Použít pro filamenty v projektu: OrcaSlicer ještě neskončil. Pokud se ptá na neuložené změny profilu, odpověz a filamenty se použijí.',
   'heads.source.direct': 'Spoolman: {n} cívek (přímo)',
   'heads.source.printer': 'Spoolman: {n} cívek (přes tiskárnu)',
   'heads.source.same': 'Cívky: stejný Spoolman jako sklad Spooleru ({n})',

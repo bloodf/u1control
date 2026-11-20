@@ -243,6 +243,7 @@ export const zhCN: Record<MessageKey, string> = {
   'heads.rfidLabel': '重新读取 T{n} 的 RFID 标签',
   'heads.sync': '应用到项目耗材丝',
   'heads.syncHelp': '根据已装入的料盘和 RFID 标签，为项目的每个槽位选择匹配的 OrcaSlicer 耗材丝预设和颜色。',
+  'heads.syncSlow': '应用到项目耗材丝：OrcaSlicer 尚未完成。如果它在询问未保存的预设更改，请先回答，耗材丝随后会被应用。',
   'heads.source.direct': 'Spoolman：{n} 个料盘（直连）',
   'heads.source.printer': 'Spoolman：{n} 个料盘（通过打印机）',
   'heads.source.same': '料盘：与 Spooler 库存使用同一个 Spoolman（{n}）',
