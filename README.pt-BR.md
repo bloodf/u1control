@@ -26,7 +26,7 @@ O U1 Control é um plugin do OrcaSlicer 2.5 para a Snapmaker U1. Ele acrescenta 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/u1control-screenshot-dashboard-dark-pt-BR.png">
-    <img alt="O Painel do U1 Control durante uma impressão: progresso, mesa e câmara, câmera e as quatro cabeças com suas bobinas" src="assets/readme/u1control-screenshot-dashboard-light-pt-BR.png" width="100%">
+    <img alt="O Painel do U1 Control durante uma impressão: progresso e tempos, as quatro cabeças com suas bobinas, os controles, a câmera e a tela da impressora" src="assets/readme/u1control-screenshot-dashboard-light-pt-BR.png" width="100%">
   </picture>
 </p>
 
@@ -57,17 +57,17 @@ A partir de um arquivo:
       <p><b>Preparo da impressão</b><br>Cada filamento é relacionado a uma cabeça por material e cor antes de o arquivo sair do OrcaSlicer.</p>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/orca-cloud/u1control-feature-02-dashboard-pt-BR.png" alt="O Painel: temperatura da mesa, velocidade, tampa superior, luz da câmara e a imagem da câmera" width="100%">
+      <img src="assets/orca-cloud/u1control-feature-02-dashboard-pt-BR.png" alt="O Painel: a imagem da câmera com a temperatura da mesa logo abaixo" width="100%">
       <p><b>Painel</b><br>Status, temperaturas, câmera, pausar, retomar, cancelar e parada de emergência em uma página.</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="assets/orca-cloud/u1control-feature-03-filament-pt-BR.png" alt="As cabeças T1 e T2 com filamento, etiqueta RFID, bobina do Spoolman e gramas restantes" width="100%">
+      <img src="assets/orca-cloud/u1control-feature-03-filament-pt-BR.png" alt="As cabeças T1 a T4 com filamento, etiqueta RFID, bobina do Spoolman e gramas restantes" width="100%">
       <p><b>Cabeças e bobinas</b><br>Veja e edite o filamento de cada cabeça, leia a etiqueta RFID e vincule uma bobina do Spoolman por cabeça.</p>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/orca-cloud/u1control-feature-04-files-pt-BR.png" alt="A página Arquivos: pastas, arquivos de impressão com tempo e filamento, e a lista de timelapses" width="100%">
+      <img src="assets/orca-cloud/u1control-feature-04-files-pt-BR.png" alt="A página Arquivos: a árvore de pastas, arquivos de impressão com tamanho e data, e a lista de timelapses" width="100%">
       <p><b>Arquivos e timelapses</b><br>Imprima, renomeie, mova e apague arquivos da impressora e salve os vídeos de timelapse no computador.</p>
     </td>
   </tr>
@@ -116,7 +116,7 @@ Os detalhes estão em [docs/features.md](docs/features.md) e todos os ajustes em
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/u1control-screenshot-print-setup-dark-pt-BR.png">
-    <img alt="A janela Preparar impressão na U1: Filamento para cabeça com quatro filamentos, Opções de impressão e o botão Enviar à U1" src="assets/readme/u1control-screenshot-print-setup-light-pt-BR.png" width="720">
+    <img alt="A janela Preparar impressão na U1: quatro filamentos mapeados para as cabeças, as opções de impressão e o botão Aplicar e continuar" src="assets/readme/u1control-screenshot-print-setup-light-pt-BR.png" width="900">
   </picture>
 </p>
 

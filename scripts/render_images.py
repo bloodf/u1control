@@ -65,7 +65,14 @@ SCROLL_TO = ('document.querySelector("main").style.paddingBottom="600px";'   # t
              'p.style.scrollMarginTop=document.querySelector(".oui-appbar").offsetHeight+10+"px";p.scrollIntoView({block:"start"});'
              'scrollTo(0,Math.round(scrollY));')
 CAMERA_ON = ('document.querySelector(\'[data-test="camera"]\').click();'      # start the camera, answer with the mock picture
-             'setTimeout(()=>emit({type:"frame",image:DATA.frame}),50);setTimeout(()=>{%s},300);')
+             'setTimeout(()=>emit({type:"frame",image:DATA.frame}),50);setTimeout(()=>{%s},150);')
+# The camera above the controls, which keep their temperatures only: the whole picture and the whole panel fit the square.
+CAMERA_FIRST = ('const ctl=document.querySelector("#bed-h").closest(".oui-panel");ctl.before(document.querySelector("#cam-h").closest(".oui-panel"));'
+                'ctl.querySelectorAll(".oui-controls-group:not(:first-child)").forEach(e=>e.remove());'
+                'document.querySelector("#scr-h").closest(".oui-panel").remove();')
+# Nothing after the toolheads: the panel that follows would show its title and little else.
+HEADS_LAST = ('const hp=document.querySelector("#heads-h").closest(".oui-panel");document.querySelectorAll("main .oui-panel").forEach(p=>{'
+              'if(hp.compareDocumentPosition(p)&Node.DOCUMENT_POSITION_FOLLOWING&&!hp.contains(p))p.remove();});')
 # The toolhead cards without their heater row, feeder line and buttons: the spools are what they show here.
 COMPACT_HEADS = 'document.querySelectorAll(".hc .oui-slot-extra>[data-heater-row],.hc .oui-slot-extra>p.oui-meta,.hc .oui-slot-actions").forEach(e=>e.remove());'
 # The main and hero images: the print card without the printer photo or its buttons, the four toolheads and their spools right under it
@@ -75,10 +82,10 @@ REELS_UNDER_JOB = ('const job=document.querySelector(\'[data-test="job-card"]\')
                    + 'document.querySelectorAll(".hc .hc-pick").forEach(e=>e.remove());')
 SCREENS = {
     "dash": dict(page="app", section="dash", width=640, spools=True, js=REELS_UNDER_JOB),
-    "camera": dict(page="app", section="dash", width=640, js=CAMERA_ON % (SCROLL_TO % "#bed-h")),
-    "heads": dict(page="app", section="dash", width=640, spools=True, js=SCROLL_TO % "#heads-h" + COMPACT_HEADS),   # all four fit the square
+    "camera": dict(page="app", section="dash", width=640, js=CAMERA_ON % (CAMERA_FIRST + SCROLL_TO % "#cam-h")),
+    "heads": dict(page="app", section="dash", width=640, spools=True, js=HEADS_LAST + SCROLL_TO % "#heads-h" + COMPACT_HEADS),   # all four fit the square
     "files": dict(page="app", section="files", width=880),
-    "setup": dict(page="setup", width=680),
+    "setup": dict(page="setup", width=900),                  # the window's own width: four filaments in one row, options and buttons under them
     "wide": dict(page="app", section="dash", spools=True),
 }
 # Listing sizes by the kind of image (the name of the source file says which).
@@ -88,10 +95,12 @@ LANDSCAPE = (1600, 900)
 # ("Snapmaker U1 · 192.168.1.50 · Extended firmware 2.0.0"), narrow enough to keep the two-row header.
 CSS_WIDTHS = {"en": 740, "pt-BR": 760}      # wide squares: room for the whole firmware line in the header
 CSS_WIDTH_SOCIAL = 760                      # the small square: wide layout too, so the header line fits and no button wraps
+FILES_WIDTH_PT = 960                        # the Files tab in Portuguese: its longer tab names need a wider one-row app bar
 USES = {"tile": "store tile and plugin table icon", "square": "Orca Cloud square image", "social": "GitHub social preview",
         "hero": "README hero", "main": "Orca Cloud main image", "feature": "Orca Cloud gallery and README feature grid"}
 # README screenshots: name, screen, CSS viewport. Exported at 1.25x.
-PLAIN = [("dashboard", "wide", (1280, 800)), ("print-setup", "setup", (720, 640))]
+# The viewports hold the whole page: every toolhead and the controls, and the setup window (900 px wide in OrcaSlicer) down to its buttons.
+PLAIN = [("dashboard", "wide", (1280, 1240)), ("print-setup", "setup", (900, 640))]
 PLAIN_SCALE = 1.25
 # The mock camera picture: the print inside the printer, cut from the cover photograph (x, y, width, height).
 CAMERA_CROP = ("u1control-workshop-cover-en.png", (372, 668, 208, 117))
@@ -275,16 +284,23 @@ def font_css():
 # Ends the page at a clean edge: the first row or card that would be cut by the bottom of the image (at `H`
 # CSS px) is hidden with everything below it, under a block in the page colour.
 CLEAN_CUT = """(H=>{
-  let el = document.querySelector("main"), cut = H;
+  // the open tab's page (the other tabs are hidden); above: where the page ends if `el` goes whole
+  let el = [...document.querySelectorAll("main")].find(m => m.offsetHeight) || document.body, cut = H, above = 0;
+  // the boxes inside `e`: a display: contents wrapper has none of its own, its children stand in for it
+  const boxes = e => [...e.children].flatMap(k => getComputedStyle(k).display === "contents" ? boxes(k) : [k]);
   for (;;) {
-    const kids = [...el.children].filter(k => k.offsetHeight > 0), rect = k => k.getBoundingClientRect();
+    const kids = boxes(el).filter(k => k.offsetHeight > 0), rect = k => k.getBoundingClientRect();
     const s = kids.find(k => rect(k).top < H && rect(k).bottom > H);
-    if (!s) { cut = Math.max(0, ...kids.map(k => rect(k).bottom).filter(b => b <= H)); break; }
-    if (rect(s).height <= 90 || !s.children.length) {
-      const i = kids.indexOf(s), prev = i ? rect(kids[i - 1]).bottom : rect(s).top;
-      cut = (prev + rect(s).top) / 2; break;
+    if (!s) {   // nothing is cut here; a block with no measurable children goes whole
+      const ends = kids.map(k => rect(k).bottom).filter(b => b <= H);
+      cut = ends.length ? Math.max(...ends) : above; break;
     }
-    el = s;
+    const i = kids.indexOf(s), here = ((i ? rect(kids[i - 1]).bottom : rect(s).top) + rect(s).top) / 2;
+    if (rect(s).height <= 90 || !s.children.length) {
+      // a group left with only its label goes whole too
+      cut = i && kids.slice(0, i).every(k => k.matches(".oui-label")) ? above : here; break;
+    }
+    above = here; el = s;
   }
   const d = document.createElement("div");
   d.style.cssText = "position:fixed;left:0;right:0;bottom:0;z-index:99;top:" + Math.min(cut, H) + "px;background:" + getComputedStyle(document.body).backgroundColor;
@@ -294,7 +310,7 @@ CLEAN_CUT = """(H=>{
 
 def make_page(html, theme, stub_data, section=None, scroll=None, js=None, cut=None):
     root = ":root{%s}" % ";".join("%s:%s" % kv for kv in THEMES[theme].items())
-    head = "<style>%s%s</style>%s" % (font_css(), root, STUB % json.dumps(stub_data).replace("</", "<\\/"))
+    head = "<style>%s%s::-webkit-scrollbar{display:none}</style>%s" % (font_css(), root, STUB % json.dumps(stub_data).replace("</", "<\\/"))
     steps = []
     if section:
         steps.append('setTimeout(()=>document.querySelector(\'[data-tab="%s"]\').click(),300);' % section)
@@ -416,6 +432,8 @@ def save(im, rel):
 
 
 def css_width_for(rel, screen, lang):
+    if screen == "files" and lang == "pt-BR":
+        return FILES_WIDTH_PT          # the one-row app bar cuts "Ajustes" and "Imprimindo" short below this
     if screen not in ("dash", "camera"):   # the setup window, toolheads and files keep their own layout widths
         return None
     return CSS_WIDTH_SOCIAL if rel.startswith("social/") else CSS_WIDTHS[lang]
@@ -430,7 +448,7 @@ def export_artwork(env, src):
     if screen:
         box, radius = find_square(art)
         paste_rounded(art, shoot(env, screen, theme, lang, (box[2] - box[0], box[3] - box[1]),
-                                 css_width_for(rel, screen, lang), clean=screen == "dash"), box, radius)
+                                 css_width_for(rel, screen, lang), clean=True), box, radius)
         op += "; mock screenshot '%s' (%s, %s) pasted inside the square at x=%d y=%d, %dx%d, corner radius %d" % (
             screen, theme, lang, box[0], box[1], box[2] - box[0], box[3] - box[1], radius)
     return {**save(art, rel), "source": "assets/marketing/source/" + src.name, "operation": op, "use": use}
@@ -439,7 +457,7 @@ def export_artwork(env, src):
 def export_plain(env, name, screen, viewport, theme, lang):
     size = (round(viewport[0] * PLAIN_SCALE), round(viewport[1] * PLAIN_SCALE))
     rel = "readme/u1control-screenshot-%s-%s-%s.png" % (name, theme, lang)
-    return {**save(shoot(env, screen, theme, lang, size, viewport[0]), rel), "source": "the built page (src/u1control/ui/app.html) with fake data",
+    return {**save(shoot(env, screen, theme, lang, size, viewport[0], clean=True), rel), "source": "the built page (src/u1control/ui/app.html) with fake data",
             "operation": "mock screenshot '%s' (%s, %s), %dx%d CSS px at %gx" % ((screen, theme, lang) + viewport + (PLAIN_SCALE,)),
             "use": "README screenshot"}
 

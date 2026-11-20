@@ -26,7 +26,7 @@ U1 Control is an OrcaSlicer 2.5 plugin for the Snapmaker U1. It adds a printer t
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/u1control-screenshot-dashboard-dark-en.png">
-    <img alt="The U1 Control Dashboard during a print: progress, bed and chamber, camera, and the four toolheads with their spools" src="assets/readme/u1control-screenshot-dashboard-light-en.png" width="100%">
+    <img alt="The U1 Control Dashboard during a print: progress and times, the four toolheads with their spools, the controls, the camera and the printer screen" src="assets/readme/u1control-screenshot-dashboard-light-en.png" width="100%">
   </picture>
 </p>
 
@@ -57,17 +57,17 @@ From a file:
       <p><b>Print setup</b><br>Each filament is matched to a toolhead by material and colour before the file leaves OrcaSlicer.</p>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/orca-cloud/u1control-feature-02-dashboard-en.png" alt="The Dashboard: bed temperature, speed, top cover, chamber light and the camera picture" width="100%">
+      <img src="assets/orca-cloud/u1control-feature-02-dashboard-en.png" alt="The Dashboard: the camera picture with the bed temperature under it" width="100%">
       <p><b>Dashboard</b><br>Status, temperatures, camera, pause, resume, cancel and emergency stop on one page.</p>
     </td>
   </tr>
   <tr>
     <td width="50%" valign="top">
-      <img src="assets/orca-cloud/u1control-feature-03-filament-en.png" alt="Toolheads T1 and T2 with their filament, RFID tag, Spoolman spool and grams left" width="100%">
+      <img src="assets/orca-cloud/u1control-feature-03-filament-en.png" alt="The toolheads T1 to T4 with their filament, RFID tag, Spoolman spool and grams left" width="100%">
       <p><b>Toolheads and spools</b><br>See and edit the filament in each head, read its RFID tag and link one Spoolman spool per head.</p>
     </td>
     <td width="50%" valign="top">
-      <img src="assets/orca-cloud/u1control-feature-04-files-en.png" alt="The Files page: folders, print files with time and filament, and the time-lapse list" width="100%">
+      <img src="assets/orca-cloud/u1control-feature-04-files-en.png" alt="The Files page: the folder tree, print files with size and date, and the time-lapse list" width="100%">
       <p><b>Files and time-lapses</b><br>Print, rename, move and delete files on the printer, and save its time-lapse videos to your computer.</p>
     </td>
   </tr>
@@ -116,7 +116,7 @@ Every detail is in [docs/features.md](docs/features.md), and every setting in [d
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/readme/u1control-screenshot-print-setup-dark-en.png">
-    <img alt="The U1 print setup window: Filament to toolhead for four filaments, Print options, and the Send to U1 button" src="assets/readme/u1control-screenshot-print-setup-light-en.png" width="720">
+    <img alt="The U1 print setup window: four filaments mapped to the toolheads, the print options, and the Apply &amp; continue button" src="assets/readme/u1control-screenshot-print-setup-light-en.png" width="900">
   </picture>
 </p>
 
