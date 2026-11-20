@@ -11,6 +11,15 @@
 
 - A toolhead whose filament was unloaded but whose spool still sits in the feeder (feeder state `preload_finish`) now says **Not in the head** instead of looking loaded, and the feeder line reads in words (in the head, at the inlet, waiting for filament, unloaded) instead of the raw firmware state.
 
+### Fixed
+
+- OrcaSlicer's **Device** tab and Print dialog, with u1control as the printer agent (thanks @Veisen, from #72):
+  - The four toolheads now reach OrcaSlicer: the filament block is sent nested the way OrcaSlicer reads it (`print.ams.ams`), so the Device tab shows them and **Sync from AMS** gets each toolhead's preset, multicolour spools and material variants included.
+  - The printer reports the Snapmaker U1's model id, so the Print dialog no longer calls it a printer of another model than the U1 preset.
+  - The Print dialog's **Flow calibration** box shows again: the status keeps the bit OrcaSlicer reads it from.
+  - The Device tab shows the printer's camera (Moonraker's first webcam, read again at each connection).
+  - **Home**, the bed and nozzle temperatures and the fan from the Device tab are sent only while the U1 is idle (not printing, paused, loading or calibrating), temperatures from 0 up to the U1's limits (nozzle 320 °C, bed 110 °C), a toolhead from T1 to T4. Anything else is refused and logged, and nothing reaches the printer.
+
 ## [0.15.2] - 2026-11-20
 
 ### Fixed

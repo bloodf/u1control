@@ -89,6 +89,7 @@ class FakePrinter:
                       {"name": "camera", "path": "/oem/printer_data/camera", "permissions": "r"}]
         self.file_list = None   # served by /server/files/list instead of the files under that root
         self.undeletable = set()   # "timelapse/x.jpg": DELETE answers 500
+        self.webcams = []   # served by /server/webcams/list
         handler = self._handler()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -157,7 +158,7 @@ class FakePrinter:
                 if u.path == "/printer/objects/query":
                     return self._send(200, {"result": {"status": fake.status()}})
                 if u.path == "/server/webcams/list":
-                    return self._send(200, {"result": {"webcams": []}})
+                    return self._send(200, {"result": {"webcams": fake.webcams}})
                 if u.path == "/server/files/directory" and fake.listing is not None:
                     return self._send(200, {"result": {**fake.listing, "disk_usage": {"free": 100}}})
                 if u.path == "/server/files/directory":
