@@ -2,10 +2,13 @@ export interface Head { loaded: boolean; type: string; vendor: string; sub_type:
 export interface Heater { temp: number | null; target: number | null; active?: boolean; picked?: boolean }
 export interface Tag { vendor?: string; manufacturer?: string; type?: string; sub_type?: string; uid?: string; official?: boolean;
   hotend_min?: number; hotend_max?: number; bed_temp?: number; sku?: string }
+/** A stepper driver (u1.driver_states): temp and state are null while its motor is off. */
+export interface Driver { name: string; temp: number | null; state: 'ok' | 'otpw' | 'ot' | null }
 export interface Status {
   state: string; message?: string; filename?: string; progress?: number; layer?: number; total_layers?: number;
   print_duration?: number; total_duration?: number; extruders: Heater[]; bed: Heater; heads: Head[];
-  rfid?: (Tag | null)[]; options?: Record<string, boolean>; features?: string[]; purifier?: { fitted?: boolean; mode?: string | number; recirculating?: boolean };
+  rfid?: (Tag | null)[]; options?: Record<string, boolean>; features?: string[]; purifier?: { fitted?: boolean; mode?: string | number; recirculating?: boolean; exhaust?: number | null; inner?: number | null };
+  fan?: number | null; aux_fan?: number | null; chamber?: number | null; drivers?: Driver[];
   feed?: { state?: string; detected?: boolean }[]; busy?: boolean; machine_state?: string; bindings?: Record<string, number>;
   light?: boolean | null; speed_factor?: number; power_loss?: boolean; reprint?: unknown; exceptions?: unknown[];
   firmware?: { kind: string; version?: string };

@@ -706,6 +706,12 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         view = self._require_idle()
         return self._gcode(u1.cover_fan_command(fan, percent, (view.get("purifier") or {}).get("mode")))
 
+    def cmd_fan(self, fan, percent):
+        """Set the part cooling fan or the aux cooling fan now (Temperatures & fans), on an idle U1 only."""
+        line = u1.fan_command(fan, percent)
+        self._require_idle()
+        return self._gcode(line)
+
     @staticmethod
     def _commands(client):
         """The printer's G-code command list; empty when it can't be read, so the extra options stay off."""

@@ -63,6 +63,11 @@ TASK_FIELDS = ("filament_vendor", "filament_type", "filament_sub_type", "filamen
                "extruder_map_table", "extruders_used", "reprint_info", "filament_spool_id",
                "filament_entangle_sen", "flow_calib_extruders") + tuple(p[3] for p in PREFERENCES)
 
+# Stepper drivers as the U1's printer.cfg names them: TMC2240 on X and Y (they also read their own temperature),
+# TMC2209 on Z and in each toolhead.
+DRIVERS = (("X", "tmc2240 stepper_x"), ("Y", "tmc2240 stepper_y"), ("Z", "tmc2209 stepper_z"),
+           *(("T%d" % (i + 1), "tmc2209 " + name) for i, name in enumerate(EXTRUDERS)))
+
 STATUS_OBJECTS = {
     "webhooks": None,
     "print_stats": None,
@@ -78,6 +83,9 @@ STATUS_OBJECTS = {
     "defect_detection": None,
     "led cavity_led": ["color_data"],
     "fan": ["speed"],
+    "fan_generic cavity_fan": ["speed"],        # M106 P2: the aux_cool_fan of [fan] (U1 printer.cfg)
+    "temperature_sensor cavity": ["temperature"],
+    **{obj: ["temperature", "drv_status"] for _, obj in DRIVERS},
     "filament_detect": ["info", "state"],   # RFID: Snapmaker, OpenRFID, OpenSpool, external readers
     "filament_feed left": None,   # keyed extruderN: channel_state, filament_detected, ...
     "filament_feed right": None,
@@ -329,6 +337,29 @@ def cover_fan_command(fan, percent, mode=None):
     return "SET_PURIFIER FAN=%s SPEED=%.2f" % (fan, pct / 100)
 
 
+def fan_command(fan, percent):
+    """The part cooling fan (M106, T1's [fan]) or the aux cooling fan (fan_generic cavity_fan) at percent 0..100."""
+    if fan not in ("part", "aux"):
+        raise ValueError(tr("unknown fan %r") % (fan,))
+    if isinstance(percent, bool) or not isinstance(percent, (int, float)) or not 0 <= percent <= 100:
+        raise ValueError(tr("%s out of range (0 to %d)") % ("%s %%" % (percent,), 100))
+    if fan == "part":
+        return "M106 S%d" % round(percent * 255 / 100)
+    return "SET_FAN_SPEED FAN=cavity_fan SPEED=%.2f" % (percent / 100)
+
+
+def driver_states(status):
+    """[{"name", "temp" (°C, TMC2240 only), "state": "ot" | "otpw" | "ok" | None}] for DRIVERS. u1-klipper tmc.py
+    get_status gives both None while the motor is off, and keeps only the set flags in drv_status."""
+    out = []
+    for name, obj in DRIVERS:
+        st = status.get(obj) or {}
+        drv = st.get("drv_status")
+        state = None if not isinstance(drv, dict) else "ot" if drv.get("ot") else "otpw" if drv.get("otpw") else "ok"
+        out.append({"name": name, "temp": st.get("temperature"), "state": state})
+    return out
+
+
 def purifier_command(mode, prefs=None):
     """The SET_PURIFIER_MODE line for mode, with the matching top-cover fan's speed from prefs when set."""
     cmd = PURIFIER[mode]
@@ -371,8 +402,13 @@ def summarize(status):
         "tuning": printer_tuning(task, status.get("defect_detection")),
         "light": bool(led[0][3]) if led and led[0] and len(led[0]) > 3 else None,
         "purifier": {"fitted": purifier.get("power_detected"), "mode": purifier.get("mode"),
-                     "recirculating": exhaust_blocked(purifier.get("mode"))},
+                     "recirculating": exhaust_blocked(purifier.get("mode")),
+                     "exhaust": (purifier.get("exhaust_fan") or {}).get("speed"),
+                     "inner": (purifier.get("inner_fan") or {}).get("speed")},
         "fan": (status.get("fan") or {}).get("speed"),
+        "aux_fan": (status.get("fan_generic cavity_fan") or {}).get("speed"),
+        "chamber": (status.get("temperature_sensor cavity") or {}).get("temperature"),
+        "drivers": driver_states(status),
         "feed": feed_states(status),
         "rfid": rfid_tags(status.get("filament_detect")),
         "machine_state": _main_state((status.get("machine_state_manager") or {}).get("main_state")),

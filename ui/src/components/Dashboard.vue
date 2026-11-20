@@ -8,6 +8,7 @@ import { OuiBanner, OuiEmpty, OuiHint, OuiIcon, OuiPageHeader, OuiPanel } from '
 import { check, play, refresh, settings, trash, zap } from '@orca-plugins/ui-foundation/src/icons';
 import JobCard from './JobCard.vue';
 import ControlsCard from './ControlsCard.vue';
+import TempsFansCard from './TempsFansCard.vue';
 import CameraCard from './CameraCard.vue';
 import ScreenCard from './ScreenCard.vue';
 import ToolheadsCard from './ToolheadsCard.vue';
@@ -78,6 +79,7 @@ async function powerDiscard() {
       <div class="oui-dash-main">
         <ToolheadsCard />
         <ControlsCard />
+        <TempsFansCard />
       </div>
       <div class="oui-dash-side">
         <CameraCard />
