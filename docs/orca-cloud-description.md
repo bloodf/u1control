@@ -47,7 +47,7 @@ Independent project, not made or supported by Snapmaker.
 
 ## Languages
 
-English, Brazilian Portuguese, Spanish, German, Simplified Chinese and Polish.
+English, Brazilian Portuguese, Spanish, German, Simplified Chinese, Polish and Czech.
 
 ## More plugins by bloodf
 
@@ -109,7 +109,7 @@ Projeto independente, não é feito nem suportado pela Snapmaker.
 
 ## Idiomas
 
-Inglês, português do Brasil, espanhol, alemão, chinês simplificado e polonês.
+Inglês, português do Brasil, espanhol, alemão, chinês simplificado, polonês e tcheco.
 
 ## Mais plugins do bloodf
 

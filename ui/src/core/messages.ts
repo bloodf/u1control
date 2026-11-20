@@ -1,5 +1,5 @@
 // Every visible string of the U1 Control pages, in English and Brazilian Portuguese (Spanish, German, Simplified
-// Chinese and Polish: messages-es.ts, messages-de.ts, messages-zh.ts, messages-pl.ts; tests/unit/i18n.test.ts keeps the six complete and alike). Texts that come from the
+// Chinese, Polish and Czech: messages-es.ts, messages-de.ts, messages-zh.ts, messages-pl.ts, messages-cs.ts; tests/unit/i18n.test.ts keeps the seven complete and alike). Texts that come from the
 // printer or from Python (error details, Extended Firmware labels) are shown inside these, not translated.
 export const en = {
   'app.title': 'U1 Control',
@@ -561,6 +561,7 @@ export const en = {
   'lang.de': 'Deutsch',
   'lang.zh-CN': '简体中文',
   'lang.pl': 'Polski',
+  'lang.cs': 'Čeština',
   'lang.help': 'Automatic follows OrcaSlicer’s language, then the system’s. Your choice is kept in this OrcaSlicer only.',
   'about.text': 'U1 Control {version} · Independent project, not made by Snapmaker.',
 
@@ -1327,6 +1328,7 @@ export const ptBR: Record<MessageKey, string> = {
   'lang.de': 'Deutsch',
   'lang.zh-CN': '简体中文',
   'lang.pl': 'Polski',
+  'lang.cs': 'Čeština',
   'lang.help': 'Automático segue o idioma do OrcaSlicer e depois o do sistema. A escolha fica guardada só neste OrcaSlicer.',
   'about.text': 'U1 Control {version} · Projeto independente, não feito pela Snapmaker.',
 

@@ -43,7 +43,7 @@ CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolm
 EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto", "camera_fps": 5,
          "network_origins": [],   # scheme://host of printers and Spoolman used: the network grants asked for at load
          "spoolman_refresh_s": 30}   # the page re-reads Spoolman this often while it shows (0 = off; 10-300)
-UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl")   # "auto": OrcaSlicer's language, then the system's
+UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl", "cs")   # "auto": OrcaSlicer's language, then the system's
 CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
 REFRESH_RANGE = (10, 300)      # spoolman_refresh_s: 0 (off) or seconds in this range
 

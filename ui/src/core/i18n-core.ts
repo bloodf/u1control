@@ -1,15 +1,15 @@
 // Locale resolution, kept free of Vue so the unit tests can import it directly.
-export const LOCALES = ['en', 'pt-BR', 'es', 'de', 'zh-CN', 'pl'] as const;
+export const LOCALES = ['en', 'pt-BR', 'es', 'de', 'zh-CN', 'pl', 'cs'] as const;
 export type Locale = (typeof LOCALES)[number];
 export type LangPref = 'auto' | Locale;
 
 // Language subtag -> the page language that serves it. Every Chinese (zh_CN, zh_TW, zh-Hant…) reads zh-CN:
 // OrcaSlicer's Traditional Chinese users get Simplified text rather than English.
-const BY_LANGUAGE: Record<string, Locale> = { en: 'en', pt: 'pt-BR', es: 'es', de: 'de', zh: 'zh-CN', pl: 'pl' };
+const BY_LANGUAGE: Record<string, Locale> = { en: 'en', pt: 'pt-BR', es: 'es', de: 'de', zh: 'zh-CN', pl: 'pl', cs: 'cs' };
 
 export const isLocale = (value: unknown): value is Locale => (LOCALES as readonly unknown[]).includes(value);
 
-/** OrcaSlicer's or the browser's code ("pt_BR", "de", "zh_CN", "pl_PL", "es-MX") → a page language; anything else → null (caller falls back). */
+/** OrcaSlicer's or the browser's code ("pt_BR", "de", "zh_CN", "pl_PL", "cs_CZ", "es-MX") → a page language; anything else → null (caller falls back). */
 export function normalizeLocale(value: unknown): Locale | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   return BY_LANGUAGE[value.trim().replace(/_/g, '-').toLowerCase().split('-')[0]] ?? null;
@@ -27,7 +27,7 @@ export function interpolate(text: string, params?: Record<string, unknown>): str
 }
 
 /** "<base>_one" for the language's singular, "<base>_other" otherwise (Chinese has no singular form). A language with
- *  more forms has them in its dictionary (Polish "_few", "_many"), picked by the same Intl rule when `dict` holds them. */
+ *  more forms has them in its dictionary (Polish "_few", "_many"; Czech "_few"), picked by the same Intl rule when `dict` holds them. */
 export function pluralKey(locale: Locale, base: string, n: number, dict?: Record<string, string>): string {
   const form = new Intl.PluralRules(locale).select(n);
   if (dict && `${base}_${form}` in dict) return `${base}_${form}`;

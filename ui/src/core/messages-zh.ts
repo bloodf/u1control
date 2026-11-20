@@ -562,6 +562,7 @@ export const zhCN: Record<MessageKey, string> = {
   'lang.de': 'Deutsch',
   'lang.zh-CN': '简体中文',
   'lang.pl': 'Polski',
+  'lang.cs': 'Čeština',
   'lang.help': '“自动”先跟随 OrcaSlicer 的语言，其次是系统语言。您的选择只保存在此 OrcaSlicer 中。',
   'about.text': 'U1 Control {version} · 独立项目，并非由 Snapmaker 制作。',
 

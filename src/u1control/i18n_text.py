@@ -1,10 +1,11 @@
 """Translations of the texts Python writes (see i18n.py). Key: the English text, exactly as in the source.
 
-Every entry has all five languages and the same placeholders in the same order as its key (Polish is kept apart, in
-i18n_text_pl.py, and joined in below). Words for shared terms are OrcaSlicer's own (toolhead, nozzle, bed, preset,
-time-lapse). German is formal ("Sie"), Spanish neutral, Chinese uses its own punctuation, Polish informal ("ty"). Text from the printer, Spoolman or the system fills the placeholders as it came.
+Every entry has all five languages and the same placeholders in the same order as its key (Polish and Czech are kept apart, in
+i18n_text_pl.py and i18n_text_cs.py, and joined in below). Words for shared terms are OrcaSlicer's own (toolhead, nozzle, bed, preset,
+time-lapse). German is formal ("Sie"), Spanish neutral, Chinese uses its own punctuation, Polish and Czech informal ("ty"). Text from the printer, Spoolman or the system fills the placeholders as it came.
 """
 
+from i18n_text_cs import CS
 from i18n_text_pl import PL
 
 
@@ -663,4 +664,5 @@ MESSAGES = {
         "noch ist unklar, ob auf dem Drucker die Extended Firmware läuft", "尚无法判断打印机是否运行 Extended Firmware"),
 }
 
-MESSAGES = {key: {**langs, **({"pl": PL[key]} if key in PL else {})} for key, langs in MESSAGES.items()}
+MESSAGES = {key: {**langs, **({"pl": PL[key]} if key in PL else {}), **({"cs": CS[key]} if key in CS else {})}
+            for key, langs in MESSAGES.items()}

@@ -39,6 +39,14 @@ const OWN: Partial<Record<Locale, Partial<PrimeLocale>>> = {
     aria: { close: 'Zamknij', previous: 'Poprzedni', next: 'Następny', firstPageLabel: 'Pierwsza strona', lastPageLabel: 'Ostatnia strona',
       nextPageLabel: 'Następna strona', prevPageLabel: 'Poprzednia strona', selectRow: 'Zaznacz wiersz', unselectRow: 'Odznacz wiersz' },
   },
+  cs: {
+    accept: 'Potvrdit', reject: 'Zpět', choose: 'Vybrat', upload: 'Nahrát', cancel: 'Zrušit',
+    emptyMessage: 'Žádné položky', emptyFilterMessage: 'Těmto filtrům nic neodpovídá',
+    emptySearchMessage: 'Nic nenalezeno', searchMessage: 'Nalezené výsledky: {0}',
+    selectionMessage: 'Vybrané položky: {0}', emptySelectionMessage: 'Není vybrána žádná položka',
+    aria: { close: 'Zavřít', previous: 'Předchozí', next: 'Další', firstPageLabel: 'První stránka', lastPageLabel: 'Poslední stránka',
+      nextPageLabel: 'Další stránka', prevPageLabel: 'Předchozí stránka', selectRow: 'Vybrat řádek', unselectRow: 'Zrušit výběr řádku' },
+  },
 };
 
 /** The labels PrimeVue should use for a page language; undefined keeps its built-in English. */
