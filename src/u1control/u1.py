@@ -10,6 +10,8 @@ from i18n import tr
 TOOLHEADS = 4         # PHYSICAL_EXTRUDER_NUM
 MAX_FILAMENTS = 32    # LOGICAL_EXTRUDER_NUM
 EXTRUDERS = ("extruder", "extruder1", "extruder2", "extruder3")
+HOTEND_MAX = 320      # °C: highest heater target u1control sends (the page, the Device tab)
+BED_MAX = 110
 
 # (key, SET_PRINT_PREFERENCES param, label, print_task_config field, basic)
 # Basic = the three Snapmaker Orca always sends; the others only when the printer reports them.

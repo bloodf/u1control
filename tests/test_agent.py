@@ -41,11 +41,13 @@ class PushTests(unittest.TestCase):
         self.assertIs(p["support_timelapse"], True)
         self.assertIs(p["sdcard"], True)
         self.assertEqual(p["home_flag"] >> 8 & 3, agent.HAS_SDCARD_NORMAL)
+        self.assertTrue(p["home_flag"] >> 16 & 1)   # PA calibration: keeps the dialog's Flow calibration box
+        self.assertEqual((p["nozzle_temp_range"], p["bed_temp_range"]), ([0, u1.HOTEND_MAX], [0, u1.BED_MAX]))
         self.assertEqual(p["gcode_state"], "IDLE")
 
     def test_tray_ids_prefer_the_linked_spools_preset_then_generic_by_material(self):
         block = agent.push_status(view(), lambda h: {1: "SPL00000000AB"}.get(h["index"], ""))["print"]
-        self.assertEqual([t["tray_info_idx"] for t in block["ams"][0]["tray"]],
+        self.assertEqual([t["tray_info_idx"] for t in block["ams"]["ams"][0]["tray"]],
                          ["OFDSrzZ8", "SPL00000000AB", "", "OFmY0l6t"])   # Generic PLA, Spooler's, empty, Generic PLA Matte
 
     def test_generic_ids_match_orcas_library(self):
@@ -65,7 +67,7 @@ class PushTests(unittest.TestCase):
         self.assertTrue(set(agent.FILAMENT_FAMILIES.values()) <= set(agent.GENERIC_IDS))   # an id for every family
 
     def test_four_toolheads_are_one_four_tray_unit(self):
-        block = agent.push_status(view())["print"]
+        block = agent.push_status(view())["print"]["ams"]   # print.ams.ams, as DevFilaSystemParser reads it
         self.assertEqual(block["ams_exist_bits"], "1")
         self.assertEqual(block["tray_exist_bits"], "B")   # heads 1, 2 and 4 loaded; 3 empty
         unit, = block["ams"]
@@ -106,6 +108,32 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(self.kind({"system": {"command": "ledctrl", "led_node": "chamber_light", "led_mode": "off"}}),
                          {"kind": "set_light", "on": False, "seq": ""})
         self.assertEqual(self.kind({"print": {"command": "gcode_line", "param": "M104 S200\n"}})["script"], "M104 S200\n")
+
+    def test_device_tab_home_heater_and_fan_lines_are_guarded(self):
+        idle, printing = view(), view(state="printing")
+        self.assertEqual(agent.guarded_line("G28 \n"), ("G28", {}))
+        self.assertEqual(agent.guarded_line("m140 s60"), ("M140", {"S": 60.0}))
+        self.assertIsNone(agent.guarded_line("M117 hi"))          # anything else runs as given
+        self.assertIsNone(agent.guarded_line("G91 \nG1 X10 F3000\nG90 \n"))
+        for line in ("G28 \n", "G28 X\n", "M140 S60\n", "M104 S200\n", "M104 T3 S200", "M106 P1 S255 \n", "M140 S0"):
+            self.assertIsNone(agent.line_refusal(line, idle), line)
+        for line in ("G28 \n", "M140 S60\n", "M104 S200\n", "M106 P1 S128 \n"):
+            self.assertIn("busy", agent.line_refusal(line, printing), line)
+            self.assertIn("busy", agent.line_refusal(line, view(state="paused")), line)
+        self.assertIn("busy", agent.line_refusal("G28", view(machine_state="AUTO_LOAD")))
+        for line, top in (("M140 S%d" % (u1.BED_MAX + 1), u1.BED_MAX), ("M104 S%d" % (u1.HOTEND_MAX + 1), u1.HOTEND_MAX),
+                          ("M104 S-5", u1.HOTEND_MAX), ("M140", u1.BED_MAX), ("M140 Sabc", u1.BED_MAX), ("M106 S256", 255)):
+            self.assertEqual(agent.line_refusal(line, idle), "%s out of range (0 to %d)" % (line, top))
+        for line in ("M104 T4 S200", "M104 T-1 S200", "M104 T1.5 S200", "M104 T S200"):
+            self.assertEqual(agent.line_refusal(line, idle), "bad toolhead", line)
+
+    def test_camera_is_moonrakers_first_enabled_webcam(self):
+        base = "http://10.0.0.2:7125"
+        cams = {"webcams": [{"enabled": False, "snapshot_url": "/off.jpg"}, {"name": "c", "snapshot_url": "/webcam/?action=snapshot"}]}
+        self.assertEqual(agent.snapshot_url(cams, base), base + "/webcam/?action=snapshot")
+        self.assertEqual(agent.snapshot_url({"webcams": [{"snapshot_url": "http://cam/s.jpg"}]}, base), "http://cam/s.jpg")
+        for bad in (None, [], {"webcams": None}, {"webcams": [{"snapshot_url": ""}, "x"]}):
+            self.assertEqual(agent.snapshot_url(bad, base), "")
 
     def test_unsupported_and_invalid(self):
         self.assertEqual(self.kind({"print": {"command": "calibration"}})["kind"], "unsupported")
@@ -514,7 +542,7 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(self.agent.connect_printer(conn), 0)
         self.assertTrue(wait_for(lambda: messages and connected))
         push = messages[0]["print"]
-        self.assertEqual(push["ams"][0]["tray"][1]["tray_type"], "PETG")
+        self.assertEqual(push["ams"]["ams"][0]["tray"][1]["tray_type"], "PETG")
         self.assertIs(push["support_timelapse"], True)
         light = json.dumps({"system": {"command": "ledctrl", "led_node": "chamber_light", "led_mode": "on"}})
         self.assertEqual(self.agent.send_message_to_printer("u1", light, 0, 0), 0)
@@ -564,7 +592,7 @@ class PluginAgentTests(unittest.TestCase):
         messages.clear()
         self.agent._wake.set()
         self.assertTrue(wait_for(lambda: messages))
-        trays = messages[-1]["print"]["ams"][0]["tray"]
+        trays = messages[-1]["print"]["ams"]["ams"][0]["tray"]
         self.assertEqual((trays[0]["tray_type"], trays[0]["tray_info_idx"]), ("PLA", "SPL00000005AA"))
         self.assertEqual((trays[1]["tray_type"], trays[1]["tray_info_idx"]), ("PETG", "OFYPdQJh"))
         self.ns["_service"] = types.SimpleNamespace(   # the tab showing this U1 wins: its links are up to date
@@ -620,7 +648,7 @@ class PluginAgentTests(unittest.TestCase):
         messages.clear()
         self.agent._wake.set()
         self.assertTrue(wait_for(lambda: messages))
-        trays = messages[-1]["print"]["ams"][0]["tray"]
+        trays = messages[-1]["print"]["ams"]["ams"][0]["tray"]
         self.assertEqual([t["tray_info_idx"] for t in trays], ["P1a2b3c", "OFYPdQJh", "", "OFmY0l6t"])
         self.assertEqual(off_ui, [])
         ghost = [n for n in self.orca.notifications if '"Ghost"' in n]   # AMS sync says it too, once per name
@@ -724,7 +752,7 @@ class PluginAgentTests(unittest.TestCase):
     def test_device_gcode_waits_like_the_console(self):
         seen = []
         client = type("C", (), {"gcode": lambda self, script, timeout=30: seen.append(timeout)})()
-        self.agent._run_command(client, {"kind": "gcode", "script": "G28", "seq": "1"})
+        self.agent._run_command(client, {"kind": "gcode", "script": "G29", "seq": "1"})
         self.assertEqual(seen, [600])
 
     def test_port_and_ssl_as_orcaslicer_gives_them(self):
@@ -793,6 +821,51 @@ class PluginAgentTests(unittest.TestCase):
     def test_commands_need_a_connection(self):
         pause = json.dumps({"print": {"command": "pause"}})
         self.assertEqual(self.agent.send_message_to_printer("u1", pause, 0, 0), self.ns["ERR_CONNECT"])
+
+    def device_line(self, messages, line, seq):
+        self.agent.send_message_to_printer("u1", json.dumps({"print": {"command": "gcode_line", "param": line,
+                                                                       "sequence_id": seq}}), 0, 0)
+        self.assertTrue(wait_for(lambda: any(m.get("print", {}).get("sequence_id") == seq for m in messages)))
+        return [m["print"]["result"] for m in messages if m.get("print", {}).get("sequence_id") == seq][-1]
+
+    def test_device_tab_home_heater_and_fan_wait_for_an_idle_u1_and_their_range(self):
+        messages = []
+        self.agent.set_on_local_message_fn(lambda dev, text: messages.append(json.loads(text)))
+        self.connect()
+        self.fake.state = "printing"
+        for i, line in enumerate(("G28 \n", "M140 S60\n", "M104 S200\n", "M106 P1 S255 \n")):
+            self.assertEqual(self.device_line(messages, line, "p%d" % i), "failed")
+        self.fake.state = "paused"
+        self.assertEqual(self.device_line(messages, "G28 X\n", "paused"), "failed")
+        self.fake.state = "standby"
+        for i, line in enumerate(("M140 S%d" % (u1.BED_MAX + 1), "M104 S%d" % (u1.HOTEND_MAX + 1), "M104 T4 S200", "M106 S300")):
+            self.assertEqual(self.device_line(messages, line, "r%d" % i), "failed")
+        self.assertEqual(self.fake.scripts, [])                          # nothing refused reached the printer
+        self.assertEqual(self.device_line(messages, "M140 S60\n", "ok"), "success")
+        self.assertEqual(self.device_line(messages, "G28 \n", "home"), "success")
+        self.assertEqual(self.fake.scripts, ["M140 S60\n", "G28 \n"])
+
+    def test_device_tab_camera_is_the_printers_webcam_read_at_connect(self):
+        pa = self.orca.printer_agent
+        self.fake.webcams = [{"name": "cam", "enabled": True, "service": "mjpegstreamer", "snapshot_url": "/webcam/?action=snapshot"}]
+        self.assertEqual(self.agent.get_camera_stream_mode(), pa.CameraStreamMode.None_)
+        self.connect()
+        self.assertTrue(wait_for(lambda: self.agent.get_camera_url()))
+        self.assertEqual(self.agent.get_camera_url(), "http://%s/webcam/?action=snapshot" % self.fake.host)
+        self.assertEqual(self.agent.get_camera_stream_mode(), pa.CameraStreamMode.HTTP_SNAPSHOT)
+        self.agent.disconnect_printer()
+        self.assertEqual((self.agent.get_camera_url(), self.agent.get_camera_stream_mode()), ("", pa.CameraStreamMode.None_))
+
+    def test_discovery_and_detect_report_the_u1_model_id(self):
+        found = []
+        self.agent.set_on_ssdp_msg_fn(lambda text: found.append(json.loads(text)))
+        self.connect()
+        self.assertTrue(self.agent.start_discovery(True, False))
+        self.assertTrue(wait_for(lambda: found))
+        self.assertEqual((found[-1]["dev_type"], found[-1]["dev_ip"]), ("797581801", self.fake.host))
+        detect = type("Detect", (), {})()
+        self.assertEqual(self.agent.bind_detect(self.fake.host, "secure", detect), 0)
+        self.assertEqual((detect.dev_name, detect.model_id), ("Snapmaker U1", "797581801"))
 
 
 def bridge_preset(name, vendor="Generic", colour="#FF0000"):

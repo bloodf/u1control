@@ -19,6 +19,7 @@ whether older firmware has it, and the commands below work on every U1 firmware 
 import json
 import os
 import re
+import urllib.parse
 import zipfile
 
 import gcode
@@ -28,6 +29,14 @@ from moonraker import UploadCancelled as Cancelled  # noqa: F401  (raised by run
 
 UNSUPPORTED = -7010            # IPrinterAgent: "command not supported"
 HAS_SDCARD_NORMAL = 1          # DevStorage.h SdcardState
+# home_flag bit 16 = is_support_pa_calibration (DM parse_home_flag). DM parses home_flag after support_flow_calibration
+# in the same push and lets the bit win (DM:1216 over DM:3277), so without it the dialog's Flow calibration box hides.
+HAS_PA_CALIBRATION = 1 << 16
+# The Snapmaker U1's model_id in OrcaSlicer's profiles (resources/profiles/Snapmaker/machine/Snapmaker U1.json). It is
+# the device's printer_type (DevManager on_machine_alive reads ssdp dev_type), which the Print dialog compares with the
+# preset's model_id (DevConfigUtil is_printer_model_compatible); MRA sends the preset's model_id the same way. The
+# plugin API doesn't show a preset's model_id, so it is written here.
+U1_MODEL_ID = "797581801"
 CHAMBER_LIGHT = "chamber_light"
 LIGHT_ON, LIGHT_OFF = "SET_LED LED=cavity_led WHITE=1 SYNC=0", "SET_LED LED=cavity_led WHITE=0 SYNC=0"
 
@@ -108,7 +117,9 @@ def ams_block(heads, preferred=None):
         else:
             tray.update(tray_info_idx="", tray_type="", tray_color="00000000", tray_slot_placeholder="1")
         trays.append(tray)
-    return {"ams": [{"id": "0", "info": "0002", "tray": trays}], "ams_exist_bits": "1", "tray_exist_bits": "%X" % bits}
+    # Nested as DevFilaSystemParser::ParseV1_0 reads it: print.ams.ams, print.ams.tray_exist_bits (MRA build_ams_payload)
+    return {"ams": {"ams": [{"id": "0", "info": "0002", "tray": trays}], "ams_exist_bits": "1",
+                    "tray_exist_bits": "%X" % bits}}
 
 
 def _remaining_minutes(view):
@@ -133,12 +144,12 @@ def push_status(view, preferred=None):
         "gcode_state": gstate, "mc_print_stage": PRINT_STAGE.get(state, 0),
         "mc_print_error_code": 0, "print_error": 0,
         # Both storage reports must say present or the dialog refuses LAN printing (MRA:2167-2184)
-        "sdcard": True, "home_flag": HAS_SDCARD_NORMAL << 8,
+        "sdcard": True, "home_flag": HAS_SDCARD_NORMAL << 8 | HAS_PA_CALIBRATION,
         "support_send_to_sd": True,
         "support_bed_leveling": 1,          # SM: Auto Bed Leveling on/off -> task_bed_leveling
         "support_flow_calibration": True,   # SM: Flow Dynamics Calibration -> task_flow_cali (untested)
         "support_timelapse": True,          # SM: Timelapse -> task_record_timelapse (untested)
-        "nozzle_temp_range": [0, 320], "bed_temp_range": [0, 110],
+        "nozzle_temp_range": [0, u1.HOTEND_MAX], "bed_temp_range": [0, u1.BED_MAX],
         "nozzle_temper": active.get("temp") or 0, "nozzle_target_temper": active.get("target") or 0,
         "bed_temper": bed.get("temp") or 0, "bed_target_temper": bed.get("target") or 0,
         "fan_gear": int(max(0.0, min(1.0, fan)) * 255 + 0.5),
@@ -150,6 +161,17 @@ def push_status(view, preferred=None):
         **ams_block(view.get("heads") or [], preferred),
     }
     return {"print": p}
+
+
+def snapshot_url(webcams, base):
+    """The first enabled Moonraker webcam's snapshot URL (/server/webcams/list result), absolute against base; "" if
+    none. The Device tab shows it as OrcaSlicer's HTTP snapshot camera."""
+    cams = webcams.get("webcams") if isinstance(webcams, dict) else None
+    for cam in cams if isinstance(cams, list) else []:
+        url = cam.get("snapshot_url") if isinstance(cam, dict) and cam.get("enabled", True) else None
+        if isinstance(url, str) and url.strip():
+            return urllib.parse.urljoin(base.rstrip("/") + "/", url.strip())
+    return ""
 
 
 def version_reply(firmware, product="Snapmaker U1"):
@@ -198,8 +220,41 @@ def parse_command(json_str):
         out = {"kind": name}
     elif section == "print" and name == "gcode_line" and isinstance(body.get("param"), str) \
             and body["param"].strip():
-        out = {"kind": "gcode", "script": body["param"]}   # MRA: Klipper runs it as given
+        out = {"kind": "gcode", "script": body["param"]}   # MRA: Klipper runs it as given (guarded_line excepted)
     return {**(out or {"kind": "unsupported"}), "seq": seq}
+
+
+# What the Device tab sends to home, heat and cool (IPrinterAgent.hpp command_go_home, command_set_bed and
+# command_set_nozzle, DevFan.cpp command_control_fan): G-code lines, as this agent reports no MQTT control (DM "fun").
+GUARDED = {"G28": None, "M104": u1.HOTEND_MAX, "M140": u1.BED_MAX, "M106": 255}   # code -> highest S
+
+
+def guarded_line(script):
+    """(code, {letter: number or None}) for a Device tab home, heater or fan line, else None (the line runs as given)."""
+    words = str(script or "").upper().split()
+    if not words or words[0] not in GUARDED:
+        return None
+    args = {}
+    for w in words[1:]:
+        try:
+            args[w[0]] = float(w[1:]) if len(w) > 1 else None
+        except ValueError:
+            args[w[0]] = None
+    return words[0], args
+
+
+def line_refusal(script, view):
+    """Why the Device tab may not run this guarded_line now (translated), or None. Only while the U1 is idle, as the
+    tab's commands; heater targets 0..the U1 limit, fan 0..255, toolhead T0..T3."""
+    if u1.machine_busy(view):
+        return tr("the U1 is busy (%s)") % (view.get("machine_state") or view.get("state") or "").lower()
+    code, args = guarded_line(script)
+    top, s, t = GUARDED[code], args.get("S"), args.get("T", 0)
+    if top is not None and (s is None or not 0 <= s <= top):
+        return tr("%s out of range (0 to %d)") % (" ".join(script.split()), top)
+    if code == "M104" and (t is None or t != int(t) or not 0 <= t < u1.TOOLHEADS):
+        return tr("bad toolhead")
+    return None
 
 
 # ---------------------------------------------------------------- print job

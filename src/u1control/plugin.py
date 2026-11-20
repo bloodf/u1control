@@ -1064,6 +1064,7 @@ class U1Agent(pa.PrinterAgentBase):
         self._links = ([], {})               # (spools, {toolhead: spool id}) the agent read from Spoolman itself
         self._links_busy = threading.Lock()
         self.base = ""
+        self.camera_url = ""                 # the Device tab's camera: Moonraker's first webcam, read at each connect
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._commands = queue.Queue()   # Device tab commands, run in order by one worker (_command_worker)
@@ -1124,7 +1125,7 @@ class U1Agent(pa.PrinterAgentBase):
         if start and self.host:   # the configured printer only, never a network scan (MRA announce_printhost_device)
             self._emit("ssdp", json.dumps({
                 "dev_name": "Snapmaker U1", "dev_id": self.dev_id or self.host, "dev_ip": self.host,
-                "dev_type": "Snapmaker U1", "dev_signal": "0", "connect_type": "lan", "bind_state": "free",
+                "dev_type": agent.U1_MODEL_ID, "dev_signal": "0", "connect_type": "lan", "bind_state": "free",
                 "sec_link": "secure", "ssdp_version": "v1"}))
         return True
 
@@ -1137,7 +1138,7 @@ class U1Agent(pa.PrinterAgentBase):
 
     def bind_detect(self, dev_ip, sec_link, detect):
         detect.dev_id = self.dev_id if self.host and self.host == host_of(dev_ip) else dev_ip
-        detect.dev_name = detect.model_id = "Snapmaker U1"
+        detect.dev_name, detect.model_id = "Snapmaker U1", agent.U1_MODEL_ID
         detect.version = self.firmware
         detect.connect_type, detect.bind_state = "lan", "free"
         return OK
@@ -1172,7 +1173,7 @@ class U1Agent(pa.PrinterAgentBase):
     def disconnect_printer(self):
         with self._lock:
             self._stop.set()
-            self.view, self.client = None, None
+            self.view, self.client, self.camera_url = None, None, ""
             while True:   # queued commands were for this printer: drop them (the worker also checks the client)
                 try:
                     if self._commands.get_nowait() is None:
@@ -1284,6 +1285,8 @@ class U1Agent(pa.PrinterAgentBase):
                     self.view = view
                 if not connected:
                     connected = True   # MRA perform_connection_async: ConnectStatusOk, then printer_connected
+                    threading.Thread(target=self._read_camera, args=(stop, client), name="u1control-camera",
+                                     daemon=True).start()   # never holds up the status push
                     dev_id = self._dev_id()
                     self._emit("local_connect", 0, dev_id, "0")
                     self._emit("printer_connected", dev_id)
@@ -1297,6 +1300,22 @@ class U1Agent(pa.PrinterAgentBase):
                         self.view = None   # Device tab commands answer "not connected" instead of queueing
             self._wake.wait(AGENT_POLL)
             self._wake.clear()
+
+    def _read_camera(self, stop, client):
+        try:
+            url = agent.snapshot_url(client.request("GET", "/server/webcams/list"), client.base or "")
+        except Exception as e:   # no webcam API: the Device tab shows no camera
+            log("agent: webcam list not read (%s)" % e)
+            return
+        with self._lock:   # as the poll: never about an earlier connection's printer
+            if not stop.is_set():
+                self.camera_url = url
+
+    def get_camera_stream_mode(self):
+        return pa.CameraStreamMode.HTTP_SNAPSHOT if self.camera_url else pa.CameraStreamMode.None_
+
+    def get_camera_url(self):
+        return self.camera_url
 
     # Device tab commands ------------------------------------------------------------------------------------
     def send_message(self, dev_id, json_str, qos, flag):
@@ -1362,6 +1381,10 @@ class U1Agent(pa.PrinterAgentBase):
             elif kind == "set_light":
                 client.gcode(agent.LIGHT_ON if command["on"] else agent.LIGHT_OFF)
             elif kind == "gcode":
+                if agent.guarded_line(command["script"]):   # home, heaters, fans: as the tab, only on an idle U1
+                    why = agent.line_refusal(command["script"], u1.summarize(client.query(u1.STATUS_OBJECTS)))
+                    if why:
+                        raise PrinterError(why)
                 client.gcode(command["script"], timeout=DEVICE_GCODE_TIMEOUT)
             ok = True
         except Exception as e:
