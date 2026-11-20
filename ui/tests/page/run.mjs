@@ -1264,21 +1264,69 @@ test('files: a tree of the printer\'s folders, several files selected, moved by 
   assert(alerts().includes('Move failed') && alerts().includes('b.gcode'), 'the one that stayed says why: ' + alerts());
   await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1, 2))}});
   eq(qa('.oui-files-row').map(r => r.dataset.file), ['gcodes/b.gcode'], 'what is left');
-  // Drag and drop, with the events a browser sends (the same code runs for a real drag).
-  const dt = new DataTransfer();
-  row('b').dispatchEvent(new DragEvent('dragstart', {bubbles: true, cancelable: true, dataTransfer: dt})); await settle();
-  assert(folderEl('gcodes/sub').hasAttribute('data-target'), 'while dragging, a folder that can take the file is offered');
-  assert(!folderEl('camera').hasAttribute('data-target') && !folderEl('gcodes').hasAttribute('data-target'), 'another root and the open folder are not');
-  const over = new DragEvent('dragover', {bubbles: true, cancelable: true, dataTransfer: dt});
-  folderEl('camera').dispatchEvent(over);
-  assert(!over.defaultPrevented, 'a folder that cannot take it refuses the drop');
-  folderEl('gcodes/sub').dispatchEvent(new DragEvent('dragover', {bubbles: true, cancelable: true, dataTransfer: dt})); await settle();
-  assert(folderEl('gcodes/sub').hasAttribute('data-drop'), 'the folder under the pointer is marked');
-  folderEl('gcodes/sub').dispatchEvent(new DragEvent('drop', {bubbles: true, cancelable: true, dataTransfer: dt})); await settle();
+  // Dragging onto a folder, with the real mouse: trusted pointer events. OrcaSlicer's macOS web view never delivers HTML5
+  // drops (it replaces WKWebView's drop handling), so the browser drags with pointer events.
+  await mdown(row('b'));
+  assert(!q('.oui-files-ghost'), 'a press alone does not drag');
+  await mmove(folderEl('camera'));
+  const ghost = q('.oui-files-ghost');
+  assert(ghost && text(ghost).includes('b.gcode') && !q('.oui-files-ghostcount'), 'the file follows the pointer, by name: ' + text(ghost));
+  const at = (el, g = ghost.getBoundingClientRect()) => { const [x, y] = centre(el); return Math.abs(g.left - (x - 14)) < 2 && Math.abs(g.top - (y - 14)) < 2; };
+  assert(at(folderEl('camera')), 'under the pointer: ' + JSON.stringify(ghost.getBoundingClientRect()) + ' / ' + centre(folderEl('camera')));
+  eq(getComputedStyle(ghost).pointerEvents, 'none', 'never in the way of what is under the pointer');
+  assert(row('b').hasAttribute('data-dragged'), 'the dragged row dims');
+  assert(folderEl('camera').hasAttribute('data-refused') && folderEl('gcodes').hasAttribute('data-refused'), 'a read-only root and the folder the file is in are refused');
+  assert(!folderEl('gcodes/sub').hasAttribute('data-refused') && !folderEl('gcodes/sub').hasAttribute('data-drop'), 'a folder that takes it looks as it did');
+  eq([qa('[data-drop]').length, document.documentElement.dataset.ouiDrag], [0, 'refused'], 'a refused folder is never marked; the cursor says no');
+  await mmove(folderEl('gcodes/sub'));
+  assert(at(folderEl('gcodes/sub')), 'the file went with the pointer');
+  eq(qa('[data-drop]').map(f => f.dataset.folder), ['gcodes/sub'], 'only the folder under the pointer is marked');
+  eq(document.documentElement.dataset.ouiDrag, 'move', 'a grabbing cursor over a folder that takes it');
+  await mmove(folderEl('gcodes'));
+  eq(qa('[data-drop]').length, 0, 'leaving it clears the mark');
+  await mup(folderEl('gcodes'));
+  await until(() => !q('.oui-files-ghost'), 'dropped on the folder it is in: the file goes back to its row');
+  eq(cmds('move').length, 3, 'and nothing is moved');
+  assert(!document.documentElement.dataset.ouiDrag && !q('[data-refused]') && !q('[data-dragged]'), 'the folders and the row are as before');
+  eq(picked(), ['b.gcode'], 'the release is not a click');
+  await mdown(row('b')); await mmove(folderEl('camera')); await mup(folderEl('camera'));
+  await until(() => !q('.oui-files-ghost'), 'dropped on a read-only folder: back to its row');
+  await mdown(row('b')); await mmove(folderEl('gcodes/sub')); await press('Escape');
+  await until(() => !q('.oui-files-ghost') && !q('[data-drop]'), 'Escape ends the drag');
+  await mup(folderEl('gcodes/sub'));
+  eq(cmds('move').length, 3, 'a refused drop and Escape move nothing');
+  eq(picked(), ['b.gcode'], 'and keep the selection');
+  await mdown(row('b')); await mmove(folderEl('gcodes/sub')); await mup(folderEl('gcodes/sub'));
+  assert(!q('.oui-files-ghost'), 'the drop takes the file away at once');
   eq(cmds('move').length, 4, 'the drop moves it');
   eq(last('cmd', 'move').args, {path: 'gcodes/b.gcode', folder: 'gcodes/sub'}, 'into the folder it was dropped on');
   await reply(last('cmd', 'move'), {path: 'gcodes/sub/b.gcode'});
   await until(() => toasts().includes('File moved.'), 'said once: ' + toasts());
+`);
+
+test('files: dragging a selected file takes the whole selection; an unselected one goes alone', `
+  ${FILES_OPEN}
+  await click(row('a'));
+  row('c').dispatchEvent(new MouseEvent('click', {bubbles: true, ctrlKey: true})); await settle();
+  await mdown(row('c')); await mmove(folderEl('gcodes/sub'));
+  eq([text(q('.oui-files-ghost .oui-truncate')), text(q('.oui-files-ghostcount'))], ['c.gcode', '2'], 'the file taken, and how many: ' + text(q('.oui-files-ghost')));
+  eq(qa('[data-dragged]').map(r => r.dataset.file), ['gcodes/a.gcode', 'gcodes/c.gcode'], 'both rows dim');
+  await mup(folderEl('gcodes/sub'));
+  await until(() => cmds('move').length === 1, 'the first move sent');
+  eq(cmds('move')[0].args, {path: 'gcodes/a.gcode', folder: 'gcodes/sub'}, 'each selected file');
+  await reply(cmds('move')[0], {path: 'gcodes/sub/a.gcode'});
+  await until(() => cmds('move').length === 2);
+  eq(cmds('move')[1].args, {path: 'gcodes/c.gcode', folder: 'gcodes/sub'}, 'goes');
+  await reply(cmds('move')[1], {path: 'gcodes/sub/c.gcode'});
+  await until(() => toasts().includes('2 files moved.'), toasts());
+  await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1, 2))}.concat([{name: 'd.gcode', size: 5, modified: 1}])});
+  await click(row('b'));
+  await mdown(row('d')); await mmove(folderEl('gcodes/sub'));
+  eq([text(q('.oui-files-ghost .oui-truncate')), q('.oui-files-ghostcount')], ['d.gcode', null], 'an unselected file is dragged alone');
+  eq(picked(), ['d.gcode'], 'and becomes the selection');
+  await mup(folderEl('gcodes/sub'));
+  await until(() => cmds('move').length === 3);
+  eq(cmds('move')[2].args, {path: 'gcodes/d.gcode', folder: 'gcodes/sub'}, 'only it moves');
 `);
 
 test('files: Delete asks once, with the names; the camera folder is read only and says why', `
@@ -1326,8 +1374,10 @@ test('files: Delete asks once, with the names; the camera folder is read only an
   await click(q('[data-file="camera/shot.jpg"]'));
   assert(q('#files-ro') && text(q('#files-ro')) === 'Read only', 'says it is read only, once');
   assert(btn('Delete', bar()).disabled && btn('Delete', bar()).getAttribute('aria-describedby') === 'files-ro', 'Delete off, pointing at the reason');
-  assert(q('.oui-files-move').classList.contains('p-disabled') && !byTest('files-mkdir') && !byTest('folder-delete'), 'Move off; no folder is made, renamed or deleted here');
-  assert(q('[data-file="camera/shot.jpg"]').getAttribute('draggable') === 'false', 'nothing to drag');
+  assert(q('.oui-files-move').classList.contains('p-disabled') && !q('[data-files-mkdir]') && !byTest('folder-delete'), 'Move off; no folder is made, renamed or deleted here');
+  await mdown(q('[data-file="camera/shot.jpg"]')); await mmove(folderEl('gcodes/sub'));
+  assert(!q('.oui-files-ghost') && !q('[data-drop]'), 'nothing to drag'); await mup(folderEl('gcodes/sub'));
+  eq(cmds('move'), [], 'and nothing moved');
   assert(btn('Save shot.jpg') && !btn('Print shot.jpg') && !btn('Rename shot.jpg'), 'a picture can be saved, not printed or renamed');
   await click(btn('Save shot.jpg'));
   eq(last('cmd', 'download').args, {path: 'camera/shot.jpg'}, 'saved from its own root');
@@ -1379,15 +1429,66 @@ for (const size of [[420, 900], [600, 720]]) test(`files: at ${size.join('x')} t
 
 test('files: a new folder, and the open folder renamed, moved and deleted', `
   ${FILES_OPEN}
-  await click(byTest('files-mkdir'));
-  await until(() => document.activeElement === q('#dlg-input'), 'asks for the name');
-  assert(dialogText().includes('gcodes'), 'says where: ' + dialogText());
-  await type(q('#dlg-input'), 'Spares');
-  await yes();
+  // New folder: the name is typed in the tree, under the open folder, and checked before anything is sent.
+  await click(q('[data-files-mkdir]'));
+  const field = () => q('[data-files-newname]');
+  await until(() => document.activeElement === field(), 'the name field in the tree');
+  eq([field().value, field().closest('[role=treeitem]').getAttribute('aria-level')], ['New folder', '2'], 'a name to start from, inside the open folder');
+  const nameIs = async value => { await type(field(), value); await press('Enter'); };
+  await nameIs('SUB');
+  assert(field() && text(q('.oui-files-nameerror')) === 'This folder already has one with that name.' && field().getAttribute('aria-invalid') === 'true', 'a name its sibling has is refused: ' + text(q('.oui-files-nameerror')));
+  await nameIs('a/b');
+  eq(text(q('.oui-files-nameerror')), 'A name can’t contain / or be . or ..', 'a slash is refused');
+  await nameIs('..');
+  assert(field() && q('.oui-files-nameerror'), 'so is ..');
+  await press('Escape');
+  await until(() => !field(), 'Escape leaves');
+  eq(cmds('mkdir'), [], 'nothing sent for a refused name or Escape');
+  await click(q('[data-files-mkdir]'));
+  await until(() => document.activeElement === field());
+  await nameIs('Spares');
+  await until(() => last('cmd', 'mkdir'), 'sent');
   eq(last('cmd', 'mkdir').args, {path: 'gcodes/Spares'}, 'in the open folder');
-  await reply(last('cmd', 'mkdir'), true);
-  await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], ${JSON.stringify(ABC)});
-  assert(folderEl('gcodes/Spares'), 'in the tree once it is read again');
+  await reply(last('cmd', 'mkdir'), {item: {path: 'Spares', root: 'gcodes'}, action: 'create_dir'});
+  await until(() => toasts().includes('Folder created'), 'said: ' + toasts());
+  await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], {path: 'gcodes/Spares', dirs: [], files: []});
+  eq(last('cmd', 'files').args.path, 'gcodes/Spares', 'the new folder is opened');
+  eq(folderEl('gcodes/Spares').getAttribute('aria-selected'), 'true', 'and marked in the tree');
+  // A refusal from the printer says why and opens nothing.
+  await click(q('[data-files-mkdir]'));
+  await until(() => document.activeElement === field());
+  await nameIs('bad#name');
+  await until(() => cmds('mkdir').length === 2);
+  await fail(last('cmd', 'mkdir'), "folder names use letters, digits, spaces, '-', '_' and '.'");
+  await until(() => alerts().includes('folder names use'), 'the reason: ' + alerts());
+  await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], {path: 'gcodes/Spares', dirs: [], files: []});
+  eq(last('cmd', 'files').args.path, 'gcodes/Spares', 'still in the folder it was in');
+  // The new folder takes files like any other: drag one there.
+  await click(folderEl('gcodes'));
+  listed = last('cmd', 'files').id;
+  await reply(last('cmd', 'files'), ${JSON.stringify(ABC)});
+  await mdown(row('a')); await mmove(folderEl('gcodes/Spares'));
+  eq(qa('[data-drop]').map(f => f.dataset.folder), ['gcodes/Spares'], 'a place to drop');
+  await mup(folderEl('gcodes/Spares'));
+  eq(last('cmd', 'move').args, {path: 'gcodes/a.gcode', folder: 'gcodes/Spares'}, 'moved into the new folder');
+  await reply(last('cmd', 'move'), {path: 'gcodes/Spares/a.gcode'});
+  await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1))}});
+  // The context menu of a folder in the tree makes one in that folder.
+  folderEl('gcodes/sub').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(folderEl('gcodes/sub'))[0], clientY: centre(folderEl('gcodes/sub'))[1]}));
+  await until(() => q('.oui-files-menu [role=menuitem]'), 'a menu');
+  eq([text(q('.oui-files-menu [role=menuitem]')), document.activeElement === q('.oui-files-menu [role=menuitem]')], ['New folder', true], 'one item, focused');
+  await press('Escape');
+  await until(() => !q('.oui-files-menu'), 'Escape closes it');
+  folderEl('gcodes/sub').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(folderEl('gcodes/sub'))[0], clientY: centre(folderEl('gcodes/sub'))[1]}));
+  await until(() => q('.oui-files-menu [role=menuitem]'));
+  await mouse(q('.oui-files-menu [role=menuitem]'));
+  await until(() => field() && document.activeElement === field(), 'the name field');
+  eq(field().closest('[role=treeitem]').previousElementSibling.dataset.folder, 'gcodes/sub', 'under that folder');
+  await nameIs('inner');
+  await until(() => cmds('mkdir').length === 3);
+  eq(last('cmd', 'mkdir').args, {path: 'gcodes/sub/inner'}, 'in the folder of the menu');
+  await reply(last('cmd', 'mkdir'), {item: {path: 'sub/inner', root: 'gcodes'}, action: 'create_dir'});
+  await again(['gcodes', 'gcodes/Spares', 'gcodes/sub', 'gcodes/sub/inner', 'gcodes/sub/deep'], {path: 'gcodes/sub/inner', dirs: [], files: []});
   await click(folderEl('gcodes/sub'));
   listed = last('cmd', 'files').id;
   await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [{name: 'deep'}], files: []});

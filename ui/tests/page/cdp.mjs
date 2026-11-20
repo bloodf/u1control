@@ -87,6 +87,8 @@ async function openPage(port) {
           ...(k.text ? { text: k.text, unmodifiedText: k.text } : {}) });
         await call('Input.dispatchKeyEvent', { type: 'keyUp', modifiers, windowsVirtualKeyCode: k.keyCode, key: k.key, code: k.code });
       }
+      // One step of a mouse drag (press, move with the button held, release): trusted pointer events, as a hand makes them.
+      if (req.op === 'mouse') await call('Input.dispatchMouseEvent', { type: req.type, x: req.x, y: req.y, button: 'left', buttons: req.type === 'mouseReleased' ? 0 : 1, clickCount: req.type === 'mouseMoved' ? 0 : 1 });
       if (req.op === 'clickAt') {
         for (const type of ['mousePressed', 'mouseReleased']) await call('Input.dispatchMouseEvent', { type, x: req.x, y: req.y, button: 'left', clickCount: 1 });
       }
@@ -167,6 +169,11 @@ let __n = 0;
 async function cdp(req) { const id = 'r' + (++__n); __cdp(JSON.stringify({ ...req, id })); await until(() => __t.acks.has(id), 'cdp ' + req.op); await settle(); }
 async function type(el, value) { assert(el, 'element to type into'); await reveal(el); el.focus(); if (el.select) el.select(); await cdp({ op: 'key', key: 'Backspace' }); if (value !== '') await cdp({ op: 'type', text: value }); }
 const press = (key, shift) => cdp({ op: 'key', key, shift: !!shift });
+// A drag with the real mouse: press on an element, move to others with the button held, release (each at the element's centre).
+const centre = el => { const r = el.getBoundingClientRect(); return [r.left + r.width / 2, r.top + r.height / 2]; };
+async function mdown(el) { assert(el, 'element to press'); el.scrollIntoView({ block: 'nearest' }); await settle(); const [x, y] = centre(el); await cdp({ op: 'mouse', type: 'mousePressed', x, y }); }
+async function mmove(el) { assert(el, 'element to move to'); const [x, y] = centre(el); await cdp({ op: 'mouse', type: 'mouseMoved', x, y }); }
+async function mup(el) { assert(el, 'element to release on'); const [x, y] = centre(el); await cdp({ op: 'mouse', type: 'mouseReleased', x, y }); }
 async function mouse(el) { assert(el, 'element for a real click'); await reveal(el); el.scrollIntoView({ block: 'center' }); await settle(); const r = el.getBoundingClientRect(); await cdp({ op: 'clickAt', x: r.left + r.width / 2, y: r.top + r.height / 2 }); }
 async function answer(which) { await until(dialogOpen, 'dialog'); const el = dialogEl(); await click(q('[data-dlg="' + which + '"]', el)); await until(() => dialogEl() !== el, 'dialog closed'); }
 const yes = () => answer('yes');
