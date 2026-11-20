@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { OuiIcon } from '../../shared/src/components';
-import { video } from '../../shared/src/icons';
+import { OuiIcon } from '@orca-plugins/ui-foundation/src/components';
+import { video } from '@orca-plugins/ui-foundation/src/icons';
 import { covers } from '../app/thumbs';
 // A time-lapse's cover picture, asked for only once its row is on screen (app/thumbs); the video icon without one.
 // foundation-gap: OuiThumb (5.0.7) is a square box with one `size`; a video cover is 16:9 and, fitted into a square

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from 'vue';
-import { OuiThumb } from '../../shared/src/components';
-import { file } from '../../shared/src/icons';
+import { OuiThumb } from '@orca-plugins/ui-foundation/src/components';
+import { file } from '@orca-plugins/ui-foundation/src/icons';
 import { watchThumb } from '../app/thumbs';
 // A print file's preview, asked for only once its row is on screen (app/thumbs). The box keeps its size without it.
 const props = defineProps<{ gen: number; path: string; rel?: string }>();

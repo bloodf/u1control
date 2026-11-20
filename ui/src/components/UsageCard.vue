@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import Button from 'primevue/button';
-import { OuiBanner, OuiIcon, OuiPanel } from '../../shared/src/components';
-import { check, eye, warning } from '../../shared/src/icons';
+import { OuiBanner, OuiIcon, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { check, eye, warning } from '@orca-plugins/ui-foundation/src/icons';
 import { s, run, tracker } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, tn, fmt } from '../core/i18n';

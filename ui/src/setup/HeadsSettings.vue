@@ -6,7 +6,7 @@ import { onMounted, reactive, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { OuiSpool } from '../../shared/src/components';
+import { OuiSpool } from '@orca-plugins/ui-foundation/src/components';
 import { spoolFraction } from '../core/spool-level';
 import * as bridge from '../core/bridge';
 import { ask } from '../core/dialog';

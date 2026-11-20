@@ -2,8 +2,8 @@
 import { computed, reactive, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
-import { OuiBanner, OuiEmpty, OuiFormRow, OuiIcon, OuiKeyValue, OuiPanel } from '../../shared/src/components';
-import { external, refresh, wrench } from '../../shared/src/icons';
+import { OuiBanner, OuiEmpty, OuiFormRow, OuiIcon, OuiKeyValue, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { external, refresh, wrench } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, targetKnown, printing } from '../app/store';
 import { ask, prompt } from '../core/dialog';

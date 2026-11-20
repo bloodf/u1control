@@ -1,7 +1,7 @@
 // PrimeVue's own labels (empty lists, dialog close…) for the languages the shared foundation does not carry yet
-// (ui/shared 4.0.1 has English and pt-BR). No calendar names: the pages have no date picker.
+// (ui-foundation 4.0.1 has English and pt-BR). No calendar names: the pages have no date picker.
 import type { PrimeVueConfiguration } from 'primevue/config';
-import { primeVueOptions } from '../../shared/src';
+import { primeVueOptions } from '@orca-plugins/ui-foundation/src';
 import type { Locale } from './i18n-core';
 
 type PrimeLocale = NonNullable<PrimeVueConfiguration['locale']>;

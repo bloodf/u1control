@@ -3,8 +3,8 @@
 // first time the tab shows) and the time-lapses under it.
 import { ref, watch } from 'vue';
 import Button from 'primevue/button';
-import { OuiEmpty, OuiIcon, OuiPageHeader, OuiPanel } from '../../shared/src/components';
-import { refresh } from '../../shared/src/icons';
+import { OuiEmpty, OuiIcon, OuiPageHeader, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { refresh } from '@orca-plugins/ui-foundation/src/icons';
 import FilesBrowser from './FilesBrowser.vue';
 import TimelapsesCard from './TimelapsesCard.vue';
 import { s } from '../app/store';

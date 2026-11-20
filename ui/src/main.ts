@@ -1,5 +1,5 @@
 import { createApp, watch } from 'vue';
-import { installOrcaUI } from '../shared/src';
+import { installOrcaUI } from '@orca-plugins/ui-foundation/src';
 import { boot } from './core/boot';
 import { locale, setHostLanguage } from './core/i18n';
 import { followHostTheme } from './core/theme';

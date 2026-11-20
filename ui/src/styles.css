@@ -1,4 +1,4 @@
-/* U1 Control's own layout on top of the shared foundation (ui/shared): where the page's banners sit, the plain tables and
+/* U1 Control's own layout on top of the shared foundation (@orca-plugins/ui-foundation): where the page's banners sit, the plain tables and
    a few lines the pages share. Colours are the foundation's --oui-* roles only; nothing here defines a colour. */
 
 /* Narrow bar: the tabs wrap under Emergency stop. Keep a clear gap so a tab press never lands on it. */

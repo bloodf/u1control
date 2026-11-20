@@ -68,7 +68,7 @@ class WheelTests(unittest.TestCase):
     def test_licenses_travel_with_the_wheel(self):
         """Our LICENSE and the notices of the bundled Vue, PrimeVue, PrimeUIX, Lucide icons and Manrope font, byte for byte."""
         self.assertEqual(self.zip.read(DIST_INFO + "licenses/LICENSE"), (ROOT / "LICENSE").read_bytes())
-        shared = sorted((ROOT / "ui" / "shared" / "licenses").glob("*.txt"))
+        shared = sorted((ROOT / "ui" / "node_modules" / "@orca-plugins" / "ui-foundation" / "licenses").glob("*.txt"))
         self.assertEqual({f.name for f in shared}, {"Lucide.txt", "Manrope.txt", "PrimeUIX.txt", "PrimeVue.txt", "Vue.txt"})
         for f in shared:
             self.assertEqual(self.zip.read(DIST_INFO + "licenses/" + f.name), f.read_bytes())
