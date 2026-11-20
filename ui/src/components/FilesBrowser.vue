@@ -67,7 +67,7 @@ const shown = computed<OuiFile[]>(() => {
 });
 const labels = computed<OuiFileBrowserLabels>(() => ({
   folders: t('files.folders'), files: t('nav.files'), name: t('files.col.name'), size: t('files.col.size'), modified: t('files.col.modified'),
-  selectAll: t('files.selectAll'), select: name => t('files.select', { name }), items: n => tn('files.count', n), selected: n => tn('files.selected', n),
+  selectAll: t('files.selectAll'), select: name => t('files.select', { name }), items: n => (filter.value.trim() ? t('files.showing', { shown: n, total: files.files.length }) : tn('files.count', n)), selected: n => tn('files.selected', n),
   clear: t('files.clear'), moveTo: t('files.moveToFolder'), remove: t('files.delete'), removeTitle: n => tn('files.deleteTitle', n), removeText: t('files.deleteText'),
   andMore: n => t('files.andMore', { n }), cancel: t('common.goBack'),
   empty: filter.value.trim() && files.files.length ? t('files.noMatch', { filter: filter.value.trim() }) : t('files.empty'), loading: t('files.loading'),
@@ -163,7 +163,7 @@ async function deleteFolder() {
           <Button size="small" severity="secondary" text :label="t('files.newFolder')" data-test="files-mkdir" @click="mkdir"><template #icon><OuiIcon :icon="plus" :size="14" /></template></Button>
         </template>
       </template>
-      <template #toolbar><InputText id="files-filter" v-model="filter" type="search" size="small" :placeholder="t('files.filter')" :aria-label="t('files.filter')" class="fv-q" /></template>
+      <template #toolbar><InputText id="files-filter" v-model="filter" type="search" size="small" :placeholder="t('files.filter')" :aria-label="t('files.search')" class="fv-q" /></template>
       <template #actions="{ file }">
         <Button v-if="root === 'gcodes'" :label="t('files.print')" :aria-label="t('files.printLabel', { name: file.name })" :disabled="!!s.status?.busy" :aria-describedby="s.status?.busy ? 'heads-why' : undefined" data-test="file-print" @click="print(file.id)">
           <template #icon><OuiIcon :icon="printer" :size="14" /></template></Button>

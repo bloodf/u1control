@@ -370,7 +370,7 @@ export const es: Record<MessageKey, string> = {
   'files.renameTo': 'Nuevo nombre para {name}:',
   'files.newName': 'Nuevo nombre',
   'files.filter': 'Filtrar por nombre',
-  'files.noMatch': 'Ningún archivo ni carpeta coincide con «{filter}».',
+  'files.noMatch': 'Ningún archivo coincide con «{filter}».',
   'files.col.weight': 'Filamento',
   'tl.title': 'Timelapses',
   'tl.count_one': '1 vídeo',
@@ -751,4 +751,6 @@ export const es: Record<MessageKey, string> = {
   'files.readOnly': 'Solo lectura',
   'files.readOnlyWhy': 'La impresora permite guardar estos archivos, no moverlos ni borrarlos. Los timelapses se pueden borrar en la lista de abajo.',
   'files.loadFailed': 'No se pudieron leer los archivos',
+  'files.search': 'Buscar archivos',
+  'files.showing': 'Mostrando {shown} de {total} archivos',
 };

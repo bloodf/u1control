@@ -362,7 +362,7 @@ export const pl: Record<PolishKey, string> = {
   'files.renameTo': 'Nowa nazwa dla {name}:',
   'files.newName': 'Nowa nazwa',
   'files.filter': 'Filtruj po nazwie',
-  'files.noMatch': 'Żaden plik ani folder nie pasuje do „{filter}”.',
+  'files.noMatch': 'Żaden plik nie pasuje do „{filter}”.',
   'files.col.weight': 'Filament',
   'tl.title': 'Timelapse',
   'tl.count_one': '1 nagranie',
@@ -756,4 +756,6 @@ export const pl: Record<PolishKey, string> = {
   'files.readOnly': 'Tylko do odczytu',
   'files.readOnlyWhy': 'Drukarka pozwala te pliki zapisać, ale nie przesunąć ani usunąć. Nagrania timelapse można usunąć na liście poniżej.',
   'files.loadFailed': 'Nie udało się odczytać plików',
+  'files.search': 'Szukaj plików',
+  'files.showing': 'Pokazano {shown} z {total} plików',
 };

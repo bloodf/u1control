@@ -81,8 +81,11 @@ export function folderTree(paths: string[], rootName: (root: string) => string, 
   });
 }
 
-/** A file's kind for its chip: its extension in capitals ("GCODE", "MP4"), or none. */
-export const fileKind = (name: string): string | undefined => /\.([A-Za-z0-9]{1,5})$/.exec(name)?.[1].toUpperCase();
+/** A file's kind for its chip: "G-code" for a print file, else its extension in capitals ("3MF", "MP4"), or none. */
+export function fileKind(name: string): string | undefined {
+  const ext = /\.([A-Za-z0-9]{1,5})$/.exec(name)?.[1].toUpperCase();
+  return ext && ['GCODE', 'GCO', 'G'].includes(ext) ? 'G-code' : ext;
+}
 
 /** Map each bound spool id to its toolhead label ("T2"), preferring the live bindings. */
 export function boundHeads(live: Record<string, number>, fromStock: Record<string, number>): Record<number, string> {

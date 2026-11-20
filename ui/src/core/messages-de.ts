@@ -371,7 +371,7 @@ export const de: Record<MessageKey, string> = {
   'files.renameTo': 'Neuer Name für {name}:',
   'files.newName': 'Neuer Name',
   'files.filter': 'Nach Name filtern',
-  'files.noMatch': 'Keine Datei und kein Ordner passt zu „{filter}“.',
+  'files.noMatch': 'Keine Datei passt zu „{filter}“.',
   'files.col.weight': 'Filament',
   'tl.title': 'Zeitraffer',
   'tl.count_one': '1 Video',
@@ -752,4 +752,6 @@ export const de: Record<MessageKey, string> = {
   'files.readOnly': 'Schreibgeschützt',
   'files.readOnlyWhy': 'Der Drucker lässt diese Dateien speichern, aber nicht verschieben oder löschen. Zeitraffer lassen sich in der Liste darunter löschen.',
   'files.loadFailed': 'Die Dateien konnten nicht gelesen werden',
+  'files.search': 'Dateien suchen',
+  'files.showing': '{shown} von {total} Dateien angezeigt',
 };

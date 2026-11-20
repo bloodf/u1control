@@ -1133,9 +1133,13 @@ test('files: filter by name and show each file\'s filament', `
   assert(text(q('.oui-files-detail')).includes('12 g'), 'filament weight in the details of the file: ' + text(q('.oui-files-detail')));
   await type(q('#files-filter'), 'BEN');
   eq(rows(), ['gcodes/benchy.gcode'], 'case-insensitive match');
+  await click(btn('Clear', q('.oui-files-bar')));
+  assert(text(q('.oui-files-bar')).includes('Showing 1 of 2 files'), 'with nothing selected the bar says how many of the files are shown: ' + text(q('.oui-files-bar')));
+  eq([q('#files-filter').placeholder, q('#files-filter').getAttribute('aria-label')], ['Search by name', 'Search files'], 'the search field, named as in the other printer plugin');
+  eq(text(q('.oui-files-row .oui-chip')), 'G-code', 'a print file is tagged G-code');
   assert(q('[data-folder="gcodes/sub"]'), 'the folder tree is not filtered');
   await type(q('#files-filter'), 'zzz');
-  assert(text(byTest('files')).includes('No file or folder matches'), 'says nothing matches');
+  assert(text(byTest('files')).includes('No file matches'), 'says nothing matches');
   await type(q('#files-filter'), '');
   eq(rows().length, 2, 'all back');
 `);
@@ -1180,7 +1184,7 @@ test('files: a tree of the printer\'s folders, several files selected, moved by 
   await fail(cmds('move')[1], 'gcodes/sub already has something named b.gcode; nothing was moved');
   await until(() => cmds('move').length === 3, 'a failure does not stop the rest');
   await reply(cmds('move')[2], {path: 'gcodes/sub/c.gcode'});
-  await until(() => toasts().includes('Moved 2 files'), 'one message for the files that went: ' + toasts());
+  await until(() => toasts().includes('2 files moved.'), 'one message for the files that went: ' + toasts());
   assert(alerts().includes('Move failed') && alerts().includes('b.gcode'), 'the one that stayed says why: ' + alerts());
   await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1, 2))}});
   eq(qa('.oui-files-row').map(r => r.dataset.file), ['gcodes/b.gcode'], 'what is left');
@@ -1198,7 +1202,7 @@ test('files: a tree of the printer\'s folders, several files selected, moved by 
   eq(cmds('move').length, 4, 'the drop moves it');
   eq(last('cmd', 'move').args, {path: 'gcodes/b.gcode', folder: 'gcodes/sub'}, 'into the folder it was dropped on');
   await reply(last('cmd', 'move'), {path: 'gcodes/sub/b.gcode'});
-  await until(() => toasts().includes('Moved 1 file'), 'said once: ' + toasts());
+  await until(() => toasts().includes('File moved.'), 'said once: ' + toasts());
 `);
 
 test('files: Delete asks once, with the names; the camera folder is read only and says why', `
@@ -1210,7 +1214,7 @@ test('files: Delete asks once, with the names; the camera folder is read only an
   assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-outlined'), 'Delete is a red outline in the page');
   await click(del);
   await until(dialogOpen, 'asks first');
-  assert(dialogText().includes('Delete 2 files?') && dialogText().includes('a.gcode') && dialogText().includes('b.gcode') && dialogText().includes('cannot be undone'), 'the count and the names: ' + dialogText());
+  assert(dialogText().includes('Delete 2 files?') && dialogText().includes('a.gcode') && dialogText().includes('b.gcode') && dialogText().includes('can’t be undone'), 'the count and the names: ' + dialogText());
   const confirm = q('[data-dlg="confirm"]', dialogEl());
   assert(confirm.classList.contains('p-button-danger') && !confirm.classList.contains('p-button-outlined'), 'the solid red is the confirmation');
   await click(q('[data-dlg="cancel"]', dialogEl()));
@@ -1227,7 +1231,7 @@ test('files: Delete asks once, with the names; the camera folder is read only an
   await until(() => cmds('delete').length === 2);
   eq(cmds('delete')[1].args, {path: 'gcodes/b.gcode'}, 'then the other');
   await reply(cmds('delete')[1], true);
-  await until(() => toasts().includes('Deleted 2 files'), 'one message: ' + toasts());
+  await until(() => toasts().includes('2 files deleted.'), 'one message: ' + toasts());
   assert(document.activeElement && document.activeElement.dataset.file === 'gcodes/b.gcode', 'the question closed before the printer answered: the keyboard is back on a row that is about to go');
   await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(2))}});
   await until(() => document.activeElement && document.activeElement.dataset.file === 'gcodes/c.gcode', 'the keyboard stays in the list, on the row that is left');
@@ -1259,7 +1263,7 @@ test('files: newest first; a read that fails says so, keeps the tree and reads a
   await trees();
   await until(() => last('cmd', 'files'));
   await fail(last('cmd', 'files'), 'the U1 did not answer in 5 s');
-  assert(text(byTest('files')).includes('The files could not be read') && text(byTest('files')).includes('did not answer'), 'what failed and why: ' + text(byTest('files')));
+  assert(text(byTest('files')).includes('Couldn’t read the file list') && text(byTest('files')).includes('did not answer'), 'what failed and why: ' + text(byTest('files')));
   assert(q('[data-folder="gcodes/sub"]') && !q('.oui-files-row'), 'the folders stay; no rows are made up');
   await click(q('[data-files-retry]'));
   await trees();

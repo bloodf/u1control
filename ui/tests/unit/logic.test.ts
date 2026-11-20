@@ -86,8 +86,10 @@ test('the folder tree: parents from paths, roots named and in the order given, a
   assert.equal(rootOf('gcodes/sub/a.gcode'), 'gcodes');
 });
 
-test('a file\'s kind is its extension in capitals', () => {
-  assert.equal(fileKind('benchy.gcode'), 'GCODE');
+test('a file\'s kind is G-code for a print file, else its extension in capitals', () => {
+  assert.equal(fileKind('benchy.gcode'), 'G-code');
+  assert.equal(fileKind('old.GCO'), 'G-code');
+  assert.equal(fileKind('plate.3mf'), '3MF');
   assert.equal(fileKind('a.b.MP4'), 'MP4');
   assert.equal(fileKind('README'), undefined);
   assert.equal(fileKind('odd.name with spaces'), undefined);

@@ -370,7 +370,7 @@ export const zhCN: Record<MessageKey, string> = {
   'files.renameTo': '{name} 的新名称：',
   'files.newName': '新名称',
   'files.filter': '按名称筛选',
-  'files.noMatch': '没有与“{filter}”匹配的文件或文件夹。',
+  'files.noMatch': '没有与“{filter}”匹配的文件。',
   'files.col.weight': '耗材丝',
   'tl.title': '延时摄影',
   'tl.count_one': '1 个视频',
@@ -751,4 +751,6 @@ export const zhCN: Record<MessageKey, string> = {
   'files.readOnly': '只读',
   'files.readOnlyWhy': '打印机只允许保存这些文件，不能移动或删除。延时摄影可在下方列表中删除。',
   'files.loadFailed': '无法读取文件',
+  'files.search': '搜索文件',
+  'files.showing': '显示 {total} 个文件中的 {shown} 个',
 };
