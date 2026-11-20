@@ -377,6 +377,8 @@ export const de: Record<MessageKey, string> = {
   'files.moveTo': '{name} verschieben nach:',
   'files.newFolderIn': 'Neuer Ordner in {path}',
   'files.folderName': 'Ordnername',
+  'files.view.list': 'Liste',
+  'files.view.grid': 'Raster',
   'files.nameErr.empty': 'Gib einen Namen ein.',
   'files.nameErr.invalid': 'Ein Name darf kein / enthalten und nicht . oder .. sein.',
   'files.nameErr.spaces': 'Ein Name darf nicht mit einem Leerzeichen beginnen oder enden.',

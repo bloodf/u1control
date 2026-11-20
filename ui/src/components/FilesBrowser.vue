@@ -1,19 +1,20 @@
 <script setup lang="ts">
 // One printer's files: the shared OuiFileBrowser over useFileBackend, which reads, shows a failed read with its way out,
 // runs a move or delete and reads again. This component gives the storage (the plugin's Moonraker file commands, with the
-// printer's own paths as ids: "gcodes/sub/a.gcode") and what the page adds: print, save and rename a file; rename, move
-// and delete the open folder. A new folder is made in the browser's own tree, through createFolder. FilesView makes a new one for every printer.
+// printer's own paths as ids: "gcodes/sub/a.gcode") and what the page adds: print and save a file, on its details and its
+// context menu. Naming (a new folder, a rename) is typed in the browser itself; moving and deleting a folder are the
+// browser's too (its context menus, and the buttons beside the path). FilesView makes a new one for every printer.
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
-import { OuiFileBrowser, OuiHint, OuiIcon, useFileBackend, type OuiFile, type OuiFileBackend, type OuiFileBrowserLabels } from '@orca-plugins/ui-foundation/src/components';
+import { fuzzyFilter, OuiFileBrowser, OuiHint, OuiIcon, useFileBackend, type OuiFile, type OuiFileBackend, type OuiFileBrowserLabels, type OuiFileMenuItem } from '@orca-plugins/ui-foundation/src/components';
 import { download as downloadIcon, edit, move as moveIcon, printer, trash } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, printerName } from '../app/store';
 import { newFolder, watchThumb } from '../app/thumbs';
-import { ask, choose, prompt } from '../core/dialog';
+import { ask } from '../core/dialog';
 import { t, tn, fmt } from '../core/i18n';
-import { fileKind, folderTree, moveTargets, rootOf } from '../core/logic';
+import { fileKind, folderTree, rootOf } from '../core/logic';
 
 /** A file as the printer listed it. Its texts, kind, picture and facts are added where it is shown, in the page's language. */
 interface Listed extends OuiFile { time?: number; weight?: number | null; rel?: string }
@@ -48,24 +49,42 @@ const backend: OuiFileBackend = {
   // The browser asked first (its own confirmation, with the count and the names).
   remove: ids => each(ids, 'files.deleted', id => run({ key: `del:${id}`, label: t('act.delete'), cmd: 'delete', args: { path: id } })),
   move: (ids, to) => each(ids, 'files.moved', id => run({ key: `mv:${id}`, label: t('act.move'), cmd: 'move', args: { path: id, folder: to } })),
-  // The browser checked the name and opens the new folder; a refusal has already said why (the tracker's message).
+  // Typed in the browser: it checked the name, opens a new folder and follows a renamed one; a refusal is shown under the name.
   async createFolder(parent, name) {
     const path = `${parent}/${name}`;
-    if (!(await run({ key: 'mkdir', label: t('act.mkdir'), cmd: 'mkdir', args: { path }, okText: t('ok.mkdir') })).ok) throw new Error(path);
+    await quiet({ key: 'mkdir', label: t('act.mkdir'), cmd: 'mkdir', args: { path }, okText: t('ok.mkdir') });
     return path;
   },
+  rename: async (id, name) => (await quiet({ key: `ren:${id}`, label: t('act.rename'), cmd: 'rename', args: { path: id, name }, okText: t('ok.rename') }))?.path ?? `${parentOf(id)}/${name}`,
+  // The browser asked first (its own question, with what goes with the folder); a failure says why itself.
+  async moveFolder(id, to) {
+    const r = await run({ key: `mv:${id}`, label: t('act.move'), cmd: 'move', args: { path: id, folder: to }, okText: t('ok.move') });
+    if (!r.ok) throw new Error(r.reason);
+    return r.result?.path ?? `${to}/${nameOf(id)}`;
+  },
+  async removeFolder(id) { if (!(await run({ key: `del:${id}`, label: t('act.delete'), cmd: 'delete', args: { path: id, is_dir: true }, okText: t('ok.delete') })).ok) throw new Error(id); },
 };
+/** A command whose failure the name field shows (no toast): rejects with the printer's reason. */
+async function quiet(o: Parameters<typeof run>[0]) {
+  const r = await run({ ...o, quiet: true });
+  if (!r.ok) throw new Error(r.reason === 'error' ? r.error ?? '' : t('msg.unknown', { action: o.label, seconds: 20 }));
+  return r.result;
+}
+const parentOf = (id: string) => id.slice(0, Math.max(0, id.lastIndexOf('/')));
 // A file that failed has already said why (each, above): nothing to add here.
 const files = useFileBackend(backend, { folder: 'gcodes', onError: () => {} });
 defineExpose({ reload: () => files.reload({ quiet: true }), disk, loading: computed(() => files.loading) });
+const browser = ref<InstanceType<typeof OuiFileBrowser>>();
 
 const root = computed(() => rootOf(files.folder));
 const filter = ref('');
 const thumbs = ref<Record<string, string>>({});
 watch(() => files.folder, () => { thumbs.value = {}; filter.value = ''; });
+// The filter is fuzzy (case, accents and separators do not matter; the letters in order): best match first, matches marked.
+const ranked = computed(() => !!filter.value.trim());
 const shown = computed<OuiFile[]>(() => {
-  const needle = filter.value.trim().toLowerCase();
-  return (files.files as Listed[]).filter(f => f.name.toLowerCase().includes(needle)).map(f => ({
+  const found = ranked.value ? fuzzyFilter(files.files as Listed[], filter.value, f => f.name) : (files.files as Listed[]).map(item => ({ item, match: null }));
+  return found.map(({ item: f, match }) => ({ match: match?.hits,
     id: f.id, name: f.name, size: f.size, sizeText: fmt.bytes(f.size) || undefined, modified: f.modified, modifiedText: f.modified ? fmt.dateTime(f.modified) : undefined,
     kind: fileKind(f.name), thumb: thumbs.value[f.id] ?? null,
     facts: root.value === 'gcodes' ? [{ label: t('files.col.time'), value: f.time ? fmt.duration(f.time) : null }, { label: t('files.col.weight'), value: f.weight ? fmt.grams(f.weight) : null }] : [],
@@ -79,7 +98,9 @@ const labels = computed<OuiFileBrowserLabels>(() => ({
   empty: filter.value.trim() && files.files.length ? t('files.noMatch', { filter: filter.value.trim() }) : t('files.empty'), loading: t('files.loading'),
   nothingSelected: t('files.none'), nothingSelectedText: root.value === 'gcodes' ? t('files.noneHint') : undefined,
   loadFailed: t('files.loadFailed'), retry: t('common.retry'),
-  newFolder: t('files.newFolder'), folderName: t('files.folderName'), folderError: reason => t(`files.nameErr.${reason}` as const),
+  newFolder: t('files.newFolder'), folderName: t('files.newName'), folderError: reason => t(`files.nameErr.${reason}` as const),
+  rename: t('files.rename'), move: t('files.move'), moveTitle: () => t('files.moveToFolder'), removeFolderTitle: name => t('confirm.deleteDir.text', { name }), removeFolderText: t('files.deleteText'),
+  listView: t('files.view.list'), gridView: t('files.view.grid'),
 }));
 
 // A print file's preview is asked for only once its row is on screen (app/thumbs): the rows are the browser's, found by
@@ -95,6 +116,8 @@ function watchRows() {
   }
 }
 watch([() => files.files, () => files.loading, filter], () => void nextTick(watchRows), { flush: 'post' });
+// The grid draws new elements for the same files: their pictures are watched again.
+const onView = () => void nextTick(watchRows);
 onBeforeUnmount(() => unwatch.forEach(stop => stop()));
 
 async function print(id: string) {
@@ -106,59 +129,25 @@ async function download(id: string) {
   if (r.ok) tracker.notify('success', t('ok.saved', { path: r.result }));
 }
 const onOpen = (id: string) => (root.value === 'gcodes' ? print(id) : download(id));
-/** Ask for a new name; null when the dialog was left or the name was kept. */
-async function newName(name: string): Promise<string | null> {
-  const n = ((await prompt({ title: t('files.rename'), text: t('files.renameTo', { name }), yes: t('files.rename'), no: t('common.goBack'),
-    input: { label: t('files.newName'), value: name } })) || '').trim();
-  return n && n !== name ? n : null;
-}
-async function rename(id: string) {
-  const name = await newName(nameOf(id));
-  if (!name) return;
-  const r = await run({ key: `ren:${id}`, label: t('act.rename'), cmd: 'rename', args: { path: id, name }, okText: t('ok.rename') });
-  if (r.ok) void files.reload({ quiet: true });
-}
-
-// ---------------------------------------------------------------- folders: the open one renamed, moved or deleted (a new one is the browser's)
-const parentOf = (id: string) => id.slice(0, Math.max(0, id.lastIndexOf('/')));
-/** The open folder is somewhere else now (or gone: its parent): open that, and read the tree again. */
-function folderNow(id: string) { files.folder = id; files.selected = []; void files.reload(); }
-async function renameFolder() {
-  const was = files.folder, name = await newName(nameOf(was));
-  if (!name) return;
-  const r = await run({ key: `ren:${was}`, label: t('act.rename'), cmd: 'rename', args: { path: was, name }, okText: t('ok.rename') });
-  if (r.ok) folderNow(r.result?.path ?? `${parentOf(was)}/${name}`);
-}
-async function moveFolder() {
-  const was = files.folder, name = nameOf(was);
-  const items = moveTargets(files.folders.filter(f => !f.readonly && rootOf(f.id) === root.value).map(f => f.id), parentOf(was), name)
-    .map(f => ({ value: f, label: f === root.value ? t('files.top', { root: rootLabel(root.value) }) : f.slice(root.value.length + 1) }));
-  if (!items.length) { tracker.notify('error', t('files.noFolder')); return; }
-  const dest = await choose({ title: t('files.move'), text: t('files.moveTo', { name }), choices: items, no: t('common.goBack') });
-  if (!dest) return;
-  const r = await run({ key: `mv:${was}`, label: t('act.move'), cmd: 'move', args: { path: was, folder: dest }, okText: t('ok.move') });
-  if (r.ok) folderNow(r.result?.path ?? `${dest}/${name}`);
-}
-async function deleteFolder() {
-  const was = files.folder;
-  if (!await ask({ title: t('files.delete'), text: t('confirm.deleteDir.text', { name: nameOf(was) }), yes: t('confirm.delete.yes'), no: t('common.goBack'), danger: true })) return;
-  const r = await run({ key: `del:${was}`, label: t('act.delete'), cmd: 'delete', args: { path: was, is_dir: true }, okText: t('ok.delete') });
-  if (r.ok) folderNow(parentOf(was));
-}
+// A file's (the selection's) context menu starts with what the page adds: print it, save it.
+const fileMenu = (ids: string[]): OuiFileMenuItem[] => ids.length !== 1 ? [] : [
+  ...(root.value === 'gcodes' ? [{ label: t('files.print'), icon: printer, disabled: !!s.status?.busy, run: () => void print(ids[0]) }] : []),
+  { label: t('files.save'), icon: downloadIcon, run: () => void download(ids[0]) }];
 </script>
 <template>
   <div ref="wrap" class="fv" data-test="files">
     <!-- The printer lists its files newest first; any column can still be sorted. -->
-    <OuiFileBrowser v-bind="files.props" :files="shown" :labels="labels" :sort="{ key: 'modified', down: true }" :describedby="root === 'camera' ? 'files-ro' : undefined" v-on="files.on" @open="onOpen">
+    <OuiFileBrowser ref="browser" v-bind="files.props" :files="shown" :ranked="ranked" :labels="labels" :sort="{ key: 'modified', down: true }" :describedby="root === 'camera' ? 'files-ro' : undefined"
+      :file-menu="fileMenu" view-key="u1control" v-on="files.on" @open="onOpen" @update:view="onView">
       <!-- The open folder itself: the tree shows where it is, these act on it. A file root is never renamed, moved or
            deleted, and a read-only folder says so once, here. -->
       <template #folder="{ folder }">
         <template v-if="folder?.readonly"><span id="files-ro" class="oui-chip">{{ t('files.readOnly') }}</span><OuiHint :label="t('files.readOnly')" :text="t('files.readOnlyWhy')" /></template>
         <template v-else-if="folder">
           <template v-if="folder.parent">
-            <Button size="small" severity="secondary" text :aria-label="t('files.renameLabel', { name: folder.name })" :title="t('files.renameLabel', { name: folder.name })" data-test="folder-rename" @click="renameFolder"><template #icon><OuiIcon :icon="edit" :size="14" /></template></Button>
-            <Button size="small" severity="secondary" text :aria-label="t('files.moveLabel', { name: folder.name })" :title="t('files.moveLabel', { name: folder.name })" data-test="folder-move" @click="moveFolder"><template #icon><OuiIcon :icon="moveIcon" :size="14" /></template></Button>
-            <Button size="small" severity="danger" outlined :aria-label="t('files.deleteLabel', { name: folder.name })" :title="t('files.deleteLabel', { name: folder.name })" data-test="folder-delete" @click="deleteFolder"><template #icon><OuiIcon :icon="trash" :size="14" /></template></Button>
+            <Button size="small" severity="secondary" text :aria-label="t('files.renameLabel', { name: folder.name })" :title="t('files.renameLabel', { name: folder.name })" data-test="folder-rename" @click="browser?.rename(folder.id)"><template #icon><OuiIcon :icon="edit" :size="14" /></template></Button>
+            <Button size="small" severity="secondary" text :aria-label="t('files.moveLabel', { name: folder.name })" :title="t('files.moveLabel', { name: folder.name })" data-test="folder-move" @click="browser?.moveFolder(folder.id)"><template #icon><OuiIcon :icon="moveIcon" :size="14" /></template></Button>
+            <Button size="small" severity="danger" outlined :aria-label="t('files.deleteLabel', { name: folder.name })" :title="t('files.deleteLabel', { name: folder.name })" data-test="folder-delete" @click="browser?.deleteFolder(folder.id)"><template #icon><OuiIcon :icon="trash" :size="14" /></template></Button>
           </template>
         </template>
       </template>
@@ -168,7 +157,7 @@ async function deleteFolder() {
           <template #icon><OuiIcon :icon="printer" :size="14" /></template></Button>
         <Button severity="secondary" :label="t('files.save')" :aria-label="t('files.saveLabel', { name: file.name })" :loading="tracker.isBusy(`dl:${file.id}`)" data-test="file-save" @click="download(file.id)">
           <template #icon><OuiIcon :icon="downloadIcon" :size="14" /></template></Button>
-        <Button v-if="root === 'gcodes'" severity="secondary" text :label="t('files.rename')" :aria-label="t('files.renameLabel', { name: file.name })" data-test="file-rename" @click="rename(file.id)">
+        <Button v-if="root === 'gcodes'" severity="secondary" text :label="t('files.rename')" :aria-label="t('files.renameLabel', { name: file.name })" data-test="file-rename" @click="browser?.rename(file.id)">
           <template #icon><OuiIcon :icon="edit" :size="14" /></template></Button>
       </template>
     </OuiFileBrowser>

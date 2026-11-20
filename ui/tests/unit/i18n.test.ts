@@ -40,6 +40,7 @@ test('plural keys exist in pairs; Chinese uses the "other" form', () => {
   const bases = Object.keys(en).filter(k => k.endsWith('_one')).map(k => k.slice(0, -4));
   assert.ok(bases.length > 0);
   for (const b of bases) assert.ok(`${b}_other` in en, b);
+  assert.equal(pluralKey('pt-BR', 'x', 0), 'x_other', 'Portuguese 0 is "one" by CLDR, but "_one" says 1'); assert.equal(pluralKey('pt-BR', 'x', 1), 'x_one');
   assert.equal(pluralKey('en', 'x', 1), 'x_one'); assert.equal(pluralKey('de', 'x', 2), 'x_other');
   assert.equal(pluralKey('es', 'x', 1), 'x_one'); assert.equal(pluralKey('zh-CN', 'x', 1), 'x_other');
 });

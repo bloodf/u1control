@@ -376,6 +376,8 @@ export const es: Record<MessageKey, string> = {
   'files.moveTo': 'Mover {name} a:',
   'files.newFolderIn': 'Nueva carpeta en {path}',
   'files.folderName': 'Nombre de la carpeta',
+  'files.view.list': 'Lista',
+  'files.view.grid': 'Cuadrícula',
   'files.nameErr.empty': 'Escribe un nombre.',
   'files.nameErr.invalid': 'Un nombre no puede contener / ni ser . o ..',
   'files.nameErr.spaces': 'Un nombre no puede empezar ni terminar con un espacio.',

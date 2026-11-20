@@ -1166,7 +1166,7 @@ test('files: a newly selected printer starts at the top folder', `
   eq(last('cmd', 'files').args.path, 'gcodes', 'top folder of the new printer');
 `);
 
-test('files: rename asks for the new name and never sends an unchanged one', `
+test('files: rename in place, from the details or the context menu; an unchanged name sends nothing', `
   await connect();
   await tab('files');
   await trees();
@@ -1175,27 +1175,47 @@ test('files: rename asks for the new name and never sends an unchanged one', `
   assert(!btn('Rename benchy.gcode'), 'the actions of one file show once it is selected');
   await click(q('[data-file="gcodes/benchy.gcode"]'));
   await click(btn('Rename benchy.gcode'));
-  await until(dialogOpen);
-  eq(q('#dlg-input').value, 'benchy.gcode', 'starts from the current name');
-  await yes();
+  const field = () => q('[data-files-newname]');
+  await until(() => document.activeElement === field(), 'the name opens in its row');
+  eq([field().value, field().value.slice(field().selectionStart, field().selectionEnd), !!field().closest('[data-file="gcodes/benchy.gcode"]')], ['benchy.gcode', 'benchy', true], 'the name without its extension is selected, in the row');
+  await press('Enter');
+  await until(() => !field(), 'closed');
   eq(cmds('rename'), [], 'same name: nothing sent');
   await click(btn('Rename benchy.gcode'));
-  await until(() => document.activeElement === q('#dlg-input'));
-  await type(q('#dlg-input'), 'boat.gcode');
-  await yes();
+  await until(() => document.activeElement === field());
+  await type(field(), 'clip.gcode'); await press('Enter');
+  eq(text(q('.oui-files-nameerror')), 'This folder already has one with that name.', 'a name the folder already has is refused here');
+  await type(field(), 'boat.gcode');
+  await mouse(q('.oui-files-detail'));
+  await until(() => last('cmd', 'rename'), 'a click elsewhere commits');
   eq(last('cmd', 'rename').args, {path: 'gcodes/benchy.gcode', name: 'boat.gcode'}, 'path and new name');
+  assert(field() && field().readOnly, 'the field waits for the printer');
+  await fail(last('cmd', 'rename'), 'gcodes/boat.gcode exists');
+  await until(() => text(q('.oui-files-nameerror')) === 'gcodes/boat.gcode exists', 'the printer refusal stays under the field: ' + text(q('.oui-files-nameerror')));
+  assert(!toasts().includes('exists'), 'said once, there, not in a toast too');
+  await press('Enter');
+  await until(() => cmds('rename').length === 2, 'tried again');
   const listed = cmds('files').length;
   await reply(last('cmd', 'rename'), {path: 'gcodes/boat.gcode'});
   await trees();
   await until(() => cmds('files').length > listed, 'listed again after the rename');
-  await reply(last('cmd', 'files'), ${JSON.stringify(FILES)});
+  await reply(last('cmd', 'files'), {...${JSON.stringify(FILES)}, files: [{name: 'boat.gcode', size: 10, modified: 5}, {name: 'clip.gcode', size: 5, modified: 4}]});
+  await until(() => !field(), 'the field closes once it is done');
+  eq(qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file), ['gcodes/boat.gcode'], 'the renamed file stays selected');
   assert(!byTest('folder-rename'), 'a file root is never renamed');
-  await click(q('[data-folder="gcodes/sub"]'));
-  await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [], files: []});
-  await click(btn('Rename sub'));
-  await until(dialogOpen);
-  await no();
-  eq(cmds('rename').length, 1, 'cancel sends nothing');
+  // The context menu of a file, and F2.
+  q('[data-file="gcodes/clip.gcode"]').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(q('[data-file="gcodes/clip.gcode"]'))[0], clientY: centre(q('[data-file="gcodes/clip.gcode"]'))[1]}));
+  await until(() => q('.oui-files-menu'), 'a menu');
+  eq(qa('.oui-files-menu [role=menuitem]').map(text), ['Print', 'Save', 'Rename', 'Move to…', 'Delete'], 'the page\\u2019s actions, then rename, move and delete');
+  eq(qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file), ['gcodes/clip.gcode'], 'a file outside the selection is selected alone');
+  await click(qa('.oui-files-menu [role=menuitem]').find(b => text(b) === 'Rename'));
+  await until(() => document.activeElement === field() && field().value === 'clip.gcode', 'renamed from the menu');
+  await press('Escape');
+  await until(() => !field(), 'Escape leaves');
+  q('[data-file="gcodes/clip.gcode"]').focus(); await press('F2');
+  await until(() => document.activeElement === field(), 'F2 renames the focused file');
+  await press('Escape');
+  eq(cmds('rename').length, 2, 'Escape sends nothing');
 `);
 
 test('files: filter by name and show each file\'s filament', `
@@ -1207,8 +1227,9 @@ test('files: filter by name and show each file\'s filament', `
   const rows = () => qa('.oui-files-row').map(r => r.dataset.file);
   await click(q('[data-file="gcodes/benchy.gcode"]'));
   assert(text(q('.oui-files-detail')).includes('12 g'), 'filament weight in the details of the file: ' + text(q('.oui-files-detail')));
-  await type(q('#files-filter'), 'BEN');
-  eq(rows(), ['gcodes/benchy.gcode'], 'case-insensitive match');
+  await type(q('#files-filter'), 'BNCH');
+  eq(rows(), ['gcodes/benchy.gcode'], 'fuzzy: case-insensitive, the letters in order');
+  eq(qa('.oui-files-row .oui-files-hit').map(text).join(''), 'bnch', 'the matched letters are marked');
   await click(btn('Clear', q('.oui-files-bar')));
   assert(text(q('.oui-files-bar')).includes('Showing 1 of 2 files'), 'with nothing selected the bar says how many of the files are shown: ' + text(q('.oui-files-bar')));
   eq([q('#files-filter').placeholder, q('#files-filter').getAttribute('aria-label')], ['Search by name', 'Search files'], 'the search field, named as in the other printer plugin');
@@ -1329,6 +1350,102 @@ test('files: dragging a selected file takes the whole selection; an unselected o
   eq(cmds('move')[2].args, {path: 'gcodes/d.gcode', folder: 'gcodes/sub'}, 'only it moves');
 `);
 
+test('files: the context menu of a file of the selection acts for the selection', `
+  ${FILES_OPEN}
+  await click(row('a'));
+  row('c').dispatchEvent(new MouseEvent('click', {bubbles: true, ctrlKey: true})); await settle();
+  row('c').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('c'))[0], clientY: centre(row('c'))[1]}));
+  await until(() => q('.oui-files-menu'));
+  eq(qa('.oui-files-menu [role=menuitem]').map(text), ['Move to…', 'Delete'], 'for two files: no rename, no print');
+  eq(picked(), ['a.gcode', 'c.gcode'], 'the selection is kept');
+  await mouse(q('.oui-files-detail'));
+  await until(() => !q('.oui-files-menu'), 'a press outside closes it');
+  row('c').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('c'))[0], clientY: centre(row('c'))[1]}));
+  await until(() => q('.oui-files-menu') && document.activeElement === q('.oui-files-menu [role=menuitem]'), 'open again, its first item focused');
+  await press('ArrowDown');
+  eq(text(document.activeElement), 'Delete', 'arrow keys move through the menu');
+  await press('Enter');
+  await until(dialogOpen, 'asks first');
+  assert(dialogText().includes('Delete 2 files?') && dialogText().includes('a.gcode') && dialogText().includes('c.gcode'), dialogText());
+  await click(q('[data-dlg="confirm"]', dialogEl()));
+  await until(() => cmds('delete').length === 1);
+  eq(cmds('delete')[0].args, {path: 'gcodes/a.gcode'}, 'each file of the selection');
+  await reply(cmds('delete')[0], true);
+  await until(() => cmds('delete').length === 2);
+  eq(cmds('delete')[1].args, {path: 'gcodes/c.gcode'}, 'goes');
+  await reply(cmds('delete')[1], true);
+  await again(TREE, {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1, 2))}});
+  // Move to… from the menu: the folders the file can go to.
+  row('b').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('b'))[0], clientY: centre(row('b'))[1]}));
+  await until(() => q('.oui-files-menu'));
+  await click(qa('.oui-files-menu [role=menuitem]').find(b => text(b) === 'Move to…'));
+  await until(() => q('[data-files-moveto]'));
+  await pick(q('[data-files-moveto]'), 'Print files / sub');
+  await click(q('[data-dlg="confirm"]'));
+  eq(last('cmd', 'move').args, {path: 'gcodes/b.gcode', folder: 'gcodes/sub'}, 'moved where chosen');
+`);
+
+test('files: a grid of pictures, kept for next time; selecting, the menu, rename and dragging work there too', `
+  ${FILES_OPEN}
+  const withThumbs = {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files)}.map(f => ({...f, thumb: '.thumbs/' + f.name + '-300x300.png'}))};
+  await click(q('[data-files-view="grid"]'));
+  eq([q('[data-files-view="grid"]').getAttribute('aria-pressed'), qa('.oui-files-card[data-file]').length, !!q('.oui-files-table')], ['true', 3, false], 'cards instead of the table');
+  eq(localStorage.getItem('oui-files-view:' + location.pathname + ':u1control'), 'grid', 'kept for the plugin');
+  await click(byTest('files-refresh'));
+  await again(TREE, withThumbs);
+  await until(() => cmds('thumbnail').length, 'the pictures of the cards on screen are asked for');
+  await reply(cmds('thumbnail')[0], 'data:image/png;base64,${'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='}');
+  await until(() => q('.oui-files-card img'), 'and shown on the card');
+  eq(q('.oui-files-card img').closest('[data-file]').dataset.file, cmds('thumbnail')[0].args.path, 'on its own card');
+  assert(q('.oui-files-card[data-file="gcodes/b.gcode"] .oui-files-cardpic svg'), 'a file without its picture yet shows the file icon');
+  await click(row('a'));
+  row('c').dispatchEvent(new MouseEvent('click', {bubbles: true, shiftKey: true})); await settle();
+  eq(picked(), ['a.gcode', 'b.gcode', 'c.gcode'], 'Shift-click selects the range');
+  row('a').focus(); await press('Escape');
+  eq(picked(), [], 'Escape clears');
+  row('b').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(row('b'))[0], clientY: centre(row('b'))[1]}));
+  await until(() => q('.oui-files-menu'));
+  await click(qa('.oui-files-menu [role=menuitem]').find(b => text(b) === 'Rename'));
+  const field = () => q('[data-files-newname]');
+  await until(() => document.activeElement === field() && field().closest('.oui-files-card'), 'renamed on its card');
+  await type(field(), 'bee.gcode'); await press('Enter');
+  eq(last('cmd', 'rename').args, {path: 'gcodes/b.gcode', name: 'bee.gcode'}, 'sent');
+  await reply(last('cmd', 'rename'), {path: 'gcodes/bee.gcode'});
+  await again(TREE, withThumbs);
+  await mdown(row('c')); await mmove(folderEl('gcodes/sub'));
+  eq(text(q('.oui-files-ghost .oui-truncate')), 'c.gcode', 'a card drags like a row');
+  await mup(folderEl('gcodes/sub'));
+  eq(last('cmd', 'move').args, {path: 'gcodes/c.gcode', folder: 'gcodes/sub'}, 'dropped on the folder');
+`);
+
+test('files: the search is fuzzy, best match first', `
+  ${FILES_OPEN}
+  const names = ['my_bench_2.gcode', 'xbenchx.gcode', 'benchy_PLA.gcode', 'Bench.gcode', 'clip.gcode', 'b-e-n-c-h.gcode'];
+  await click(byTest('files-refresh'));
+  await again(TREE, {...${JSON.stringify(ABC)}, files: names.map((name, i) => ({name, size: 1, modified: i}))});
+  const shown = () => qa('.oui-files-row').map(r => r.dataset.file.split('/').pop());
+  await type(q('#files-filter'), 'bench');
+  eq(shown(), ['Bench.gcode', 'b-e-n-c-h.gcode', 'benchy_PLA.gcode', 'my_bench_2.gcode', 'xbenchx.gcode'], 'exact, then without separators, prefix, word start, inside a word');
+  eq(text(q('.oui-files-row .oui-files-hit')), 'Bench', 'the match is marked');
+  await type(q('#files-filter'), 'bnch pla');
+  eq(shown(), ['benchy_PLA.gcode'], 'letters in order, separators skipped');
+  await type(q('#files-filter'), 'BÊNCHY');
+  eq(shown(), ['benchy_PLA.gcode'], 'case and accents do not matter');
+  assert(text(q('.oui-files-bar')).includes('Showing 1 of 6 files'), text(q('.oui-files-bar')));
+  await type(q('#files-filter'), '');
+  eq(shown().length, 6, 'all back, in the column order');
+`);
+
+test('files: no files left after a move says 0 files, in every language', `
+  ${FILES_OPEN}
+  await click(row('a')); row('c').dispatchEvent(new MouseEvent('click', {bubbles: true, shiftKey: true})); await settle();
+  await pick(q('.oui-files-move'), 'Arquivos de impressão / sub');
+  for (const n of [0, 1, 2]) { await until(() => cmds('move').length === n + 1); await reply(cmds('move')[n], {path: 'x'}); }
+  await again(TREE, {...${JSON.stringify(ABC)}, files: []});
+  assert(text(byTest('files')).includes('Nenhum arquivo nesta pasta.'), 'the folder is empty');
+  eq(text(q('.oui-files-bar [aria-live]')), '0 arquivos', 'and the count says so (Portuguese puts 0 in the plural rule "one", which read "1 arquivo")');
+`, { lang: 'pt-BR' });
+
 test('files: Delete asks once, with the names; the camera folder is read only and says why', `
   ${FILES_OPEN}
   await click(row('a'));
@@ -1429,40 +1546,41 @@ for (const size of [[420, 900], [600, 720]]) test(`files: at ${size.join('x')} t
 
 test('files: a new folder, and the open folder renamed, moved and deleted', `
   ${FILES_OPEN}
-  // New folder: the name is typed in the tree, under the open folder, and checked before anything is sent.
-  await click(q('[data-files-mkdir]'));
+  // New folder, as in Finder: a folder at the top of the list with its name selected; a click elsewhere commits.
   const field = () => q('[data-files-newname]');
-  await until(() => document.activeElement === field(), 'the name field in the tree');
-  eq([field().value, field().closest('[role=treeitem]').getAttribute('aria-level')], ['New folder', '2'], 'a name to start from, inside the open folder');
-  const nameIs = async value => { await type(field(), value); await press('Enter'); };
-  await nameIs('SUB');
+  assert(!q('[data-files-mkdir]').classList.contains('p-button-text'), 'New folder reads as a button');
+  await mouse(q('[data-files-mkdir]'));
+  await until(() => document.activeElement === field(), 'the name field');
+  eq([field().value, field().value.slice(field().selectionStart, field().selectionEnd), !!field().closest('.oui-files-table .oui-files-newrow')], ['New folder', 'New folder', true], 'at the top of the list, the name selected');
+  await type(field(), 'SUB'); await press('Enter');
   assert(field() && text(q('.oui-files-nameerror')) === 'This folder already has one with that name.' && field().getAttribute('aria-invalid') === 'true', 'a name its sibling has is refused: ' + text(q('.oui-files-nameerror')));
-  await nameIs('a/b');
-  eq(text(q('.oui-files-nameerror')), 'A name can’t contain / or be . or ..', 'a slash is refused');
-  await nameIs('..');
-  assert(field() && q('.oui-files-nameerror'), 'so is ..');
+  await type(field(), 'a/b'); await mouse(q('.oui-files-detail'));
+  eq([!!field(), text(q('.oui-files-nameerror'))], [true, 'A name can’t contain / or be . or ..'], 'a click elsewhere with a bad name says why and keeps the field');
+  await type(field(), ''); await press('Enter');
+  eq(text(q('.oui-files-nameerror')), 'Type a name.', 'an empty name is refused');
   await press('Escape');
   await until(() => !field(), 'Escape leaves');
   eq(cmds('mkdir'), [], 'nothing sent for a refused name or Escape');
-  await click(q('[data-files-mkdir]'));
+  await mouse(q('[data-files-mkdir]'));
   await until(() => document.activeElement === field());
-  await nameIs('Spares');
-  await until(() => last('cmd', 'mkdir'), 'sent');
+  await type(field(), 'Spares');
+  await mouse(q('.oui-files-detail'));
+  await until(() => last('cmd', 'mkdir'), 'a click elsewhere commits');
   eq(last('cmd', 'mkdir').args, {path: 'gcodes/Spares'}, 'in the open folder');
   await reply(last('cmd', 'mkdir'), {item: {path: 'Spares', root: 'gcodes'}, action: 'create_dir'});
   await until(() => toasts().includes('Folder created'), 'said: ' + toasts());
   await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], {path: 'gcodes/Spares', dirs: [], files: []});
   eq(last('cmd', 'files').args.path, 'gcodes/Spares', 'the new folder is opened');
   eq(folderEl('gcodes/Spares').getAttribute('aria-selected'), 'true', 'and marked in the tree');
-  // A refusal from the printer says why and opens nothing.
-  await click(q('[data-files-mkdir]'));
+  // A refusal from the printer is shown under the field, which stays open with the name.
+  await mouse(q('[data-files-mkdir]'));
   await until(() => document.activeElement === field());
-  await nameIs('bad#name');
+  await type(field(), 'bad#name'); await press('Enter');
   await until(() => cmds('mkdir').length === 2);
   await fail(last('cmd', 'mkdir'), "folder names use letters, digits, spaces, '-', '_' and '.'");
-  await until(() => alerts().includes('folder names use'), 'the reason: ' + alerts());
-  await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], {path: 'gcodes/Spares', dirs: [], files: []});
-  eq(last('cmd', 'files').args.path, 'gcodes/Spares', 'still in the folder it was in');
+  await until(() => text(q('.oui-files-nameerror')).includes('folder names use'), 'the reason, under the field: ' + text(q('.oui-files-nameerror')));
+  eq(field().value, 'bad#name', 'the name is kept to fix');
+  await press('Escape');
   // The new folder takes files like any other: drag one there.
   await click(folderEl('gcodes'));
   listed = last('cmd', 'files').id;
@@ -1473,40 +1591,48 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   eq(last('cmd', 'move').args, {path: 'gcodes/a.gcode', folder: 'gcodes/Spares'}, 'moved into the new folder');
   await reply(last('cmd', 'move'), {path: 'gcodes/Spares/a.gcode'});
   await again(['gcodes', 'gcodes/Spares', ...TREE.slice(1)], {...${JSON.stringify(ABC)}, files: ${JSON.stringify(ABC.files.slice(1))}});
-  // The context menu of a folder in the tree makes one in that folder.
-  folderEl('gcodes/sub').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(folderEl('gcodes/sub'))[0], clientY: centre(folderEl('gcodes/sub'))[1]}));
+  // A folder's context menu in the tree: New folder there, named in the tree.
+  const menuAt = el => el.dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(el)[0], clientY: centre(el)[1]}));
+  menuAt(folderEl('gcodes/sub'));
   await until(() => q('.oui-files-menu [role=menuitem]'), 'a menu');
-  eq([text(q('.oui-files-menu [role=menuitem]')), document.activeElement === q('.oui-files-menu [role=menuitem]')], ['New folder', true], 'one item, focused');
+  eq(qa('.oui-files-menu [role=menuitem]').map(text), ['New folder', 'Rename', 'Move to…', 'Delete'], 'what can be done with a folder');
+  eq(document.activeElement, q('.oui-files-menu [role=menuitem]'), 'the first item has focus');
   await press('Escape');
   await until(() => !q('.oui-files-menu'), 'Escape closes it');
-  folderEl('gcodes/sub').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(folderEl('gcodes/sub'))[0], clientY: centre(folderEl('gcodes/sub'))[1]}));
-  await until(() => q('.oui-files-menu [role=menuitem]'));
+  menuAt(folderEl('gcodes'));
+  await until(() => q('.oui-files-menu'));
+  eq(qa('.oui-files-menu [role=menuitem]').map(text), ['New folder'], 'a root is never renamed, moved or deleted');
+  await press('Escape');
+  menuAt(folderEl('gcodes/sub'));
+  await until(() => q('.oui-files-menu'));
   await mouse(q('.oui-files-menu [role=menuitem]'));
   await until(() => field() && document.activeElement === field(), 'the name field');
-  eq(field().closest('[role=treeitem]').previousElementSibling.dataset.folder, 'gcodes/sub', 'under that folder');
-  await nameIs('inner');
+  eq(field().closest('[role=treeitem]').previousElementSibling.dataset.folder, 'gcodes/sub', 'in the tree, under that folder');
+  await type(field(), 'inner'); await press('Enter');
   await until(() => cmds('mkdir').length === 3);
   eq(last('cmd', 'mkdir').args, {path: 'gcodes/sub/inner'}, 'in the folder of the menu');
   await reply(last('cmd', 'mkdir'), {item: {path: 'sub/inner', root: 'gcodes'}, action: 'create_dir'});
   await again(['gcodes', 'gcodes/Spares', 'gcodes/sub', 'gcodes/sub/inner', 'gcodes/sub/deep'], {path: 'gcodes/sub/inner', dirs: [], files: []});
   await click(folderEl('gcodes/sub'));
   listed = last('cmd', 'files').id;
-  await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [{name: 'deep'}], files: []});
+  await reply(last('cmd', 'files'), {path: 'gcodes/sub', dirs: [{name: 'deep'}, {name: 'inner'}], files: []});
   assert(text(byTest('files')).includes('No files in this folder'), 'an empty folder says so');
+  // The open folder's own buttons beside the path: move (a question with the folders it can go to), rename in place, delete.
   await click(byTest('folder-move'));
-  await until(dialogOpen);
-  eq(qa('.dlg-choice').map(text), ['Spares'], 'every folder of the root but the one it is in, itself and what is inside it');
-  await click(btn('Spares', dialogEl()));
+  await until(() => q('[data-files-moveto]'), 'asks where');
+  await pick(q('[data-files-moveto]'), 'Print files / Spares');
+  await click(q('[data-dlg="confirm"]'));
   eq(last('cmd', 'move').args, {path: 'gcodes/sub', folder: 'gcodes/Spares'}, 'the folder moves whole');
   await reply(last('cmd', 'move'), {path: 'gcodes/Spares/sub'});
-  await again(['gcodes', 'gcodes/Spares', 'gcodes/Spares/sub', 'gcodes/Spares/sub/deep'], {path: 'gcodes/Spares/sub', dirs: [{name: 'deep'}], files: []});
+  await again(['gcodes', 'gcodes/Spares', 'gcodes/Spares/sub', 'gcodes/Spares/sub/deep', 'gcodes/Spares/sub/inner'], {path: 'gcodes/Spares/sub', dirs: [{name: 'deep'}], files: []});
   eq(last('cmd', 'files').args.path, 'gcodes/Spares/sub', 'the page follows it');
   eq(folderEl('gcodes/Spares/sub').getAttribute('aria-selected'), 'true', 'open and marked where it is now');
   assert(!folderEl('gcodes/sub'), 'gone from where it was');
   await click(byTest('folder-rename'));
-  await until(() => document.activeElement === q('#dlg-input'));
-  await type(q('#dlg-input'), 'old');
-  await yes();
+  await until(() => document.activeElement === field(), 'the name opens in the tree');
+  assert(field().closest('[data-folder="gcodes/Spares/sub"]'), 'in its own row');
+  await type(field(), 'old'); await mouse(q('.oui-files-detail'));
+  await until(() => last('cmd', 'rename'), 'a click elsewhere commits');
   eq(last('cmd', 'rename').args, {path: 'gcodes/Spares/sub', name: 'old'}, 'renamed where it is');
   await reply(last('cmd', 'rename'), {path: 'gcodes/Spares/old'});
   await again(['gcodes', 'gcodes/Spares', 'gcodes/Spares/old'], {path: 'gcodes/Spares/old', dirs: [], files: []});
@@ -1514,11 +1640,17 @@ test('files: a new folder, and the open folder renamed, moved and deleted', `
   const del = byTest('folder-delete');
   assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-outlined'), 'deleting a folder is a red outline');
   await click(del);
-  assert(dialogOpen() && dialogText().includes('old') && dialogText().includes('everything in it'), 'asks, naming the folder: ' + dialogText());
-  await no();
-  eq(cmds('delete'), [], 'Go back deletes nothing');
-  await click(byTest('folder-delete'));
-  await yes();
+  await until(dialogOpen);
+  assert(dialogText().includes('old') && dialogText().includes('everything in it'), 'asks, naming the folder and what goes with it: ' + dialogText());
+  await click(q('[data-dlg="cancel"]', dialogEl()));
+  await until(() => !dialogOpen());
+  eq(cmds('delete'), [], 'Keep deletes nothing');
+  menuAt(folderEl('gcodes/Spares/old'));
+  await until(() => q('.oui-files-menu'));
+  await click(qa('.oui-files-menu [role=menuitem]').find(b => text(b) === 'Delete'));
+  await until(dialogOpen, 'the menu asks too');
+  await click(q('[data-dlg="confirm"]', dialogEl()));
+  await until(() => last('cmd', 'delete'));
   eq(last('cmd', 'delete').args, {path: 'gcodes/Spares/old', is_dir: true}, 'the folder and what is in it');
   await reply(last('cmd', 'delete'), true);
   await again(['gcodes', 'gcodes/Spares'], {path: 'gcodes/Spares', dirs: [], files: []});
