@@ -4,6 +4,7 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -389,6 +390,25 @@ class SpoolerTests(PluginBase):
         page.on_message({"type": "sync_project"})  # manual still runs
         self.assertIn("No printer status", page.posted[-1]["text"])
         ns["service"]().close()
+
+    def test_apply_button_gets_an_answer_for_its_click(self):
+        # The header button asks with an id and stays busy until this reply: what was applied, or why not.
+        orca, ns = self.load()
+        page = ns["U1ControlPage"]()
+        svc = ns["service"]()
+        self.addCleanup(svc.close)
+        page.on_message({"type": "sync_project", "id": 7})
+        self.assertEqual(page.posted[-1]["id"], 7)
+        self.assertEqual(page.posted[-1]["result"]["problems"], 1)
+        self.assertIn("No printer status", page.posted[-1]["result"]["text"])
+        svc.last_view = {"heads": [], "rfid": []}
+        answered = threading.Event()
+        page.post_message = lambda m: (page.posted.append(m), answered.set())
+        ns["sync_project"] = lambda *a, **kw: (["1: Generic PLA"], [])
+        page.on_message({"type": "sync_project", "id": 8})
+        self.assertTrue(answered.wait(5))
+        self.assertEqual(page.posted[-1]["id"], 8)
+        self.assertEqual(page.posted[-1]["result"], {"text": "Project filaments 1: Generic PLA", "done": 1, "problems": 0})
 
 
 class StorageOutsideCallbackTests(PluginBase):

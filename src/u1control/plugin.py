@@ -321,6 +321,9 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                 try:
                     self._select(svc)
                 except Exception as e:   # no U1 selected (or no address): the page disables every printer control
+                    # Settings still needs the config: its form (and Save) stays off without it, and that is where
+                    # the empty state sends the user to enter the printer address.
+                    self.post_message(self._config_message())
                     self.post_message({"type": "reply", "id": data.get("id"), "error": str(e), "no_target": True})
                     return
                 svc.touch(camera=False)
@@ -338,23 +341,32 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                 svc.submit(data.get("id"), data.get("cmd"), data.get("args") or {},
                            gen if isinstance(gen, int) and not isinstance(gen, bool) else None)
             elif kind == "sync_project":
+                rid = data.get("id")
+
+                def say(text, done=0, problems=0):
+                    # The header button asks with an id and waits for this answer (busy state, tone); the RFID
+                    # auto-sync posts without one and gets a notice.
+                    if rid is None:
+                        self.post_message({"type": "notice", "text": text})
+                    else:
+                        self.post_message({"type": "reply", "id": rid,
+                                           "result": {"text": text, "done": done, "problems": problems}})
                 view = svc.last_view
                 if data.get("auto") and spooler_keeping_slots():
-                    self.post_message({"type": "notice", "text": tr("Spooler is keeping slots synced")})
+                    say(tr("Spooler is keeping slots synced"))
                 elif not view:
-                    self.post_message({"type": "notice", "text": tr("No printer status yet; try again in a moment.")})
+                    say(tr("No printer status yet; try again in a moment."), problems=1)
                 else:
                     overrides = self._config()["profile_overrides"]
 
                     def job():
                         try:
                             done, problems = sync_project(view["heads"], view["rfid"], overrides, bound=bound_spool_lookup(svc))
-                            text = sync_message(done, problems)
+                            say(sync_message(done, problems), len(done), len(problems))
                         except Exception as e:
-                            text = tr("Couldn't update the project filaments: %s") % e
-                        self.post_message({"type": "notice", "text": text})
+                            say(tr("Couldn't update the project filaments: %s") % e, problems=1)
                     if not self._background(job):
-                        self.post_message({"type": "notice", "text": tr("Another preset update is running; try again in a moment.")})
+                        say(tr("Another preset update is running; try again in a moment."), problems=1)
             elif kind == "requirements":   # Settings > Requirements; recheck: its "Check again" (also looks for Spooler again)
                 recheck = bool(data.get("recheck"))
                 self.post_message({"type": "requirements", "items": requirements_state(svc, self._config(), recheck)})

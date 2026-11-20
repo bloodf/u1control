@@ -53,6 +53,7 @@ export const s = reactive({
   usageError: '',
   requirements: [] as Requirement[],
   reqChecking: false,
+  syncing: false,                   // "Apply to project filaments" sent, no answer yet
 });
 
 export const tracker = new Tracker(
@@ -122,6 +123,27 @@ function reset(): void {
     spoolsError: '', spoolsLoaded: false, frame: '', camError: '', screen: '', screenError: '', usageError: '' });
   if (s.stock) s.stock = { ...s.stock, bindings: {}, same_spoolman: null, usage: 'unknown' };
   cancelDialog();
+}
+
+/** Seconds before "Apply to project filaments" says it is still waiting on OrcaSlicer. */
+export const SYNC_SLOW_MS = 15_000;
+/** "Apply to project filaments": the plugin answers with what it applied or why not, never silently. While
+ *  OrcaSlicer waits on one of its own dialogs (unsaved preset changes) the answer can be late: say so. */
+export async function syncProject(): Promise<void> {
+  if (s.syncing) return;
+  s.syncing = true;
+  let slow = 0;
+  const timer = setTimeout(() => { slow = tracker.notify('unknown', t('heads.syncSlow')); }, SYNC_SLOW_MS);
+  try {
+    const r = await bridge.request({ type: 'sync_project' });
+    tracker.notify(r?.problems ? 'error' : r?.done ? 'success' : 'info', String(r?.text ?? ''));
+  } catch (e) {
+    tracker.notify('error', t('msg.failed', { action: t('heads.sync'), error: message(e) }));
+  } finally {
+    clearTimeout(timer);
+    if (slow) tracker.dismiss(slow);
+    s.syncing = false;
+  }
 }
 
 let helloInFlight = false;

@@ -165,6 +165,24 @@ class TargetIsolationTests(unittest.TestCase):
         self.assertTrue(reply1["no_target"])   # the page tells "no printer" apart from "printer unreachable"
         self.assertIsNotNone(orca)
 
+    def test_plugin_hello_without_a_u1_still_sends_the_settings(self):
+        # Settings keeps Save off until a config message arrives; with no U1 that is where the address is entered.
+        fakes.install_orca(preset={"name": "Bambu X1C", "printer_model": "X1C"})
+        ns = fakes.load_wheel(build_wheel())
+        svc = ns["service"]()
+        self.addCleanup(svc.close)
+        page = ns["U1ControlPage"]()
+        page.on_message({"type": "hello", "id": 1})
+        self.assertTrue([m for m in page.posted if m.get("id") == 1][0]["no_target"])
+        configs = [m for m in page.posted if m.get("type") == "config"]
+        self.assertEqual(len(configs), 1)
+        self.assertEqual(configs[0]["settings"]["host"], "")
+        # Saving an address there connects: the target is set and the page's next hello connects.
+        page.on_message({"type": "save_settings", "id": 2, "settings": {"host": "127.0.0.1:1"}})
+        self.assertEqual([m for m in page.posted if m.get("id") == 2][0]["result"], {"saved": True})
+        self.assertIsNotNone(svc.client)
+        self.assertEqual(svc.target.host, "127.0.0.1:1")
+
     def test_connect_reports_the_temperature_limits_the_plugin_applies(self):
         svc, pub = mem_service(self)
         svc.set_target(Target("printer-A"))
