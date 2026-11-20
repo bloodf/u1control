@@ -19,6 +19,7 @@ whether older firmware has it, and the commands below work on every U1 firmware 
 import json
 import os
 import re
+import time
 import zipfile
 
 import gcode
@@ -65,11 +66,11 @@ class JobError(RuntimeError):
 # ---------------------------------------------------------------- status push
 
 def tray_type(ftype, sub_type=""):
-    """SPA combine_filament_type: 'PLA' + 'Matte' -> 'PLA MATTE'; brand sub-types ('Basic') add nothing."""
+    """Base material + optional -CF/-GF (matching u1_moonraker_agent's combine_filament_type)."""
     base, sub = str(ftype or "").strip().upper(), str(sub_type or "").strip().upper()
-    if not base:
+    if not base or base == "NONE":
         return "PLA"
-    return base + _SUB_TYPES.get(sub, "")
+    return base + {"CF": "-CF", "GF": "-GF"}.get(sub, "")
 
 
 def material_family(material):
@@ -97,18 +98,18 @@ def ams_block(heads, preferred=None):
     Spooler preset of the head's Spoolman spool, or ""), else the Generic preset of the head's material."""
     trays, bits = [], 0
     for h in heads[:u1.TOOLHEADS]:
-        tray = {"id": str(h["index"]), "tag_uid": "0000000000000000"}
+        idx = int(h.get("index", len(trays)))
+        tray = {"id": str(idx), "tag_uid": "0000000000000000"}
         if h.get("loaded"):
-            bits |= 1 << h["index"]
+            bits |= 1 << idx
             material = tray_type(h.get("type"), h.get("sub_type"))
             colour = _rgba(h.get("colour"))
-            colours = [_rgba(c) for c in h.get("colours") or []] or [colour]
-            tray.update(tray_type=material, tray_color=colour, cols=colours, ctype=1, remain=-1,
-                        tray_info_idx=(preferred(h) if preferred else "") or generic_filament_id(material))
+            fid = (preferred(h) if preferred else "") or generic_filament_id(material) or ("U1_%s" % material)
+            tray.update(tray_info_idx=fid, tray_type=material, tray_color=colour)
         else:
             tray.update(tray_info_idx="", tray_type="", tray_color="00000000", tray_slot_placeholder="1")
         trays.append(tray)
-    return {"ams": [{"id": "0", "info": "0002", "tray": trays}], "ams_exist_bits": "1", "tray_exist_bits": "%X" % bits}
+    return {"ams": [{"id": "0", "info": "0002", "tray": trays}], "ams_exist_bits": "1", "tray_exist_bits": format(bits, "X")}
 
 
 def _remaining_minutes(view):
@@ -133,23 +134,41 @@ def push_status(view, preferred=None):
         "gcode_state": gstate, "mc_print_stage": PRINT_STAGE.get(state, 0),
         "mc_print_error_code": 0, "print_error": 0,
         # Both storage reports must say present or the dialog refuses LAN printing (MRA:2167-2184)
-        "sdcard": True, "home_flag": HAS_SDCARD_NORMAL << 8,
+        "sdcard": True, "home_flag": (HAS_SDCARD_NORMAL << 8) | (1 << 15) | (1 << 16),
         "support_send_to_sd": True,
         "support_bed_leveling": 1,          # SM: Auto Bed Leveling on/off -> task_bed_leveling
         "support_flow_calibration": True,   # SM: Flow Dynamics Calibration -> task_flow_cali (untested)
         "support_timelapse": True,          # SM: Timelapse -> task_record_timelapse (untested)
-        "nozzle_temp_range": [0, 320], "bed_temp_range": [0, 110],
+        "nozzle_temp_range": [100, 300], "bed_temp_range": [0, 100],
         "nozzle_temper": active.get("temp") or 0, "nozzle_target_temper": active.get("target") or 0,
         "bed_temper": bed.get("temp") or 0, "bed_target_temper": bed.get("target") or 0,
         "fan_gear": int(max(0.0, min(1.0, fan)) * 255 + 0.5),
+        "cooling_fan_speed": str(int(max(0.0, min(1.0, fan)) * 15 + 0.5)),
         "subtask_name": view.get("filename") or "", "gcode_file": view.get("filename") or "",
         "mc_percent": int(round(max(0.0, min(1.0, progress)) * 100)),
         "mc_remaining_time": _remaining_minutes(view),
         "layer_num": int(view.get("layer") or 0), "total_layer_num": int(view.get("total_layers") or 0),
         "lights_report": [{"node": CHAMBER_LIGHT, "mode": "on" if view.get("light") else "off"}],
-        **ams_block(view.get("heads") or [], preferred),
+        "nozzle_diameter": 0.4,
+        "nozzle_type": "hardened_steel",
     }
-    return {"print": p}
+    purifier = view.get("purifier") or {}
+    if isinstance(purifier.get("temp"), (int, float)):
+        ctemp = round(purifier["temp"], 1)
+        p["chamber_temper"] = ctemp
+        p["device"] = {"ctc": {"info": {"temp": int(round(ctemp)) & 0xFFFF}}}
+    inner_spd = purifier.get("inner_speed")
+    if isinstance(inner_spd, (int, float)):
+        p["big_fan1_speed"] = str(int(max(0.0, min(1.0, inner_spd)) * 15 + 0.5))
+    chamber_spd = purifier.get("cavity_speed")
+    if not isinstance(chamber_spd, (int, float)):
+        chamber_spd = purifier.get("exhaust_speed")
+    if isinstance(chamber_spd, (int, float)):
+        p["big_fan2_speed"] = str(int(max(0.0, min(1.0, chamber_spd)) * 15 + 0.5))
+    heads = view.get("heads") or []
+    if heads:
+        p["ams"] = ams_block(heads, preferred)
+    return {"print": p, "t_utc": int(time.time() * 1000)}
 
 
 def version_reply(firmware, product="Snapmaker U1"):
@@ -191,14 +210,27 @@ def parse_command(json_str):
         out = {"kind": name}
     elif section == "pushing" and name in ("start", "stop"):
         out = {"kind": "pushall" if name == "start" else "noop"}
-    elif section == "system" and name == "ledctrl" and body.get("led_node") == CHAMBER_LIGHT \
-            and body.get("led_mode") in ("on", "off"):
+    elif section == "system" and name == "ledctrl" and body.get("led_mode") in ("on", "off"):
         out = {"kind": "set_light", "on": body["led_mode"] == "on"}
     elif section == "print" and name in ("pause", "resume", "stop"):
         out = {"kind": name}
+    elif section == "print" and name == "set_bed_temp" and isinstance(body.get("temp"), (int, float)):
+        out = {"kind": "set_bed_temp", "temp": body["temp"]}
+    elif section == "print" and name == "set_nozzle_temp" and isinstance(body.get("target_temp"), (int, float)):
+        out = {"kind": "set_nozzle_temp", "target_temp": body["target_temp"],
+               "extruder_index": int(body.get("extruder_index") or 0)}
+    elif section == "print" and name == "home":
+        out = {"kind": "home"}
     elif section == "print" and name == "gcode_line" and isinstance(body.get("param"), str) \
             and body["param"].strip():
-        out = {"kind": "gcode", "script": body["param"]}   # MRA: Klipper runs it as given
+        script = body["param"].strip()
+        m = re.fullmatch(r"M106\s+P([23])\s+S(\d+(?:\.\d+)?)", script, re.I)
+        if m:
+            fan_name = "circulation_fan" if m.group(1) == "2" else "cavity_fan"
+            speed = max(0.0, min(1.0, float(m.group(2)) / 255.0))
+            out = {"kind": "set_generic_fan", "fan": fan_name, "speed": speed, "param": body["param"]}
+        else:
+            out = {"kind": "gcode", "script": body["param"]}   # MRA: Klipper runs it as given
     return {**(out or {"kind": "unsupported"}), "seq": seq}
 
 

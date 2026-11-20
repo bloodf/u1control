@@ -12,6 +12,92 @@ import json
 import re
 import urllib.parse
 
+import sys
+
+_CS_GROUPS = {
+    "web": "Web",
+    "camera": "Kamera",
+    "remote_access": "Vzdálený přístup",
+    "snapmaker_components": "Komponenty Snapmaker",
+    "print_preferences": "Předvolby tisku",
+    "tweaks": "Vyladění (Tweaks)",
+    "troubleshooting": "Řešení problémů",
+    "monitoring_debugging": "Monitoring a ladění",
+}
+
+_CS_ITEMS = {
+    "web-frontend": ("Webové rozhraní", "Volba mezi Fluidd a Mainsail jako webovým rozhraním."),
+    "firmware-config": ("Konfigurace firmwaru", "Povolit nebo zakázat toto webové konfigurační rozhraní."),
+    "remote-screen": ("Vzdálená obrazovka", "Streamovat dotykovou obrazovku tiskárny do prohlížeče."),
+    "camera-internal": ("Interní kamera", "Výběr ovladače pro vestavěnou MIPI kameru."),
+    "camera-internal-resolution": ("Rozlišení interní kamery", "Rozlišení a snímková frekvence vestavěné MIPI kamery. Rozlišení je vždy 1080p; snížit lze pouze snímkovou frekvenci."),
+    "camera-usb": ("USB kamera", "Povolit streamování z připojené USB kamery."),
+    "camera-rtsp": ("RTSP stream (pouze paxx12)", "Povolit výstup RTSP streamu pro interní kameru (pouze ovladač paxx12)."),
+    "ssh": ("SSH přístup", "Povolit vzdálený přístup do příkazové řádky tiskárny přes SSH."),
+    "authorization": ("Webové ověřování (experimentální)", "Chránit přístup do Fluidd a Konfigurace firmwaru heslem přes ověřování Moonrakeru."),
+    "vpn": ("VPN poskytovatel (experimentální)", "Připojit tiskárnu k VPN pro bezpečný vzdálený přístup odkudkoliv."),
+    "cloud": ("Cloudový přístup (experimentální)", "Povolit alternativní cloudový přístup mimo vaši síť."),
+    "rfid": ("Detekce filamentu", "Nastavení způsobu detekce filamentu."),
+    "firmware-upgrade-channel": ("Aktualizace firmwaru", "Povolit nebo zakázat aktualizace paxx12 firmwaru. Vyžaduje použití Snapmaker Cloudu."),
+    "afc": ("AFC Lite přes Fluidd/Mainsail", "Vícekanálová správa filamentů s makry CHANGE_TOOL a LANE_UNLOAD."),
+    "spoolman": ("Integrace Spoolman", "Sledování spotřeby filamentu a metadat pomocí správy cívek Spoolman."),
+    "chamber_heater": ("Vyhřívání komory PandaBreath / DragonBreath", "Integrace ohřívače komory a filtru vzduchu BIQU Panda Breath nebo otevřeného firmwaru DragonBreath na stejné desce."),
+    "filament_feeders": ("Podavače filamentu", "Výběr sestavy podavačů filamentu. Sestavy s delší dráhou k tiskové hlavě (např. BIQU PopStation mini) vyžadují delší délku zavedení než standardních 950 mm."),
+    "gui": ("Rozhraní dotykové obrazovky (experimentální)", "Výběr rozhraní zobrazovaného na vestavěné dotykové obrazovce tiskárny."),
+    "bed_leveling_force": ("Vynutit kalibraci sítě podložky", "Vynutí kalibraci sítě podložky (bed mesh) před každým tiskem."),
+    "object_processing": ("Zpracování objektů pro adaptivní síť", "Povolí zpracování objektů v Moonrakeru pro adaptivní síť. Doporučuje se raději zapnout Exclude Object přímo ve sliceru."),
+    "timelapse_force": ("Vynutit časosběr", "Vynutí časosběr bez ohledu na nastavení v aplikaci Snapmaker. Slicer musí volat TIMELAPSE_START, TIMELAPSE_TAKE_FRAME a TIMELAPSE_STOP."),
+    "max_speed": ("Maximální rychlost", "Experimentální. Zvyšuje limity pohybu XY a zrychluje výměny nástrojů. Zvyšuje opotřebení tiskárny a může způsobit problémy (např. přeskakování osy Z). Vyvážený režim je doporučený základ; vyžaduje zkalibrovanou tiskárnu."),
+    "tmc_autotune": ("TMC AutoTune", "Optimalizuje nastavení driverů TMC2240 pro tišší chod a lepší výkon."),
+    "tmc_reduce_current": ("Snížený proud TMC", "Snižuje proud motorů X/Y z 1,2 A na 1,0 A pro tišší chod a nižší zahřívání."),
+    "toolhead1": ("Tisková hlava 1", "Dočasné přemostění termistoru, ohřevu nebo MCU pro tiskovou hlavu 1."),
+    "toolhead2": ("Tisková hlava 2", "Dočasné přemostění termistoru, ohřevu nebo MCU pro tiskovou hlavu 2."),
+    "toolhead3": ("Tisková hlava 3", "Dočasné přemostění termistoru, ohřevu nebo MCU pro tiskovou hlavu 3."),
+    "toolhead4": ("Tisková hlava 4", "Dočasné přemostění termistoru, ohřevu nebo MCU pro tiskovou hlavu 4."),
+    "klipper-metrics": ("Export metrik Klipperu", "Exportuje metriky Klipperu pro sběr pomocí Promethea."),
+}
+
+_CS_OPTION_LABELS = {
+    "Enabled": "Povoleno",
+    "Disabled": "Zakázáno",
+    "None": "Žádný",
+    "Default": "Výchozí",
+    "Normal": "Normální",
+    "External": "Externí",
+    "OpenRFID (force generic vendor)": "OpenRFID (vynutit výrobce Generic)",
+    "Stable (recommended)": "Stabilní (doporučeno)",
+    "Testing (pre-releases)": "Testovací (předběžná vydání)",
+    "Develop (bleeding edge)": "Vývojová (bleeding edge)",
+    "Enabled (Force Generic Vendor)": "Povoleno (vynutit výrobce Generic)",
+    "Panda Breath (Manual mode)": "Panda Breath (manuální režim)",
+    "DragonBreath (Recommended)": "DragonBreath (doporučeno)",
+    "Force Full Mesh": "Vynutit plnou síť",
+    "Force Adaptive Mesh": "Vynutit adaptivní síť",
+    "Balanced": "Vyvážený",
+    "Aggressive": "Agresivní",
+    "Bypass Thermistor": "Přemostit termistor",
+    "Bypass MCU (Disconnected)": "Přemostit MCU (odpojeno)",
+}
+
+
+def _is_cs():
+    for name in ("plugin", "u1control.plugin"):
+        mod = sys.modules.get(name)
+        if mod is not None:
+            store = getattr(mod, "_store", None)
+            pref = store.effective().get("ui_language", "auto") if store is not None else "auto"
+            if pref == "cs":
+                return True
+            if pref != "auto":
+                return False
+            host = str(getattr(mod, "_host_lang", "") or "").lower()
+            if host.startswith("cs"):
+                return True
+            if host:
+                return False
+    return False
+
+
 from moonraker import PrinterError
 from i18n import tr
 
@@ -117,23 +203,30 @@ def _inputs(raw):
     return out
 
 
-def _option(value, raw):
+def _option(value, raw, cs=False):
     if not isinstance(raw, dict) or not VALUE_RE.match(str(value)):
         raise ValueError("option %r" % value)
     confirm = raw.get("confirm")
-    return {"value": str(value), "label": _text(raw.get("label")) or str(value),
+    label = _text(raw.get("label")) or str(value)
+    if cs:
+        label = _CS_OPTION_LABELS.get(label, label)
+    return {"value": str(value), "label": label,
             "confirm": confirm if isinstance(confirm, str) else ("" if not confirm else tr("Apply this change?")),
             "hidden": raw.get("hidden") is True, "inputs": _inputs(raw.get("inputs"))}
 
 
-def _item(raw):
+def _item(raw, cs=False):
     if not isinstance(raw, dict) or not SETTING_ID_RE.match(_text(raw.get("id"))) or not isinstance(raw.get("options"), dict):
         raise ValueError("setting")
     current = raw.get("current")
-    return {"id": raw["id"], "label": _text(raw.get("label")) or raw["id"], "description": _text(raw.get("description")),
+    label = _text(raw.get("label")) or raw["id"]
+    desc = _text(raw.get("description"))
+    if cs and raw["id"] in _CS_ITEMS:
+        label, desc = _CS_ITEMS[raw["id"]]
+    return {"id": raw["id"], "label": label, "description": desc,
             "help_url": _text(raw.get("help_url")), "current": "" if current is None else str(current),
             "hidden": raw.get("hidden") is True, "print_safe": raw["id"] in PRINT_SAFE,
-            "options": [_option(k, v) for k, v in raw["options"].items()]}
+            "options": [_option(k, v, cs) for k, v in raw["options"].items()]}
 
 
 def normalize_settings(data):
@@ -144,12 +237,16 @@ def normalize_settings(data):
     try:
         if not isinstance(data, dict):
             raise ValueError("top level")
+        cs = _is_cs()
         groups = []
         for gid, group in data.items():
             if not isinstance(group, dict) or not isinstance(group.get("items"), list):
                 raise ValueError("group %r" % gid)
-            groups.append({"id": str(gid), "label": _text(group.get("label")) or str(gid),
-                           "items": [_item(i) for i in group["items"]]})
+            glabel = _text(group.get("label")) or str(gid)
+            if cs and str(gid) in _CS_GROUPS:
+                glabel = _CS_GROUPS[str(gid)]
+            groups.append({"id": str(gid), "label": glabel,
+                           "items": [_item(i, cs) for i in group["items"]]})
         return groups
     except ValueError as e:
         raise PrinterError(tr("Firmware Config sent settings u1control can't read (%s)") % e) from e

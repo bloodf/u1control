@@ -75,7 +75,18 @@ STATUS_OBJECTS = {
     "purifier": None,
     "defect_detection": None,
     "led cavity_led": ["color_data"],
+    "temperature_sensor cavity": ["temperature"],
     "fan": ["speed"],
+    "fan_generic cavity_fan": ["speed"],
+    "fan_generic exhaust_fan": ["speed"],
+    "fan_generic circulation_fan": ["speed"],
+    "tmc2240 stepper_x": ["temperature"],
+    "tmc2240 stepper_y": ["temperature"],
+    "tmc2209 stepper_z": ["drv_status"],
+    "tmc2209 extruder": ["drv_status"],
+    "tmc2209 extruder1": ["drv_status"],
+    "tmc2209 extruder2": ["drv_status"],
+    "tmc2209 extruder3": ["drv_status"],
     "filament_detect": ["info", "state"],   # RFID: Snapmaker, OpenRFID, OpenSpool, external readers
     "filament_feed left": None,   # keyed extruderN: channel_state, filament_detected, ...
     "filament_feed right": None,
@@ -336,6 +347,17 @@ def purifier_command(mode, prefs=None):
     return re.sub(r"FAN_SPEED=[\d.]+", "FAN_SPEED=%.2f" % (max(0, min(100, pct)) / 100), cmd)
 
 
+def _tmc_state(obj):
+    ds = (obj or {}).get("drv_status")
+    if not isinstance(ds, dict):
+        return None
+    if ds.get("ot"):
+        return "OT"
+    if ds.get("otpw"):
+        return "OTPW"
+    return "OK"
+
+
 def summarize(status):
     """Compact state for the UI from a STATUS_OBJECTS query."""
     stats = status.get("print_stats") or {}
@@ -367,8 +389,25 @@ def summarize(status):
         "tuning": printer_tuning(task, status.get("defect_detection")),
         "light": bool(led[0][3]) if led and led[0] and len(led[0]) > 3 else None,
         "purifier": {"fitted": purifier.get("power_detected"), "mode": purifier.get("mode"),
-                     "recirculating": exhaust_blocked(purifier.get("mode"))},
+                     "recirculating": exhaust_blocked(purifier.get("mode")),
+                     "temp": (status.get("temperature_sensor cavity") or {}).get("temperature"),
+                     "cavity_speed": (status.get("fan_generic cavity_fan") or {}).get("speed"),
+                     "exhaust_speed": ((status.get("fan_generic exhaust_fan") or {}).get("speed")
+                                       if (status.get("fan_generic exhaust_fan") or {}).get("speed") is not None
+                                       else (purifier.get("exhaust_fan") or {}).get("speed")),
+                     "inner_speed": ((status.get("fan_generic circulation_fan") or {}).get("speed")
+                                     if (status.get("fan_generic circulation_fan") or {}).get("speed") is not None
+                                     else (purifier.get("inner_fan") or {}).get("speed"))},
         "fan": (status.get("fan") or {}).get("speed"),
+        "drivers": {
+            "x": (status.get("tmc2240 stepper_x") or {}).get("temperature"),
+            "y": (status.get("tmc2240 stepper_y") or {}).get("temperature"),
+            "z": _tmc_state(status.get("tmc2209 stepper_z")),
+            "e0": _tmc_state(status.get("tmc2209 extruder")),
+            "e1": _tmc_state(status.get("tmc2209 extruder1")),
+            "e2": _tmc_state(status.get("tmc2209 extruder2")),
+            "e3": _tmc_state(status.get("tmc2209 extruder3")),
+        },
         "feed": feed_states(status),
         "rfid": rfid_tags(status.get("filament_detect")),
         "machine_state": _main_state((status.get("machine_state_manager") or {}).get("main_state")),

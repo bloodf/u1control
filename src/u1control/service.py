@@ -707,6 +707,15 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         view = self._require_idle()
         return self._gcode(u1.cover_fan_command(fan, percent, (view.get("purifier") or {}).get("mode")))
 
+    def cmd_generic_fan(self, fan, percent):
+        """Set part cooling fan (M106) or a Klipper fan_generic (cavity_fan, circulation_fan, exhaust_fan)."""
+        pct = max(0, min(100, int(round(float(percent)))))
+        if fan == "fan":
+            return self._gcode("M106 S%d" % int(round(pct * 255 / 100)))
+        if fan in ("cavity_fan", "circulation_fan", "exhaust_fan"):
+            return self._gcode("SET_FAN_SPEED FAN=%s SPEED=%.2f" % (fan, pct / 100.0))
+        raise ValueError(tr("unknown fan %r") % (fan,))
+
     @staticmethod
     def _commands(client):
         """The printer's G-code command list; empty when it can't be read, so the extra options stay off."""

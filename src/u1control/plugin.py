@@ -10,6 +10,7 @@ import tempfile
 import threading
 import time
 import urllib.parse
+import urllib.request
 import weakref
 
 import orca
@@ -99,6 +100,182 @@ def use_language(cap=None):
     i18n.use(i18n.resolve(choice, _host_language()))
 
 
+
+_CHAMBER_WIDGET = """<style>
+#u1-cf-panel{margin-top:0}
+#u1-cf-panel .u1-cf-body{display:flex;flex-direction:column;gap:12px}
+#u1-cf-panel .u1-cf-sec{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;color:var(--oui-muted,#b2b3b5);margin:0 0 6px}
+#u1-cf-panel .u1-cf-tgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:6px 14px;font-variant-numeric:tabular-nums}
+#u1-cf-panel .u1-cf-titem{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:4px 8px;border-radius:4px;background:var(--oui-inset,rgba(0,0,0,.12));border:1px solid var(--oui-border,#4a4a51)}
+#u1-cf-panel .u1-cf-titem span:first-child{color:var(--oui-muted,#b2b3b5)}
+#u1-cf-panel .u1-cf-warn{color:var(--oui-danger,#ffaaa4);font-weight:600}
+#u1-cf-panel .u1-cf-fans{display:flex;flex-direction:column;gap:8px}
+#u1-cf-panel .u1-cf-row{display:grid;grid-template-columns:110px 1fr 44px;align-items:center;gap:10px}
+#u1-cf-panel .u1-cf-row input[type=range]{width:100%;accent-color:var(--oui-primary-mark,#009688);cursor:pointer}
+#u1-cf-panel .u1-cf-val{text-align:right;font-variant-numeric:tabular-nums;color:var(--oui-muted,#b2b3b5)}
+#u1-cf-panel .u1-cf-temp{color:var(--oui-primary-text,#5eead4);font-weight:600;font-variant-numeric:tabular-nums;margin-left:auto}
+</style>
+<script>
+(function(){
+  const L = {
+    en: {title:"Temperatures & Fans", secTemps:"Temperatures", cavity:"Chamber", bed:"Bed", secDrivers:"Motors / Drivers (TMC)", dx:"Motor X", dy:"Motor Y", dz:"Driver Z", secFans:"Fans", fanPart:"Part", fanChamber:"Chamber", fanCirc:"Circulation", fanExhaust:"Exhaust"},
+    cs: {title:"Teploty & Ventilátory", secTemps:"Teploty", cavity:"Komora", bed:"Podložka", secDrivers:"Motory / Drivery (TMC)", dx:"Motor X", dy:"Motor Y", dz:"Driver Z", secFans:"Ventilátory", fanPart:"Ofuk (Díly)", fanChamber:"Komora", fanCirc:"Cirkulace", fanExhaust:"Odtah"},
+    "pt-BR": {title:"Temperaturas e Ventoinhas", secTemps:"Temperaturas", cavity:"Câmara", bed:"Mesa", secDrivers:"Motores / Drivers (TMC)", dx:"Motor X", dy:"Motor Y", dz:"Driver Z", secFans:"Ventoinhas", fanPart:"Peça", fanChamber:"Câmara", fanCirc:"Circulação", fanExhaust:"Exaustão"},
+    es: {title:"Temperaturas y Ventiladores", secTemps:"Temperaturas", cavity:"Cámara", bed:"Cama", secDrivers:"Motores / Drivers (TMC)", dx:"Motor X", dy:"Motor Y", dz:"Driver Z", secFans:"Ventiladores", fanPart:"Capa", fanChamber:"Cámara", fanCirc:"Circulación", fanExhaust:"Extracción"},
+    de: {title:"Temperaturen & Lüfter", secTemps:"Temperaturen", cavity:"Kammer", bed:"Bett", secDrivers:"Motoren / Treiber (TMC)", dx:"Motor X", dy:"Motor Y", dz:"Treiber Z", secFans:"Lüfter", fanPart:"Bauteil", fanChamber:"Kammer", fanCirc:"Umluft", fanExhaust:"Abluft"},
+    "zh-CN": {title:"温度与风扇", secTemps:"温度", cavity:"腔室", bed:"热床", secDrivers:"电机 / 驱动 (TMC)", dx:"X 电机", dy:"Y 电机", dz:"Z 驱动", secFans:"风扇", fanPart:"模型散热", fanChamber:"腔室", fanCirc:"内循环", fanExhaust:"排风"},
+    pl: {title:"Temperatury i Wentylatory", secTemps:"Temperatury", cavity:"Komora", bed:"Stół", secDrivers:"Silniki / Sterowniki (TMC)", dx:"Silnik X", dy:"Silnik Y", dz:"Sterownik Z", secFans:"Wentylatory", fanPart:"Wydruk", fanChamber:"Komora", fanCirc:"Cyrkulacja", fanExhaust:"Wyciąg"}
+  };
+
+  const panel = document.createElement("section");
+  panel.className = "oui-panel";
+  panel.id = "u1-cf-panel";
+  panel.innerHTML = `
+    <header class="oui-panel-head">
+      <h2 class="oui-panel-title"><span data-i18n="title">Temperatures &amp; Fans</span></h2>
+      <span class="u1-cf-temp" id="u1-cf-temp">– °C</span>
+    </header>
+    <div class="oui-panel-body u1-cf-body">
+      <div>
+        <p class="u1-cf-sec" data-i18n="secTemps">Temperatures</p>
+        <div class="u1-cf-tgrid">
+          <div class="u1-cf-titem"><span data-i18n="cavity">Chamber</span><span data-t="cavity">–</span></div>
+          <div class="u1-cf-titem"><span data-i18n="bed">Bed</span><span data-t="bed">–</span></div>
+          <div class="u1-cf-titem"><span>T1</span><span data-t="t0">–</span></div>
+          <div class="u1-cf-titem"><span>T2</span><span data-t="t1">–</span></div>
+          <div class="u1-cf-titem"><span>T3</span><span data-t="t2">–</span></div>
+          <div class="u1-cf-titem"><span>T4</span><span data-t="t3">–</span></div>
+        </div>
+      </div>
+      <div>
+        <p class="u1-cf-sec" data-i18n="secDrivers">Motors / Drivers (TMC)</p>
+        <div class="u1-cf-tgrid">
+          <div class="u1-cf-titem"><span data-i18n="dx">Motor X</span><span data-t="dx">–</span></div>
+          <div class="u1-cf-titem"><span data-i18n="dy">Motor Y</span><span data-t="dy">–</span></div>
+          <div class="u1-cf-titem"><span data-i18n="dz">Driver Z</span><span data-t="dz">–</span></div>
+          <div class="u1-cf-titem"><span>E0–E3</span><span data-t="de">–</span></div>
+        </div>
+      </div>
+      <div>
+        <p class="u1-cf-sec" data-i18n="secFans">Fans</p>
+        <div class="u1-cf-fans">
+          <div class="u1-cf-row"><span data-i18n="fanPart">Part</span><input type="range" min="0" max="100" step="5" data-fan="fan" value="0"><span class="u1-cf-val" data-val="fan">0 %</span></div>
+          <div class="u1-cf-row"><span data-i18n="fanChamber">Chamber</span><input type="range" min="0" max="100" step="5" data-fan="cavity_fan" value="0"><span class="u1-cf-val" data-val="cavity_fan">0 %</span></div>
+          <div class="u1-cf-row"><span data-i18n="fanCirc">Circulation</span><input type="range" min="0" max="100" step="5" data-fan="circulation_fan" value="0"><span class="u1-cf-val" data-val="circulation_fan">0 %</span></div>
+          <div class="u1-cf-row"><span data-i18n="fanExhaust">Exhaust</span><input type="range" min="0" max="100" step="5" data-fan="exhaust_fan" value="0"><span class="u1-cf-val" data-val="exhaust_fan">0 %</span></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  const tempEl = panel.querySelector("#u1-cf-temp");
+  const dragging = new Set();
+  let lastStatus = null;
+
+  function applyLang(code) {
+    const c = (code || document.documentElement.lang || "en").trim();
+    const dict = L[c] || L[c.split("-")[0]] || L.en;
+    panel.querySelectorAll("[data-i18n]").forEach(el => {
+      const k = el.dataset.i18n;
+      if (dict[k]) el.textContent = dict[k];
+    });
+  }
+
+  const setT = (key, text, warn=false) => {
+    const el = panel.querySelector(`[data-t="${key}"]`);
+    if (!el) return;
+    el.textContent = text;
+    el.classList.toggle("u1-cf-warn", warn);
+  };
+  const fmtPair = (cur, tgt) => {
+    if (typeof cur !== "number") return "–";
+    return Math.round(cur) + (typeof tgt === "number" && tgt > 0 ? "/" + Math.round(tgt) : "") + " °C";
+  };
+  const setFan = (fan, pct) => {
+    if (window.orca && orca.postMessage) {
+      orca.postMessage({type:"cmd", id:"cf-"+Date.now(), cmd:"generic_fan", args:{fan, percent:Number(pct)}});
+    }
+  };
+
+  panel.querySelectorAll("input[data-fan]").forEach(inp => {
+    const f = inp.dataset.fan;
+    const valEl = panel.querySelector(`[data-val="${f}"]`);
+    inp.addEventListener("pointerdown", () => dragging.add(f));
+    inp.addEventListener("pointerup", () => dragging.delete(f));
+    inp.addEventListener("input", () => { if (valEl) valEl.textContent = inp.value + " %"; });
+    inp.addEventListener("change", () => { dragging.delete(f); setFan(f, inp.value); });
+  });
+
+  function updateFromStatus(d) {
+    if (!d || d.type !== "status" || !d.data) return;
+    lastStatus = d;
+    const s = d.data, p = s.purifier || {}, drv = s.drivers || {};
+    if (typeof p.temp === "number") {
+      const txt = p.temp.toFixed(1) + " °C";
+      tempEl.textContent = txt;
+      setT("cavity", txt);
+    }
+    if (s.bed) setT("bed", fmtPair(s.bed.temp, s.bed.target));
+    if (Array.isArray(s.extruders)) {
+      s.extruders.slice(0, 4).forEach((e, i) => setT("t" + i, fmtPair(e.temp, e.target)));
+    }
+    setT("dx", typeof drv.x === "number" ? drv.x.toFixed(1) + " °C" : "–", typeof drv.x === "number" && drv.x >= 80);
+    setT("dy", typeof drv.y === "number" ? drv.y.toFixed(1) + " °C" : "–", typeof drv.y === "number" && drv.y >= 80);
+    setT("dz", drv.z || "–", drv.z === "OT" || drv.z === "OTPW");
+    const exts = [drv.e0, drv.e1, drv.e2, drv.e3];
+    if (exts.some(v => v === "OT" || v === "OTPW")) {
+      const bad = exts.map((v, i) => (v === "OT" || v === "OTPW") ? `E${i}:${v}` : "").filter(Boolean).join(" ");
+      setT("de", bad, true);
+    } else if (exts.some(v => v === "OK")) {
+      setT("de", "OK", false);
+    } else {
+      setT("de", "–", false);
+    }
+    const map = {fan: s.fan, cavity_fan: p.cavity_speed, circulation_fan: p.inner_speed, exhaust_fan: p.exhaust_speed};
+    for (const [k, v] of Object.entries(map)) {
+      if (typeof v !== "number" || dragging.has(k)) continue;
+      const pct = Math.round(Math.max(0, Math.min(1, v)) * 100);
+      const inp = panel.querySelector(`input[data-fan="${k}"]`);
+      const valEl = panel.querySelector(`[data-val="${k}"]`);
+      if (inp) inp.value = pct;
+      if (valEl) valEl.textContent = pct + " %";
+    }
+  }
+
+  function mountPanel() {
+    const ctrl = document.querySelector('section.oui-panel[aria-labelledby="bed-h"]');
+    if (ctrl) {
+      if (ctrl.nextElementSibling !== panel) {
+        ctrl.insertAdjacentElement("afterend", panel);
+        applyLang(document.documentElement.lang);
+        if (lastStatus) updateFromStatus(lastStatus);
+      }
+    } else if (panel.parentNode) {
+      panel.remove();
+    }
+  }
+
+  applyLang(document.documentElement.lang);
+  window.addEventListener("u1-lang", e => applyLang(e.detail));
+  new MutationObserver(() => applyLang(document.documentElement.lang))
+    .observe(document.documentElement, {attributes: true, attributeFilter: ["lang"]});
+  new MutationObserver(mountPanel).observe(document.body, {childList: true, subtree: true});
+  mountPanel();
+
+  function hook() {
+    if (!window.orca || !orca.onMessage) { setTimeout(hook, 200); return; }
+    const orig = orca.onMessage.bind(orca);
+    orca.onMessage = function(cb) {
+      return orig(function(msg) {
+        try { updateFromStatus(msg); } catch (e) {}
+        return cb(msg);
+      });
+    };
+  }
+  hook();
+})();
+</script>"""
+
 def page_html(mode, data=None, language="auto"):
     """The one compiled Vue page (ui/ -> src/u1control/ui/app.html) with its boot payload: the tab ("app") or the
     U1 print setup window ("setup", with the job data). `language`: the user's explicit choice, "auto" otherwise."""
@@ -106,17 +283,20 @@ def page_html(mode, data=None, language="auto"):
             "pref": language if language in settings.UI_LANGUAGES else "auto"}
     if data is not None:
         boot["data"] = data
-    return _asset("app.html").replace("__BOOT__", json_for_html(boot), 1)
+    html = _asset("app.html").replace("__BOOT__", json_for_html(boot), 1)
+    if mode == "app" and "</body>" in html:
+        html = html.replace("</body>", _CHAMBER_WIDGET + "</body>", 1)
+    return html
 
 
 def log(msg):
-    # Logging must never raise: a Windows console (cp1252) cannot encode characters such as "\u2192".
+    # OrcaSlicer tees stderr into log/python_*.log; never raise on console encoding.
     line = "[u1control] " + str(msg)
     try:
-        print(line)
+        print(line, file=sys.stderr, flush=True)
     except UnicodeEncodeError:
-        enc = getattr(sys.stdout, "encoding", None) or "ascii"
-        print(line.encode(enc, "replace").decode(enc))
+        enc = getattr(sys.stderr, "encoding", None) or "ascii"
+        print(line.encode(enc, "replace").decode(enc), file=sys.stderr, flush=True)
 
 
 _storage_dir = None
@@ -1058,6 +1238,7 @@ class U1Agent(pa.PrinterAgentBase):
         self._links = ([], {})               # (spools, {toolhead: spool id}) the agent read from Spoolman itself
         self._links_busy = threading.Lock()
         self.base = ""
+        self.camera_url = ""
         self._wake = threading.Event()
         self._stop = threading.Event()
         self._commands = queue.Queue()   # Device tab commands, run in order by one worker (_command_worker)
@@ -1113,13 +1294,27 @@ class U1Agent(pa.PrinterAgentBase):
     def _message(self, payload):
         self._emit("local_message", self._dev_id(), json.dumps(payload))
 
+    def _preset_host(self):
+        try:
+            bundle = orca.host.preset_bundle()
+            preset = bundle.current_printer_preset()
+            val = clean(preset.config_value("print_host")) or clean(bundle.full_config_value("print_host"))
+            return host_of(val)
+        except Exception:
+            return ""
+
     # discovery and selection ---------------------------------------------------------------------------
     def start_discovery(self, start, sending):
-        if start and self.host:   # the configured printer only, never a network scan (MRA announce_printhost_device)
-            self._emit("ssdp", json.dumps({
-                "dev_name": "Snapmaker U1", "dev_id": self.dev_id or self.host, "dev_ip": self.host,
-                "dev_type": "Snapmaker U1", "dev_signal": "0", "connect_type": "lan", "bind_state": "free",
-                "sec_link": "secure", "ssdp_version": "v1"}))
+        if start:   # the configured printer only, never a network scan (MRA announce_printhost_device)
+            host = self.host or self._preset_host()
+            if host:
+                dev_id = self.dev_id or host
+                if not self.selected:
+                    self.selected = dev_id
+                self._emit("ssdp", json.dumps({
+                    "dev_name": "Snapmaker U1", "dev_id": dev_id, "dev_ip": host,
+                    "dev_type": "797581801", "dev_signal": "0", "connect_type": "lan", "bind_state": "free",
+                    "sec_link": "secure", "ssdp_version": "v1"}))
         return True
 
     def get_user_selected_machine(self):
@@ -1131,7 +1326,8 @@ class U1Agent(pa.PrinterAgentBase):
 
     def bind_detect(self, dev_ip, sec_link, detect):
         detect.dev_id = self.dev_id if self.host and self.host == host_of(dev_ip) else dev_ip
-        detect.dev_name = detect.model_id = "Snapmaker U1"
+        detect.dev_name = "Snapmaker U1"
+        detect.model_id = "797581801"
         detect.version = self.firmware
         detect.connect_type, detect.bind_state = "lan", "free"
         return OK
@@ -1278,7 +1474,10 @@ class U1Agent(pa.PrinterAgentBase):
                     self.view = view
                 if not connected:
                     connected = True   # MRA perform_connection_async: ConnectStatusOk, then printer_connected
+                    if not self.camera_url:
+                        self.camera_url = self._fetch_camera_url()
                     dev_id = self._dev_id()
+                    self.start_discovery(True, False)
                     self._emit("local_connect", 0, dev_id, "0")
                     self._emit("printer_connected", dev_id)
                 self._message(agent.push_status(view, self._preferred()))
@@ -1355,6 +1554,16 @@ class U1Agent(pa.PrinterAgentBase):
                 client.cancel()
             elif kind == "set_light":
                 client.gcode(agent.LIGHT_ON if command["on"] else agent.LIGHT_OFF)
+            elif kind == "set_bed_temp":
+                client.gcode("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=%s" % command["temp"])
+            elif kind == "set_nozzle_temp":
+                idx = int(command.get("extruder_index") or 0)
+                heater = "extruder" if idx == 0 else "extruder%d" % idx
+                client.gcode("SET_HEATER_TEMPERATURE HEATER=%s TARGET=%s" % (heater, command["target_temp"]))
+            elif kind == "home":
+                client.gcode("G28")
+            elif kind == "set_generic_fan":
+                client.gcode("SET_FAN_SPEED FAN=%s SPEED=%.2f" % (command["fan"], command["speed"]))
             elif kind == "gcode":
                 client.gcode(command["script"], timeout=DEVICE_GCODE_TIMEOUT)
             ok = True
@@ -1362,6 +1571,8 @@ class U1Agent(pa.PrinterAgentBase):
             log("agent: Device tab %s failed: %s" % (kind, e))
         if kind == "gcode":
             self._message(agent.gcode_reply(command["seq"], command["script"], ok))
+        elif kind == "set_generic_fan":
+            self._message(agent.gcode_reply(command["seq"], command.get("param", ""), ok))
         self._wake.set()
 
     # jobs (OrcaSlicer's job threads: blocking is fine) ---------------------------------------------------------
@@ -1503,13 +1714,61 @@ class U1Agent(pa.PrinterAgentBase):
     def unbind(self, dev_id): return OK
     def request_bind_ticket(self): return (OK, "")
 
+    # camera -------------------------------------------------------------------------------------------------
+    def _fetch_camera_url(self):
+        with self._lock:
+            base, key, host = self.base, self.api_key, self.host
+        if not base:
+            return ""
+        try:
+            headers = {"X-Api-Key": key} if key else {}
+            req = urllib.request.Request(base.rstrip("/") + "/server/webcams/list", headers=headers)
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                data = json.loads(resp.read().decode("utf-8", errors="replace"))
+            webcams = (data.get("result", data) if isinstance(data, dict) else {}).get("webcams", [])
+        except Exception as e:
+            log("agent: webcam list not read (%s)" % e)
+            return ""
+        for cam in webcams:
+            if not isinstance(cam, dict):
+                continue
+            url = cam.get("snapshot_url") or ""
+            if cam.get("enabled", True) and url and cam.get("service") != "iframe":
+                if "://" not in url:
+                    parsed = urllib.parse.urlsplit(base)
+                    scheme = parsed.scheme or "http"
+                    hostname = parsed.hostname or _hostname(host)
+                    url = "%s://%s/%s" % (scheme, hostname, url.lstrip("/"))
+                log("agent: camera url=%s" % url)
+                return url
+        return ""
+
+    def get_camera_stream_mode(self):
+        return pa.CameraStreamMode.HTTP_SNAPSHOT if self.camera_url else pa.CameraStreamMode.None_
+
+    def get_camera_url(self):
+        return self.camera_url
+
     # filaments ----------------------------------------------------------------------------------------------
     def get_filament_sync_mode(self):
-        return pa.FilamentSyncMode.Subscription
+        return pa.FilamentSyncMode.Pull
 
     def fetch_filament_info(self, dev_id, sync_mode=None):
-        self._wake.set()   # the next push carries the toolheads
-        return True
+        with self._lock:
+            client = self.client
+        if client is None:
+            return False
+        try:
+            view = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS)), timeout=10)
+            with self._lock:
+                self.view = view
+            self._message(agent.push_status(view, self._preferred()))
+            self._wake.set()
+            return True
+        except Exception as e:
+            log("agent: filament sync failed (%s)" % e)
+            self._wake.set()
+            return False
 
 
 NO_ADDRESS = "no U1 address set: set the printer preset's host to the U1's IP"
