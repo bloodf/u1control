@@ -120,6 +120,18 @@ class DomainTests(unittest.TestCase):
         self.assertFalse(u1.machine_busy({"state": "complete", "machine_state": "IDLE"}))
 
 
+    def test_park_command_names_each_toolhead(self):
+        self.assertEqual([u1.park_command(h) for h in range(4)],
+                         ["PARK_EXTRUDER", "PARK_EXTRUDER1", "PARK_EXTRUDER2", "PARK_EXTRUDER3"])
+
+    def test_summary_says_which_head_is_on_the_carriage(self):
+        status = {"toolhead": {"extruder": "extruder1"}, "extruder": {"state": "PARKED"},
+                  "extruder1": {"state": "ACTIVATE"}, "extruder2": {"state": "UNKNOWN"}, "extruder3": {}}
+        heads = u1.summarize(status)["extruders"]
+        self.assertEqual([h["picked"] for h in heads], [False, True, False, False])
+        self.assertEqual([h["active"] for h in heads], [False, True, False, False])
+
+
 class RfidTests(unittest.TestCase):
     def test_parse(self):
         info = [
