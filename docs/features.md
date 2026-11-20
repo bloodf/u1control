@@ -166,7 +166,13 @@ On every U1 slice u1control also fixes the G-code. Each fix can be turned off in
     name, the date and the size. **Save** copies the video to `Downloads/u1control` on your computer;
     **Delete** asks first, then removes the video and its cover pictures from the printer. Both work
     while the U1 prints.
-- **Console:** send G-code and see the printer's replies; `M112` runs the E-stop.
+- **Console:** a Dashboard widget (no tab of its own): send G-code and see the printer's replies; `M112` runs the E-stop.
+- **Layout:** **Edit layout** on the Dashboard arranges its widgets (status, toolheads, controls,
+  temperatures and fans, camera, printer screen, console, files shortcut) on a grid: drag to move,
+  drag an edge or corner to resize, remove, add from the list, and each widget's settings. Arrow keys
+  move a focused widget and Shift with the arrows resizes it. Named layouts can be created, switched,
+  renamed, deleted and reset to the default; they are kept in U1 Control's settings. Maximise shows the
+  camera, the screen or the console alone. A narrow window shows the widgets in one column.
 - **Settings:** Automagic or Expert, **Requirements** (OrcaSlicer's printer agents, the Extended
   Firmware and Spoolman: whether each is there, what needs it and how to get it; what needs a missing one
   stays off and says why), Spoolman, the printer's print options, bed mesh, input shaper

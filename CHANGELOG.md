@@ -4,12 +4,16 @@
 
 ### Added
 
+- **Your own dashboard.** **Edit layout** on the Dashboard: drag a widget to move it, drag its edges or corners to resize it (it snaps to the grid and keeps a sensible least size), remove it, or add one from the list of every widget: Status, Toolheads, Controls, Temperatures & fans, Camera, Printer screen, G-code console and a Files shortcut. Widgets with settings have a gear: the camera's picture shape, how many console lines are kept, which temperatures show. The keyboard works too: arrow keys move a widget, Shift and the arrow keys resize it, Delete removes it. **Save layout** keeps it. Make named layouts, switch between them, rename, delete or reset one to the default. They are saved in U1 Control's settings, so they come back after a restart. Each widget fits its content to its size: the camera keeps its shape, a taller console shows more lines, a small temperatures widget is compact. The camera, the screen and the console can be maximised. A narrow window shows the widgets in one column.
+
 - Czech translation (thanks @Veisen, from #72). The tab, the U1 print setup window and the messages in OrcaSlicer's Print dialog follow an OrcaSlicer set to Czech (cs_CZ), or pick **Čeština** under **Settings > Language**. Counts use Czech plural forms (1 video, 3 videa, 5 videí).
 - **Park** on the toolhead card of the head that is on the carriage puts it back in its dock (`PARK_EXTRUDER`, `PARK_EXTRUDER1`..`3`), for example after a manual bed mesh left it picked up. It asks first, is hidden while a print runs and, like Load and Unload, waits until the U1 is idle. The plugin checks the head is still on the carriage right before sending, so a card that is out of date can't make the printer home for nothing.
 - **Temperatures & fans** on the Dashboard (thanks @Veisen, from #72): the chamber temperature, each stepper driver (temperature of the X and Y drivers, and OK, **Hot (warning)** or **Overheated** for every driver, a dash while its motor is off), and the speed of every fan: part cooling, auxiliary, and the top cover's exhaust and recirculation fans. The part cooling and auxiliary fans can be set there, only while the U1 is idle; the top-cover fans stay in **Controls**.
 
 ### Changed
 
+- The G-code console is now a Dashboard widget, part of the default layout, instead of a tab of its own.
+- Shared UI 5.4.0 (the dashboard grid).
 - A toolhead whose filament was unloaded but whose spool still sits in the feeder (feeder state `preload_finish`) now says **Not in the head** instead of looking loaded, and the feeder line reads in words (in the head, at the inlet, waiting for filament, unloaded) instead of the raw firmware state.
 
 ### Fixed
