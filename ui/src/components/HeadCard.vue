@@ -4,9 +4,9 @@ import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { OuiHint, OuiIcon, OuiLevel, OuiSlot, OuiSpool, OuiStatus } from '../../shared/src/components';
-import { download, edit as editIcon, rfid as rfidIcon, upload } from '../../shared/src/icons';
+import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload } from '../../shared/src/icons';
 import HeaterControl from './HeaterControl.vue';
-import { s, run, tracker, controlsOff, loadSpools, guidedWhy } from '../app/store';
+import { s, run, tracker, busy, controlsOff, loadSpools, guidedWhy } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, fmt, tMaybe } from '../core/i18n';
 import { family } from '../core/logic';
@@ -14,7 +14,7 @@ import { headFraction, levelTone, spoolFraction } from '../core/spool-level';
 import type { Spool, Tag } from '../app/types';
 
 // One toolhead as a neutral card: a 4 px strip of its filament's colour, the spool, what is left of the linked
-// Spoolman spool, the spool chooser, its nozzle heater, and Load / Unload / Edit / Read RFID.
+// Spoolman spool, the spool chooser, its nozzle heater, and Load / Unload / Park (when picked up) / Edit / Read RFID.
 const props = defineProps<{ index: number }>();
 const i = props.index, n = i + 1;
 const TYPES = ['PLA', 'PLA+', 'PLA-CF', 'PETG', 'PETG-CF', 'PCTG', 'ABS', 'ASA', 'TPU', 'PA', 'PA-CF', 'PC', 'PVA', 'HIPS'];
@@ -27,6 +27,8 @@ const active = computed(() => !!s.status?.extruders[i]?.active);
 // inlet (preload_finish, e.g. after Unload): the RFID tag and filament_exist stay set either way.
 const notInHead = computed(() => !!head.value?.loaded && ['preload_finish', 'wait_insert', 'unload_finish'].includes(feed.value.state || ''));
 const feedText = computed(() => (feed.value.state ? tMaybe(`heads.feedState.${feed.value.state}`, feed.value.state) : '—'));
+// On the carriage (park detector ACTIVATE): offer Park, e.g. after a manual bed mesh left the head picked up.
+const picked = computed(() => !!s.status?.extruders[i]?.picked);
 const tagged = computed(() => !!(head.value?.official || tag.value));
 const tagText = computed(() => {
   const g = tag.value;
@@ -45,6 +47,10 @@ async function load() {
 async function unload() {
   if (!await ask({ title: t('act.unload', { n }), text: t('confirm.unload.text', { n }), yes: t('confirm.unload.yes', { n }), no: t('common.goBack') })) return;
   await run({ key: `unload:${i}`, label: t('act.unload', { n }), cmd: 'unload', args: { head: i }, okText: t('ok.unload', { n }), timeoutMs: 120000 });
+}
+async function park() {
+  if (!await ask({ title: t('act.park', { n }), text: t('confirm.park.text', { n }), yes: t('confirm.park.yes', { n }), no: t('common.goBack') })) return;
+  await run({ key: `park:${i}`, label: t('act.park', { n }), cmd: 'park', args: { head: i }, okText: t('ok.park', { n }), timeoutMs: 120000 });
 }
 const rfid = () => run({ key: `rfid:${i}`, label: t('act.rfid', { n }), cmd: 'reread_rfid', args: { head: i }, okText: t('ok.rfid', { n }) });
 
@@ -144,7 +150,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
     </template>
     <HeaterControl :id="String(i)" card />
     <template v-if="!editing">
-      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected"> · {{ t('heads.atInlet') }}</template></p>
+      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && feed.state !== 'preload_finish'"> · {{ t('heads.atInlet') }}</template></p>
     </template>
     <form v-else :id="`hc-form-${i}`" class="hc-form" @submit.prevent="saveEdit">
       <p class="oui-strong hc-form-title">{{ t('edit.title', { n }) }}<OuiHint v-if="tagged" :label="t('heads.tag')" :text="t('edit.rfidNote')" /></p>
@@ -165,6 +171,8 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
               :loading="tracker.isBusy(`load:${i}`)" :data-focus-key="`load:${i}`" :data-load="i" @click="load"><template #icon><OuiIcon :icon="download" :size="14" /></template></Button>
       <Button size="small" severity="secondary" :label="t('heads.unload')" :aria-label="t('heads.unloadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`unload:${i}`)" :aria-describedby="why"
               :loading="tracker.isBusy(`unload:${i}`)" :data-focus-key="`unload:${i}`" :data-unload="i" @click="unload"><template #icon><OuiIcon :icon="upload" :size="14" /></template></Button>
+      <Button v-if="picked && !busy" size="small" severity="secondary" :label="t('heads.park')" :aria-label="t('heads.parkLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`park:${i}`)" :aria-describedby="why"
+              :loading="tracker.isBusy(`park:${i}`)" :data-focus-key="`park:${i}`" :data-park="i" @click="park"><template #icon><OuiIcon :icon="parkIcon" :size="14" /></template></Button>
       <span class="oui-spacer" />
       <Button size="small" severity="secondary" text :aria-label="t('heads.editLabel', { n })" :title="t('heads.editLabel', { n })" :disabled="!!guidedWhy" :aria-describedby="why"
               :data-focus-key="`edit:${i}`" :data-edit="i" @click="startEdit"><template #icon><OuiIcon :icon="editIcon" :size="14" /></template></Button>

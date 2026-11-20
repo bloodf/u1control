@@ -346,7 +346,9 @@ def summarize(status):
     temps = []
     for i, name in enumerate(EXTRUDERS):
         e = status.get(name) or {}
-        temps.append({"temp": e.get("temperature"), "target": e.get("target"), "active": name == active})
+        # "state" is the park detector: ACTIVATE = on the carriage, PARKED = in its dock (park_detector.py)
+        temps.append({"temp": e.get("temperature"), "target": e.get("target"), "active": name == active,
+                      "picked": e.get("state") == "ACTIVATE"})
     purifier = status.get("purifier") or {}
     return {
         "state": stats.get("state") or (status.get("webhooks") or {}).get("state", "unknown"),
@@ -422,6 +424,12 @@ def load_command(head):
 
 def unload_command(head):
     return "AUTO_FEEDING EXTRUDER=%d UNLOAD=1" % int(head)
+
+
+def park_command(head):
+    """Put a picked-up toolhead back in its dock: PARK_<extruder name> (extruder.py registers PARK_EXTRUDER,
+    PARK_EXTRUDER1..3; it homes first if needed)."""
+    return "PARK_" + EXTRUDERS[int(head)].upper()
 
 
 def is_busy(state):

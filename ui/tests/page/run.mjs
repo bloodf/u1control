@@ -151,12 +151,31 @@ test('editing a tagged head asks before FORCE', `
 
 test('feeder: a spool unloaded from the head but still in the feeder says so', `
   await connect();
-  await post({type: 'status', data: VIEW({feed: [{state: 'preload_finish', detected: true}, {state: 'load_finish', detected: true}, {}, {}]})});
+  await post({type: 'status', data: VIEW({feed: [{state: 'preload_finish', detected: true}, {state: 'load_finish', detected: true}, {state: 'wait_insert'}, {}]})});
   await until(() => q('[data-not-in-head="0"]'), 'T1 says it is not in the head');
-  eq(qa('[data-not-in-head]').length, 1, 'only T1');
-  const cards = qa('.hc');
-  assert(text(cards[0]).includes('at the inlet, not in the head'), 'feeder line in words: ' + text(cards[0]));
-  assert(text(cards[1]).includes('in the head') && !text(cards[1]).includes('load_finish'), 'no raw state for T2');
+  eq(qa('[data-not-in-head]').map(e => e.dataset.notInHead), ['0', '2'], 'T1 and T3, not T2');
+  const meta = qa('.hc').map(c => qa('.oui-meta', c).map(text).find(x => x.startsWith('Feeder')));
+  eq(meta[0], 'Feeder: at the inlet, not in the head', 'feeder line in words, no repeated inlet note');
+  eq(meta[1], 'Feeder: in the head · filament at inlet', 'no raw state for T2');
+  eq(meta[2], 'Feeder: waiting for filament', 'T3 waits for filament');
+`);
+
+test('park: only the head on the carriage offers Park, and it asks first', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  eq(qa('[data-park]').length, 0, 'no Park while every head is in its dock');
+  await post({type: 'status', data: VIEW({extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1, picked: i === 1}))})});
+  await until(() => q('[data-park="1"]'), 'Park on the picked-up head');
+  eq(qa('[data-park]').length, 1, 'only that head');
+  await click(q('[data-park="1"]'));
+  assert(dialogOpen(), 'asks before moving the head');
+  await no();
+  eq(cmds('park'), [], 'cancel sends nothing');
+  await click(q('[data-park="1"]'));
+  await yes();
+  eq(cmds('park')[0].args.head, 1, 'parks T2');
+  await post({type: 'status', data: VIEW({busy: true, state: 'printing', extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1, picked: i === 1}))})});
+  await until(() => !q('[data-park]'), 'no Park while printing');
 `);
 
 test('busy machine disables guided commands; unload-when-done is read-only; E-stop stays', `
