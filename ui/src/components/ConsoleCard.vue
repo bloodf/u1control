@@ -1,8 +1,15 @@
+<script lang="ts">
+import { ref } from 'vue';
+// The log outlives the widget (removed and added again, another layout): it is the page's, not the card's.
+export interface Line { id: number; text: string; kind: 'in' | 'out' | 'err' }
+const lines = ref<Line[]>([]);
+let next = 0;
+</script>
 <script setup lang="ts">
-import { nextTick, ref } from 'vue';
+import { nextTick, watch } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
-import { OuiHint, OuiIcon, OuiPageHeader, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { OuiIcon, OuiPanel, OuiWidgetMaximize } from '@orca-plugins/ui-foundation/src/components';
 import { terminal } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, targetKnown, printerName } from '../app/store';
@@ -10,18 +17,19 @@ import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
 import { message } from '../core/tracker';
 
-// The log is a list of entries (role=log, append-only), capped like the previous page's 20 000 characters.
-interface Line { id: number; text: string; kind: 'in' | 'out' | 'err' }
-const MAX_LINES = 400;
+// The G-code console, a dashboard widget: the command line over the log (role=log, append-only). The log takes the rest
+// of the widget's height, so a taller widget shows more lines; `lines` (its setting) is how many it keeps.
+const props = withDefaults(defineProps<{ config?: { lines?: number } }>(), { config: () => ({}) });
 const cmd = ref('');
-const lines = ref<Line[]>([]);
 const sending = ref(false);
 const box = ref<HTMLElement | null>(null);
-let next = 0;
+const keep = () => props.config.lines ?? 400;
+watch(keep, n => { lines.value = lines.value.slice(-n); });
 function out(text: string, kind: Line['kind'] = 'out') {
-  lines.value = [...lines.value, { id: ++next, text, kind }].slice(-MAX_LINES);
+  lines.value = [...lines.value, { id: ++next, text, kind }].slice(-keep());
   void nextTick(() => { if (box.value) box.value.scrollTop = box.value.scrollHeight; });
 }
+function clear() { lines.value = []; }
 async function send() {
   const c = cmd.value.trim();
   if (!c || sending.value) return;
@@ -49,20 +57,18 @@ async function send() {
 }
 </script>
 <template>
-  <div class="u1-head">
-    <OuiPageHeader :title="t('console.title')" :meta="targetKnown ? printerName : t('console.noTarget')">
-      <template #actions><OuiHint id="console-help" end :label="t('console.title')" :text="t('console.help')" /></template>
-    </OuiPageHeader>
-    <div id="u1-banner-console" />
-  </div>
-  <OuiPanel :aria-label="t('console.title')">
-    <div class="oui-stack">
-      <form class="oui-row" @submit.prevent="send">
+  <OuiPanel :icon="terminal" aria-labelledby="console-h" :meta="targetKnown ? printerName : t('console.noTarget')" :hint="t('console.help')" hint-id="console-help" :hint-label="t('console.title')" data-test="console">
+    <template #title><span id="console-h">{{ t('console.title') }}</span></template>
+    <template #actions>
+      <Button severity="secondary" text size="small" :label="t('console.clear')" :disabled="!lines.length" data-test="console-clear" @click="clear" />
+      <OuiWidgetMaximize />
+    </template>
+    <div class="cv">
+      <form class="oui-row cv-form" @submit.prevent="send">
         <InputText id="console-cmd" v-model="cmd" class="cv-in oui-mono" :aria-label="t('console.title')" aria-describedby="console-help" :placeholder="t('console.placeholder')" :disabled="!targetKnown" />
         <Button type="submit" :label="t('console.send')" :disabled="!targetKnown || !cmd.trim()" :loading="sending"><template #icon><OuiIcon :icon="terminal" :size="14" /></template></Button>
-        <Button severity="secondary" text :label="t('console.clear')" :disabled="!lines.length" @click="lines = []" />
       </form>
-      <div ref="box" class="cv-log oui-well" role="log" aria-live="polite" :aria-label="t('console.log')" tabindex="0">
+      <div ref="box" class="cv-log oui-well" role="log" aria-live="polite" :aria-label="t('console.log')" tabindex="0" data-test="console-log">
         <p v-if="!lines.length" class="oui-muted">{{ t('console.empty') }}</p>
         <div v-for="l in lines" :key="l.id" :class="['cv-line', l.kind]">{{ l.text }}</div>
       </div>
@@ -70,8 +76,12 @@ async function send() {
   </OuiPanel>
 </template>
 <style>
-.cv-in { flex: 1 1 280px; min-width: 0; }
-.cv-log { min-height: 160px; max-height: 420px; overflow: auto; padding: var(--oui-s3); font-family: var(--oui-mono); font-size: var(--oui-text-sm); line-height: 1.5; box-shadow: inset 0 0 0 1px var(--oui-border); }
+/* The log fills what the widget leaves under the command line; in the narrow single column it has its own height. */
+.cv { display: flex; flex-direction: column; gap: var(--oui-s3); height: 100%; min-height: 0; }
+.cv-form { flex: none; }
+.cv-in { flex: 1 1 200px; min-width: 0; }
+.cv-log { flex: 1 1 0; min-height: 96px; overflow: auto; padding: var(--oui-s2) var(--oui-s3); font-family: var(--oui-mono); font-size: var(--oui-text-sm); line-height: 1.5; box-shadow: inset 0 0 0 1px var(--oui-border); }
+.oui-dash-grid[data-narrow] .cv-log { flex: none; height: 240px; }
 .cv-line { white-space: pre-wrap; overflow-wrap: anywhere; }
 .cv-line.in { font-weight: 700; }
 .cv-line.err { color: var(--oui-danger); }

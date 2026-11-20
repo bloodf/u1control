@@ -377,6 +377,8 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                 use_language(self)
             elif kind == "camera_fps":    # the camera card's frame rate; an invalid value keeps the stored one
                 svc.set_camera_fps(self._settings().update({"camera_fps": data.get("value")})["camera_fps"])
+            elif kind == "dashboard":   # the Dashboard's layouts, saved by the page; an invalid value keeps the stored one
+                self._settings().update({"dashboard": data.get("value")})
             elif kind == "spoolman_refresh":   # Settings: how often the page re-reads Spoolman; invalid keeps the stored one
                 self._settings().update({"spoolman_refresh_s": data.get("value")})
                 self.post_message(self._config_message())

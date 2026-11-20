@@ -3,10 +3,11 @@ Free of the `orca` module."""
 
 import re
 
-MAX_SEGMENTS = 4000   # ~108 KB of JSON at most: layers are sampled to stay under it. The print setup page
-                      # already carries ~1.36 MB (seven languages) and has to stay under plugin.SETUP_PAGE_LIMIT with the preview, or
-                      # the preview is left out; OrcaSlicer's WebView2 on Windows leaves a much bigger page blank.
-                      # The preview is drawn 160 px wide: 4000 segments are still more than it can show.
+MAX_SEGMENTS = 1600   # ~40 KB of JSON at most: layers are sampled to stay under it. The print setup page
+                      # already carries ~1.40 MB (seven languages, the dashboard grid) and has to stay under
+                      # plugin.SETUP_PAGE_LIMIT with the preview, or the preview is left out; OrcaSlicer's WebView2 on
+                      # Windows leaves a much bigger page blank. The preview is drawn 160 px wide: 1600 segments are
+                      # still more than it can show.
 MOVE_RE = re.compile(r"^G[0-3](?:\s|$)")
 WORD_RE = re.compile(r"([XYE])(-?\d*\.?\d+)")
 TOOL_RE = re.compile(r"^T(\d+)\s*(?:;.*)?$")

@@ -42,7 +42,8 @@ AUTOMATIONS = [
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
 EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "ui_language": "auto", "camera_fps": 5,
          "network_origins": [],   # scheme://host of printers and Spoolman used: the network grants asked for at load
-         "spoolman_refresh_s": 30}   # the page re-reads Spoolman this often while it shows (0 = off; 10-300)
+         "spoolman_refresh_s": 30,
+         "dashboard": {}}   # the Dashboard's layouts (clean_dashboard); {} = the page's default   # the page re-reads Spoolman this often while it shows (0 = off; 10-300)
 UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl", "cs")   # "auto": OrcaSlicer's language, then the system's
 CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
 REFRESH_RANGE = (10, 300)      # spoolman_refresh_s: 0 (off) or seconds in this range
@@ -50,6 +51,41 @@ REFRESH_RANGE = (10, 300)      # spoolman_refresh_s: 0 (off) or seconds in this 
 
 def valid_refresh(value):
     return type(value) is int and (value == 0 or REFRESH_RANGE[0] <= value <= REFRESH_RANGE[1])
+
+
+DASHBOARD_MAX_BYTES = 32_000   # the page's dashboard layouts (settings "dashboard"), serialized
+
+
+def clean_dashboard(value):
+    """The page's dashboard layouts as stored: {"v": 1, "active": n, "layouts": [{"name", "items": [{"id", "x", "y",
+    "w", "h", "cfg"}]}]}. The shape and the size only: the page itself drops widgets it does not know and brings sizes
+    within each widget's limits. None when the value is not a dashboard (the stored one is kept)."""
+    if not isinstance(value, dict) or value.get("v") != 1:
+        return None
+    layouts = value.get("layouts")
+    if not isinstance(layouts, list) or not 1 <= len(layouts) <= 12:
+        return None
+    out = []
+    for layout in layouts:
+        if not isinstance(layout, dict) or not isinstance(layout.get("name"), str) or not isinstance(layout.get("items"), list) \
+                or len(layout["items"]) > 40:
+            return None
+        items = []
+        for it in layout["items"]:
+            if not isinstance(it, dict) or not isinstance(it.get("id"), str) or not 0 < len(it["id"]) <= 40 \
+                    or not all(type(it.get(k)) is int and 0 <= it[k] <= 200 for k in ("x", "y", "w", "h")):
+                return None
+            item = {k: it[k] for k in ("id", "x", "y", "w", "h")}
+            cfg = it.get("cfg")
+            if cfg is not None:
+                if not isinstance(cfg, dict) or not all(isinstance(k, str) and type(v) in (str, int, float, bool) for k, v in cfg.items()):
+                    return None
+                item["cfg"] = dict(cfg)
+            items.append(item)
+        out.append({"name": layout["name"][:40], "items": items})
+    active = value.get("active")
+    clean = {"v": 1, "active": active if type(active) is int and 0 <= active < len(out) else 0, "layouts": out}
+    return clean if len(json.dumps(clean)) <= DASHBOARD_MAX_BYTES else None
 
 
 def automagic_values():
@@ -135,6 +171,10 @@ class Store:
                 elif key == "spoolman_refresh_s":
                     if valid_refresh(value):
                         data[key] = value
+                elif key == "dashboard":
+                    clean = clean_dashboard(value)
+                    if clean is not None:
+                        data[key] = clean
                 elif key in CONNECTION or key in EXTRA:
                     default = {**CONNECTION, **EXTRA}[key]
                     if type(value) is type(default):

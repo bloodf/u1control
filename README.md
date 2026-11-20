@@ -83,7 +83,8 @@ From a file:
 | Spoolman | A spool list with colour, brand, material and grams left. Filament use is recorded once per print: by U1 Control on the stock firmware, by the printer on the Extended Firmware ([what is covered](docs/spooler-contract.md#filament-use)). |
 | Remote Screen | With the Extended Firmware, the printer's touchscreen is on the Dashboard, live, and you can tap it. |
 | Power-loss recovery | Resume or discard a print interrupted by a power cut, and see the printer's error list. |
-| Console | Send G-code and read the printer's replies. `M112` runs the emergency stop. |
+| Console | A Dashboard widget: send G-code and read the printer's replies. `M112` runs the emergency stop. |
+| Your dashboard | **Edit layout** on the Dashboard: drag widgets to move them, drag their edges or corners to resize them, remove them, add them from the list, and set the ones that have settings (camera shape, console lines, which readings show). Keep several named layouts and switch between them. Layouts are saved in U1 Control's settings. |
 | Settings | Bed mesh, input shaper and flow calibration, the Extended Firmware's settings, restart Klipper, restart Moonraker and reboot. |
 | Plugins > Run | **Check U1 connection**, **Sync U1 toolheads to project filaments** and **Apply Snapmaker Orca U1 process tuning**. |
 | Spooler | With [Spooler](https://github.com/bloodf/spooler) installed, each toolhead gets Spooler's filament profile and the **Stock** tab lists Spooler's stock. |

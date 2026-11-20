@@ -3,7 +3,7 @@
   "version": "0.15.2",
   "private": true,
   "type": "module",
-  "description": "U1 Control pages (Vue 3 + PrimeVue 5, shared Orca UI foundation 5.3.0), built into one offline HTML file",
+  "description": "U1 Control pages (Vue 3 + PrimeVue 5, shared Orca UI foundation 5.4.0), built into one offline HTML file",
   "scripts": {
     "typecheck": "node node_modules/@orca-plugins/ui-foundation/scripts/vue-tsc.mjs --noEmit",
     "build": "node node_modules/@orca-plugins/ui-foundation/scripts/vue-tsc.mjs --noEmit && vite build && node scripts/emit.mjs",
@@ -12,7 +12,7 @@
     "test": "npm run test:unit && npm run test:page"
   },
   "dependencies": {
-    "@orca-plugins/ui-foundation": "github:bloodf/orca-ui-foundation#v5.3.0",
+    "@orca-plugins/ui-foundation": "github:bloodf/orca-ui-foundation#v5.4.0",
     "@primeuix/themes": "3.1.1",
     "primevue": "5.0.5",
     "vue": "3.5.46"

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import Button from 'primevue/button';
-import { OuiEmpty, OuiIcon, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { OuiEmpty, OuiIcon, OuiPanel, OuiWidgetMaximize } from '@orca-plugins/ui-foundation/src/components';
 import { hand, x } from '@orca-plugins/ui-foundation/src/icons';
 import { s, lease, run } from '../app/store';
 import { t } from '../core/i18n';
@@ -25,6 +25,7 @@ function tap(e: MouseEvent) {
     <template #actions>
       <Button severity="secondary" size="small" :label="s.scrOn && !off ? t('scr.hide') : t('scr.show')" :disabled="!!off" data-focus-key="screen" data-test="screen-show" @click="toggle">
         <template #icon><OuiIcon :icon="s.scrOn && !off ? x : hand" :size="14" /></template></Button>
+      <OuiWidgetMaximize />
     </template>
     <OuiEmpty v-if="!s.scrOn || off" compact :icon="hand" :title="t('scr.off')" :text="off || undefined" data-test="screen-card" />
     <div v-else class="u1-view-screen" :role="s.screen ? undefined : 'status'">
@@ -37,5 +38,7 @@ function tap(e: MouseEvent) {
 /* The touchscreen's own 1024 x 600, on the neutral track every picture sits on. The picture is fitted, never cropped: a
    click is mapped back to the screen's pixels. */
 .u1-view-screen { display: grid; place-items: center; overflow: hidden; aspect-ratio: 1024 / 600; background: var(--oui-inset); border-radius: 0 0 var(--oui-radius-lg) var(--oui-radius-lg); }
+/* On the dashboard grid the screen fits the widget both ways and keeps its 1024 x 600. */
+.oui-dash-grid:not([data-narrow]) .u1-view-screen { width: min(100%, 100cqh * 1024 / 600); margin-inline: auto; border-radius: 0; }
 .u1-view-screen img { width: 100%; height: 100%; object-fit: contain; cursor: pointer; }
 </style>

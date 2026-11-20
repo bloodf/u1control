@@ -83,7 +83,8 @@ A partir de um arquivo:
 | Spoolman | Uma lista de bobinas com cor, marca, material e gramas restantes. O consumo de filamento é registrado uma vez por impressão: pelo U1 Control no firmware original, pela impressora no Extended Firmware ([o que é coberto](docs/spooler-contract.md#filament-use)). |
 | Tela remota | Com o Extended Firmware, a tela da impressora fica no Painel, ao vivo, e você pode tocar nela. |
 | Recuperação após queda de energia | Retome ou descarte uma impressão interrompida por falta de energia e veja a lista de erros da impressora. |
-| Console | Envie G-code e leia as respostas da impressora. `M112` aciona a parada de emergência. |
+| Console | Um widget do Painel: envie G-code e leia as respostas da impressora. `M112` aciona a parada de emergência. |
+| Seu painel | **Editar layout** no Painel: arraste widgets para movê-los, arraste bordas ou cantos para redimensionar, remova, adicione da lista e ajuste os que têm configurações (formato da câmera, linhas do console, leituras mostradas). Guarde vários layouts com nome e alterne entre eles. Os layouts ficam salvos nas configurações do U1 Control. |
 | Ajustes | Malha da mesa, input shaper e calibração de fluxo, os ajustes do Extended Firmware, reiniciar o Klipper, reiniciar o Moonraker e reiniciar a impressora. |
 | Plugins > Run | **Check U1 connection**, **Sync U1 toolheads to project filaments** e **Apply Snapmaker Orca U1 process tuning**. |
 | Spooler | Com o [Spooler](https://github.com/bloodf/spooler) instalado, cada cabeça recebe o perfil de filamento do Spooler e a aba **Estoque** lista o estoque do Spooler. |
