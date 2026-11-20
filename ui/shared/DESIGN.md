@@ -229,7 +229,7 @@ One surface, three panes: the folder tree, the open folder as a table, and what 
 - **Detail**: one file selected shows its picture, name, facts and the page's actions for it (Print is the page's primary); several show the count and their names; none says so in one line. It scrolls when it is taller than the browser.
 - **Order**: by name unless the page asks otherwise (`sort`); a printer's own list usually opens newest first.
 - **Focus**: after a delete or a move it stays in the list, on the first row.
-- Under 980 px the detail goes under the table; under 620 px the tree goes above it.
+- Under 980 px the detail goes under the table; under 620 px the tree goes above it. Stacked, the detail and the tree get a share of the height at most and scroll inside it, so the table always keeps room for its rows.
 
 One component, the same in U1 Control and Kobra Control. The storage is behind an adapter (`OuiFileBackend`: `folders()`, `list(folder)`, `remove(ids)`, `move(ids, to)`), and `useFileBackend(adapter)` gives the component its state and handlers, so reading, failing, retrying and re-reading after a change behave the same in both. What the storage cannot do is left out of the adapter and the page stops offering it, with no hole where it was:
 

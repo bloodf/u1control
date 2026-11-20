@@ -1,4 +1,14 @@
-# Orca UI foundation 5.0.6 — Vue and PrimeVue
+# Orca UI foundation 5.0.7 — Vue and PrimeVue
+
+Version 5.0.7 fixes `OuiFileBrowser` in narrow windows; nothing else changes:
+
+- Stacked (the browser narrower than 980 px), the detail pane sat under the table in a row as tall as its content and took the height first: with a tall detail the table was left one row, or none. The detail now gets at most 40 % of the height (30 % when the tree is stacked above as well, which gets at most 26 %) and scrolls inside it; the table keeps the rest.
+- A toolbar that wrapped to two lines was cut off by the rows below it. The toolbar, the selection bar and the foot keep their height; only the rows give way.
+- With no folders, the `#toolbar` slot sat at the right end of the bar. It is now as wide as the bar and starts at its left; a page spreads its items with `.oui-spacer`.
+
+To update from 5.0.6, replace `ui/shared/` with the 5.0.7 snapshot and rebuild. Remove any plugin rule on `.oui-files-grid`'s rows or on `.oui-files-tools`.
+
+## 5.0.6
 
 Version 5.0.6 fixes what the U1 Control migration found in `OuiSetpoint` and the file browser. Nothing is removed.
 

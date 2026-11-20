@@ -1,6 +1,6 @@
 # Migrating a plugin to Orca UI foundation 5.0
 
-Current release: **5.0.6** (5.0.5 with `OuiSetpoint` safe to type in while the printer's status ticks, decimals, `locale`, `inputProps` and accessible names on it, and the file browser keeping focus after a slow delete, see README; 5.0.5 was 5.0.4 with a state chip kept whole in a narrow `OuiPanel` header, see README; 5.0.4 was 5.0.3 with `OuiPanel`'s header wrapping inside its panel in narrow places, see README; 5.0.3 was 5.0.2 with what the Kobra and U1 migrations found: file browser fixes, a `#folder` slot, `sort` and read-only folders; opt-in `inputId`, `error`, `validate` and `offAlways` on `OuiSetpoint`; `frame`, `fit` and `#picture` on `OuiCamera`; `hintId` on `OuiPanel`; see README; 5.0.2 was 5.0.1 with `OuiHint` fixed: a closed bubble takes no room and an open one stays inside the window, see README; 5.0.1 was 5.0.0 plus the file backend adapter: `useFileBackend`, and `OuiFileBrowser` for storages with no folders or no move). Nothing 5.0.0 pages rely on changes.
+Current release: **5.0.7** (5.0.6 with `OuiFileBrowser` keeping room for its table when the detail is stacked under it, and its `#toolbar` slot spanning the bar when there are no folders, see README; 5.0.6 was 5.0.5 with `OuiSetpoint` safe to type in while the printer's status ticks, decimals, `locale`, `inputProps` and accessible names on it, and the file browser keeping focus after a slow delete, see README; 5.0.5 was 5.0.4 with a state chip kept whole in a narrow `OuiPanel` header, see README; 5.0.4 was 5.0.3 with `OuiPanel`'s header wrapping inside its panel in narrow places, see README; 5.0.3 was 5.0.2 with what the Kobra and U1 migrations found: file browser fixes, a `#folder` slot, `sort` and read-only folders; opt-in `inputId`, `error`, `validate` and `offAlways` on `OuiSetpoint`; `frame`, `fit` and `#picture` on `OuiCamera`; `hintId` on `OuiPanel`; see README; 5.0.2 was 5.0.1 with `OuiHint` fixed: a closed bubble takes no room and an open one stays inside the window, see README; 5.0.1 was 5.0.0 plus the file backend adapter: `useFileBackend`, and `OuiFileBrowser` for storages with no folders or no move). Nothing 5.0.0 pages rely on changes.
 
 For the agent rolling 5.0 out to one plugin. `DESIGN.md` is the specification (what a page should look like and why); this file is the procedure. The reference screen for each page is in `ui-foundation/gallery/screens/` and its screenshots in `ui-foundation/evidence-5.0.0/after/`: build the plugin's page until it matches its reference, with the plugin's real data.
 
@@ -223,7 +223,8 @@ What the component offers follows from the adapter, with nothing to configure:
 - A page may change the listed files in place, for example to fill in `thumb` as thumbnails arrive: `files.files` is writable and reactive, rows keep `[data-file="<id>"]`, and the selection is kept as long as the ids stay. `files.reload({ quiet: true })` reads again without the skeleton rows.
 - `sort`: the order the list opens in, `{ key: 'name' | 'size' | 'modified', down?: boolean }`. The default is by name; a list that should read newest first passes `{ key: 'modified', down: true }`. The user can still sort by any column.
 - The last column is 168 px: enough for a short date and time ("11/18/26, 7:15 PM", "18/11/2026, 19:15"). Do not put more than that in `modifiedText`.
-- The detail pane scrolls when a file's facts and actions are taller than the browser; a long `#actions` slot is fine.
+- The detail pane scrolls when a file's facts and actions are taller than the browser; a long `#actions` slot is fine. Under 980 px, where it sits under the table, it gets at most 40 % of the height (5.0.7): do not set the grid's rows from the plugin.
+- With no folders, `#toolbar` is the whole bar, from its left: put `<span class="oui-spacer" />` between the items that should sit at each end. Do not style `.oui-files-tools`.
 - After a delete or a move, focus stays in the list. Do not move focus yourself.
 - `readonly` while the printer cannot take file changes (printing): the bulk actions are disabled and point at the page's banner with `describedby`.
 - Set its height: `--oui-files-height` on a parent (the reference uses the window less the bars above). Without it the component is as tall as its content, at least 360 px.
@@ -260,7 +261,7 @@ Built size of each shared component (`node scripts/sizes.mjs`): one minified bui
 | OuiConfirm | 2.1 | 1.0 | 1.7 | 0.8 |
 | OuiControlRow | 3.6 | 1.4 | new | new |
 | OuiEmpty | 5.1 | 1.9 | 5.2 | 1.9 |
-| OuiFileBrowser | 36.6 | 10.1 | new | new |
+| OuiFileBrowser | 36.8 | 10.1 | new | new |
 | useFileBackend | 1.9 | 0.8 | new | new |
 | OuiFormRow | 2.0 | 0.9 | 2.0 | 0.9 |
 | OuiFormSection | 8.6 | 3.0 | 5.8 | 1.9 |
@@ -284,7 +285,7 @@ Built size of each shared component (`node scripts/sizes.mjs`): one minified bui
 | OuiToastHost | 8.1 | 3.0 | 8.1 | 3.1 |
 | OuiToolbar | 1.2 | 0.6 | 1.2 | 0.6 |
 
-What a 4.2.2 page gains by updating: `OuiPanel` now carries `OuiHint` (about 2.5 kB raw, once per page). A printer plugin that adopts the Files tab adds `OuiFileBrowser` and `useFileBackend`, 38.5 kB raw together, including `OuiConfirm`, `OuiEmpty`, `OuiKeyValue`, `OuiThumb` and `OuiIcon`, which those pages already have; it uses PrimeVue's Button, Select and Dialog, which they also already import. `OuiSpool` and `OuiSlot` are the eight spool renders (about 72 kB), unchanged. Measure the plugin's real page against its limit (90 % of 1,572,864 bytes) after migrating; these figures are not a substitute.
+What a 4.2.2 page gains by updating: `OuiPanel` now carries `OuiHint` (about 2.5 kB raw, once per page). A printer plugin that adopts the Files tab adds `OuiFileBrowser` and `useFileBackend`, 38.7 kB raw together, including `OuiConfirm`, `OuiEmpty`, `OuiKeyValue`, `OuiThumb` and `OuiIcon`, which those pages already have; it uses PrimeVue's Button, Select and Dialog, which they also already import. `OuiSpool` and `OuiSlot` are the eight spool renders (about 72 kB), unchanged. Measure the plugin's real page against its limit (90 % of 1,572,864 bytes) after migrating; these figures are not a substitute.
 
 ## 8. Known limits
 
