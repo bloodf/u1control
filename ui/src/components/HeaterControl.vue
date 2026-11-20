@@ -2,8 +2,8 @@
 import { computed, ref } from 'vue';
 import Button from 'primevue/button';
 import InputNumber from 'primevue/inputnumber';
-import { OuiIcon, OuiSpark, type OuiTone } from '../../shared/src/components';
-import { bed as bedIcon, nozzle } from '../../shared/src/icons';
+import { OuiIcon, OuiSpark, type OuiTone } from '@orca-plugins/ui-foundation/src/components';
+import { bed as bedIcon, nozzle } from '@orca-plugins/ui-foundation/src/icons';
 import { s, run, tracker, controlsOff, printing, printerName, stale } from '../app/store';
 import { ask } from '../core/dialog';
 import { locale, t, fmt } from '../core/i18n';

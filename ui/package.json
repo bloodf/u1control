@@ -3,19 +3,19 @@
   "version": "0.15.2",
   "private": true,
   "type": "module",
-  "description": "U1 Control pages (Vue 3 + PrimeVue 5, shared Orca UI foundation 5.0.7), built into one offline HTML file",
+  "description": "U1 Control pages (Vue 3 + PrimeVue 5, shared Orca UI foundation 5.0.8), built into one offline HTML file",
   "scripts": {
-    "check:shared": "node shared/scripts/check.mjs",
-    "typecheck": "node shared/scripts/vue-tsc.mjs --noEmit",
-    "build": "node shared/scripts/check.mjs && node shared/scripts/vue-tsc.mjs --noEmit && vite build && node scripts/emit.mjs",
-    "test:unit": "node --test tests/unit/*.test.ts",
+    "typecheck": "node node_modules/@orca-plugins/ui-foundation/scripts/vue-tsc.mjs --noEmit",
+    "build": "node node_modules/@orca-plugins/ui-foundation/scripts/vue-tsc.mjs --noEmit && vite build && node scripts/emit.mjs",
+    "test:unit": "node --import ./tests/unit/foundation-ts.mjs --test tests/unit/*.test.ts",
     "test:page": "node tests/page/run.mjs",
     "test": "npm run test:unit && npm run test:page"
   },
   "dependencies": {
+    "@orca-plugins/ui-foundation": "github:bloodf/orca-ui-foundation#v5.0.8",
     "@primeuix/themes": "3.1.1",
     "primevue": "5.0.5",
-    "vue": "3.5.45"
+    "vue": "3.5.46"
   },
   "devDependencies": {
     "@typescript/typescript6": "6.0.2",

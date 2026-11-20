@@ -4,8 +4,8 @@
 // The spool stock is its own tab (StockView).
 import { computed } from 'vue';
 import Button from 'primevue/button';
-import { OuiBanner, OuiEmpty, OuiHint, OuiIcon, OuiPageHeader, OuiPanel } from '../../shared/src/components';
-import { check, play, refresh, settings, trash, zap } from '../../shared/src/icons';
+import { OuiBanner, OuiEmpty, OuiHint, OuiIcon, OuiPageHeader, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { check, play, refresh, settings, trash, zap } from '@orca-plugins/ui-foundation/src/icons';
 import JobCard from './JobCard.vue';
 import ControlsCard from './ControlsCard.vue';
 import CameraCard from './CameraCard.vue';

@@ -1,5 +1,5 @@
 import { markRaw, reactive } from 'vue';
-import { dismissToast, showToast, type OuiToastTone } from '../../shared/src/components/toast.ts';
+import { dismissToast, showToast, type OuiToastTone } from '@orca-plugins/ui-foundation/src/components/toast.ts';
 
 // Every printer command goes through one tracker: one in flight per action key (double clicks send once), a
 // visible "waiting" state, a UI timeout that reports an UNKNOWN outcome (never success, never an automatic retry)

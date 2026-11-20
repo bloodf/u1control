@@ -33,7 +33,7 @@ class PageLogic(unittest.TestCase):
         if not NODE:
             self.fail("Node.js is needed: put node on PATH or set NODE")
         files = sorted(os.path.join(UNIT, f) for f in os.listdir(UNIT) if f.endswith(".test.ts"))
-        proc = subprocess.run([NODE, "--test", *files], capture_output=True, text=True, timeout=120, cwd=os.path.join(ROOT, "ui"))
+        proc = subprocess.run([NODE, "--import", "./tests/unit/foundation-ts.mjs", "--test", *files], capture_output=True, text=True, timeout=120, cwd=os.path.join(ROOT, "ui"))
         self.assertEqual(proc.returncode, 0, proc.stdout[-4000:] + proc.stderr[-2000:])
 
     def test_setup_warnings_match_the_plugin(self):

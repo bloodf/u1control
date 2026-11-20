@@ -6,8 +6,8 @@
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
-import { OuiFileBrowser, OuiHint, OuiIcon, useFileBackend, type OuiFile, type OuiFileBackend, type OuiFileBrowserLabels } from '../../shared/src/components';
-import { download as downloadIcon, edit, move as moveIcon, plus, printer, trash } from '../../shared/src/icons';
+import { OuiFileBrowser, OuiHint, OuiIcon, useFileBackend, type OuiFile, type OuiFileBackend, type OuiFileBrowserLabels } from '@orca-plugins/ui-foundation/src/components';
+import { download as downloadIcon, edit, move as moveIcon, plus, printer, trash } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, printerName } from '../app/store';
 import { newFolder, watchThumb } from '../app/thumbs';

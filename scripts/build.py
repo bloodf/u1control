@@ -78,7 +78,7 @@ def dist_info(project, files):
     meta[di + "licenses/LICENSE"] = (ROOT / "LICENSE").read_bytes()
     # the Dashboard's printer photo is Snapmaker's product image: its credit travels too
     meta[di + "licenses/NOTICE.md"] = (ROOT / "NOTICE.md").read_bytes()
-    for lic in sorted((ROOT / "ui" / "shared" / "licenses").glob("*.txt")):
+    for lic in sorted((ROOT / "ui" / "node_modules" / "@orca-plugins" / "ui-foundation" / "licenses").glob("*.txt")):
         meta[di + "licenses/" + lic.name] = lic.read_bytes()
     record = []
     for path, data in {**files, **meta}.items():

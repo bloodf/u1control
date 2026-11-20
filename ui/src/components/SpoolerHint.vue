@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { OuiBanner } from '../../shared/src/components';
-import { spoolman } from '../../shared/src/icons';
+import { OuiBanner } from '@orca-plugins/ui-foundation/src/components';
+import { spoolman } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { config } from '../app/settings';
 import { t } from '../core/i18n';

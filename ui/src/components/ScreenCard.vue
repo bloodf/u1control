@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import Button from 'primevue/button';
-import { OuiEmpty, OuiIcon, OuiPanel } from '../../shared/src/components';
-import { hand, x } from '../../shared/src/icons';
+import { OuiEmpty, OuiIcon, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { hand, x } from '@orca-plugins/ui-foundation/src/icons';
 import { s, lease, run } from '../app/store';
 import { t } from '../core/i18n';
 

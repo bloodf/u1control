@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { nextTick, ref, watch } from 'vue';
 import Button from 'primevue/button';
-import { OuiEmpty, OuiIcon, OuiPanel } from '../../shared/src/components';
-import { download as downloadIcon, refresh, trash, video } from '../../shared/src/icons';
+import { OuiEmpty, OuiIcon, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { download as downloadIcon, refresh, trash, video } from '@orca-plugins/ui-foundation/src/icons';
 import TimelapseCover from './TimelapseCover.vue';
 import * as bridge from '../core/bridge';
 import { s, run, tracker, targetKnown } from '../app/store';

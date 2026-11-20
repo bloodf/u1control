@@ -2,8 +2,8 @@
 import { computed, ref } from 'vue';
 import Button from 'primevue/button';
 import Select from 'primevue/select';
-import { OuiCamera, OuiIcon, OuiPanel } from '../../shared/src/components';
-import { camera, cameraOff, download } from '../../shared/src/icons';
+import { OuiCamera, OuiIcon, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { camera, cameraOff, download } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { s, lease, run, tracker, targetKnown, printerName } from '../app/store';
 import { t } from '../core/i18n';

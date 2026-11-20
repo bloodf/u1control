@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import Button from 'primevue/button';
-import { OuiEmpty, OuiIcon, OuiJob, OuiPanel, OuiReadout, OuiStatus, type OuiState } from '../../shared/src/components';
-import { calendar, clock, hourglass, pause as pauseIcon, play, x } from '../../shared/src/icons';
+import { OuiEmpty, OuiIcon, OuiJob, OuiPanel, OuiReadout, OuiStatus, type OuiState } from '@orca-plugins/ui-foundation/src/components';
+import { calendar, clock, hourglass, pause as pauseIcon, play, x } from '@orca-plugins/ui-foundation/src/icons';
 import PrinterFigure from './PrinterFigure.vue';
 import { s, run, tracker, controlsOff, printing, printerName, stale } from '../app/store';
 import { ask } from '../core/dialog';

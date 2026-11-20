@@ -71,12 +71,13 @@ jobs:
         env:
           CHROME: ${{ steps.chrome.outputs.chrome-path }}
         run: bash scripts/ci_chrome_sandbox.sh
-      - name: Build the plugin
-        run: python scripts/build.py
-      # ui/tests/unit imports vue from ui/node_modules (node --test runs the TypeScript sources).
+      # ui/tests/unit imports vue and the shared foundation from ui/node_modules (node --test runs the TypeScript sources).
       - name: Install page dependencies
         working-directory: ui
         run: npm ci --ignore-scripts
+      # The wheel takes the bundled licence texts from ui/node_modules/@orca-plugins/ui-foundation/licenses.
+      - name: Build the plugin
+        run: python scripts/build.py
       - name: Unit tests
         env:
           SPOOLER_SRC: ${{ github.workspace }}/spooler

@@ -3,7 +3,7 @@
 import { test, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { Tracker, split } from '../../src/core/tracker.ts';
-import { clearToasts, toastList } from '../../shared/src/components/toast.ts';
+import { clearToasts, toastList } from '@orca-plugins/ui-foundation/src/components/toast.ts';
 
 function setup() {
   let now = 0;

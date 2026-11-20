@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
-import { OuiEmpty, OuiPanel } from '../../shared/src/components';
-import { toolhead } from '../../shared/src/icons';
+import { OuiEmpty, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { toolhead } from '@orca-plugins/ui-foundation/src/icons';
 import HeadCard from './HeadCard.vue';
 import { s } from '../app/store';
 import { t } from '../core/i18n';

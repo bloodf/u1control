@@ -2,8 +2,8 @@
 import { nextTick, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
-import { OuiHint, OuiIcon, OuiPageHeader, OuiPanel } from '../../shared/src/components';
-import { terminal } from '../../shared/src/icons';
+import { OuiHint, OuiIcon, OuiPageHeader, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
+import { terminal } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { s, run, targetKnown, printerName } from '../app/store';
 import { ask } from '../core/dialog';
