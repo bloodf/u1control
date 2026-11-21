@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- A job from OrcaSlicer goes to the U1 it names (the print's printer address, as OrcaSlicer's **Multi-device** tab sends it), not to the U1 the agent is connected to; the connected U1 still gets the jobs that name it.
 - **Multi-colour spools show every colour.** A toolhead loaded with a multi-colour spool set up on the printer (`filament_color_multi`) showed only its first colour. Its card's strip and spool, the Stock tab, the printer photo and the print setup now show all of them, side by side, and OrcaSlicer's filament sync receives them too.
 - **A loaded spool nobody has named is no longer called empty.** A toolhead whose spool has no tag and was never set up on the screen reports NONE for everything; its card said **Empty / No filament** while the feeder said the filament was in the head. It now reads **Unnamed filament** in its colour, the print setup says so instead of "empty", and **Apply to project filaments** keeps the project filament for that head, as OrcaSlicer's own U1 sync does.
 - Toolhead cards are only as tall as their content: no blank band between the feeder line and Load / Unload when the dashboard row is taller.

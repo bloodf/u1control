@@ -620,6 +620,18 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(self.agent.start_send_gcode_to_sdcard(self.params(project_name="verify_job"), None, None, None), 0)
         self.assertEqual(list(self.fake.uploads), ["part.gcode"])   # the check uploads nothing
 
+    def test_a_job_goes_to_the_u1_it_names_not_the_connected_one(self):
+        """OrcaSlicer's Multi-device tab names each printer in PrintParams.dev_ip; the connected U1 must not get
+        another printer's job."""
+        other = fakes.FakePrinter()
+        self.addCleanup(other.close)
+        self.connect()
+        self.assertEqual(self.agent.start_send_gcode_to_sdcard(self.params(dev_ip=other.host), self.update, None, None), 0)
+        self.assertEqual(list(other.uploads), ["part.gcode"])
+        self.assertEqual(list(self.fake.uploads), [])
+        self.assertEqual(self.agent.start_send_gcode_to_sdcard(self.params(project_name="mine"), self.update, None, None), 0)
+        self.assertEqual(list(self.fake.uploads), ["mine.gcode"])   # the connected one, when the job names it
+
     def test_connect_pushes_status_and_answers_commands(self):
         messages, connected = [], []
         self.agent.set_on_local_message_fn(lambda dev, text: messages.append(json.loads(text)))
