@@ -1138,10 +1138,36 @@ class U1Agent(pa.PrinterAgentBase):
         self._emit("local_message", self._dev_id(), json.dumps(payload))
 
     # discovery and selection ---------------------------------------------------------------------------
+    def _announce_host(self):
+        """The U1 to list in the Device tab: the connected one, else U1 Control's own "host", else the selected U1
+        printer preset's address. OrcaSlicer discovers before it connects, so the connected one alone is never known
+        on a fresh start. "" when there is none."""
+        with self._lock:
+            host = self.host
+        if host:
+            return host
+        host = clean(self._settings().effective().get("host"))
+        if host:
+            return host_of(host)
+        try:
+            bundle = orca.host.preset_bundle()
+            preset = bundle.current_printer_preset()
+            if not is_u1_name(preset.config_value("printer_model"), preset.name, preset.config_value("inherits")):
+                log("agent: discovery lists nothing: the selected printer is not a Snapmaker U1")
+                return ""
+            host = host_of(clean(preset.config_value("print_host")) or clean(bundle.full_config_value("print_host")))
+        except Exception as e:
+            log("agent: discovery lists nothing: the selected printer's address is not readable (%s)" % e)
+            return ""
+        if not host:
+            log("agent: discovery lists nothing: no U1 address set (set the printer preset's host to the U1's IP)")
+        return host
+
     def start_discovery(self, start, sending):
-        if start and self.host:   # the configured printer only, never a network scan (MRA announce_printhost_device)
+        host = self._announce_host() if start else ""   # the configured printer only, never a network scan (MRA announce_printhost_device)
+        if host:
             self._emit("ssdp", json.dumps({
-                "dev_name": "Snapmaker U1", "dev_id": self.dev_id or self.host, "dev_ip": self.host,
+                "dev_name": "Snapmaker U1", "dev_id": self.dev_id or host, "dev_ip": host,
                 "dev_type": agent.U1_MODEL_ID, "dev_signal": "0", "connect_type": "lan", "bind_state": "free",
                 "sec_link": "secure", "ssdp_version": "v1"}))
         return True
@@ -1288,6 +1314,7 @@ class U1Agent(pa.PrinterAgentBase):
 
     def _poll(self, stop, client):
         connected, thumb = False, (None, "")   # thumb: (file name, its thumbnail URL), read once per file
+        reported = False   # the current run of failed reads is in the log
         while not stop.is_set():
             try:
                 if not self.firmware:
@@ -1301,6 +1328,7 @@ class U1Agent(pa.PrinterAgentBase):
                     if stop.is_set():
                         return
                     self.view = view
+                reported = False
                 if not connected:
                     connected = True   # MRA perform_connection_async: ConnectStatusOk, then printer_connected
                     threading.Thread(target=self._read_camera, args=(stop, client), name="u1control-camera",
@@ -1315,6 +1343,9 @@ class U1Agent(pa.PrinterAgentBase):
             except Exception as e:
                 if connected:
                     log("agent: the U1 stopped answering (%s)" % e)
+                elif not reported:
+                    log("agent: can't reach the U1 at %s (%s)" % (client.base, e))
+                reported = True
                 connected = False
                 with self._lock:
                     if not stop.is_set():

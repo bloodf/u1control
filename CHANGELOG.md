@@ -20,6 +20,7 @@
 
 ### Fixed
 
+- With u1control as the printer agent, the U1 now shows in OrcaSlicer's **Device** tab printer list and connects on a fresh start. OrcaSlicer lists printers before it connects, and the agent only announced the U1 once it was connected, so it never appeared; it now announces the address from U1 Control's `host` setting or the selected U1 printer preset's host. The log says why when nothing is listed (not a U1, no address) and once when the U1 can't be reached, instead of staying silent.
 - A job from OrcaSlicer goes to the U1 it names (the print's printer address, as OrcaSlicer's **Multi-device** tab sends it), not to the U1 the agent is connected to; the connected U1 still gets the jobs that name it.
 - **Multi-colour spools show every colour.** A toolhead loaded with a multi-colour spool set up on the printer (`filament_color_multi`) showed only its first colour. Its card's strip and spool, the Stock tab, the printer photo and the print setup now show all of them, side by side, and OrcaSlicer's filament sync receives them too.
 - **A loaded spool nobody has named is no longer called empty.** A toolhead whose spool has no tag and was never set up on the screen reports NONE for everything; its card said **Empty / No filament** while the feeder said the filament was in the head. It now reads **Unnamed filament** in its colour, the print setup says so instead of "empty", and **Apply to project filaments** keeps the project filament for that head, as OrcaSlicer's own U1 sync does.

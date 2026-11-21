@@ -7,6 +7,7 @@ import os
 import pathlib
 import sys
 import tempfile
+import time
 import unittest
 import zipfile
 
@@ -982,6 +983,50 @@ class PluginAgentTests(unittest.TestCase):
         detect = type("Detect", (), {})()
         self.assertEqual(self.agent.bind_detect(self.fake.host, "secure", detect), 0)
         self.assertEqual((detect.dev_name, detect.model_id), ("Snapmaker U1", "797581801"))
+
+    def select_preset(self, name="Snapmaker U1 (0.4 nozzle)", **values):
+        """The printer preset OrcaSlicer has selected, as the plugin reads it (print_host is the preset's address)."""
+        preset = type("Preset", (), {"name": name, "config_value": lambda s, k: values.get(k)})()
+        self.orca.host.preset_bundle = lambda: type("Bundle", (), {
+            "current_printer_preset": lambda b: preset, "full_config_value": lambda b, k: values.get(k)})()
+
+    def test_discovery_announces_the_selected_u1_before_any_connect(self):
+        """OrcaSlicer asks for discovery before it connects; the Device tab lists only what discovery announced."""
+        found = []
+        self.agent.set_on_ssdp_msg_fn(lambda text: found.append(json.loads(text)))
+        self.select_preset(print_host=self.fake.host)
+        self.assertTrue(self.agent.start_discovery(True, False))
+        self.assertTrue(wait_for(lambda: found))
+        self.assertEqual((found[-1]["dev_type"], found[-1]["dev_ip"]), ("797581801", self.fake.host))
+
+    def test_discovery_announces_nothing_for_a_printer_that_is_not_a_u1(self):
+        found = []
+        self.agent.set_on_ssdp_msg_fn(lambda text: found.append(json.loads(text)))
+        self.select_preset(name="Voron 2.4", print_host=self.fake.host, printer_model="Voron")
+        self.assertTrue(self.agent.start_discovery(True, False))
+        time.sleep(0.2)
+        self.assertEqual(found, [])
+
+    def test_discovery_announces_nothing_when_no_address_is_known(self):
+        found = []
+        self.agent.set_on_ssdp_msg_fn(lambda text: found.append(json.loads(text)))
+        self.select_preset()
+        self.assertTrue(self.agent.start_discovery(True, False))
+        time.sleep(0.2)
+        self.assertEqual(found, [])
+
+    def test_an_unreachable_u1_is_logged_once_not_every_poll(self):
+        lines = []
+        self.ns["log"] = lines.append
+        self.agent.AGENT_POLL = 0.05
+        self.ns["AGENT_POLL"] = 0.05
+        port_closed = self.fake.host
+        self.fake.close()
+        conn = self.orca.printer_agent.PrinterConnectionParams(dev_id="u1", host=port_closed)
+        self.assertEqual(self.agent.connect_printer(conn), 0)
+        self.assertTrue(wait_for(lambda: any("can't reach the U1" in l for l in lines)))
+        time.sleep(0.4)
+        self.assertEqual(len([l for l in lines if "can't reach the U1" in l]), 1)
 
 
 def bridge_preset(name, vendor="Generic", colour="#FF0000"):
