@@ -24,7 +24,9 @@
   - The four toolheads now reach OrcaSlicer: the filament block is sent nested the way OrcaSlicer reads it (`print.ams.ams`), so the Device tab shows them and **Sync from AMS** gets each toolhead's preset, multicolour spools and material variants included.
   - The printer reports the Snapmaker U1's model id, so the Print dialog no longer calls it a printer of another model than the U1 preset.
   - The Print dialog's **Flow calibration** box shows again: the status keeps the bit OrcaSlicer reads it from.
-  - The Device tab shows the printer's camera (Moonraker's first webcam, read again at each connection).
+  - The Device tab shows the printer's camera (Moonraker's first webcam, read again at each connection). A webcam that streams MJPEG plays as a stream. On the stock firmware, which lists no webcam, it is the U1's own camera picture, kept current while the Device tab shows it (`camera.start_monitor`, as U1 Control's own camera does).
+  - The Device tab's speed levels set the print speed (silent 50 %, standard 100 %, sport 124 %, ludicrous 166 %, `M220`), and show the U1's current speed factor.
+  - The chamber temperature shows in the Device tab.
   - **Home**, the bed and nozzle temperatures and the fan from the Device tab are sent only while the U1 is idle (not printing, paused, loading or calibrating), temperatures from 0 up to the U1's limits (nozzle 320 °C, bed 110 °C), a toolhead from T1 to T4. Anything else is refused and logged, and nothing reaches the printer.
 
 ## [0.15.2] - 2026-11-20

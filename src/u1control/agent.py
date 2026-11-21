@@ -38,6 +38,13 @@ HAS_PA_CALIBRATION = 1 << 16
 # plugin API doesn't show a preset's model_id, so it is written here.
 U1_MODEL_ID = "797581801"
 CHAMBER_LIGHT = "chamber_light"
+# The stock firmware's camera picture, renewed only for ~60 s after camera.start_monitor (u1control's own camera does the
+# same keepalive, service.py CAMERA_KEEPALIVE)
+STOCK_CAMERA = "/server/files/camera/monitor.jpg"
+MONITOR_EVERY = 50.0    # s between camera.start_monitor requests while the Device tab shows the camera
+MONITOR_WATCHED = 10.0  # s since the Device tab last asked for the camera URL that still count as "showing it"
+# Device tab speed level (DevDefs.h DevPrintingSpeedLevel: silent, standard, sport, ludicrous) -> M220 percent, as Bambu's
+SPEED_PERCENT = {1: 50, 2: 100, 3: 124, 4: 166}
 LIGHT_ON, LIGHT_OFF = "SET_LED LED=cavity_led WHITE=1 SYNC=0", "SET_LED LED=cavity_led WHITE=0 SYNC=0"
 
 # Material -> OrcaFilamentLibrary family (MRA map_filament_type_to_generic_id).
@@ -157,21 +164,47 @@ def push_status(view, preferred=None):
         "mc_percent": int(round(max(0.0, min(1.0, progress)) * 100)),
         "mc_remaining_time": _remaining_minutes(view),
         "layer_num": int(view.get("layer") or 0), "total_layer_num": int(view.get("total_layers") or 0),
+        "spd_lvl": speed_level(view.get("speed_factor")),
         "lights_report": [{"node": CHAMBER_LIGHT, "mode": "on" if view.get("light") else "off"}],
         **ams_block(view.get("heads") or [], preferred),
     }
+    if isinstance(view.get("chamber"), (int, float)):   # DevConfig: the Device tab shows it only when told to
+        p.update(chamber_temper=view["chamber"], support_chamber_temp_display=True)
     return {"print": p}
 
 
-def snapshot_url(webcams, base):
-    """The first enabled Moonraker webcam's snapshot URL (/server/webcams/list result), absolute against base; "" if
-    none. The Device tab shows it as OrcaSlicer's HTTP snapshot camera."""
+def speed_level(factor):
+    """The Device tab speed level nearest a gcode_move speed_factor (1.0 = 100 %); standard when unknown."""
+    if not isinstance(factor, (int, float)) or isinstance(factor, bool):
+        return 2
+    return min(SPEED_PERCENT, key=lambda lvl: (abs(factor * 100 - SPEED_PERCENT[lvl]), lvl != 2))
+
+
+def camera_source(webcams, base):
+    """(CameraStreamMode name, absolute URL) for the Device tab, from a /server/webcams/list result: the first enabled
+    webcam's MJPEG or RTSP stream (OrcaSlicer plays those), else its snapshot; with no webcam (the stock firmware lists
+    none) the stock camera picture, which needs camera.start_monitor to stay current (monitor_due)."""
+    def absolute(url):
+        return urllib.parse.urljoin(base.rstrip("/") + "/", url.strip()) if isinstance(url, str) and url.strip() else ""
     cams = webcams.get("webcams") if isinstance(webcams, dict) else None
     for cam in cams if isinstance(cams, list) else []:
-        url = cam.get("snapshot_url") if isinstance(cam, dict) and cam.get("enabled", True) else None
-        if isinstance(url, str) and url.strip():
-            return urllib.parse.urljoin(base.rstrip("/") + "/", url.strip())
-    return ""
+        if not isinstance(cam, dict) or not cam.get("enabled", True):
+            continue
+        stream, service = absolute(cam.get("stream_url")), str(cam.get("service") or "").lower()
+        if stream.lower().startswith("rtsp://"):
+            return "RTSP", stream
+        if stream and (not service or service.startswith("mjpegstreamer")):
+            return ("HTTPS" if stream.lower().startswith("https://") else "HTTP"), stream
+        if absolute(cam.get("snapshot_url")):
+            return "HTTP_SNAPSHOT", absolute(cam.get("snapshot_url"))
+    return "HTTP_SNAPSHOT", absolute(STOCK_CAMERA)
+
+
+def monitor_due(now, watched_at, requested_at):
+    """Whether to send camera.start_monitor now: the Device tab showed the stock camera picture in the last
+    MONITOR_WATCHED s, and the last request (None: never) is MONITOR_EVERY s old."""
+    return watched_at is not None and now - watched_at <= MONITOR_WATCHED and (
+        requested_at is None or now - requested_at >= MONITOR_EVERY)
 
 
 def version_reply(firmware, product="Snapmaker U1"):
@@ -192,7 +225,7 @@ def gcode_reply(seq, param, ok):
 
 def parse_command(json_str):
     """A Device tab command -> {"kind", ..., "seq"}. Kinds: get_version, get_access_code, pushall, noop, pause,
-    resume, stop, gcode (script), set_light (on), unsupported, invalid."""
+    resume, stop, gcode (script; also the speed level, as M220), set_light (on), unsupported, invalid."""
     try:
         msg = json.loads(json_str)
     except (TypeError, ValueError):
@@ -218,6 +251,8 @@ def parse_command(json_str):
         out = {"kind": "set_light", "on": body["led_mode"] == "on"}
     elif section == "print" and name in ("pause", "resume", "stop"):
         out = {"kind": name}
+    elif section == "print" and name == "print_speed" and str(body.get("param")) in ("1", "2", "3", "4"):
+        out = {"kind": "gcode", "script": "M220 S%d" % SPEED_PERCENT[int(body["param"])]}
     elif section == "print" and name == "gcode_line" and isinstance(body.get("param"), str) \
             and body["param"].strip():
         out = {"kind": "gcode", "script": body["param"]}   # MRA: Klipper runs it as given (guarded_line excepted)
