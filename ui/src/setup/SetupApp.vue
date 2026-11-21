@@ -17,7 +17,7 @@ import { more, printer, refresh as refreshIcon, settings as settingsIcon, target
 import * as bridge from '../core/bridge';
 import { boot } from '../core/boot';
 import { t, tn, tMaybe } from '../core/i18n';
-import { headFraction } from '../core/spool-level';
+import { headColours, headFraction, present } from '../core/spool-level';
 import { colourFar, family, setupWarnings, warningKey, type SetupFilament, type SetupHead } from '../core/logic';
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import HeadPicture from './HeadPicture.vue';
@@ -47,8 +47,12 @@ const has = (k: string) => k in D.prefs;
 // ---------------------------------------------------------------- toolheads and spools
 const spoolOf = (h: number): Spool | null => { const v = spools.value[String(h)]; return !v ? null : typeof v === 'string' ? { name: v } : v; };
 /** The colour a head prints in: its Spoolman spool's colour first, the printer's own reading otherwise. */
-const headColour = (h: number) => { const hd = heads.value[h]; return hd?.loaded ? spoolOf(h)?.colour || hd.colour || null : null; };
-const headFill = (h: number) => headFraction(heads.value[h]?.loaded, spoolOf(h));
+const headColour = (h: number) => { const hd = heads.value[h]; return present(hd) ? spoolOf(h)?.colour || hd.colour || null : null; };
+/** Every colour of a multi-colour spool in the head (its Spoolman spool's, else the printer's own), or null. */
+const headMulti = (h: number) => (present(heads.value[h]) ? headColours(spoolOf(h), heads.value[h]) : null);
+const headFill = (h: number) => headFraction(present(heads.value[h]), spoolOf(h));
+/** What is in a head, in words: its filament, "unnamed" for filament nobody has named, '' when it is empty. */
+const headName = (h: SetupHead | undefined) => (h?.loaded ? [h.type, h.sub_type].filter(Boolean).join(' ') : h?.unnamed ? t('setup.unnamed') : '');
 const headOf = (f: SetupFilament) => heads.value[map[String(f.index)]];
 const warnings = computed(() => setupWarnings(D.filaments, heads.value, map));
 const warnFor = (f: SetupFilament) => warnings.value.find(w => w.f === f.index);
@@ -61,8 +65,8 @@ const ackReset = ref(false);
 const acked = computed({ get: () => !!warnings.value.length && ackFor.value === warningKey(warnings.value),
   set: v => { ackFor.value = v ? warningKey(warnings.value) : ''; ackReset.value = false; } });
 watch(() => warningKey(warnings.value), now => { if (ackFor.value && ackFor.value !== now) { ackFor.value = ''; ackReset.value = true; } if (!now) ackReset.value = false; });
-const warnText = (w: (typeof warnings.value)[number]) => w.kind === 'empty'
-  ? t('setup.warn.empty', { f: w.f + 1, n: w.h + 1 }) : t('setup.warn.material', { f: w.f + 1, a: w.a, n: w.h + 1, b: w.b });
+const warnText = (w: (typeof warnings.value)[number]) => (w.kind === 'material'
+  ? t('setup.warn.material', { f: w.f + 1, a: w.a, n: w.h + 1, b: w.b }) : t(`setup.warn.${w.kind}`, { f: w.f + 1, n: w.h + 1 }));
 const canSend = computed(() => !sent.value && !busy.value && (!warnings.value.length || acked.value));
 const why = computed(() => sent.value ? '' : busy.value ? t('setup.busyShort') : !canSend.value ? t('setup.needAck') : '');
 
@@ -183,7 +187,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
           <li v-for="f in D.filaments" :key="f.index">
             <button type="button" class="su-card" :data-f="f.index" :data-t="map[String(f.index)]" :disabled="busy || sent" aria-haspopup="dialog"
                     :aria-label="t('setup.cardLabel', { f: f.index + 1, type: f.type, n: map[String(f.index)] + 1,
-                                   loaded: headOf(f)?.loaded ? headOf(f)!.type : t('setup.empty') }) + (warnFor(f) ? '. ' + warnText(warnFor(f)!) : '')"
+                                   loaded: headOf(f)?.loaded ? headOf(f)!.type : headName(headOf(f)) || t('setup.empty') }) + (warnFor(f) ? '. ' + warnText(warnFor(f)!) : '')"
                     @click="openPicker($event, f)">
               <!-- The project filament's colour is a 4 px strip, as on every slot card; the card itself is neutral. -->
               <span class="oui-slot-strip su-card-strip" :data-unknown="!f.colour || undefined" :style="f.colour ? { background: f.colour } : undefined" aria-hidden="true" />
@@ -192,11 +196,11 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
                 <span v-if="f.weight" class="su-card-g oui-num">{{ t('setup.grams', { g: f.weight }) }}</span></span>
               <HeadPicture :n="map[String(f.index)] + 1" :strand="headColour(map[String(f.index)])" />
               <span class="su-card-foot">
-                <OuiSpool :color="headColour(map[String(f.index)])" :colors="spoolOf(map[String(f.index)])?.colours" :fraction="headFill(map[String(f.index)])" :size="32" />
+                <OuiSpool :color="headColour(map[String(f.index)])" :colors="headMulti(map[String(f.index)])" :fraction="headFill(map[String(f.index)])" :size="32" />
                 <span class="su-card-id"><span class="oui-strong">{{ t('setup.head', { n: map[String(f.index)] + 1 }) }}
                   <OuiIcon v-if="warnFor(f)" :icon="warning" :size="14" class="su-warn-ico" data-test="card-warn" /></span>
-                  <span class="oui-meta"><em v-if="!headOf(f)?.loaded" class="su-empty">{{ t('setup.empty') }}</em>
-                    <template v-else>{{ [headOf(f)!.type, headOf(f)!.sub_type].filter(Boolean).join(' ') }}</template></span>
+                  <span class="oui-meta"><em v-if="!present(headOf(f))" class="su-empty">{{ t('setup.empty') }}</em>
+                    <template v-else>{{ headName(headOf(f)) }}</template></span>
                   <span v-if="spoolOf(map[String(f.index)])" class="oui-meta su-spool" data-test="spool">{{ spoolOf(map[String(f.index)])!.name }}</span></span>
               </span>
               <span v-if="colourHint(f)" class="su-hint" data-test="colour-hint">{{ t('setup.colourDiffers', { f: f.index + 1, n: map[String(f.index)] + 1 }) }}</span>
@@ -258,8 +262,8 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
               :data-pick="h.index" @click="pick(h.index)">
         <span class="oui-slot-badge oui-num" :data-tool="h.index + 1">T{{ h.index + 1 }}</span>
         <!-- A colour chip, not the spool: picking a head is matching colours, and a head without a Spoolman spool would draw a colourless bare reel. -->
-        <OuiSwatch :color="headColour(h.index)" :size="16" />
-        <span class="su-pick-text"><span class="oui-strong"><em v-if="!h.loaded" class="su-empty">{{ t('setup.empty') }}</em><template v-else>{{ [h.type, h.sub_type].filter(Boolean).join(' ') }}</template></span>
+        <OuiSwatch :color="headColour(h.index)" :colors="headMulti(h.index)" :size="16" />
+        <span class="su-pick-text"><span class="oui-strong"><em v-if="!present(h)" class="su-empty">{{ t('setup.empty') }}</em><template v-else>{{ headName(h) }}</template></span>
           <span v-if="spoolOf(h.index)" class="oui-meta">{{ spoolOf(h.index)!.name }}</span></span>
         <OuiIcon v-if="h.loaded && family(h.type) !== family(picking.type)" :icon="warning" :size="14" class="su-warn-ico" :title="t('setup.otherMaterial')" />
       </button>

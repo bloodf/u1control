@@ -14,3 +14,16 @@ export const CRITICAL_FRACTION = 0.05;
 export function levelTone(fraction: number | null, low?: boolean): 'normal' | 'low' | 'critical' {
   return fraction != null && fraction < CRITICAL_FRACTION ? 'critical' : low ? 'low' : 'normal';
 }
+
+/** Filament in the toolhead, named or not: a spool nobody has named reports NONE, but it is not an empty head. */
+export function present<T extends { loaded?: boolean; unnamed?: boolean }>(head: T | null | undefined): head is T {
+  return !!(head?.loaded || head?.unnamed);
+}
+
+/** Every colour of what a toolhead prints with, or null for one colour: its linked Spoolman spool's (when it has a colour),
+ *  else the printer's own record of a multi-colour spool (filament_color_multi). */
+export function headColours(spool: { colour?: string | null; colours?: string[] } | null | undefined,
+  head: { colours?: string[] } | null | undefined): string[] | null {
+  const list = spool && (spool.colour || spool.colours?.length) ? spool.colours : head?.colours;
+  return list && list.length > 1 ? list : null;
+}

@@ -140,19 +140,31 @@ def describe_toolheads(task):
         ftype = str(_at(task.get("filament_type"), t, "") or "")
         none = ftype.upper() in ("", "NONE")
         exist = _at(task.get("filament_exist"), t)
-        multi = _at(task.get("filament_color_multi"), t) or {}  # {nums, alpha, colors, mode}
-        multi = multi.get("colors") if isinstance(multi, dict) else multi
         heads.append({
             "index": t,
             "type": "" if none else ftype,
             "vendor": str(_at(task.get("filament_vendor"), t, "") or "").replace("NONE", ""),
             "sub_type": str(_at(task.get("filament_sub_type"), t, "") or "").replace("NONE", ""),
             "colour": norm_colour(_at(task.get("filament_color_rgba"), t)),
-            "colours": [c for c in (norm_colour(x) for x in multi) if c] if isinstance(multi, list) else [],
+            "colours": multi_colours(_at(task.get("filament_color_multi"), t)),
             "official": bool(_at(task.get("filament_official"), t, False)),
+            # loaded: a named filament, the only kind a preset or a mapping can be matched to. unnamed: filament in the
+            # head that nobody has named (no tag, never set up on the screen): its record says NONE, but it is not empty.
             "loaded": (bool(exist) if exist is not None else True) and not none,
+            "unnamed": bool(exist) and none,
         })
     return heads
+
+
+def multi_colours(multi):
+    """Every colour of a spool from its filament_color_multi record {nums, alpha, mode, colors: [RRGGBB, ...]}: the
+    first `nums` listed colours (the firmware's own count, never more than it lists). `mode` is not documented, so the
+    colours are drawn as segments, as OrcaSlicer's own U1 sync does."""
+    if not isinstance(multi, dict) or not isinstance(multi.get("colors"), list):
+        return []
+    colours = [c for c in (norm_colour(x) for x in multi["colors"]) if c]
+    nums = multi.get("nums")
+    return colours[:nums] if isinstance(nums, int) and not isinstance(nums, bool) and nums > 0 else colours
 
 
 def _hex_rgb(value):
@@ -525,7 +537,9 @@ def mapping_warnings(filaments, heads, mapping):
         f, h = by_index.get(fi), heads[t] if 0 <= t < len(heads) else None
         if f is None or h is None:
             continue
-        if not h["loaded"]:
+        if h.get("unnamed"):
+            out.append(tr("Filament %d → T%d: the filament there is not named") % (fi + 1, t + 1))
+        elif not h["loaded"]:
             out.append(tr("Filament %d → T%d: toolhead is empty") % (fi + 1, t + 1))
         elif material_family(f.get("type")) != material_family(h["type"]):
             out.append(tr("Filament %d (%s) → T%d loaded with %s") % (fi + 1, f.get("type"), t + 1, h["type"]))
@@ -534,15 +548,17 @@ def mapping_warnings(filaments, heads, mapping):
 
 def warning_ids(filaments, heads, mapping):
     """Stable ids of a mapping's warnings, the ones the print setup must have acknowledged before sending:
-    "empty:<filament>:<toolhead>" and "material:<filament>:<toolhead>" (0-based). The page builds the same ids
-    from what it shows; a mismatch (another mapping, toolheads refreshed meanwhile) means nothing is sent."""
+    "empty:<filament>:<toolhead>", "unnamed:<filament>:<toolhead>" and "material:<filament>:<toolhead>" (0-based).
+    The page builds the same ids from what it shows; a mismatch (another mapping, toolheads refreshed meanwhile) means nothing is sent."""
     out = []
     by_index = {f["index"]: f for f in filaments}
     for fi, t in sorted(mapping.items()):
         f, h = by_index.get(fi), heads[t] if 0 <= t < len(heads) else None
         if f is None or h is None:
             continue
-        if not h["loaded"]:
+        if h.get("unnamed"):
+            out.append("unnamed:%d:%d" % (fi, t))
+        elif not h["loaded"]:
             out.append("empty:%d:%d" % (fi, t))
         elif material_family(f.get("type")) != material_family(h["type"]):
             out.append("material:%d:%d" % (fi, t))

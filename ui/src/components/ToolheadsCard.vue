@@ -33,9 +33,8 @@ const source = computed(() => {
 <style>
 /* Two cards a row in half the dashboard, four only when the widget is really wide. */
 .u1-heads .oui-cards { --oui-cards-4: 1300px; }
-/* When the dashboard row is taller than the cards, the cards share it (actions stay at their foot): no strip left empty. */
-.oui-dash-grid:not([data-narrow]) .u1-heads > .oui-panel-body { display: flex; flex-direction: column; }
-.oui-dash-grid:not([data-narrow]) .u1-heads .oui-cards { flex: 1 1 auto; grid-auto-rows: 1fr; }
+/* The cards are as tall as their content: when the dashboard row is taller (the other half needs more), the room left is
+   under the cards, never a blank band inside each card between its content and its actions. */
 
 .u1-skelcard { display: grid; gap: var(--oui-s3); align-content: start; min-height: 180px; padding: var(--oui-s3); border-radius: var(--oui-radius-lg); background: var(--oui-raised); }
 .u1-skelcard > .oui-skeleton:nth-child(1) { width: 30%; }

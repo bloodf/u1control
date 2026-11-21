@@ -535,6 +535,16 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(len(orca.filament_calls), 3)
         self.assertEqual(ns["sync_project"](heads[:0], [], {}), ([], []))
 
+    def test_sync_project_keeps_the_project_filament_of_an_unnamed_head(self):
+        # T3 has filament nobody has named (all NONE): as OrcaSlicer's own U1 sync, its project filament stays.
+        orca, ns = self.load(filament_names=["Generic PETG @U1", "Generic PLA @U1"])
+        self.fake.task["filament_exist"] = [True, True, True, True]
+        heads = u1.summarize(self.fake.status())["heads"]
+        self.assertTrue(heads[2]["unnamed"])
+        done, problems = ns["sync_project"](heads, [None] * 4, {})
+        self.assertEqual(problems, [])
+        self.assertEqual([slot for slot, _, _ in orca.filament_calls], [1, 2, 4])
+
     def test_sync_project_keeps_the_presets_when_orca_refuses_the_colour(self):
         # OrcaSlicer 2.5.x: filament_colour is a project setting, so a filament preset edit refuses it at commit.
         orca, ns = self.load(filament_names=["Generic PETG @U1", "Polymaker PLA @U1", "Generic PLA @U1"])

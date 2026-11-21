@@ -8,7 +8,7 @@ import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
 import { OuiBanner, OuiEmpty, OuiHint, OuiIcon, OuiLevel, OuiPageHeader, OuiPanel, OuiSpool, OuiStatus, OuiToolbar } from '@orca-plugins/ui-foundation/src/components';
 import { boxes, link as linkIcon, refresh } from '@orca-plugins/ui-foundation/src/icons';
-import { headFraction, levelTone, spoolFraction } from '../core/spool-level';
+import { headColours, headFraction, levelTone, present, spoolFraction } from '../core/spool-level';
 import { s, run, tracker, loadStock, loadSpools, busy, controlsOff, targetKnown, printerName, reqStatus } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, tMaybe, fmt } from '../core/i18n';
@@ -56,8 +56,8 @@ const whyId = computed(() => (!why.value ? undefined : !targetKnown.value || !s.
 const targets = computed(() => [0, 1, 2, 3].map(i => {
   const h = s.status?.heads[i], id = s.bindings[String(i)];
   const sp = id == null ? null : s.spools.find(x => x.id === id) ?? null;
-  return { i, n: (i + 1) as 1 | 2 | 3 | 4, loaded: !!h?.loaded, colour: sp?.colour || h?.colour || null, colours: sp?.colours && sp.colours.length > 1 ? sp.colours : null,
-    fraction: headFraction(h?.loaded, sp), name: sp?.name || [h?.type, h?.sub_type].filter(Boolean).join(' '),
+  return { i, n: (i + 1) as 1 | 2 | 3 | 4, loaded: present(h), colour: sp?.colour || h?.colour || null, colours: headColours(sp, h),
+    fraction: headFraction(present(h), sp), name: sp?.name || [h?.type, h?.sub_type].filter(Boolean).join(' ') || (h?.unnamed ? t('heads.unnamed') : ''),
     meta: [sp?.material || h?.vendor, sp?.remaining != null ? fmt.grams(sp.remaining) : ''].filter(Boolean).join(' · ') };
 }));
 function onTargetKey(e: KeyboardEvent) {

@@ -144,6 +144,9 @@ MESSAGES = {
     "Filament %d → T%d: toolhead is empty": _m(
         "Filamento %d → T%d: a cabeça está vazia", "Filamento %d → T%d: el cabezal está vacío",
         "Filament %d → T%d: Der Werkzeugkopf ist leer", "耗材丝 %d → T%d：工具头为空"),
+    "Filament %d → T%d: the filament there is not named": _m(
+        "Filamento %d → T%d: o filamento dessa cabeça não tem nome", "Filamento %d → T%d: el filamento de ese cabezal no tiene nombre",
+        "Filament %d → T%d: Das Filament dort hat keinen Namen", "耗材丝 %d → T%d：该工具头中的耗材丝未命名"),
     "Filament %d (%s) → T%d loaded with %s": _m(
         "Filamento %d (%s) → T%d carregada com %s", "Filamento %d (%s) → T%d cargado con %s",
         "Filament %d (%s) → T%d ist mit %s geladen", "耗材丝 %d（%s）→ T%d 装的是 %s"),
@@ -209,6 +212,7 @@ MESSAGES = {
     "U1 at %s (Extended Firmware %s)": _m("U1 em %s (Extended Firmware %s)", "U1 en %s (Extended Firmware %s)",
                                           "U1 unter %s (Extended Firmware %s)", "U1 位于 %s（Extended Firmware %s）"),
     "empty": _m("vazia", "vacío", "leer", "空"),
+    "not named": _m("sem nome", "sin nombre", "ohne Namen", "未命名"),
     "Select a Snapmaker U1 printer first.": _m(
         "Selecione primeiro uma impressora Snapmaker U1.", "Seleccione primero una impresora Snapmaker U1.",
         "Wählen Sie zuerst einen Snapmaker-U1-Drucker.", "请先选择一台 Snapmaker U1 打印机。"),

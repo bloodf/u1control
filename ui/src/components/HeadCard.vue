@@ -10,7 +10,7 @@ import { s, run, tracker, busy, controlsOff, loadSpools, guidedWhy } from '../ap
 import { ask } from '../core/dialog';
 import { t, fmt, tMaybe } from '../core/i18n';
 import { family } from '../core/logic';
-import { headFraction, levelTone, spoolFraction } from '../core/spool-level';
+import { headColours, headFraction, levelTone, present, spoolFraction } from '../core/spool-level';
 import type { Spool, Tag } from '../app/types';
 
 // One toolhead as a neutral card: a 4 px strip of its filament's colour, the spool, what is left of the linked
@@ -23,9 +23,11 @@ const head = computed(() => s.status?.heads[i]);
 const tag = computed<Tag | null>(() => s.status?.rfid?.[i] ?? null);
 const feed = computed(() => s.status?.feed?.[i] ?? {});
 const active = computed(() => !!s.status?.extruders[i]?.active);
+// Filament in the head, named or not (a spool nobody has named reports NONE, but the head is not empty).
+const has = computed(() => present(head.value));
 // The feeder knows whether the filament went all the way into the toolhead (load_finish) or only waits at the
 // inlet (preload_finish, e.g. after Unload): the RFID tag and filament_exist stay set either way.
-const notInHead = computed(() => !!head.value?.loaded && ['preload_finish', 'wait_insert', 'unload_finish'].includes(feed.value.state || ''));
+const notInHead = computed(() => has.value && ['preload_finish', 'wait_insert', 'unload_finish'].includes(feed.value.state || ''));
 const feedText = computed(() => (feed.value.state ? tMaybe(`heads.feedState.${feed.value.state}`, feed.value.state) : '—'));
 // On the carriage (park detector ACTIVATE): offer Park, e.g. after a manual bed mesh left the head picked up.
 const picked = computed(() => !!s.status?.extruders[i]?.picked);
@@ -74,12 +76,13 @@ async function saveEdit() {
 
 // ---------------------------------------------------------------- Spoolman spool
 const bound = computed(() => s.bindings[String(i)] ?? null);
-// The linked Spoolman spool, when there is one: its colour(s) and how much is left draw the spool and the bar.
+// The linked Spoolman spool, when there is one: its colour(s) and how much is left draw the spool and the bar; else the
+// printer's own colours (every colour of a multi-colour spool, as segments).
 const linked = computed(() => (bound.value != null ? s.spools.find(x => x.id === bound.value) ?? null : null));
-const colours = computed(() => (linked.value?.colours && linked.value.colours.length > 1 ? linked.value.colours : null));
+const colours = computed(() => headColours(linked.value, head.value));
 // Filament left (headFraction), given to OuiSlot as remaining/initial; null when unknown, which draws the full reel with
 // the unknown badge. The weight line below is ours.
-const fraction = computed(() => headFraction(head.value?.loaded, linked.value));
+const fraction = computed(() => headFraction(has.value, linked.value));
 const grams = (v: number) => Math.round(v).toLocaleString(document.documentElement.lang || undefined);
 const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material, grams: fmt.grams(sp.remaining) });
 const groups = computed(() => {
@@ -111,17 +114,17 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 </script>
 
 <template>
-  <OuiSlot v-if="head" class="hc" :label="`T${n}`" :tool="(n as 1 | 2 | 3 | 4)" :name="head.loaded ? [head.type, head.sub_type].filter(Boolean).join(' ') || t('common.unknown') : null"
+  <OuiSlot v-if="head" class="hc" :label="`T${n}`" :tool="(n as 1 | 2 | 3 | 4)" :name="head.loaded ? [head.type, head.sub_type].filter(Boolean).join(' ') || t('common.unknown') : has ? t('heads.unnamed') : null"
            :material="head.loaded ? head.vendor || head.type : null" :color="linked?.colour || head.colour || null" :colors="colours"
-           :remaining="fraction" :initial="1" :active="active" :empty-label="t('heads.noFilament')" :aria-label="`T${n}`">
+           :remaining="fraction" :initial="1" :active="active" :data-unnamed="(has && !head.loaded) || undefined" :empty-label="t('heads.noFilament')" :aria-label="`T${n}`">
     <template #state>
-      <OuiStatus v-if="!head.loaded" state="idle">{{ t('heads.empty') }}</OuiStatus>
+      <OuiStatus v-if="!has" state="idle">{{ t('heads.empty') }}</OuiStatus>
       <OuiStatus v-else-if="active && s.status?.state === 'printing'" state="busy">{{ t('status.state.printing') }}</OuiStatus>
       <OuiStatus v-else-if="notInHead" state="idle" :data-not-in-head="i">{{ t('heads.notInHead') }}</OuiStatus>
       <OuiStatus v-else-if="linked?.low" state="warn">{{ t('heads.low') }}</OuiStatus>
       <OuiStatus v-else-if="active" state="ok">{{ t('heads.activeChip') }}</OuiStatus>
     </template>
-    <template #meta>{{ head.vendor }}<span v-if="tag" class="oui-chip hc-tag" :title="tag.official ? t('heads.tagOfficial', { uid: tag.uid || '' }) : t('heads.tagThird', { uid: tag.uid || '' })">{{ t('heads.tag') }}</span></template>
+    <template #meta>{{ head.loaded ? head.vendor : t('heads.unnamedMeta') }}<span v-if="tag" class="oui-chip hc-tag" :title="tag.official ? t('heads.tagOfficial', { uid: tag.uid || '' }) : t('heads.tagThird', { uid: tag.uid || '' })">{{ t('heads.tag') }}</span></template>
     <!-- No Spoolman spool linked: there is no weight to show, so no amount line at all (not a dash that looks like a reading). -->
     <template #amount>
       <div v-if="linked" class="oui-slot-amount">
@@ -184,7 +187,8 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 
 <style>
 /* A dense card: tighter spacing, a smaller spool beside the name and material, one-line names and a slimmer amount;
-   the actions stay at the foot of a card stretched by its row. */
+   cards are as tall as their content (the widget does not stretch them), so the actions sit at the foot of the taller card
+   of a row, right after its content, and line up with its neighbour's. */
 .oui-slot.hc { gap: 6px; padding: 6px 4px; }
 .oui-slot.hc .oui-slot-head { min-height: 20px; }
 .oui-slot.hc .oui-slot-main { gap: var(--oui-s2); }
