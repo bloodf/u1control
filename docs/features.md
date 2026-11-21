@@ -54,7 +54,8 @@ dialog and Device tab work with the U1:
    print hosts**.
 2. Restart OrcaSlicer.
 3. In a copy of your U1 printer preset (system presets can't be changed), set **Printer Agent** to
-   `u1control` and its host to the U1's IP address. Save the preset.
+   `u1control` and its host to the U1's IP address. Save the preset. The U1 then shows in the Device tab's
+   printer list; it comes from the preset's host, or from the host in U1 Control's own settings when one is set.
 
 OrcaSlicer doesn't let plugins read this preference. **Settings > Requirements** in the U1 Control tab
 shows **On** once OrcaSlicer connects to the U1 through the u1control agent (or reports it as the
@@ -101,7 +102,9 @@ When the plugin loads, OrcaSlicer asks once to let u1control read the sliced job
    hosts**.
 2. Reinicie o OrcaSlicer.
 3. Numa cópia do perfil de impressora da U1 (perfis do sistema não podem ser alterados), defina
-   **Printer Agent** como `u1control` e o host como o IP da U1. Salve o perfil.
+   **Printer Agent** como `u1control` e o host como o IP da U1. Salve o perfil. A U1 aparece então na lista de
+   impressoras da aba Device, a partir do host do perfil ou do host nas configurações do próprio U1 Control, se
+   houver um.
 
 A janela **Imprimir** do próprio OrcaSlicer passa a mostrar as quatro cabeças como quatro slots, com
 filamento e cor. As caixas **Auto Bed Leveling**, **Flow Dynamics Calibration** e **Timelapse** já vêm
