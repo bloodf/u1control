@@ -1441,11 +1441,17 @@ class U1Agent(pa.PrinterAgentBase):
 
     # jobs (OrcaSlicer's job threads: blocking is fine) ---------------------------------------------------------
     def _job_client(self, params):
-        host = self.host or host_of(getattr(params, "dev_ip", ""))
-        key = self.api_key or clean(getattr(params, "password", ""))
+        """The printer the job names (PrintParams.dev_ip, as OrcaSlicer's Multi-device tab sends it), else the
+        connected one. Never the connected U1 for a job that names another."""
+        asked = host_of(getattr(params, "dev_ip", ""))
+        with self._lock:
+            connected, key, base = self.host, self.api_key, self.base
+        host = asked or connected
         if not host:
             raise PrinterError(tr(NO_ADDRESS))
-        return host, key, Moonraker(self.base if self.host else base_url(host), key, timeout=10)
+        if host != connected:   # another U1: its own address and key from the job
+            key, base = clean(getattr(params, "password", "")), base_url(host)
+        return host, key, Moonraker(base, key, timeout=10)
 
     @staticmethod
     def _job_path(params):
