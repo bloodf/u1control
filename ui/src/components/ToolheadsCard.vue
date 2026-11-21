@@ -17,7 +17,7 @@ const source = computed(() => {
 });
 </script>
 <template>
-  <OuiPanel :icon="toolhead" tone="magenta" aria-labelledby="heads-h">
+  <OuiPanel class="u1-heads" :icon="toolhead" tone="magenta" aria-labelledby="heads-h">
     <template #title><span id="heads-h">{{ t('heads.title') }}</span></template>
     <template #meta><span data-test="spool-source" :title="source">{{ source }}</span></template>
     <!-- Why Edit, Load and Unload are off is said once for the page (#heads-why, under the page header), not in each card. -->
@@ -31,6 +31,12 @@ const source = computed(() => {
   </OuiPanel>
 </template>
 <style>
+/* Two cards a row in half the dashboard, four only when the widget is really wide. */
+.u1-heads .oui-cards { --oui-cards-4: 1300px; }
+/* When the dashboard row is taller than the cards, the cards share it (actions stay at their foot): no strip left empty. */
+.oui-dash-grid:not([data-narrow]) .u1-heads > .oui-panel-body { display: flex; flex-direction: column; }
+.oui-dash-grid:not([data-narrow]) .u1-heads .oui-cards { flex: 1 1 auto; grid-auto-rows: 1fr; }
+
 .u1-skelcard { display: grid; gap: var(--oui-s3); align-content: start; min-height: 180px; padding: var(--oui-s3); border-radius: var(--oui-radius-lg); background: var(--oui-raised); }
 .u1-skelcard > .oui-skeleton:nth-child(1) { width: 30%; }
 .u1-skelcard > .oui-skeleton:nth-child(2) { width: 80%; }

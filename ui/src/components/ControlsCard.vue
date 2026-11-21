@@ -49,7 +49,7 @@ async function setLight(on: boolean) {
 </script>
 
 <template>
-  <OuiPanel :icon="thermometer" tone="orange" aria-labelledby="bed-h">
+  <OuiPanel :icon="thermometer" tone="orange" aria-labelledby="bed-h" data-test="controls">
     <template #title><span id="bed-h">{{ t('controls.title') }}</span></template>
     <div v-if="st" class="oui-controls">
       <div class="oui-controls-group">
@@ -93,6 +93,10 @@ async function setLight(on: boolean) {
   </OuiPanel>
 </template>
 <style>
+/* Dense rows on the dashboard. */
+[data-test="controls"] .oui-control-row { min-height: 36px; }
+[data-test="controls"] .oui-controls { gap: var(--oui-s2) var(--oui-s6); }
+
 /* A value the row refused (a speed outside 10 to 300 %) is said in the row, in the error colour. */
 .u1-refused { color: var(--oui-danger); font-weight: 600; }
 /* A reason in a row (speed refused, exhaust held off) is a sentence: it wraps instead of being cut. */

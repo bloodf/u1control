@@ -183,6 +183,18 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 </template>
 
 <style>
+/* A dense card: tighter spacing, a smaller spool beside the name and material, one-line names and a slimmer amount;
+   the actions stay at the foot of a card stretched by its row. */
+.oui-slot.hc { gap: 6px; padding: 6px 4px; }
+.oui-slot.hc .oui-slot-head { min-height: 20px; }
+.oui-slot.hc .oui-slot-main { gap: var(--oui-s2); }
+.oui-slot.hc .oui-slot-main .oui-spool { width: 36px !important; height: 36px !important; flex: none; }
+.oui-slot.hc .oui-slot-name { -webkit-line-clamp: 1; line-clamp: 1; line-height: 1.3; }
+.oui-slot.hc .oui-slot-amount { gap: 3px; line-height: 18px; }
+.oui-slot.hc .oui-slot-amount strong { font-size: var(--oui-text-md); }
+.oui-slot.hc .oui-slot-extra { gap: 6px; }
+.oui-slot.hc .oui-slot-extra > .oui-meta { font-size: var(--oui-text-xs); line-height: 1.35; }
+.oui-slot.hc .oui-slot-actions { padding-top: 0; }
 .hc-tag { margin-inline-start: var(--oui-s2); }
 .hc-pick { width: 100%; min-width: 0; }
 .hc-opt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }

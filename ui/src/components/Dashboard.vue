@@ -4,7 +4,7 @@
 // The spool stock is its own tab (StockView).
 import { computed, markRaw, ref, watch } from 'vue';
 import Button from 'primevue/button';
-import { OuiBanner, OuiDashboard, OuiEmpty, OuiHint, OuiIcon, OuiPageHeader, OuiPanel, validateLayout, replaceRetired, rowsByWidth, type OuiDashboardLabels, type OuiWidget } from '@orca-plugins/ui-foundation/src/components';
+import { OuiBanner, OuiDashboard, OuiEmpty, OuiHint, OuiIcon, OuiPageHeader, OuiPanel, validateLayout, replaceRetired, type OuiDashboardLabels, type OuiWidget } from '@orca-plugins/ui-foundation/src/components';
 import { camera, check, files, fan, hand, play, printer, refresh, settings, terminal, thermometer, toolhead, trash, zap } from '@orca-plugins/ui-foundation/src/icons';
 import JobCard from './JobCard.vue';
 import ControlsCard from './ControlsCard.vue';
@@ -26,31 +26,33 @@ import firstRunArt from '../assets/u1-toolheads.webp';
 // The modules are widgets the user arranges (OuiDashboard): sizes in columns of 12 and 32 px rows. The default is the
 // family's dashboard order: the status across the top, what you work on (toolheads, controls) beside what you watch.
 const n = (v: number) => ({ value: v, label: String(v) });
-// Sizes are measured (tests/page/shots.mjs MEASURE): the least height at each width is what the module's content needs
-// in a 1280 px window, so no widget clips or scrolls at any size the grid allows; the defaults fit it at 1280 to 2560 px.
+// A widget that is not `fill` is at least as tall as its content: its rows grow to fit it at any window width, so its
+// least height only keeps it from being dragged to nothing. The camera, the screen and the console fill what they get.
 const widgets = computed<OuiWidget[]>(() => [
-  { id: 'job', title: t('status.title'), icon: printer, component: markRaw(JobCard), w: 12, h: 3, minW: 4, minH: rowsByWidth({ 4: 6, 8: 5, 12: 3 }) },
-  { id: 'heads', title: t('heads.title'), icon: toolhead, component: markRaw(ToolheadsCard), w: 12, h: 10, minW: 5, minH: rowsByWidth({ 5: 18, 12: 10 }) },
-  { id: 'temps', title: t('tf.title'), icon: fan, component: markRaw(TempsFansCard), w: 8, h: 7, minW: 3, minH: rowsByWidth({ 3: 11, 8: 7 }),
+  { id: 'job', title: t('status.title'), icon: printer, component: markRaw(JobCard), w: 6, h: 2, minW: 4, minH: 2 },
+  { id: 'heads', title: t('heads.title'), icon: toolhead, component: markRaw(ToolheadsCard), w: 6, h: 14, minW: 5, minH: 4 },
+  { id: 'temps', title: t('tf.title'), icon: fan, component: markRaw(TempsFansCard), w: 3, h: 8, minW: 3, minH: 3,
     settings: [{ key: 'chamber', label: t('tf.chamber'), default: true }, { key: 'drivers', label: t('widget.drivers'), default: true }, { key: 'fans', label: t('tf.fans'), default: true }] },
-  { id: 'controls', title: t('controls.title'), icon: thermometer, component: markRaw(ControlsCard), w: 8, h: 6, minW: 4, minH: rowsByWidth({ 4: 8, 5: 7, 8: 6 }) },
-  { id: 'camera', title: t('cam.title'), icon: camera, component: markRaw(CameraCard), w: 4, h: 7, minW: 3, minH: 4,
+  { id: 'controls', title: t('controls.title'), icon: thermometer, component: markRaw(ControlsCard), w: 6, h: 4, minW: 4, minH: 3 },
+  { id: 'camera', title: t('cam.title'), icon: camera, component: markRaw(CameraCard), w: 3, h: 8, minW: 3, minH: 4, fill: true,
     settings: [{ key: 'aspect', label: t('widget.aspect'), default: '16/9', options: [{ value: '16/9', label: '16:9' }, { value: '4/3', label: '4:3' }, { value: '1/1', label: '1:1' }] }] },
-  { id: 'console', title: t('console.title'), icon: terminal, component: markRaw(ConsoleCard), w: 12, h: 6, minW: 3, minH: 5,
+  { id: 'console', title: t('console.title'), icon: terminal, component: markRaw(ConsoleCard), w: 12, h: 6, minW: 3, minH: 5, fill: true,
     settings: [{ key: 'lines', label: t('widget.lines'), default: 400, options: [100, 400, 1000].map(n) }] },
-  { id: 'screen', title: t('scr.title'), icon: hand, component: markRaw(ScreenCard), w: 4, h: 6, minW: 3, minH: 4 },
+  { id: 'screen', title: t('scr.title'), icon: hand, component: markRaw(ScreenCard), w: 6, h: 4, minW: 3, minH: 4, fill: true },
   { id: 'files', title: t('nav.files'), icon: files, component: markRaw(FilesCard), w: 4, h: 3, minW: 3, minH: 3 },
 ]);
-// By priority: the print, then the toolheads, then the temperatures beside the camera, then the controls beside the
-// printer screen, then the console. 12 columns used on every row, no holes. Files is in the catalogue.
+// Two halves, as arranged by hand in OrcaSlicer: the print over the toolheads on the left; the controls over the
+// temperatures, beside the camera and the printer screen, on the right; the console across the bottom. Both halves end
+// on the same row, and rows grow to fit content, so there are no holes. Files is in the catalogue.
 const defaults = computed(() => ({ name: t('layout.default'), items: [
-  { id: 'job', x: 0, y: 0, w: 12, h: 3 }, { id: 'heads', x: 0, y: 3, w: 12, h: 10 },
-  { id: 'temps', x: 0, y: 13, w: 8, h: 7 }, { id: 'camera', x: 8, y: 13, w: 4, h: 7 },
-  { id: 'controls', x: 0, y: 20, w: 8, h: 6 }, { id: 'screen', x: 8, y: 20, w: 4, h: 6 },
-  { id: 'console', x: 0, y: 26, w: 12, h: 6 }] }));
-// The first default: a layout still exactly as it was is given today's.
+  { id: 'job', x: 0, y: 0, w: 6, h: 2 }, { id: 'heads', x: 0, y: 2, w: 6, h: 14 },
+  { id: 'controls', x: 6, y: 0, w: 6, h: 4 }, { id: 'temps', x: 6, y: 4, w: 3, h: 8 }, { id: 'camera', x: 9, y: 4, w: 3, h: 8 }, { id: 'screen', x: 6, y: 12, w: 6, h: 4 },
+  { id: 'console', x: 0, y: 16, w: 12, h: 6 }] }));
+// Earlier defaults: a layout still exactly as one of them is given today's.
 const RETIRED = [[{ id: 'job', x: 0, y: 0, w: 12, h: 3 }, { id: 'heads', x: 0, y: 3, w: 12, h: 10 }, { id: 'controls', x: 0, y: 13, w: 8, h: 6 },
-  { id: 'camera', x: 8, y: 13, w: 4, h: 6 }, { id: 'temps', x: 0, y: 19, w: 8, h: 7 }, { id: 'screen', x: 8, y: 19, w: 4, h: 7 }, { id: 'console', x: 0, y: 26, w: 12, h: 7 }]];
+  { id: 'camera', x: 8, y: 13, w: 4, h: 6 }, { id: 'temps', x: 0, y: 19, w: 8, h: 7 }, { id: 'screen', x: 8, y: 19, w: 4, h: 7 }, { id: 'console', x: 0, y: 26, w: 12, h: 7 }],
+[{ id: 'job', x: 0, y: 0, w: 12, h: 3 }, { id: 'heads', x: 0, y: 3, w: 12, h: 10 }, { id: 'temps', x: 0, y: 13, w: 8, h: 7 }, { id: 'camera', x: 8, y: 13, w: 4, h: 7 },
+  { id: 'controls', x: 0, y: 20, w: 8, h: 6 }, { id: 'screen', x: 8, y: 20, w: 4, h: 6 }, { id: 'console', x: 0, y: 26, w: 12, h: 6 }]];
 const labels = computed<OuiDashboardLabels>(() => ({
   toolbar: t('layout.toolbar'), layout: t('layout.layout'), edit: t('layout.edit'), save: t('layout.save'), cancel: t('layout.cancel'), add: t('layout.add'),
   addTitle: t('layout.addTitle'), added: t('layout.added'), close: t('layout.close'), newLayout: t('layout.new'), rename: t('layout.rename'), remove: t('layout.remove'),
