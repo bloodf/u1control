@@ -156,7 +156,7 @@ test('feeder: a spool unloaded from the head but still in the feeder says so', `
   eq(qa('[data-not-in-head]').map(e => e.dataset.notInHead), ['0', '2'], 'T1 and T3, not T2');
   const meta = qa('.hc').map(c => qa('.oui-meta', c).map(text).find(x => x.startsWith('Feeder')));
   eq(meta[0], 'Feeder: at the inlet, not in the head', 'feeder line in words, no repeated inlet note');
-  eq(meta[1], 'Feeder: in the head · filament at inlet', 'no raw state for T2');
+  eq(meta[1], 'Feeder: in the head', 'no raw state and no inlet note once the filament is in the head');
   eq(meta[2], 'Feeder: waiting for filament', 'T3 waits for filament');
 `);
 
