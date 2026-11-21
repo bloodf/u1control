@@ -5,6 +5,8 @@ Every transform is idempotent (safe to run twice on the same file) and leaves a
 """
 
 import base64
+import contextlib
+import os
 import re
 
 import u1
@@ -31,8 +33,16 @@ def read(path):
 
 
 def write(path, lines, newline):
-    with open(path, "w", encoding="utf-8", errors="surrogateescape", newline="") as f:
-        f.write(newline.join(lines))
+    """Write beside the file, then swap it in: a failure halfway never leaves a cut-off G-code behind."""
+    tmp = path + ".u1control.tmp"
+    try:
+        with open(tmp, "w", encoding="utf-8", errors="surrogateescape", newline="") as f:
+            f.write(newline.join(lines))
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.remove(tmp)
+        raise
 
 
 def settings(lines):

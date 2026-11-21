@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.16.1] - 2026-11-21
+
+### Changed
+
+- Shared UI 5.6.2.
+
+### Fixed
+
+- **A printer address with https or a path (a reverse proxy, `https://example.com/u1`) works as the printer agent too.** Connecting from OrcaSlicer's Device tab, and a job sent to such an address from the Multi-device tab, dropped the https and the path and could not reach the U1.
+- **Spoolman follow no longer changes a toolhead's filament while the U1 is printing or loading.** A filament change seen mid-print or mid-load now waits and is applied once the U1 is idle, like a manual link.
+- The Device tab's heat-and-wait lines (`M109`, `M190`) get the same limits as setting a temperature: refused above the U1's maximum, for a toolhead that doesn't exist, or while the U1 is busy.
+- Saving the print setup's changes to the G-code writes a new file and then swaps it in, so a failure halfway can't leave a cut-off G-code behind.
+- Printing the G-code folder itself from the Files tab is refused with a clear message instead of an error from the printer.
+- A file whose thumbnails have no size listed still shows its thumbnail.
+- Names and settings with a trailing line break are refused like any other bad name.
+
 ## [0.16.0] - 2026-11-21
 
 ### Added

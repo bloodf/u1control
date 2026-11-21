@@ -1172,7 +1172,8 @@ class U1Agent(pa.PrinterAgentBase):
         self.disconnect_printer()
         _agent_seen()   # OrcaSlicer uses us as the printer agent: its "Use printer agents" preference is on
         key = clean(getattr(params, "password", ""))
-        base = base_url(host, getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
+        # the address as given: an https scheme or a reverse-proxy path prefix is part of how the U1 is reached
+        base = base_url(getattr(params, "host", ""), getattr(params, "port", ""), bool(getattr(params, "use_ssl", False)))
         client = Moonraker(base, key, timeout=5)
         try:
             remember_origins(self._settings(), base)
@@ -1459,14 +1460,15 @@ class U1Agent(pa.PrinterAgentBase):
     def _job_client(self, params):
         """The printer the job names (PrintParams.dev_ip, as OrcaSlicer's Multi-device tab sends it), else the
         connected one. Never the connected U1 for a job that names another."""
-        asked = host_of(getattr(params, "dev_ip", ""))
+        address = clean(getattr(params, "dev_ip", ""))
+        asked = host_of(address)
         with self._lock:
             connected, key, base = self.host, self.api_key, self.base
         host = asked or connected
         if not host:
             raise PrinterError(tr(NO_ADDRESS))
         if host != connected:   # another U1: its own address and key from the job
-            key, base = clean(getattr(params, "password", "")), base_url(host)
+            key, base = clean(getattr(params, "password", "")), base_url(address)
         return host, key, Moonraker(base, key, timeout=10)
 
     @staticmethod

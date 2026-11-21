@@ -200,6 +200,23 @@ class ServiceTests(unittest.TestCase):
             smc.connect()
         self.assertIsNone(smc.printer_spoolman)
 
+    def test_follow_waits_while_the_u1_is_busy(self):
+        """Automatic follow never writes a head mid-print or mid-load; the change goes once the U1 is idle."""
+        fake = self.printer()
+        svc = self.make(fake, spoolman_url="http://127.0.0.1:1")
+        with svc.lock:
+            svc.firmware = {"kind": "stock", "version": "1.0"}
+        view = u1.summarize(fake.status())
+        changed = dict(view, heads=[dict(h, type="PETG", colour="#000000", official=False) for h in view["heads"]],
+                       rfid=[None] * u1.TOOLHEADS)
+        svc._spoolman_follow(view, svc.generation)
+        with mock.patch.object(svc, "cmd_spools", side_effect=sm.SpoolmanError("x")) as spools:
+            svc._spoolman_follow(dict(changed, state="printing"), svc.generation)
+            svc._spoolman_follow(dict(changed, machine_state="AUTO_LOAD"), svc.generation)
+            self.assertEqual(spools.call_count, 0)
+            svc._spoolman_follow(changed, svc.generation)   # idle again: the pending change goes
+            self.assertEqual(spools.call_count, 1)
+
     def test_follow_backs_off_and_retries(self):
         fake = self.printer()
         svc = self.make(fake, spoolman_url="http://127.0.0.1:1")

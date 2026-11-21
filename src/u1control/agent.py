@@ -288,7 +288,9 @@ def parse_command(json_str):
 
 # What the Device tab sends to home, heat and cool (IPrinterAgent.hpp command_go_home, command_set_bed and
 # command_set_nozzle, DevFan.cpp command_control_fan): G-code lines, as this agent reports no MQTT control (DM "fun").
-GUARDED = {"G28": None, "M104": u1.HOTEND_MAX, "M140": u1.BED_MAX, "M106": 255}   # code -> highest S
+# Their heat-and-wait forms (M109, M190) take the same limits. SET_HEATER_TEMPERATURE is left to Klipper's max_temp.
+GUARDED = {"G28": None, "M104": u1.HOTEND_MAX, "M109": u1.HOTEND_MAX, "M140": u1.BED_MAX, "M190": u1.BED_MAX,
+           "M106": 255}   # code -> highest S
 
 
 def guarded_line(script):
@@ -319,7 +321,7 @@ def line_refusal(script, view):
         top, s, t = GUARDED[code], args.get("S"), args.get("T", 0)
         if top is not None and (s is None or not 0 <= s <= top):
             return tr("%s out of range (0 to %d)") % (text, top)
-        if code == "M104" and (t is None or t != int(t) or not 0 <= t < u1.TOOLHEADS):
+        if code in ("M104", "M109") and (t is None or t != int(t) or not 0 <= t < u1.TOOLHEADS):
             return tr("bad toolhead")
     return None
 

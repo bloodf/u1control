@@ -455,6 +455,42 @@ def build_modules():
     return build.MODULES
 
 
+class SecondReviewTests(unittest.TestCase):
+    def setUp(self):
+        self.fake = fakes.FakePrinter()
+        self.addCleanup(self.fake.close)
+
+    def test_print_of_the_gcodes_folder_itself_is_refused(self):
+        svc, pub = make_service(self, self.fake)
+        self.assertIn("bad path", call(self, svc, pub, "print_file", path="gcodes/")["error"])
+        self.assertEqual(self.fake.started, [])
+
+    def test_thumbnail_without_a_size_is_still_picked(self):
+        svc, pub = make_service(self, self.fake)
+        self.fake.thumbnails = [{"width": None, "height": None, "relative_path": ".thumbs/a.png"}]
+        self.assertNotIn("failed", str(call(self, svc, pub, "thumbnail", path="gcodes/a.gcode").get("error")))
+
+    def test_names_with_a_trailing_newline_are_refused(self):
+        import extended
+        import files
+        for pattern, text in ((extended.VALUE_RE, "abc\n"), (extended.INPUT_NAME_RE, "ABC\n"),
+                              (files.FOLDER_NAME_RE, "dir\n"), (files.THUMB_RE, "a.png\n")):
+            self.assertIsNone(pattern.match(text), text)
+
+    def test_gcode_write_replaces_the_file_whole(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, "a.gcode")
+            gcode.write(path, ["G28", "M104 S200"], "\n")
+            with open(path) as f:
+                self.assertEqual(f.read(), "G28\nM104 S200")
+            with mock.patch.object(gcode.os, "replace", side_effect=OSError("disk full")):
+                with self.assertRaises(OSError):
+                    gcode.write(path, ["X"], "\n")
+            with open(path) as f:
+                self.assertEqual(f.read(), "G28\nM104 S200")   # the old file is untouched
+            self.assertEqual(os.listdir(d), ["a.gcode"])        # no temp file left
+
+
 class PluginFixTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
