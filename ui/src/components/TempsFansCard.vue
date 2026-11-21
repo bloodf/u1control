@@ -48,7 +48,7 @@ async function setFan(id: string) {
     <div v-if="st" class="oui-controls">
       <div v-if="temps.length" class="oui-controls-group">
         <p class="oui-label">{{ t('tf.temps') }} <OuiHint id="tf-help" :label="t('tf.driversAbout')" :text="t('tf.driversHelp')" /></p>
-        <OuiKeyValue :items="temps" />
+        <OuiKeyValue class="tf-temps" :items="temps" />
       </div>
       <div v-if="show('fans')" class="oui-controls-group">
         <p class="oui-label">{{ t('tf.fans') }}</p>
@@ -68,6 +68,14 @@ async function setFan(id: string) {
   </OuiPanel>
 </template>
 <style>
+/* Dense: the readings two pairs a row where there is room, and shorter rows. */
+@container oui-widget (min-width: 300px) { [data-test="temps-fans"] .tf-temps { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); gap: 4px var(--oui-s3); } }
+[data-test="temps-fans"] .oui-control-row { min-height: 36px; }
+/* A narrow widget sets a fan on the line under it. */
+@container oui-widget (max-width: 520px) { [data-test="temps-fans"] .oui-control-row { grid-template-columns: minmax(0, 1fr) auto; }
+  [data-test="temps-fans"] .oui-control-row-control { grid-column: 1 / -1; justify-content: flex-start; } }
+[data-test="temps-fans"] .oui-controls { gap: var(--oui-s2) var(--oui-s6); }
+
 /* Compact in a small widget: the readings, not the setters. */
-@container oui-widget (max-width: 300px) or (max-height: 180px) { [data-test="temps-fans"] .oui-control-row-control { display: none; } }
+@container oui-widget (max-width: 220px) { [data-test="temps-fans"] .oui-control-row-control { display: none; } }
 </style>

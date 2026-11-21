@@ -108,4 +108,8 @@ async function setTemp() {
 .u1-heat[data-card] .u1-heat-temp strong { font-size: var(--oui-text-lg); line-height: 1.25; letter-spacing: 0; }
 .u1-heat[data-card] .u1-heat-unit { font-size: 1em; font-weight: 700; }
 .u1-heat[data-card] .u1-heat-why { text-align: start; }
+/* A card wide enough takes the reading and its field on one row (the chart leaves first). */
+.u1-heat[data-card] { padding-top: 6px; }
+@container u1-heat (min-width: 330px) { .u1-heat[data-card] .u1-heat-row { grid-template-columns: minmax(0, 1fr) auto; } .u1-heat[data-card] .u1-heat-set { grid-column: auto; } .u1-heat[data-card] .u1-heat-spark { display: none; } }
+@container u1-heat (min-width: 420px) { .u1-heat[data-card] .u1-heat-row { grid-template-columns: minmax(0, 1fr) auto auto; } .u1-heat[data-card] .u1-heat-spark { display: block; } }
 </style>
