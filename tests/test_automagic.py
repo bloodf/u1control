@@ -90,6 +90,29 @@ class PipelineTests(PluginBase):
         self.assertIsNone(ns["ensure_pipeline"](page._config()))  # guard
         self.assertEqual(len(orca.process_calls), 1)
 
+    def test_printer_preset_gets_u1_controls_address_so_print_is_offered(self):
+        """OrcaSlicer greys out Print (only Export G-code) while the printer preset has no print_host; the address
+        typed in U1 Control's Settings fills it once, unsaved like the pipeline step."""
+        orca, ns, page = self.page({"slicing_pipeline_plugin": '"U1 print setup"'})
+        page._settings().update({"host": "192.168.1.5", "api_key": "k"})
+        page._auto_pipeline()
+        self.assertTrue(wait_for(lambda: orca.printer_calls))
+        self.assertEqual(orca.printer_calls, [{"print_host": "192.168.1.5", "printhost_apikey": "k"}])
+        self.assertTrue(wait_for(lambda: any("Print button" in m.get("text", "") for m in page.posted)))
+        page._auto_pipeline()   # filled now: nothing more
+        time.sleep(0.2)
+        self.assertEqual(len(orca.printer_calls), 1)
+
+    def test_preset_address_is_left_alone_when_set_or_adding_is_off(self):
+        orca, ns, page = self.page({"slicing_pipeline_plugin": '"U1 print setup"', "print_host": "192.168.1.9"})
+        page._settings().update({"host": "192.168.1.5"})
+        self.assertIsNone(ns["host_plan"](page._config()))
+        orca, ns, page = self.page({"slicing_pipeline_plugin": '"U1 print setup"'})
+        page._settings().update({"host": "192.168.1.5", "mode": "expert", "auto_add_pipeline": False})
+        page._auto_pipeline()
+        self.assertTrue(wait_for(lambda: any("Wi-Fi icon" in m.get("text", "") for m in page.posted)))
+        self.assertEqual(orca.printer_calls, [])
+
     def test_config_says_whether_the_preset_runs_print_setup(self):
         _, _, page = self.page({"slicing_pipeline_plugin": ["Other"], "name": "My process"})
         self.assertEqual(page._config_message()["pipeline"], {"preset": "My process", "on": False})

@@ -20,6 +20,8 @@ PL = {
     "U1 print setup": "Ustawienia druku U1",
     "U1 print setup: cancelled, nothing was sent.": "Ustawienia druku U1: anulowano, niczego nie wysłano.",
     "U1 print setup: %s": "Ustawienia druku U1: %s",
+    "U1 Control's printer address added to %s, so OrcaSlicer's Print button can send to the U1; save the preset to keep it": 'Adres drukarki z U1 Control dodano do %s, więc przycisk Drukuj w OrcaSlicer może wysyłać do U1; zapisz profil, aby go zachować',
+    "OrcaSlicer's Print button stays greyed out (only Export G-code) until the U1 printer preset has an address: click the Wi-Fi icon next to the printer and enter %s": 'Przycisk Drukuj w OrcaSlicer pozostaje szary (tylko Eksportuj G-code), dopóki profil drukarki U1 nie ma adresu: kliknij ikonę Wi-Fi obok drukarki i wpisz %s',
     "U1 print setup added to %s; save the preset to keep it": "Dodano ustawienia druku U1 do %s; zapisz profil, aby je zachować",
     "not a Snapmaker U1 print; skipped": "to nie jest wydruk dla Snapmaker U1; pominięto",
     "U1 G-code prepared (top cover: %s)": "Przygotowano G-code dla U1 (górna pokrywa: %s)",

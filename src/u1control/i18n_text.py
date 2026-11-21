@@ -164,6 +164,16 @@ MESSAGES = {
         "La U1 seleccionada no tiene dirección: haga clic en el icono de Wi-Fi junto a la impresora e introduzca su IP.",
         "Der gewählte U1 hat keine Adresse: Klicken Sie auf das WLAN-Symbol neben dem Drucker und geben Sie die IP ein.",
         "所选的 U1 没有地址：请点击打印机旁的 Wi-Fi 图标并输入其 IP。"),
+    "U1 Control's printer address added to %s, so OrcaSlicer's Print button can send to the U1; save the preset to keep it": _m(
+        "Endereço da impressora do U1 Control adicionado a %s, para o botão Imprimir do OrcaSlicer enviar à U1; salve o perfil para manter",
+        "Dirección de la impresora de U1 Control añadida a %s, para que el botón Imprimir de OrcaSlicer envíe a la U1; guarde el perfil para conservarla",
+        "Die Druckeradresse aus U1 Control wurde zu %s hinzugefügt, damit die Drucken-Schaltfläche von OrcaSlicer an den U1 senden kann; speichern Sie das Profil, um sie zu behalten",
+        "已将 U1 Control 的打印机地址添加到 %s，OrcaSlicer 的“打印”按钮即可发送到 U1；请保存预设以保留"),
+    "OrcaSlicer's Print button stays greyed out (only Export G-code) until the U1 printer preset has an address: click the Wi-Fi icon next to the printer and enter %s": _m(
+        "O botão Imprimir do OrcaSlicer fica cinza (só Exportar G-code) até o perfil da impressora U1 ter um endereço: clique no ícone de Wi-Fi ao lado da impressora e informe %s",
+        "El botón Imprimir de OrcaSlicer queda en gris (solo Exportar G-code) hasta que el perfil de la impresora U1 tenga dirección: haga clic en el icono de Wi-Fi junto a la impresora e introduzca %s",
+        "Die Drucken-Schaltfläche von OrcaSlicer bleibt grau (nur G-Code exportieren), bis das U1-Druckerprofil eine Adresse hat: Klicken Sie auf das WLAN-Symbol neben dem Drucker und geben Sie %s ein",
+        "在 U1 打印机预设有地址之前，OrcaSlicer 的“打印”按钮保持灰色（只能导出 G-code）：请点击打印机旁的 Wi-Fi 图标并输入 %s"),
     "Spooler is keeping slots synced": _m(
         "O Spooler está mantendo os slots sincronizados", "Spooler mantiene las ranuras sincronizadas",
         "Spooler hält die Plätze synchron", "Spooler 正在保持槽位同步"),

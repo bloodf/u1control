@@ -131,5 +131,28 @@ class Messages(unittest.TestCase):
                 self.assertNotIn("stock", text.lower().replace("stock-", ""))
 
 
+    def test_firmware_config_labels_in_czech_with_english_fallback(self):
+        import extended
+        data = {"tweaks": {"label": "Tweaks", "items": [
+            {"id": "max_speed", "label": "Max Speed", "description": "Something new from the firmware",
+             "options": {"balanced": {"label": "Balanced"}, "x": {"label": "Unknown option"}}}]}}
+        i18n.use("cs")
+        group = extended.normalize_settings(data)[0]
+        item = group["items"][0]
+        self.assertEqual((group["label"], item["label"], item["description"]),
+                         ("Vyladění (Tweaks)", "Maximální rychlost", "Something new from the firmware"))
+        self.assertEqual([o["label"] for o in item["options"]], ["Vyvážený", "Unknown option"])
+        i18n.use("de")
+        self.assertEqual(extended.normalize_settings(data)[0]["items"][0]["label"], "Max Speed")
+
+    def test_log_goes_to_stderr(self):
+        """OrcaSlicer copies sys.stderr, not stdout, into its python_*.log."""
+        import io
+        err = io.StringIO()
+        with mock.patch.object(sys, "stderr", err), mock.patch.object(sys, "stdout", io.StringIO()) as out:
+            plugin.log("hello \u2192")
+        self.assertIn("[u1control] hello", err.getvalue())
+        self.assertEqual(out.getvalue(), "")
+
 if __name__ == "__main__":
     unittest.main()

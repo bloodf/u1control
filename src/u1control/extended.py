@@ -121,7 +121,7 @@ def _option(value, raw):
     if not isinstance(raw, dict) or not VALUE_RE.match(str(value)):
         raise ValueError("option %r" % value)
     confirm = raw.get("confirm")
-    return {"value": str(value), "label": _text(raw.get("label")) or str(value),
+    return {"value": str(value), "label": tr(_text(raw.get("label"))) or str(value),
             "confirm": confirm if isinstance(confirm, str) else ("" if not confirm else tr("Apply this change?")),
             "hidden": raw.get("hidden") is True, "inputs": _inputs(raw.get("inputs"))}
 
@@ -130,7 +130,7 @@ def _item(raw):
     if not isinstance(raw, dict) or not SETTING_ID_RE.match(_text(raw.get("id"))) or not isinstance(raw.get("options"), dict):
         raise ValueError("setting")
     current = raw.get("current")
-    return {"id": raw["id"], "label": _text(raw.get("label")) or raw["id"], "description": _text(raw.get("description")),
+    return {"id": raw["id"], "label": tr(_text(raw.get("label"))) or raw["id"], "description": tr(_text(raw.get("description"))),
             "help_url": _text(raw.get("help_url")), "current": "" if current is None else str(current),
             "hidden": raw.get("hidden") is True, "print_safe": raw["id"] in PRINT_SAFE,
             "options": [_option(k, v) for k, v in raw["options"].items()]}
@@ -148,7 +148,7 @@ def normalize_settings(data):
         for gid, group in data.items():
             if not isinstance(group, dict) or not isinstance(group.get("items"), list):
                 raise ValueError("group %r" % gid)
-            groups.append({"id": str(gid), "label": _text(group.get("label")) or str(gid),
+            groups.append({"id": str(gid), "label": tr(_text(group.get("label"))) or str(gid),
                            "items": [_item(i) for i in group["items"]]})
         return groups
     except ValueError as e:

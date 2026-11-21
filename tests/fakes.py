@@ -447,10 +447,20 @@ def install_orca(answer=None, preset=None, filament_names=(), filament_meta=None
             orca.process_calls.append((self.name, self.values))
             preset["slicing_pipeline_plugin"] = self.values.get("slicing_pipeline_plugin")
 
+    orca.printer_calls = []
+
+    class PrinterTx(Tx):
+        target_name = Preset.name
+
+        def commit(self):
+            orca.printer_calls.append(dict(self.values))
+            preset.update(self.values)
+
     store_dir = storage or tempfile.mkdtemp()
     orca.host = types.SimpleNamespace(
         preset=types.SimpleNamespace(filament=types.SimpleNamespace(begin_update=begin_update),
                                      process=types.SimpleNamespace(begin_update=lambda name: ProcessTx(0, name)),
+                                     printer=types.SimpleNamespace(begin_update=lambda name: PrinterTx(0, name)),
                                      bundles=types.SimpleNamespace(list_ids=lambda: list(bundle_ids))),
         ui=types.SimpleNamespace(create_window=create_window, WINDOW_MODAL=1, message=lambda *a, **k: "yes",
                                  NotificationLevel=types.SimpleNamespace(RegularNotificationLevel=1),

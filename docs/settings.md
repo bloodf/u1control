@@ -12,7 +12,7 @@ plugin uses the same file. Change them on the **Settings** page of the U1 Contro
 
 | Setting | Key | Automagic value | Choices | What it does |
 |---|---|---|---|---|
-| Add "U1 print setup" to U1 process presets | `auto_add_pipeline` | on | on / off | Adds it to the Slicing Pipeline Plugin setting of your U1 process preset (save the preset to keep it). |
+| Add "U1 print setup" to U1 process presets | `auto_add_pipeline` | on | on / off | Adds it to the Slicing Pipeline Plugin setting of your U1 process preset, and gives a U1 printer preset with no address U1 Control's printer address so OrcaSlicer's Print button works (save the presets to keep them). |
 | Show print setup before sending | `print_dialog` | on | on / off | After OrcaSlicer's Print, choose the toolheads and options in U1 Control's window. Off: OrcaSlicer's choice is sent as is, and a material mismatch or a busy U1 is still refused. A stored "never" reads as off. |
 | Top cover (purifier) mode | `purifier` | auto | auto / keep-warm / weak / strong / off | auto follows Snapmaker's softening-temperature rule. |
 | Wait for chamber temperature | `chamber_wait` | on | on / off | Adds WAIT_CHAMBER_TEMP after bed heat-up when missing. |

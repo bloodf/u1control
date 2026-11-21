@@ -35,8 +35,8 @@ Automagic mode runs every step it can by itself and asks only when a choice is n
 
 ## How to start
 
-1. Subscribe, open **File > Plugins**, click **Refresh** and tick **Activate**. Allow the background thread.
-2. Select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name). The **U1 Control** tab appears next to Prepare and Preview.
+1. Subscribe, open OrcaSlicer's **Plugins** dialog, click **Refresh** and tick **Activate**. Allow the background thread. Where the dialog is: macOS, **File > Plugins** in the menu bar; Windows and Linux, the small **▾** arrow next to **File** at the top left of the window, then **Plugins** (not inside the File menu).
+2. Select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name). Without it OrcaSlicer offers only **Export G-code**. The **U1 Control** tab appears next to Prepare and Preview.
 3. Automagic adds **U1 print setup** to your U1 process preset. Save the preset, slice and press **Print**.
 
 ## Privacy
@@ -97,8 +97,8 @@ O modo Automágico roda sozinho tudo o que pode e só pergunta quando é preciso
 
 ## Como começar
 
-1. Assine, abra **File > Plugins**, clique em **Refresh** e marque **Activate**. Permita a thread em segundo plano.
-2. Selecione a sua Snapmaker U1 e informe o endereço IP dela (o ícone de Wi-Fi ao lado do nome da impressora). A aba **U1 Control** aparece ao lado de Prepare e Preview.
+1. Assine, abra a janela **Plugins** do OrcaSlicer, clique em **Refresh** e marque **Activate**. Permita a thread em segundo plano. Onde fica a janela: no macOS, **File > Plugins** na barra de menus; no Windows e no Linux, a pequena seta **▾** ao lado de **File**, no canto superior esquerdo da janela, e depois **Plugins** (não fica dentro do menu File).
+2. Selecione a sua Snapmaker U1 e informe o endereço IP dela (o ícone de Wi-Fi ao lado do nome da impressora). Sem ele o OrcaSlicer só oferece **Exportar G-code**. A aba **U1 Control** aparece ao lado de Prepare e Preview.
 3. O Automágico acrescenta **U1 print setup** ao seu perfil de processo da U1. Salve o perfil, fatie e aperte **Imprimir**.
 
 ## Privacidade

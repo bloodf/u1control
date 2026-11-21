@@ -41,6 +41,7 @@ _store = None
 _store_lock = threading.Lock()
 _page_ref = lambda: None   # the U1 Control tab once loaded (weakref)
 _pipeline_done = set()   # process presets U1 print setup was already offered for this session
+_host_done = set()       # printer presets given U1 Control's address (or told how) this session
 _presets_lock = threading.Lock()   # preset edits (begin_update/commit) run one at a time, off the UI thread
 _queue_on_main = None    # OrcaSlicer's queue_on_main, once it hands it to the printer agent
 UI_WAIT = 5.0            # seconds a script's worker thread waits for the UI thread to read the presets
@@ -116,13 +117,14 @@ def page_html(mode, data=None, language="auto"):
 
 
 def log(msg):
-    # Logging must never raise: a Windows console (cp1252) cannot encode characters such as "\u2192".
+    # stderr: OrcaSlicer tees sys.stderr (not stdout) into <data dir>/log/python_*.log (PythonInterpreter.cpp,
+    # install_python_stderr_redirect). Logging must never raise: a Windows console (cp1252) cannot encode "\u2192".
     line = "[u1control] " + str(msg)
     try:
-        print(line)
+        print(line, file=sys.stderr, flush=True)
     except UnicodeEncodeError:
-        enc = getattr(sys.stdout, "encoding", None) or "ascii"
-        print(line.encode(enc, "replace").decode(enc))
+        enc = getattr(sys.stderr, "encoding", None) or "ascii"
+        print(line.encode(enc, "replace").decode(enc), file=sys.stderr, flush=True)
 
 
 _storage_dir = None
@@ -442,13 +444,22 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
         return True
 
     def _auto_pipeline(self):
-        """UI thread (page messages, lifecycle events): presets are read here, only the write runs on a plugin
+        """UI thread (page messages, lifecycle events): presets are read here, only the writes run on a plugin
         thread."""
+        cfg = self._config()
         try:
-            plan = pipeline_plan(self._config())
+            plan = pipeline_plan(cfg)
         except Exception as e:
             log("auto-add U1 print setup failed: %r" % e)
             plan = None
+        try:
+            hplan = host_plan(cfg)
+        except Exception as e:
+            log("printer preset address not checked: %r" % e)
+            hplan = None
+        if hplan is not None and not cfg.get("auto_add_pipeline"):   # Expert, adding off: say how, write nothing
+            self.post_message({"type": "notice", "text": tr(NO_PRESET_HOST) % hplan[1]["print_host"]})
+            hplan = None
         message = self._config_message()   # the Settings page says whether this preset runs it
 
         def job():
@@ -459,10 +470,19 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                     self.post_message({"type": "notice", "text": tr("U1 print setup added to %s; save the preset to keep it") % name})
             except Exception as e:
                 log("auto-add U1 print setup failed: %r" % e)
+            try:
+                name = apply_host(hplan)
+                if name:
+                    self.post_message({"type": "notice", "text": tr(HOST_ADDED) % name})
+            except Exception as e:
+                log("printer preset address not set: %r" % e)
+                self.post_message({"type": "notice", "text": tr(NO_PRESET_HOST) % hplan[1]["print_host"]})
             self.post_message(message)
         if not self._background(job):   # another preset edit is running: still say which preset is selected now
             if plan is not None:
                 _pipeline_done.discard(plan[0])   # not written: offered again on the next event
+            if hplan is not None:
+                _host_done.discard(hplan[0])
             self.post_message(message)
 
     def on_lifecycle_event(self, event, ctx):
@@ -470,7 +490,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
         if event == orca.LifecycleEvent.DeviceSelected or (
                 event == orca.LifecycleEvent.PresetSelected and kind == "printer"):
             self.post_message({"type": "selection_changed"})
-        if (event == orca.LifecycleEvent.PresetSelected and kind in ("print", "process")) or (
+        if (event == orca.LifecycleEvent.PresetSelected and kind in ("print", "process", "printer")) or (
                 event == getattr(orca.LifecycleEvent, "ProjectOpened", None)):
             self._auto_pipeline()
 
@@ -583,6 +603,56 @@ def apply_pipeline(plan):
         ui = orca.host.ui
         ui.push_notification(ui.NotificationLevel.RegularNotificationLevel,
                              tr("U1 print setup added to %s; save the preset to keep it") % name)
+    except Exception as e:
+        log("notification failed: %r" % e)
+    return name
+
+
+HOST_ADDED = "U1 Control's printer address added to %s, so OrcaSlicer's Print button can send to the U1; save the preset to keep it"
+NO_PRESET_HOST = ("OrcaSlicer's Print button stays greyed out (only Export G-code) until the U1 printer preset has an "
+                  "address: click the Wi-Fi icon next to the printer and enter %s")
+
+
+def host_plan(cfg):
+    """UI thread: (printer preset name, {setting: value}) when the selected U1 printer preset has no address but
+    U1 Control has one (Settings > Printer address). Without print_host OrcaSlicer greys out Print and offers only
+    Export G-code (MainFrame::can_send_gcode), so U1 print setup never runs. Once per preset name per session;
+    None when there is nothing to fill."""
+    host = clean(cfg.get("host"))
+    if not host:
+        return None
+    bundle = orca.host.preset_bundle()
+    printer = bundle.current_printer_preset()
+    if not is_u1_name(printer.config_value("printer_model"), printer.name, printer.config_value("inherits")):
+        return None
+    if clean(printer.config_value("print_host")) or clean(bundle.full_config_value("print_host")):
+        return None
+    if printer.name in _host_done:
+        return None
+    _host_done.add(printer.name)
+    values = {"print_host": host}
+    key = clean(cfg.get("api_key"))
+    if key and not clean(printer.config_value("printhost_apikey")):
+        values["printhost_apikey"] = key
+    return printer.name, values
+
+
+def apply_host(plan):
+    """Plugin thread (begin_update blocks until the UI thread applied it): write a host_plan into the selected
+    printer preset, unsaved like a hand edit. Returns the preset name when written."""
+    if plan is None:
+        return None
+    name, values = plan
+    tx = orca.host.preset.printer.begin_update("")
+    if tx.target_name != name:   # the user switched printer meanwhile: leave the other preset alone
+        _host_done.discard(name)
+        return None
+    for k, v in values.items():
+        tx.set(k, v)
+    tx.commit()
+    try:
+        ui = orca.host.ui
+        ui.push_notification(ui.NotificationLevel.RegularNotificationLevel, tr(HOST_ADDED) % name)
     except Exception as e:
         log("notification failed: %r" % e)
     return name

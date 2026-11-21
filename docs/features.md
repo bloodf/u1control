@@ -49,7 +49,7 @@ Control tab says whether your process preset runs it.
 With OrcaSlicer's printer agents, u1control can be the U1's agent instead, so OrcaSlicer's own Print
 dialog and Device tab work with the U1:
 
-1. In OrcaSlicer, open **Preferences** (macOS: the OrcaSlicer menu; Windows and Linux: the main menu),
+1. In OrcaSlicer, open **Preferences** (macOS: the OrcaSlicer menu; Windows and Linux: the small **▾** arrow next to **File** at the top left of the window),
    go to the **Developer** tab, and under **Experimental Features** tick **Use printer agents instead of
    print hosts**.
 2. Restart OrcaSlicer.
@@ -258,9 +258,11 @@ toolhead reports, and only if that preset is its own base:
 
 1. Subscribe to U1 Control on [Orca Cloud](https://cloud.orcaslicer.com/p/55b8c347d443), or download
    `u1control_any.whl` from the [latest release](https://github.com/bloodf/u1control/releases/latest) and use
-   **File > Plugins > Install local plugin**.
+   **Install local plugin** in OrcaSlicer's **Plugins** dialog (macOS: **File > Plugins** in the menu bar; Windows
+   and Linux: the small **▾** arrow next to **File** at the top left of the window, then **Plugins**).
 2. Tick **Activate** and allow the background thread when OrcaSlicer asks.
-3. Select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name).
+3. Select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name). Without it
+   OrcaSlicer offers only **Export G-code**; in Automagic mode u1control fills it in from its own Settings.
 4. In Automagic mode u1control adds **U1 print setup** to your U1 process preset. Save the preset to
    keep it. In Expert mode, add it yourself under **Process > Others > Slicing Pipeline Plugin**.
 

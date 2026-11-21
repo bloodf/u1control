@@ -32,12 +32,14 @@ O U1 Control é um plugin do OrcaSlicer 2.5 para a Snapmaker U1. Ele acrescenta 
 
 ## 📦 Instalação
 
-Abra o [U1 Control no Orca Cloud](https://cloud.orcaslicer.com/p/55b8c347d443) e assine; depois marque **Activate** em **File > Plugins** no OrcaSlicer.
+Abra o [U1 Control no Orca Cloud](https://cloud.orcaslicer.com/p/55b8c347d443) e assine; depois marque **Activate** na janela **Plugins** do OrcaSlicer.
+
+A janela **Plugins** do OrcaSlicer fica, no macOS, em **File > Plugins** na barra de menus no alto da tela. No Windows e no Linux, clique na pequena seta **▾** ao lado de **File**, no canto superior esquerdo da janela do OrcaSlicer, e depois em **Plugins** (não fica dentro do menu File).
 
 A partir de um arquivo:
 
 1. Baixe `u1control_any.whl` da [última versão](https://github.com/bloodf/u1control/releases/latest).
-2. No OrcaSlicer, abra **File > Plugins > Install local plugin** e escolha o arquivo.
+2. Na janela **Plugins** do OrcaSlicer, clique em **Install local plugin** e escolha o arquivo.
 3. Marque **Activate** e permita a thread em segundo plano quando o OrcaSlicer perguntar.
 
 | Requisito | Detalhe |
@@ -108,7 +110,7 @@ Os detalhes estão em [docs/features.md](docs/features.md) e todos os ajustes em
 <a id="-como-usar"></a>
 ## 🛠️ Como usar
 
-1. No OrcaSlicer, selecione a sua Snapmaker U1 e informe o endereço IP dela (o ícone de Wi-Fi ao lado do nome da impressora).
+1. No OrcaSlicer, selecione a sua Snapmaker U1 e informe o endereço IP dela (o ícone de Wi-Fi ao lado do nome da impressora). Sem ele o OrcaSlicer só oferece **Exportar G-code**; no modo Automágico o U1 Control preenche com o endereço dos **Ajustes** dele.
 2. Abra a aba **U1 Control**, ao lado de Prepare, Preview e Device. O **Painel** mostra a impressão, a mesa e as quatro cabeças. **Ligar câmera** liga a imagem.
 3. No modo Automágico o plugin acrescenta **U1 print setup** ao seu perfil de processo da U1. Salve o perfil para manter. No modo Especialista, acrescente você mesmo em **Process > Others > Slicing Pipeline Plugin**.
 4. Fatie e aperte **Imprimir**. Quando é preciso escolher, a janela **Preparar impressão na U1** abre: confira **Filamento → cabeça** e **Opções de impressão** e aperte **Enviar à U1**.
@@ -152,6 +154,12 @@ Não. O preparo da impressão, a câmera, as cabeças, as etiquetas RFID da Snap
 <summary>Por que aparecem duas janelas quando clico em Imprimir?</summary>
 
 O OrcaSlicer sempre abre a própria janela Imprimir primeiro, e nenhum plugin pode substituí-la. O preparo da impressão do U1 Control abre em seguida, já preenchido com o que você escolheu, para conferir as cabeças e as opções antes de enviar. Para pular, mude para Especialista e desligue **Mostrar o preparo antes de enviar**; um material diferente ou uma U1 ocupada continuam sendo recusados.
+</details>
+
+<details>
+<summary>O Imprimir fica cinza e o OrcaSlicer só oferece Exportar G-code. O que falta?</summary>
+
+O perfil de impressora da U1 não tem endereço. O OrcaSlicer só liga **Imprimir** quando o perfil de impressora selecionado tem um, não importa o que o U1 Control saiba. Clique no ícone de Wi-Fi ao lado do nome da impressora, informe o IP da U1 e salve o perfil. No modo Automágico o U1 Control preenche sozinho com o endereço dos **Ajustes** dele (salve o perfil de impressora para manter). Depois escolha **Imprimir** na pequena seta ao lado de **Exportar arquivo G-code**.
 </details>
 
 <details>
