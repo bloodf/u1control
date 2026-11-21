@@ -7,6 +7,9 @@ The page's own texts are in ui/src/core/messages*.ts. Text the printer sends is 
 """
 
 from i18n_text import MESSAGES
+from i18n_text_cs import FIRMWARE as FIRMWARE_CS
+
+FIRMWARE = {"cs": FIRMWARE_CS}   # Extended Firmware texts (English from the printer); other languages keep the English
 
 LANGUAGES = ("en", "pt-BR", "es", "de", "zh-CN", "pl", "cs")
 _PREFIXES = (("pt", "pt-BR"), ("en", "en"), ("es", "es"), ("de", "de"), ("zh", "zh-CN"), ("pl", "pl"), ("cs", "cs"))   # zh_TW reads zh-CN too
@@ -37,4 +40,7 @@ def language():
 
 def tr(text):
     """`text` (English) in the language in use. Format the answer afterwards: tr("T%d is empty") % 2."""
-    return text if _language == "en" else MESSAGES.get(text, {}).get(_language, text)
+    if _language == "en":
+        return text
+    langs = MESSAGES.get(text)
+    return langs.get(_language, text) if langs else FIRMWARE.get(_language, {}).get(text, text)

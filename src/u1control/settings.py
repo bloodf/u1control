@@ -18,7 +18,8 @@ AUTOMATIONS = [
     ("mode", "Mode", "Automagic does everything it can by itself; Expert lets you change each step.",
      AUTOMAGIC, (AUTOMAGIC, EXPERT)),
     ("auto_add_pipeline", "Add \"U1 print setup\" to U1 process presets",
-     "Adds it to the Slicing Pipeline Plugin setting of your U1 process preset (save the preset to keep it).", True, "bool"),
+     "Adds it to the Slicing Pipeline Plugin setting of your U1 process preset, and gives a U1 printer preset with no "
+     "address U1 Control's printer address so OrcaSlicer's Print button works (save the presets to keep them).", True, "bool"),
     ("print_dialog", "Show print setup before sending",
      "After OrcaSlicer's Print, choose the toolheads and options in U1 Control's window. Off: OrcaSlicer's "
      "choice is sent as is, and a material mismatch or a busy U1 is still refused.", True, "bool"),

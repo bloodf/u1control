@@ -32,8 +32,9 @@ Spooler with the presence/stock-list API (release v0.21.0 or newer); CI checks o
 `spooler_ref` or the repository variable `SPOOLER_REF` says otherwise. Page tests need Node 24 and Chrome or
 Chromium (`CHROME=...`); CI runs them with `WORKERS=1` (one scenario at a time). Releases: [docs/release.md](docs/release.md).
 
-To try a build in OrcaSlicer: **File > Plugins > Install local plugin**, pick
-`dist/u1control_any.whl`, then **Activate**. Python errors and `print()` output go to
+To try a build in OrcaSlicer: **Plugins > Install local plugin** (macOS: **File > Plugins**; Windows and Linux: the
+**▾** arrow next to **File**, then **Plugins**), pick
+`dist/u1control_any.whl`, then **Activate**. Python errors and U1 Control's log lines (stderr) go to
 `<OrcaSlicer data folder>/log/python_*.log`.
 
 ## Layout

@@ -32,12 +32,14 @@ U1 Control is an OrcaSlicer 2.5 plugin for the Snapmaker U1. It adds a printer t
 
 ## 📦 Install
 
-Open [U1 Control on Orca Cloud](https://cloud.orcaslicer.com/p/55b8c347d443) and subscribe, then tick **Activate** under **File > Plugins** in OrcaSlicer.
+Open [U1 Control on Orca Cloud](https://cloud.orcaslicer.com/p/55b8c347d443) and subscribe, then tick **Activate** in OrcaSlicer's **Plugins** dialog.
+
+OrcaSlicer's **Plugins** dialog is on macOS under **File > Plugins** in the menu bar at the top of the screen. On Windows and Linux, click the small **▾** arrow next to **File** at the top left of the OrcaSlicer window, then **Plugins** (it is not inside the File menu).
 
 From a file:
 
 1. Download `u1control_any.whl` from the [latest release](https://github.com/bloodf/u1control/releases/latest).
-2. In OrcaSlicer, open **File > Plugins > Install local plugin** and pick the file.
+2. In OrcaSlicer's **Plugins** dialog, click **Install local plugin** and pick the file.
 3. Tick **Activate** and allow the background thread when OrcaSlicer asks.
 
 | Requirement | Detail |
@@ -108,7 +110,7 @@ Every detail is in [docs/features.md](docs/features.md), and every setting in [d
 <a id="-how-to-use"></a>
 ## 🛠️ How to use
 
-1. In OrcaSlicer, select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name).
+1. In OrcaSlicer, select your Snapmaker U1 printer and enter its IP address (the Wi-Fi icon next to the printer name). Without it OrcaSlicer offers only **Export G-code**; in Automagic mode U1 Control fills it in from its own **Settings**.
 2. Open the **U1 Control** tab next to Prepare, Preview and Device. The **Dashboard** shows the print, the bed and the four toolheads. **Start camera** turns the picture on.
 3. In Automagic mode the plugin adds **U1 print setup** to your U1 process preset. Save the preset to keep it. In Expert mode, add it yourself under **Process > Others > Slicing Pipeline Plugin**.
 4. Slice and press **Print**. When a choice is needed, the **U1 print setup** window opens: check **Filament → toolhead** and **Print options**, then press **Send to U1**.
@@ -152,6 +154,12 @@ No. Print setup, the camera, toolheads, Snapmaker RFID tags, Spoolman, files, ti
 <summary>Why do I see two windows when I press Print?</summary>
 
 OrcaSlicer always opens its own Print dialog first, and no plugin can replace it. U1 Control's print setup opens next, already filled in from what you picked, so you can check the heads and options before anything is sent. To skip it, switch to Expert and turn off **Show print setup before sending**; a different material or a busy U1 is still refused.
+</details>
+
+<details>
+<summary>Print is greyed out and OrcaSlicer only offers Export G-code. What is missing?</summary>
+
+The U1 printer preset has no address. OrcaSlicer turns on **Print** only when the selected printer preset has one, whatever U1 Control knows. Click the Wi-Fi icon next to the printer name, enter the U1's IP and save the preset. In Automagic mode U1 Control fills it in by itself from the address in its **Settings** (save the printer preset to keep it). Then pick **Print** from the small arrow next to **Export G-code file**.
 </details>
 
 <details>

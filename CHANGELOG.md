@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.16.2] - 2026-11-21
+
+### Fixed
+
+- **OrcaSlicer's Print button works when the U1's address was typed only in U1 Control.** OrcaSlicer turns on **Print** only when the selected printer preset has an address; without one it offers only **Export G-code**, and U1 print setup never runs. In Automagic mode U1 Control now copies its printer address into a U1 printer preset that has none, as it adds U1 print setup to the process preset (save the printer preset to keep it); then pick **Print** from the arrow next to the export button. In Expert mode, with adding turned off, it says what to do instead. Thanks to @bluecobras09 for reporting it.
+- **Install steps say where OrcaSlicer's Plugins dialog is.** On macOS it is **File > Plugins** in the menu bar; on Windows and Linux it is behind the small **▾** arrow next to **File** at the top left of the window, not inside the File menu. The README, the Orca Cloud page and the printer-agent steps say so. Thanks to @Robbosfx.
+- The Extended Firmware's settings page is in Czech when U1 Control is: group, setting and option names and descriptions. Text the firmware adds later stays English. Translation by @Veisen.
+- U1 Control's log lines now go to OrcaSlicer's `log/python_*.log` file. OrcaSlicer copies only a plugin's error output into that file, so they were missing from it. From @Veisen's fork.
+
 ## [0.16.1] - 2026-11-21
 
 ### Changed
