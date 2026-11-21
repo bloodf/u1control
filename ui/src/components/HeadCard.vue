@@ -153,7 +153,7 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
     </template>
     <HeaterControl :id="String(i)" card />
     <template v-if="!editing">
-      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && feed.state !== 'preload_finish'"> · {{ t('heads.atInlet') }}</template></p>
+      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && !['preload_finish', 'load_finish'].includes(feed.state || '')"> · {{ t('heads.atInlet') }}</template></p>
     </template>
     <form v-else :id="`hc-form-${i}`" class="hc-form" @submit.prevent="saveEdit">
       <p class="oui-strong hc-form-title">{{ t('edit.title', { n }) }}<OuiHint v-if="tagged" :label="t('heads.tag')" :text="t('edit.rfidNote')" /></p>
