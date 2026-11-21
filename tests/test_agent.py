@@ -149,10 +149,41 @@ class CommandTests(unittest.TestCase):
     def test_camera_is_moonrakers_first_enabled_webcam(self):
         base = "http://10.0.0.2:7125"
         cams = {"webcams": [{"enabled": False, "snapshot_url": "/off.jpg"}, {"name": "c", "snapshot_url": "/webcam/?action=snapshot"}]}
-        self.assertEqual(agent.snapshot_url(cams, base), base + "/webcam/?action=snapshot")
-        self.assertEqual(agent.snapshot_url({"webcams": [{"snapshot_url": "http://cam/s.jpg"}]}, base), "http://cam/s.jpg")
-        for bad in (None, [], {"webcams": None}, {"webcams": [{"snapshot_url": ""}, "x"]}):
-            self.assertEqual(agent.snapshot_url(bad, base), "")
+        self.assertEqual(agent.camera_source(cams, base), ("HTTP_SNAPSHOT", base + "/webcam/?action=snapshot"))
+        self.assertEqual(agent.camera_source({"webcams": [{"snapshot_url": "http://cam/s.jpg"}]}, base),
+                         ("HTTP_SNAPSHOT", "http://cam/s.jpg"))
+        mjpeg = {"webcams": [{"service": "mjpegstreamer-adaptive", "stream_url": "/webcam/?action=stream",
+                              "snapshot_url": "/webcam/?action=snapshot"}]}
+        self.assertEqual(agent.camera_source(mjpeg, base), ("HTTP", base + "/webcam/?action=stream"))   # a stream plays
+        webrtc = {"webcams": [{"service": "webrtc-camerastreamer", "stream_url": "/webcam/webrtc", "snapshot_url": "/s.jpg"}]}
+        self.assertEqual(agent.camera_source(webrtc, base), ("HTTP_SNAPSHOT", base + "/s.jpg"))   # OrcaSlicer can't play it
+        self.assertEqual(agent.camera_source({"webcams": [{"stream_url": "rtsp://10.0.0.2/live"}]}, base),
+                         ("RTSP", "rtsp://10.0.0.2/live"))
+
+    def test_without_a_webcam_the_camera_is_the_stock_picture(self):
+        base = "http://10.0.0.2:7125"
+        for none in (None, [], {"webcams": None}, {"webcams": []}, {"webcams": [{"snapshot_url": ""}, "x"]}):
+            self.assertEqual(agent.camera_source(none, base), ("HTTP_SNAPSHOT", base + agent.STOCK_CAMERA))
+
+    def test_stock_picture_kept_current_only_while_shown(self):
+        self.assertTrue(agent.monitor_due(100.0, 99.0, None))            # shown, never asked
+        self.assertFalse(agent.monitor_due(100.0, 99.0, 80.0))           # asked 20 s ago
+        self.assertTrue(agent.monitor_due(100.0, 99.0, 50.0))            # asked 50 s ago: before the U1 stops
+        self.assertFalse(agent.monitor_due(100.0, 80.0, None))           # not shown for 20 s
+        self.assertFalse(agent.monitor_due(100.0, None, None))           # never shown
+
+    def test_speed_level_and_m220(self):
+        self.assertEqual([agent.speed_level(f) for f in (0.5, 1.0, 1.24, 1.66, 1.3, None)], [1, 2, 3, 4, 3, 2])
+        self.assertEqual(agent.push_status(view(speed_factor=1.66))["print"]["spd_lvl"], 4)
+        for lvl, pct in ((1, 50), (2, 100), (3, 124), (4, 166)):
+            cmd = self.kind({"print": {"command": "print_speed", "param": str(lvl), "sequence_id": "9"}})
+            self.assertEqual((cmd["kind"], cmd["script"], cmd["seq"]), ("gcode", "M220 S%d" % pct, "9"))
+        self.assertEqual(self.kind({"print": {"command": "print_speed", "param": "5"}})["kind"], "unsupported")
+
+    def test_chamber_temperature_shown_when_reported(self):
+        p = agent.push_status(view(chamber=31.5))["print"]
+        self.assertEqual((p["chamber_temper"], p["support_chamber_temp_display"]), (31.5, True))
+        self.assertNotIn("chamber_temper", agent.push_status(view(chamber=None))["print"])
 
     def test_unsupported_and_invalid(self):
         self.assertEqual(self.kind({"print": {"command": "calibration"}})["kind"], "unsupported")
@@ -874,6 +905,14 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(self.agent.get_camera_stream_mode(), pa.CameraStreamMode.HTTP_SNAPSHOT)
         self.agent.disconnect_printer()
         self.assertEqual((self.agent.get_camera_url(), self.agent.get_camera_stream_mode()), ("", pa.CameraStreamMode.None_))
+
+    def test_device_tab_camera_on_stock_firmware_is_its_camera_picture(self):
+        pa = self.orca.printer_agent
+        self.connect()   # FakePrinter lists no webcam, as the stock firmware
+        self.assertTrue(wait_for(lambda: self.agent.get_camera_url()))
+        self.assertEqual(self.agent.get_camera_url(), "http://%s%s" % (self.fake.host, agent.STOCK_CAMERA))
+        self.assertEqual(self.agent.get_camera_stream_mode(), pa.CameraStreamMode.HTTP_SNAPSHOT)
+        self.assertEqual(self.agent.command_start_camera("dev"), 0)
 
     def test_discovery_and_detect_report_the_u1_model_id(self):
         found = []
