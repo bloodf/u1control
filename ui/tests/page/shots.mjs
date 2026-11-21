@@ -18,7 +18,8 @@ const VIEW = {state: IDLE ? 'standby' : 'printing', message: '', filename: IDLE 
   extruders: [0,1,2,3].map(i => ({temp: i === 0 ? 219.6 : 25, target: i === 0 ? 220 : 0, active: i === 0})), bed: {temp: 59.8, target: 60},
   heads: ['PLA','PETG','','PLA'].map((t, i) => ({loaded: !!t, type: t, vendor: t ? 'Generic' : '', sub_type: t ? 'Basic' : '', colour: ['#e5484d','#3e63dd','','#78cfd5'][i], official: i === 0})),
   rfid: [{vendor: 'Snapmaker', type: 'PLA', uid: '04A1', official: true}, null, null, null], options: {bed_level: true, flow_calibrate: true, time_lapse_camera: false, unload_when_done: false},
-  purifier: {fitted: true}, feed: [{state: 'loaded'},{state: 'loaded'},{state: 'empty'},{state: 'loaded'}], busy: !IDLE, machine_state: IDLE ? 'IDLE' : 'PRINTING', bindings: {'0': 7}, light: true, speed_factor: 1};
+  purifier: {fitted: true, exhaust: 0.6, inner: 0.3}, chamber: 38.4, fan: IDLE ? 0 : 1, aux_fan: IDLE ? 0 : 0.4,
+  drivers: [['X', 45], ['Y', 47], ['Z', null], ['T1', null], ['T2', null], ['T3', null], ['T4', null]].map(([name, temp]) => ({name, temp, state: IDLE ? null : 'ok'})), feed: [{state: 'loaded'},{state: 'loaded'},{state: 'empty'},{state: 'loaded'}], busy: !IDLE, machine_state: IDLE ? 'IDLE' : 'PRINTING', bindings: {'0': 7}, light: true, speed_factor: 1};
 if (SCN !== 'notarget') {
   __t.handler({type: 'reply', id: hello.id, result: {firmware: {kind: 'stock', version: '2.0.0.205'}, address: '192.168.1.40', printer: 'Bench U1', generation: 1, limits: {hotend: 320, bed: 110}}});
   __t.handler({type: 'status', data: VIEW});
@@ -87,10 +88,15 @@ try {
     await p.goto(pathToFileURL(file).href + '?theme=' + theme);
     const m = await p.evaluate(`(async () => { ${HELPERS} const SCN = ${JSON.stringify(scn)};
       await until(() => document.querySelector('#app > *'));
-      ${scn.startsWith('setup') ? 'await sleep(300);' : STATE}
+      ${scn.startsWith('setup') ? 'await sleep(300);' : (process.env.LAYOUT ? `{ const h0 = __t.handler; __t.handler = m => h0(m && m.type === 'config' ? {...m, settings: {...m.settings, dashboard: ${process.env.LAYOUT}}} : m); }` : '') + STATE}
       const over = [...document.querySelectorAll('body *')].filter(e => { const r = e.getBoundingClientRect(); return r.width && r.right > innerWidth + 1 && getComputedStyle(e).position !== 'fixed'; })
         .slice(0, 5).map(e => e.tagName + '.' + String(e.className).slice(0, 40));
-      const natural = [...document.querySelectorAll('.oui-dash-cell')].map(c => { const p = c.querySelector('.oui-panel'); const b = p && p.querySelector(':scope > .oui-panel-body'); return [c.dataset.widget, Math.round(c.getBoundingClientRect().height), b && b.firstElementChild ? Math.round(b.firstElementChild.getBoundingClientRect().height + 41 + parseFloat(getComputedStyle(b).paddingTop) * 2) : 0]; });
+      // Each dashboard widget: its cell's height, what its content needs (header, padding and children), and whether its body
+      // clips or scrolls (MEASURE evidence for the default layout).
+      const natural = [...document.querySelectorAll('.oui-dash-cell')].map(c => { const p = c.querySelector('.oui-panel'); const b = p && p.querySelector(':scope > .oui-panel-body');
+        if (!b) return [c.dataset.widget, 0, 0, false]; const pr = p.getBoundingClientRect(), pad = parseFloat(getComputedStyle(b).paddingBottom);
+        const bottom = Math.max(...[...b.children].map(k => k.getBoundingClientRect().bottom), b.getBoundingClientRect().top + pad);
+        return [c.dataset.widget, Math.round(c.getBoundingClientRect().width), Math.round(c.getBoundingClientRect().height), Math.round(bottom - pr.top + pad), b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1]; });
       const b = document.querySelector('.p-button'); const cs = b ? getComputedStyle(b) : null;
       return { overflowX: document.documentElement.scrollWidth > innerWidth, scrollWidth: document.documentElement.scrollWidth, innerWidth, overflowing: over,
         dom: document.getElementsByTagName('*').length, lang: document.documentElement.lang, dark: document.documentElement.classList.contains('orca-dark'),
