@@ -2549,6 +2549,38 @@ test('dashboard: a stored size too small for its content shows all of it and is 
   eq(last('dashboard'), undefined, 'nothing is saved');
 `);
 
+// ------------------------------------------------------------------ toolhead cards: multi-colour, unnamed filament, no gap
+// The fake U1 of the GUI tests: T2 a three-colour silk (filament_color_multi), T4 loaded but never named (all NONE).
+for (const size of [[1440, 1000], [1920, 1080]]) test(`toolheads at ${size.join('x')}: every colour of a multi-colour spool, unnamed filament is not empty, no gap inside a card`, DASH_JS + `
+  await READY();
+  await post({type: 'status', data: VIEW({feed: [0, 1, 2, 3].map(() => ({state: 'load_finish'})), heads: [
+    head('PLA', {index: 0, colour: '#E53935', colours: ['#E53935']}),
+    head('PLA', {index: 1, sub_type: 'Silk', colour: '#FF0000', colours: ['#FF0000', '#00FF00', '#0000FF']}),
+    head('PLA', {index: 2, sub_type: 'Silk', colour: '#FDD835', colours: ['#FDD835']}),
+    {index: 3, loaded: false, unnamed: true, type: '', vendor: '', sub_type: '', colour: '#FFFFFF', colours: ['#FFFFFF'], official: false}]})});
+  const cards = qa('.hc', cell('heads'));
+  eq(cards.length, 4, 'four cards');
+  const RGB = ['rgb(255, 0, 0)', 'rgb(0, 255, 0)', 'rgb(0, 0, 255)'];
+  const strip = getComputedStyle(q('.oui-slot-strip', cards[1])).backgroundImage;
+  assert(RGB.every(c => strip.includes(c)), 'T2: the strip shows every colour: ' + strip);
+  const paint = q('.oui-spool', cards[1]).style.getPropertyValue('--oui-spool-paint').toUpperCase();
+  assert(['#FF0000', '#00FF00', '#0000FF'].every(c => paint.includes(c)), 'T2: so does the spool: ' + paint);
+  assert(!getComputedStyle(q('.oui-slot-strip', cards[0])).backgroundImage.includes('gradient'), 'T1: one colour, no segments');
+  assert(cards[3].hasAttribute('data-unnamed') && !cards[3].hasAttribute('data-empty'), 'T4: loaded, not empty');
+  assert(text(cards[3]).includes('Unnamed filament') && !text(cards[3]).includes('No filament') && !/\\bEmpty\\b/.test(text(cards[3])), 'T4 says so: ' + text(cards[3]));
+  assert(q('.oui-slot-strip', cards[3]) && q('.oui-spool', cards[3]).style.getPropertyValue('--oui-spool-paint').toUpperCase() === '#FFFFFF', 'T4: in its colour');
+  for (const [a, b] of [[0, 1], [2, 3]]) {
+    const ra = cards[a].getBoundingClientRect(), rb = cards[b].getBoundingClientRect();
+    eq([Math.round(ra.top), Math.round(ra.height)], [Math.round(rb.top), Math.round(rb.height)], 'T' + (a + 1) + ' and T' + (b + 1) + ' share a row');
+    const inner = c => { const acts = q('.oui-slot-actions', c); return Math.round(acts.getBoundingClientRect().top - acts.previousElementSibling.getBoundingClientRect().bottom); };
+    const gaps = [inner(cards[a]), inner(cards[b])];
+    assert(Math.min(...gaps) <= 8, 'the fuller card of the row has its actions right after its content: ' + gaps);
+    assert(Math.max(...gaps) <= 48, 'the other only what its neighbour has more: ' + gaps);
+  }
+  const body = q('.oui-panel-body', cell('heads'));
+  assert(body.scrollHeight <= body.clientHeight + 1, 'the widget still fits its content');
+`, { size });
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');

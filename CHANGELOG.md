@@ -20,6 +20,9 @@
 
 ### Fixed
 
+- **Multi-colour spools show every colour.** A toolhead loaded with a multi-colour spool set up on the printer (`filament_color_multi`) showed only its first colour. Its card's strip and spool, the Stock tab, the printer photo and the print setup now show all of them, side by side, and OrcaSlicer's filament sync receives them too.
+- **A loaded spool nobody has named is no longer called empty.** A toolhead whose spool has no tag and was never set up on the screen reports NONE for everything; its card said **Empty / No filament** while the feeder said the filament was in the head. It now reads **Unnamed filament** in its colour, the print setup says so instead of "empty", and **Apply to project filaments** keeps the project filament for that head, as OrcaSlicer's own U1 sync does.
+- Toolhead cards are only as tall as their content: no blank band between the feeder line and Load / Unload when the dashboard row is taller.
 - OrcaSlicer's **Device** tab and Print dialog, with u1control as the printer agent (thanks @Veisen, from #72):
   - The four toolheads now reach OrcaSlicer: the filament block is sent nested the way OrcaSlicer reads it (`print.ams.ams`), so the Device tab shows them and **Sync from AMS** gets each toolhead's preset, multicolour spools and material variants included.
   - The printer reports the Snapmaker U1's model id, so the Print dialog no longer calls it a printer of another model than the U1 preset.

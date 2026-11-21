@@ -1,4 +1,5 @@
-export interface Head { loaded: boolean; type: string; vendor: string; sub_type: string; colour: string; official?: boolean }
+/** A toolhead (u1.describe_toolheads). loaded: a named filament; unnamed: filament nobody has named (its record says NONE). */
+export interface Head { loaded: boolean; unnamed?: boolean; type: string; vendor: string; sub_type: string; colour: string; colours?: string[]; official?: boolean }
 export interface Heater { temp: number | null; target: number | null; active?: boolean; picked?: boolean }
 export interface Tag { vendor?: string; manufacturer?: string; type?: string; sub_type?: string; uid?: string; official?: boolean;
   hotend_min?: number; hotend_max?: number; bed_temp?: number; sku?: string }

@@ -75,3 +75,15 @@ test('hex parsing and plain colour words', () => {
     '#f5d90a': 'yellow', '#30a46c': 'green', '#00c2d7': 'cyan', '#3e63dd': 'blue', '#8e4ec6': 'purple', '#f78fb3': 'pink' };
   for (const [hex, name] of Object.entries(names)) assert.equal(colourName(hex), name, hex);
 });
+
+test('no linked spool: every colour of the printer\'s multi-colour spool, side by side', () => {
+  const [t1] = figureSpools([{ ...head('PLA', '#FF0000'), colours: ['#FF0000', '#00FF00', '#0000FF'] }], {}, []);
+  assert.deepEqual([t1.colour, t1.colours, t1.name, t1.source], ['#FF0000', ['#FF0000', '#00FF00', '#0000FF'], 'multi', 'printer']);
+  const [t2] = figureSpools([{ ...head('PLA', '#FF0000'), colours: ['#FF0000'] }], {}, []);
+  assert.equal(t2.colours, null);
+});
+
+test('filament nobody has named is drawn, not an empty reel', () => {
+  const [t1] = figureSpools([{ ...head('', '#FFFFFF'), unnamed: true }], {}, []);
+  assert.deepEqual([t1.empty, t1.colour, t1.material, t1.source], [false, '#FFFFFF', '', 'printer']);
+});

@@ -1,6 +1,6 @@
 // What the printer photo shows on each spool holder (no DOM, no Vue): the Spoolman spool linked to the toolhead,
 // else the filament the printer reports, else an empty reel. Shared by PrinterFigure and its unit tests.
-import { spoolFraction } from './spool-level.ts';
+import { present, spoolFraction } from './spool-level.ts';
 import type { Head, Spool } from '../app/types.ts';
 
 export type ColourName = 'black' | 'white' | 'grey' | 'red' | 'orange' | 'brown' | 'yellow' | 'green' | 'cyan' | 'blue' | 'purple' | 'pink' | 'multi';
@@ -45,8 +45,8 @@ export function colourName(value: string | null | undefined): ColourName | null 
 export function figureSpools(heads: Head[] | undefined, bindings: Record<string, number>, spools: Spool[]): FigureSpool[] {
   return [0, 1, 2, 3].map(i => {
     const head = heads?.[i];
-    // Nothing in the toolhead: an empty reel, whatever spool is still linked to it.
-    if (!head?.loaded) return { n: i + 1, empty: true, colour: null, colours: null, fraction: null, material: '', name: null, source: 'none' };
+    // Nothing in the toolhead: an empty reel, whatever spool is still linked to it. Filament nobody has named is drawn.
+    if (!present(head)) return { n: i + 1, empty: true, colour: null, colours: null, fraction: null, material: '', name: null, source: 'none' };
     const id = bindings[String(i)];
     const linked = id != null ? spools.find(x => x.id === id) ?? null : null;
     const valid = (linked?.colours ?? []).filter(c => parseHex(c));
@@ -56,7 +56,10 @@ export function figureSpools(heads: Head[] | undefined, bindings: Record<string,
       return { n: i + 1, empty: false, colour: own || valid[0], colours, fraction: spoolFraction(linked.remaining, linked.initial),
         material: linked.material || head.type || '', name: colours ? 'multi' : colourName(own || valid[0]), source: 'spoolman' };
     }
-    return { n: i + 1, empty: false, colour: parseHex(head.colour) ? head.colour : null, colours: null, fraction: null,
-      material: head.type || '', name: colourName(head.colour), source: 'printer' };
+    // The printer's own reading: every colour of a multi-colour spool (filament_color_multi), side by side.
+    const printed = (head.colours ?? []).filter(c => parseHex(c));
+    const colours = printed.length > 1 ? printed : null;
+    return { n: i + 1, empty: false, colour: parseHex(head.colour) ? head.colour : null, colours, fraction: null,
+      material: head.type || '', name: colours ? 'multi' : colourName(head.colour), source: 'printer' };
   });
 }

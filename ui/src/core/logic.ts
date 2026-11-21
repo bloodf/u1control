@@ -30,9 +30,10 @@ export function parseSpeed(raw: unknown): number | null {
 export const family = (t: unknown): string => ((String(t ?? '').match(/[A-Za-z]+/) || [''])[0]).toUpperCase();
 
 export interface SetupFilament { index: number; type: string; colour?: string; weight?: number }
-export interface SetupHead { index: number; loaded: boolean; type: string; vendor?: string; sub_type?: string; colour?: string; official?: boolean }
+export interface SetupHead { index: number; loaded: boolean; unnamed?: boolean; type: string; vendor?: string; sub_type?: string; colour?: string;
+  colours?: string[]; official?: boolean }
 export type SetupWarning =
-  | { id: string; kind: 'empty'; f: number; h: number }
+  | { id: string; kind: 'empty' | 'unnamed'; f: number; h: number }
   | { id: string; kind: 'material'; f: number; h: number; a: string; b: string };
 
 /** Same rules and ids as u1.warning_ids in the plugin, which refuses a send whose warnings weren't acknowledged. */
@@ -41,7 +42,7 @@ export function setupWarnings(filaments: SetupFilament[], heads: SetupHead[], ma
   for (const f of [...filaments].sort((a, b) => a.index - b.index)) {
     const h = heads[map[String(f.index)]];
     if (!h) continue;
-    if (!h.loaded) out.push({ id: `empty:${f.index}:${h.index}`, kind: 'empty', f: f.index, h: h.index });
+    if (!h.loaded) { const kind = h.unnamed ? 'unnamed' : 'empty'; out.push({ id: `${kind}:${f.index}:${h.index}`, kind, f: f.index, h: h.index }); }
     else if (family(h.type) !== family(f.type)) out.push({ id: `material:${f.index}:${h.index}`, kind: 'material', f: f.index, h: h.index, a: f.type, b: h.type });
   }
   return out;

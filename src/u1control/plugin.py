@@ -1641,7 +1641,7 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
             return orca.ExecutionResult.skipped(tr("Couldn't reach the U1: %s") % e)
         fw = u1.detect_firmware(info, ext_status)   # as the tab does: the version alone misses some Extended builds
         loaded = ", ".join("T%d %s" % (h["index"] + 1, ("%s %s" % (h["type"], h["colour"] or "")).strip()
-                                       if h["loaded"] else tr("empty")) for h in heads)
+                                       if h["loaded"] else tr("not named") if h.get("unnamed") else tr("empty")) for h in heads)
         about = tr("U1 at %s (Extended Firmware %s)") if fw["kind"] == "extended" else tr("U1 at %s (official firmware %s)")
         return orca.ExecutionResult.success("%s. %s" % (about % (client.address, fw["version"]), loaded))
 

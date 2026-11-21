@@ -36,6 +36,13 @@ test('setup warnings: ids, order and the empty-before-material rule', () => {
   assert.equal(family('PA-CF'), 'PA');
 });
 
+test('setup warnings: a head with filament nobody has named is not called empty', () => {
+  const heads = [{ index: 0, loaded: true, type: 'PLA' }, { index: 1, loaded: false, unnamed: true, type: '' }, { index: 2, loaded: false, type: '' }];
+  const w = setupWarnings([{ index: 0, type: 'PLA' }, { index: 1, type: 'PLA' }], heads, { 0: 1, 1: 2 });
+  assert.equal(warningKey(w), 'unnamed:0:1,empty:1:2');   // the ids u1.warning_ids builds
+  assert.deepEqual(w.map(x => x.kind), ['unnamed', 'empty']);
+});
+
 test('move targets exclude the current folder, the item and its subfolders', () => {
   assert.deepEqual(moveTargets(['gcodes', 'gcodes/a', 'gcodes/a/b', 'gcodes/c'], 'gcodes', 'a'), ['gcodes/c']);
   assert.deepEqual(boundHeads({}, { 0: 7 }), { 7: 'T1' });
