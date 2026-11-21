@@ -16,9 +16,9 @@ from moonraker import PrinterError
 from i18n import tr
 
 API = "/firmware-config/api"
-SETTING_ID_RE = re.compile(r"^[a-z0-9_-]{1,64}$")
-VALUE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
-INPUT_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}$")
+SETTING_ID_RE = re.compile(r"^[a-z0-9_-]{1,64}\Z")
+VALUE_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,64}\Z")
+INPUT_NAME_RE = re.compile(r"^[A-Z][A-Z0-9_]{0,63}\Z")
 INPUT_MAX = 512
 ACTIONS = ("restart-klipper", "restart-moonraker", "reboot-system")
 PRINT_ENDING_ACTIONS = ("restart-klipper", "reboot-system")

@@ -11,8 +11,8 @@ from moonraker import PrinterError
 from i18n import tr
 
 GCODE_ROOT = "gcodes"
-FOLDER_NAME_RE = re.compile(r"^[\w .-]{1,64}$")
-THUMB_RE = re.compile(r"^[\w .()+-]+(/[\w .()+-]+)*\.(png|jpg|jpeg)$", re.I)
+FOLDER_NAME_RE = re.compile(r"^[\w .-]{1,64}\Z")
+THUMB_RE = re.compile(r"^[\w .()+-]+(/[\w .()+-]+)*\.(png|jpg|jpeg)\Z", re.I)
 FILE_ROOTS = ("gcodes", "camera")   # camera = U1 timelapse videos and snapshots
 GCODE_EXTS = (".gcode", ".gco", ".g")
 NAME_MAX = 200
@@ -55,7 +55,7 @@ class FilesMixin:
         folder = rel.rsplit("/", 1)[0] + "/" if "/" in rel else ""
         if thumb is None:
             meta = self._client().metadata(rel)
-            thumbs = sorted(meta.get("thumbnails") or [], key=lambda t: -(t.get("width", 0) * t.get("height", 0)))
+            thumbs = sorted(meta.get("thumbnails") or [], key=lambda t: -((t.get("width") or 0) * (t.get("height") or 0)))
             if not thumbs:
                 return None
             thumb = thumbs[0]["relative_path"]

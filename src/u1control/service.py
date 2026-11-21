@@ -494,9 +494,12 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             if gen != self.generation:
                 return
             target, kind = self.target, self.firmware["kind"]
-            if self.last_heads is not None and time.monotonic() < self.follow_retry_at and not (
-                    kind == "extended" and isinstance(view.get("spool_ids"), list)):
-                return  # backing off after a failure: the change stays pending (last_heads kept) for the retry
+            spool_link = kind == "extended" and isinstance(view.get("spool_ids"), list)
+            if self.last_heads is not None and not spool_link and (
+                    time.monotonic() < self.follow_retry_at or u1.machine_busy(view)):
+                # backing off after a failure, or the U1 is printing / loading: never write a head then (the manual
+                # bind needs an idle U1 too). The change stays pending (last_heads kept) until it can go.
+                return
             previous, self.last_heads = self.last_heads, heads
             if not target or (not target.spoolman_url and kind != "extended"):
                 return
@@ -763,6 +766,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
 
     def cmd_print_file(self, path):
         path = _safe_path(path, (GCODE_ROOT,))
+        if "/" not in path:   # the gcodes folder itself, not a file
+            raise ValueError(tr("bad path %r") % path)
         self._require_idle()
         return self._client().print_start(path[len(GCODE_ROOT) + 1:])
 

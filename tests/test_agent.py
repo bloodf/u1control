@@ -179,6 +179,10 @@ class CommandTests(unittest.TestCase):
         for line, top in (("M140 S%d" % (u1.BED_MAX + 1), u1.BED_MAX), ("M104 S%d" % (u1.HOTEND_MAX + 1), u1.HOTEND_MAX),
                           ("M104 S-5", u1.HOTEND_MAX), ("M140", u1.BED_MAX), ("M140 Sabc", u1.BED_MAX), ("M106 S256", 255)):
             self.assertEqual(agent.line_refusal(line, idle), "%s out of range (0 to %d)" % (line, top))
+        for line, top in (("M109 S%d" % (u1.HOTEND_MAX + 1), u1.HOTEND_MAX), ("M190 S%d" % (u1.BED_MAX + 1), u1.BED_MAX)):
+            self.assertEqual(agent.line_refusal(line, idle), "%s out of range (0 to %d)" % (line, top))   # wait forms
+        self.assertIn("busy", agent.line_refusal("M109 S200", printing))
+        self.assertEqual(agent.line_refusal("M109 T4 S200", idle), "bad toolhead")
         for line in ("M104 T4 S200", "M104 T-1 S200", "M104 T1.5 S200", "M104 T S200"):
             self.assertEqual(agent.line_refusal(line, idle), "bad toolhead", line)
 
@@ -755,6 +759,16 @@ class PluginAgentTests(unittest.TestCase):
         self.agent._wake.set()
         self.assertTrue(wait_for(lambda: len(messages) > 1))
         self.assertEqual(len([n for n in self.orca.notifications if '"Ghost"' in n]), 1)
+
+    def test_https_and_proxy_prefix_addresses_are_kept(self):
+        """A reverse-proxy address keeps its scheme and path, for the connection and for a job naming it."""
+        address = "https://u1.example.com/u1/"
+        conn = self.orca.printer_agent.PrinterConnectionParams(dev_id="u1", host=address)
+        self.assertEqual(self.agent.connect_printer(conn), 0)
+        self.addCleanup(self.agent.disconnect_printer)
+        self.assertEqual((self.agent.host, self.agent.base), ("u1.example.com", "https://u1.example.com/u1"))
+        host, _, client = self.agent._job_client(self.params(dev_ip="https://other.example.com:8443/x"))
+        self.assertEqual((host, client.candidates), ("other.example.com:8443", ["https://other.example.com:8443/x"]))
 
     def connect(self, **kw):
         conn = self.orca.printer_agent.PrinterConnectionParams(**{"dev_id": "u1", "host": self.fake.host, **kw})
