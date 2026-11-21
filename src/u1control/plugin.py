@@ -684,9 +684,9 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
             problems = u1.mapping_warnings(filaments, heads, mapping)
             if problems:
                 raise PrinterError(tr("%s. Turn on \"Show print setup before sending\" to choose toolheads.") % "; ".join(problems))
-        _still_valid(ctx, host, client, heads, mapping)
         lines, mode = gcode.process(lines, cfg, {**options, **cover_fans(prefs), "purifier": purifier}, mapping, heads,
                                     VERSION)
+        _still_valid(ctx, host, client, heads, mapping)   # after the G-code work: checked right before the send
         script = u1.preprint_script(mapping, prefs, commands)
         run_off_thread(lambda: client.gcode(script))
         gcode.write(ctx.gcode_path, lines + [agent.SETUP_DONE], newline)   # marked done only once the script went
@@ -850,6 +850,14 @@ def _clean_answer(answer, filaments, mapping, shown, prefs, purifier, remember_d
 SETUP_PAGE_LIMIT = 1_450_000
 # WebView2 takes a page as at most 2 MiB of base64, so 1,572,864 bytes of HTML; a bigger page renders blank.
 WEBVIEW_PAGE_LIMIT = 1_572_864
+# OrcaSlicer creates the window later, on its UI thread (orca.host.ui.create_window queues it with CallAfter), and
+# runs this post-process on the slicing thread. Its UI thread can be busy for a while (loading the G-code preview of
+# a long print) or blocked waiting for the slicing thread; ctx.cancelled() stays False at this step, so the plugin
+# can't tell the two apart. It waits this long for the window, then gives up so a blocked OrcaSlicer recovers.
+SETUP_SHOW_WAIT = 60
+# First thing in the page, before its 1.4 MB of script: says the window exists. From then on the user sees it and
+# can close it, so a page that loads slowly is waited for.
+SHOWN_PING = "<script>try{window.orca.postMessage({shown:true})}catch(e){}</script>"
 
 
 def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client, extras=None, language="auto",
@@ -879,7 +887,8 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
         log("print setup: the G-code thumbnail makes the page %d bytes; shown without it" % len(html.encode("utf-8")))
         data["job"] = {**data["job"], "thumbnail": None}
         html = page_html("setup", data, language=language)
-    done, ready, wanted, stop = (threading.Event() for _ in range(4))
+    html = html.replace("<head>", "<head>" + SHOWN_PING, 1)
+    done, alive, wanted, stop = (threading.Event() for _ in range(4))
     result = {}
     window_box = []
     shown = [heads]   # the toolheads the window shows now; the choice is checked against them
@@ -902,8 +911,8 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
     def on_message(msg):
         if not isinstance(msg, dict):
             return
-        if msg.get("ready"):
-            ready.set()
+        if msg.get("shown") or msg.get("ready"):
+            alive.set()
         if msg.get("refresh") and window_box:
             wanted.set()
         if msg.get("type") == "cmd" and window_box:
@@ -938,7 +947,7 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
                 raise PrinterError(tr("print setup timed out; nothing was sent"))
             if not window.is_open():
                 break
-            if not ready.is_set() and waited > 20:
+            if not alive.is_set() and waited > SETUP_SHOW_WAIT:
                 window.close()
                 raise PrinterError(tr("the print setup window didn't open (OrcaSlicer was busy); nothing was sent"))
     finally:
@@ -1965,6 +1974,8 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
                     raise
                 colour_ok = False   # the preset still counts; colours stay as they are for every slot
                 log("project sync: this OrcaSlicer doesn't take filament_colour from a plugin (%s); colours left as they are" % e)
+                problems.append(tr("colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; "
+                                   "set them by hand"))
                 _set_slot(slot, preset_name, "")
             done.append("%d: %s" % (slot, preset_name or (tag or head).get("type") or "?"))
         except Exception as e:

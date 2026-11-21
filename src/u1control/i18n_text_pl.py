@@ -47,6 +47,7 @@ PL = {
     "Another preset update is running; try again in a moment.": "Trwa inna aktualizacja profilu; spróbuj ponownie za chwilę.",
     "Project filaments %s": "Filamenty projektu: %s",
     "unchanged": "bez zmian",
+    "colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; set them by hand": "kolory nie zostały zmienione: ten OrcaSlicer nie pozwala wtyczkom ustawiać kolorów filamentów; ustaw je ręcznie",
     ". Problems: %s": ". Problemy: %s",
     "filament %d: %s": "filament %d: %s",
     "T%d: several user presets match \"%s\" ignoring case; write the exact name. The usual preset is used": "T%d: kilka profili użytkownika pasuje do „%s” bez względu na wielkość liter; wpisz dokładną nazwę. Użyto zwykłego profilu",
