@@ -26,7 +26,8 @@
 - Toolhead cards are only as tall as their content: no blank band between the feeder line and Load / Unload when the dashboard row is taller.
 - OrcaSlicer's **Device** tab and Print dialog, with u1control as the printer agent (thanks @Veisen, from #72):
   - The four toolheads now reach OrcaSlicer: the filament block is sent nested the way OrcaSlicer reads it (`print.ams.ams`), so the Device tab shows them and **Sync from AMS** gets each toolhead's preset, multicolour spools and material variants included.
-  - The printer reports the Snapmaker U1's model id, so the Print dialog no longer calls it a printer of another model than the U1 preset.
+  - On a stock OrcaSlicer 2.5.1 the U1 is now a Snapmaker U1, not an "Unknown" model: every status update carries the U1's model id. 2.5.1 names the printer after the preset's model name, which matches no model, so the Print and Send dialogs refused it ("not compatible with the print file configuration"), their filament list showed only **Ext**, and **Sync filament** and the sync badges in Prepare did nothing. Earlier the id went only into discovery, which 2.5.1 runs before the printer is connected.
+  - The Device tab shows the picture of the file being printed (the largest thumbnail Moonraker has for it) instead of the placeholder, and the toolheads' unit is called U1 rather than after a Bambu AMS.
   - The Print dialog's **Flow calibration** box shows again: the status keeps the bit OrcaSlicer reads it from.
   - The Device tab shows the printer's camera (Moonraker's first webcam, read again at each connection). A webcam that streams MJPEG plays as a stream. On the stock firmware, which lists no webcam, it is the U1's own camera picture, kept current while the Device tab shows it (`camera.start_monitor`, as U1 Control's own camera does).
   - The Device tab's speed levels set the print speed (silent 50 %, standard 100 %, sport 124 %, ludicrous 166 %, `M220`), and show the U1's current speed factor.

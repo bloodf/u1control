@@ -1287,7 +1287,7 @@ class U1Agent(pa.PrinterAgentBase):
         return preferred
 
     def _poll(self, stop, client):
-        connected = False
+        connected, thumb = False, (None, "")   # thumb: (file name, its thumbnail URL), read once per file
         while not stop.is_set():
             try:
                 if not self.firmware:
@@ -1308,7 +1308,9 @@ class U1Agent(pa.PrinterAgentBase):
                     dev_id = self._dev_id()
                     self._emit("local_connect", 0, dev_id, "0")
                     self._emit("printer_connected", dev_id)
-                self._message(agent.push_status(view, self._preferred()))
+                if view.get("filename") != thumb[0]:
+                    thumb = (view.get("filename"), self._thumbnail(client, view.get("filename")))
+                self._message(agent.push_status(view, self._preferred(), thumb[1]))
                 self._keep_camera(stop, client)
             except Exception as e:
                 if connected:
@@ -1319,6 +1321,17 @@ class U1Agent(pa.PrinterAgentBase):
                         self.view = None   # Device tab commands answer "not connected" instead of queueing
             self._wake.wait(AGENT_POLL)
             self._wake.clear()
+
+    @staticmethod
+    def _thumbnail(client, filename):
+        """The Device tab's picture of the file the U1 prints or printed last, or "" (no file, no thumbnail)."""
+        if not filename:
+            return ""
+        try:
+            return agent.thumbnail_url(client.metadata(filename.lstrip("/")), filename, client.base or "")
+        except Exception as e:   # no metadata (file gone, or not a print file): OrcaSlicer's placeholder
+            log("agent: thumbnail of %s not read (%s)" % (filename, e))
+            return ""
 
     def _read_camera(self, stop, client):
         try:
