@@ -8,6 +8,7 @@ import tempfile
 import time
 import types
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [os.path.join(ROOT, "src", "u1control"), os.path.join(ROOT, "tests"), os.path.join(ROOT, "scripts")]
@@ -414,6 +415,7 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(boot["mode"], "setup")   # the one Vue page, in print-setup mode
         data = boot["data"]
         self.assertEqual(data["map"], {"0": 0, "1": 1})
+        self.assertFalse(data["keep_map"])   # the slicing pipeline's map is automatic: a refresh may re-pick it
         self.assertTrue(ns["get_store"](cap).effective()["prefs"]["bed_level"])  # remembered
 
     def test_print_setup_runs_once_per_gcode(self):
@@ -432,6 +434,19 @@ class PluginTests(unittest.TestCase):
         self.assertEqual((len(orca.windows), len(self.fake.scripts)), (windows, scripts))
         with open(self.path) as f:
             self.assertEqual(f.read(), first)   # nothing inserted twice
+
+    def test_failed_preprint_script_leaves_the_gcode_unmarked(self):
+        """A send that failed before the pre-print script reached the U1 is not "already done": the retry sends it."""
+        orca, ns = self.load(answer={"map": {}, "prefs": {}, "purifier": "auto", "acknowledged": ["material:1:1"]})
+        cap = ns["U1PrintSetup"]()
+        with mock.patch.object(ns["Moonraker"], "gcode", side_effect=ns["PrinterError"]("timed out")):
+            self.assertEqual(cap.execute(self.ctx("OctoPrint")).status, "failure")
+        with open(self.path) as f:
+            self.assertNotIn("; u1control: print setup done", f.read())
+        result = cap.execute(self.ctx("OctoPrint"))
+        self.assertEqual(result.status, "success", result.message)
+        self.assertNotIn("already done", result.message)
+        self.assertIn("SET_PRINT_EXTRUDER_MAP", self.fake.scripts[-1])
 
     def test_refused_send_remembers_nothing(self):
         orca, ns = self.load(answer={"map": {}, "prefs": {"bed_level": False}, "purifier": "auto", "remember": True,

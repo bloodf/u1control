@@ -244,7 +244,12 @@ def by_object_toolchange_lift(lines):
             in_block = False   # next tool change, or any other command: the block is over
         if in_block and text == "G91" and i + 2 < n and lines[i + 2].strip() == "G90" and LIFT_RE.match(lines[i + 1].strip()):
             z = float(LIFT_RE.match(lines[i + 1].strip()).group(1))
-            if z <= 1.5 and max_height:
+            if z <= 1.5:
+                if not max_height:   # the 1.5 mm hop with no height to lift to: as absolute Z it would dive into the print
+                    out.append(line)
+                    i += 1
+                    in_block = False
+                    continue
                 z = max_height
             out += [MARK + " absolute tool-change lift (Snapmaker Orca #958)", "G90", "G1 Z%g F600" % z]
             i += 3

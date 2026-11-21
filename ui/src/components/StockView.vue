@@ -7,9 +7,9 @@ import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import Checkbox from 'primevue/checkbox';
 import { OuiBanner, OuiEmpty, OuiHint, OuiIcon, OuiLevel, OuiPageHeader, OuiPanel, OuiSpool, OuiStatus, OuiToolbar } from '@orca-plugins/ui-foundation/src/components';
-import { boxes, link as linkIcon, refresh } from '@orca-plugins/ui-foundation/src/icons';
+import { boxes, link as linkIcon, refresh, settings as settingsIcon } from '@orca-plugins/ui-foundation/src/icons';
 import { headColours, headFraction, levelTone, present, spoolFraction } from '../core/spool-level';
-import { s, run, tracker, loadStock, loadSpools, busy, controlsOff, targetKnown, printerName, reqStatus } from '../app/store';
+import { s, run, tracker, loadStock, loadSpools, busy, controlsOff, targetKnown, printerName, reqStatus, openSettings } from '../app/store';
 import { ask } from '../core/dialog';
 import { t, tMaybe, fmt } from '../core/i18n';
 import { family, boundHeads } from '../core/logic';
@@ -21,12 +21,16 @@ const fit = ref(false);
 const head = ref(0);
 const sp = computed(() => s.stock?.spooler);
 const sk = computed(() => s.stock?.stock);
-const usable = computed(() => !s.stockError && sp.value?.state === 'active' && sk.value && !['unavailable', 'missing', 'error', 'mismatch'].includes(sk.value.state));
+/** Spooler shares no list, so the plugin lists U1 Control's own Spoolman read ("own"), or says why it can't. */
+const own = computed(() => sk.value?.code === 'own');
+const ownish = computed(() => ['own', 'no_spoolman', 'own_error'].includes(sk.value?.code ?? ''));
+const usable = computed(() => !s.stockError && !!sk.value && (own.value
+  || (sp.value?.state === 'active' && !['unavailable', 'missing', 'error', 'mismatch'].includes(sk.value.state))));
 /** Why the list isn't shown: peer state or list state, with its own severity (U09). */
 const blocker = computed<{ state: 'error' | 'loading' | 'offline' | 'empty'; text: string } | null>(() => {
   if (s.stockError) return { state: 'error', text: t('stock.failed', { error: s.stockError }) };
   if (!s.stock) return { state: 'loading', text: t('stock.loading') };
-  if (sp.value!.state !== 'active') return { state: 'offline', text: sp.value!.detail ? t('common.paren', { a: tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text), b: sp.value!.detail }) : tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text) };
+  if (sp.value!.state !== 'active' && !ownish.value) return { state: 'offline', text: sp.value!.detail ? t('common.paren', { a: tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text), b: sp.value!.detail }) : tMaybe(`stock.peer.${sp.value!.state}`, sp.value!.text) };
   const k = sk.value!;
   if (usable.value) return null;
   const text = k.code ? tMaybe(`stock.code.${k.code}`, k.text, { detail: k.detail ?? '' }) : k.text;
@@ -37,7 +41,7 @@ const otherSpoolman = computed(() => !!usable.value && s.stock!.same_spoolman ==
 const noSpoolman = computed(() => !!usable.value && !otherSpoolman.value && reqStatus('spoolman') === 'missing');
 const isStale = computed(() => !!usable.value && sk.value!.state === 'stale');
 /** Plain information, not a warning: a quiet line, not a bordered box. */
-const viaPrinter = computed(() => usable.value && s.stock!.same_spoolman == null);
+const viaPrinter = computed(() => usable.value && s.stock!.same_spoolman == null && (!own.value || sk.value?.origin === 'printer'));
 const rows = computed<Spool[]>(() => sk.value?.rows ?? []);
 const materials = computed(() => [...new Set(rows.value.map(r => r.material).filter(Boolean))].sort().map(m => ({ value: m, label: m })));
 const targetHead = computed(() => s.status?.heads[head.value]);
@@ -88,7 +92,8 @@ async function link(r: Spool) {
   <div class="u1-head">
     <OuiPageHeader :title="t('stock.title')">
       <template v-if="usable" #meta>
-        <OuiStatus v-if="isStale" id="stock-meta" state="stale" :title="t('stock.stale', { age: fmt.ago(sk?.ts, s.now / 1000) })" data-test="stock-stale">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</OuiStatus>
+        <span v-if="own" id="stock-meta" data-test="stock-own-meta">{{ t('stock.ownMeta', { n: rows.length }) }}</span>
+        <OuiStatus v-else-if="isStale" id="stock-meta" state="stale" :title="t('stock.stale', { age: fmt.ago(sk?.ts, s.now / 1000) })" data-test="stock-stale">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</OuiStatus>
         <span v-else id="stock-meta">{{ t('stock.read', { version: sp?.version, age: fmt.ago(sk?.ts, s.now / 1000) }) }}</span>
       </template>
       <template #actions>
@@ -106,13 +111,18 @@ async function link(r: Spool) {
     <div id="u1-banner-stock" />
     <div role="status" aria-live="polite" class="u1-live sc-notes">
       <OuiBanner :show="otherSpoolman" id="stock-why" role="none" data-test="stock-why" tone="error" dismissible dismiss-key="other-spoolman" :close-label="t('common.close')" :title="t('stock.blocked', { reason: t('stock.why.spoolman') })">{{ t('stock.otherSpoolman') }}</OuiBanner>
+      <OuiBanner :show="own" role="none" data-test="stock-own" tone="info" dismissible dismiss-key="stock-own" :close-label="t('common.close')" :title="t('stock.own')" />
       <OuiBanner :show="noSpoolman" id="stock-why" role="none" data-test="stock-why" tone="warn" dismissible dismiss-key="no-spoolman" :close-label="t('common.close')" :title="t('stock.blocked', { reason: t('stock.why.noSpoolman') })">{{ t('stock.noSpoolman') }}</OuiBanner>
     </div>
   </div>
 
   <!-- No list to show: one row saying why, in the list's place. -->
   <OuiPanel v-if="blocker" flush data-test="stock-card">
-    <div role="status" aria-live="polite"><OuiEmpty compact :state="blocker.state" :icon="boxes" tone="lime" :title="blocker.text" /></div>
+    <div role="status" aria-live="polite"><OuiEmpty compact :state="blocker.state" :icon="boxes" tone="lime" :title="blocker.text">
+      <template v-if="sk?.code === 'no_spoolman'" #actions>
+        <Button severity="secondary" size="small" :label="t('common.openSettings')" data-test="stock-settings" @click="openSettings('connection')"><template #icon><OuiIcon :icon="settingsIcon" :size="14" /></template></Button>
+      </template>
+    </OuiEmpty></div>
   </OuiPanel>
   <div v-else class="oui-split" data-rail data-test="stock-card">
     <OuiPanel :icon="linkIcon" :title="t('stock.linkTo')" :hint="t('stock.linkHint')" :hint-label="t('stock.linkAbout')">

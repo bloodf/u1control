@@ -30,13 +30,14 @@ interface Data { job: { name?: string; time?: string; weight?: number | string; 
     thumbnail?: string; preview?: PathData | null };
   filaments: SetupFilament[]; heads: SetupHead[]; map: Record<string, number>; prefs: Record<string, Pref>;
   labels: Record<string, string>; levels?: Record<string, string[]>; features?: string[]; purifier: string; auto_purifier: string;
-  printer?: { name: string; busy: boolean; address: string } | null; spools?: Record<string, Spool | string>; remember?: boolean; tags?: boolean[] }
+  printer?: { name: string; busy: boolean; address: string } | null; spools?: Record<string, Spool | string>; remember?: boolean; tags?: boolean[];
+  /** The slots came from OrcaSlicer's Print dialog: a refresh keeps them (Auto map still re-picks every one). */ keep_map?: boolean }
 const D = boot.data as Data;
 const heads = ref<SetupHead[]>(D.heads);
 const spools = ref<Record<string, Spool | string>>(D.spools ?? {});
 const tags = ref<boolean[]>(D.tags ?? []);
 const map = reactive<Record<string, number>>({ ...D.map });
-const touched = new Set<string>();
+const touched = new Set<string>(D.keep_map ? Object.keys(D.map) : []);
 const prefs = reactive<Record<string, Pref>>({ ...D.prefs });
 const purifier = ref(D.purifier);
 const sent = ref(false);

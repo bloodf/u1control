@@ -215,10 +215,11 @@ export async function loadUsage(): Promise<void> {
   }
 }
 
-/** Spools in Spooler's stock list, for the Stock tab's count; null while there is no list to count. */
+/** Spools in the stock list (Spooler's, or U1 Control's own Spoolman read: code 'own'), for the Stock tab's count;
+ *  null while there is no list to count. */
 export const stockCount = computed(() => {
   const st = s.stock;
-  return !s.stockError && st?.spooler.state === 'active' && Array.isArray(st.stock?.rows) && !['unavailable', 'missing', 'error', 'mismatch'].includes(st.stock.state) ? st.stock.rows.length : null;
+  return !s.stockError && (st?.spooler.state === 'active' || st?.stock?.code === 'own') && Array.isArray(st.stock?.rows) && !['unavailable', 'missing', 'error', 'mismatch'].includes(st.stock.state) ? st.stock.rows.length : null;
 });
 export const stockVisible = computed(() => {
   const st = s.stock;

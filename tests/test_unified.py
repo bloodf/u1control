@@ -183,12 +183,33 @@ class StockServiceTests(unittest.TestCase):
             {"id": sid, "filament_id": fid, "name": "x", "vendor": "v", "material": "PLA"} for sid, fid in self.fil.items()]
         self.root.write(peers.STOCK_FILE, stock_doc(session, ts=now, url=url or self.url, spools=rows, **kw))
 
-    def test_without_spooler_the_view_says_so_and_nothing_can_be_assigned(self):
+    def test_without_spooler_the_stock_is_u1controls_own_spoolman_and_links_from_it(self):
         view = self.svc.cmd_stock()
-        self.assertEqual((view["spooler"]["state"], view["stock"]["state"], view["stock"]["rows"]), ("absent", "unavailable", []))
-        with self.assertRaises(ValueError):
+        self.assertEqual((view["spooler"]["state"], view["stock"]["code"], view["same_spoolman"]), ("absent", "own", None))
+        self.assertEqual(sorted(r["id"] for r in view["stock"]["rows"]), sorted(self.fil))
+        with self.assertRaises(ValueError):   # a key from Spooler's list, with no Spooler running
             self.svc.cmd_stock_assign(1, 7, "s1:3")
         self.assertEqual(self.fake.scripts, [])
+        self.assertEqual(self.svc.cmd_stock_assign(1, 7, view["stock"]["key"])["bindings"], {"1": 7})
+
+    def test_a_running_spooler_without_a_list_never_leaves_the_tab_waiting(self):
+        self.root.write(peers.PRESENCE_FILE, {**spooler_presence("s1", time.time()), "spoolman": {"origin": self.url}})
+        view = self.svc.cmd_stock()
+        self.assertEqual((view["spooler"]["state"], view["stock"]["state"], view["stock"]["code"]), ("active", "ok", "own"))
+        self.publish()   # once Spooler shares its list, that one is shown
+        self.assertEqual(self.svc.cmd_stock()["stock"]["key"], "s1:3")
+
+    def test_without_an_address_the_spoolman_spooler_uses_is_read(self):
+        self.svc.set_target(Target(self.fake.host))
+        self.root.write(peers.PRESENCE_FILE, {**spooler_presence("s1", time.time()), "spoolman": {"origin": self.url}})
+        view = self.svc.cmd_stock()
+        self.assertEqual((view["stock"]["code"], view["stock"]["key"]), ("own", "spoolman:" + peers.normalize_origin(self.url)))
+        self.assertEqual(self.svc.cmd_stock_assign(2, 11, view["stock"]["key"])["bindings"], {"2": 11})
+
+    def test_with_no_spoolman_anywhere_the_view_says_what_to_set(self):
+        self.svc.set_target(Target(self.fake.host))
+        view = self.svc.cmd_stock()
+        self.assertEqual((view["stock"]["state"], view["stock"]["code"], view["stock"]["rows"]), ("error", "no_spoolman", []))
 
     def test_a_presence_left_on_disk_is_not_a_running_spooler(self):
         self.publish()
@@ -197,7 +218,7 @@ class StockServiceTests(unittest.TestCase):
             self.root.write(peers.PRESENCE_FILE, stale)
             view = self.svc.cmd_stock()
             self.assertNotEqual(view["spooler"]["state"], "active", stale)
-            self.assertEqual(view["stock"]["rows"], [])
+            self.assertEqual(view["stock"]["code"], "own")   # not Spooler's list: U1 Control's own Spoolman read
 
     def test_view_lists_spooler_stock_with_same_spoolman_and_who_books_use(self):
         self.publish()

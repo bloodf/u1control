@@ -100,6 +100,7 @@ PL = {
     "can't read printer address %r": "nie można odczytać adresu drukarki %r",
     "printer response too large": "odpowiedź drukarki jest zbyt duża",
     "the printer sent a broken answer (%s)": "drukarka wysłała uszkodzoną odpowiedź (%s)",
+    "download incomplete: %d of %s bytes": "pobieranie niepełne: %d z %s bajtów",
     "download failed (%s)": "pobieranie nie powiodło się (%s)",
     "upload failed (%s)": "wysyłanie nie powiodło się (%s)",
     "can't reach the U1 at %s": "nie można połączyć się z U1 pod adresem %s",
