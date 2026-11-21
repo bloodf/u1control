@@ -48,6 +48,7 @@ CS = {
     "Another preset update is running; try again in a moment.": "Probíhá jiná aktualizace profilu; zkus to za chvíli znovu.",
     "Project filaments %s": "Filamenty projektu: %s",
     "unchanged": "beze změny",
+    "colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; set them by hand": "barvy se nezměnily: tento OrcaSlicer nedovolí pluginům nastavit barvy filamentů; nastav je ručně",
     ". Problems: %s": ". Problémy: %s",
     "filament %d: %s": "filament %d: %s",
     "T%d: several user presets match \"%s\" ignoring case; write the exact name. The usual preset is used": "T%d: názvu „%s“ odpovídá bez ohledu na velikost písmen více uživatelských profilů; napiš přesný název. Použije se obvyklý profil",

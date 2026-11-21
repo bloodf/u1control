@@ -574,10 +574,12 @@ class PluginTests(unittest.TestCase):
         self.addCleanup(setattr, tx_class, "commit", commit)
         heads = u1.summarize(self.fake.status())["heads"]
         done, problems = ns["sync_project"](heads, [None] * 4, {})
-        self.assertEqual(problems, [])
         self.assertEqual(len(done), 3)
         self.assertEqual([(slot, values) for slot, _, values in orca.filament_calls], [(1, {}), (2, {}), (4, {})])
-        self.assertNotIn("Problems", ns["sync_message"](done, problems))
+        # said once in the answer (the page's toast, the script's result), not only logged
+        self.assertEqual(problems, ["colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; "
+                                    "set them by hand"])
+        self.assertIn("colours weren't changed", ns["sync_message"](done, problems))
 
     def test_sync_project_uses_the_spools_linked_user_preset(self):
         meta = {"My PETG": {"is_user": True}, "Not mine": {}, "Other printer": {"is_user": True, "is_compatible": False},

@@ -183,6 +183,11 @@ MESSAGES = {
     "Project filaments %s": _m("Filamentos do projeto %s", "Filamentos del proyecto %s", "Projektfilamente %s", "项目耗材丝：%s"),
     "unchanged": _m("sem alterações", "sin cambios", "unverändert", "未更改"),
     ". Problems: %s": _m(". Problemas: %s", ". Problemas: %s", ". Probleme: %s", "。问题：%s"),
+    "colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; set them by hand": _m(
+        "as cores não foram alteradas: este OrcaSlicer não deixa plugins definirem as cores dos filamentos; defina-as à mão",
+        "los colores no se cambiaron: este OrcaSlicer no permite que los plugins definan los colores de los filamentos; ajústelos a mano",
+        "die Farben wurden nicht geändert: Dieses OrcaSlicer lässt Plugins keine Filamentfarben setzen; bitte setzen Sie sie von Hand",
+        "颜色未更改：此 OrcaSlicer 不允许插件设置耗材丝颜色；请手动设置"),
     "filament %d: %s": _m("filamento %d: %s", "filamento %d: %s", "Filament %d: %s", "耗材丝 %d：%s"),
     "T%d: no compatible user preset \"%s\" in OrcaSlicer, so the usual preset is used": _m(
         "T%d: não há perfil de usuário compatível “%s” no OrcaSlicer, então foi usado o perfil de sempre",

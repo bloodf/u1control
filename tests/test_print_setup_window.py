@@ -7,6 +7,7 @@ import os
 import re
 import sys
 import tempfile
+import time
 import unittest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -42,6 +43,21 @@ class PreviewTests(unittest.TestCase):
         drawn = sum(len(v) // 4 for v in small["tools"].values())
         self.assertTrue(0 < drawn <= 500, drawn)
         self.assertIsNone(preview.paths(["G28", "G1 X1 Y1"]))
+
+    def test_long_print_shows_its_footprint_not_its_top(self):
+        # More moves than budget x layers used to leave only the top layer: here a 2 mm triangle, not the 100 mm
+        # square every other layer prints. Named features: the outer walls are drawn, the infill isn't.
+        square = ["G1 X%d Y0 E0.1" % x for x in range(1, 101)] + ["G1 X100 Y%d E0.1" % y for y in range(1, 101)]
+        lines = ["M83"]
+        for _ in range(20):
+            lines += [";LAYER_CHANGE", "G1 X0 Y0", ";TYPE:Outer wall"] + square
+            lines += [";TYPE:Sparse infill", "G1 X10 Y10", "G1 X90 Y90 E2"]
+        lines += [";LAYER_CHANGE", "G1 X50 Y50", ";TYPE:Outer wall", "G1 X52 Y50 E0.1", "G1 X51 Y52 E0.1"]
+        p = preview.paths(lines, budget=50)
+        self.assertEqual(p["bounds"], [0.0, 0.0, 100.0, 100.0])
+        self.assertLessEqual(sum(len(v) // 4 for v in p["tools"].values()), 50)
+        segments = [p["tools"]["0"][i:i + 4] for i in range(0, len(p["tools"]["0"]), 4)]
+        self.assertNotIn([10.0, 10.0, 90.0, 90.0], segments)   # infill left out
 
     def test_tool_changes(self):
         self.assertEqual(preview.tool_changes(self.LINES), 2)
@@ -174,6 +190,47 @@ class WindowTests(unittest.TestCase):   # noqa: D101
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
         self.assertIsNotNone(boot(windows[0])["job"]["preview"])
         self.assertLess(len(windows[0].html.encode("utf-8")), self.ns["SETUP_PAGE_LIMIT"])
+
+    def _slow_window(self, show, ready_after):
+        """A window OrcaSlicer creates at once (show) or never; its page says "ready" ready_after s later."""
+        self.ns["SETUP_SHOW_WAIT"], wait = 0.3, self.ns["SETUP_SHOW_WAIT"]
+        self.addCleanup(self.ns.__setitem__, "SETUP_SHOW_WAIT", wait)
+        windows = []
+
+        class Win(fakes.FakeWindow):
+            def __init__(self, on_message, on_submit, html):
+                self.on_message, self.on_submit, self.open, self.posted, self.html = on_message, on_submit, True, [], html
+                self.created = time.monotonic()
+                if show:
+                    on_message({"shown": True})   # the page's first script ran; the app is still loading
+
+        def create(html, on_message=None, on_submit=None, **kw):
+            windows.append(Win(on_message, on_submit, html))
+            return windows[-1]
+
+        def stop():   # polled by the waiting job thread
+            w = windows[0] if windows else None
+            if w and w.open and show and time.monotonic() - w.created > ready_after:
+                w.open = False
+                w.on_message({"ready": True})
+                w.on_submit({"map": {}, "prefs": {}, "purifier": "auto"})
+            return False
+        self.orca.host.ui.create_window = create
+        return windows, stop
+
+    def test_window_that_shows_but_loads_slowly_is_waited_for(self):
+        windows, stop = self._slow_window(show=True, ready_after=0.8)   # "ready" well after SETUP_SHOW_WAIT
+        self.assertEqual(self.agent.start_local_print(self.params(), self.update, stop), 0)
+        self.assertIn(self.ns["SHOWN_PING"], windows[0].html)
+        self.assertTrue(any("SET_PRINT_EXTRUDER_MAP" in s for s in self.fake.scripts))
+
+    def test_window_never_created_gives_up_and_sends_nothing(self):
+        windows, stop = self._slow_window(show=False, ready_after=0)
+        started = time.monotonic()
+        self.assertNotEqual(self.agent.start_local_print(self.params(), self.update, stop), 0)
+        self.assertGreaterEqual(time.monotonic() - started, 0.3)
+        self.assertFalse(windows[0].open)   # closed, so a late window doesn't stay up
+        self.assertEqual(self.fake.scripts, [])
 
     def test_heads_settings_need_the_tab_for_this_printer(self):
         windows = []

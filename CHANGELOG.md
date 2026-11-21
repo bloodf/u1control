@@ -8,6 +8,10 @@
 
 ### Fixed
 
+- **The print setup window no longer gives up after 20 seconds while OrcaSlicer is still busy.** OrcaSlicer opens the window only once it is free (for example after loading the preview of a long print), and the send failed with "the print setup window didn't open" before it appeared. U1 Control now waits up to a minute for the window, and once the window is up it waits for its page however long it takes to load.
+- **"Apply to project filaments" says when the colours were not changed.** OrcaSlicer 2.5 doesn't let plugins set a filament's colour, so the presets were applied and the colours stayed as they were without a word. The result now says so; set the colours by hand until OrcaSlicer allows it.
+- **The print setup's plate preview shows the whole print, not a few lines.** A long print showed only its top layer (sometimes a single triangle). The preview now draws the outer walls of layers spread over the whole height, from the first layer up, and is built about ten times faster, so the window opens sooner.
+- **Sending from the print setup is faster for long prints.** The G-code fixes after "Apply & continue" took about 6 seconds on a 13-hour print and now take about 2, with the same result. The printer is checked again after that work, right before anything is sent.
 - **A printer address with https or a path (a reverse proxy, `https://example.com/u1`) works as the printer agent too.** Connecting from OrcaSlicer's Device tab, and a job sent to such an address from the Multi-device tab, dropped the https and the path and could not reach the U1.
 - **Spoolman follow no longer changes a toolhead's filament while the U1 is printing or loading.** A filament change seen mid-print or mid-load now waits and is applied once the U1 is idle, like a manual link.
 - The Device tab's heat-and-wait lines (`M109`, `M190`) get the same limits as setting a temperature: refused above the U1's maximum, for a toolhead that doesn't exist, or while the U1 is busy.

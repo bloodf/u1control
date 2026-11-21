@@ -77,7 +77,7 @@ def used_tools(lines):
     """Filament indices the print uses, in first-use order."""
     seen = []
     for line in lines:
-        m = TOOL_RE.match(line)
+        m = line[:1] in "T \t" and TOOL_RE.match(line)   # the prefix test skips the millions of moves cheaply
         if m:
             t = int(m.group(1))
             if t not in seen and t < u1.MAX_FILAMENTS:
@@ -149,6 +149,11 @@ def summary(lines, cfg):
 
 # --------------------------------------------------------------------- transforms
 
+def _head_end(lines):
+    """The index of the first layer line (len(lines) without one): the start G-code is before it."""
+    return next((i for i, l in enumerate(lines) if l[:1] != "G" and LAYER_RE.match(l)), len(lines))
+
+
 def _start_index(lines):
     for i, line in enumerate(lines):
         if PRINT_START_RE.match(line):
@@ -166,9 +171,11 @@ def ensure_purifier(lines, mode, fans=None):
     profile has one in its start G-code) is replaced by ours, with a '; u1control: purifier <mode> (was: ...)'
     marker; without one ours goes after PRINT_START. Re-running first restores what the marker recorded.
     fans: {"exhaust_fan"/"inner_fan": percent} sets the mode's fan speed (u1.purifier_command)."""
+    marker = MARK + " purifier"
     out, ours_next, was = [], False, None
-    for line in lines:   # undo an earlier run so the result only depends on the original file and mode
-        if line.startswith(MARK + " purifier"):
+    for line in (lines if any(l.startswith(marker) for l in lines[:_head_end(lines)]) else ()):
+        # undo an earlier run (its marker is in the start G-code) so the result only depends on the file and mode
+        if line.startswith(marker):
             m = WAS_RE.search(line)
             ours_next, was = True, m.group(1) if m else None
             continue
@@ -179,6 +186,7 @@ def ensure_purifier(lines, mode, fans=None):
                     out.append(was)
                 continue
         out.append(line)
+    out = out or lines
     if mode == "off" or mode not in u1.PURIFIER:
         return out
     cmd = u1.purifier_command(mode, fans)
@@ -205,15 +213,14 @@ def whole_bed_mesh(lines):
     """Replace adaptive mesh lines with Snapmaker Orca's whole-bed 11x11 probe, keeping Z_OFFSET.
     The U1 saves every probed mesh as 'default', so a small adaptive patch would be reused by
     the next print that skips leveling."""
-    out = []
-    for line in lines:
-        m = MESH_RE.match(line)
-        if m and "mesh_min" in m.group(1).lower():
+    out = lines
+    for i in reversed([i for i, l in enumerate(lines) if l[:1] in "Bb \t" and MESH_RE.match(l)]):
+        m = MESH_RE.match(lines[i])
+        if "mesh_min" in m.group(1).lower():
             z = re.search(r"\bZ_OFFSET=(-?[\d.]+)", m.group(1), re.I)
-            out.append(MARK + " whole-bed mesh (was: %s)" % line.strip())
-            out.append(WHOLE_MESH + (" Z_OFFSET=%s" % z.group(1) if z else ""))
-        else:
-            out.append(line)
+            out = out if out is not lines else list(lines)
+            out[i:i + 1] = [MARK + " whole-bed mesh (was: %s)" % lines[i].strip(),
+                            WHOLE_MESH + (" Z_OFFSET=%s" % z.group(1) if z else "")]
     return out
 
 
@@ -223,8 +230,12 @@ TOOL_CHANGE_RE = re.compile(r"^;\s*Change Tool\d+\s*->")
 LIFT_RE = re.compile(r"^G1 Z([\d.]+) F600\s*$")
 
 
-def _print_facts(lines):
-    """(print_sequence is 'by object', max_print_height or None) from the '; key = value' comments anywhere in the file."""
+def _print_facts(lines, cfg=None):
+    """(print_sequence is 'by object', max_print_height or None) from the '; key = value' comments anywhere in the file.
+    A print by layer per cfg (settings(lines): the config block, last in the file) needs no height and no second read
+    of a file with millions of lines."""
+    if cfg and cfg.get("print_sequence") not in (None, "by object", "by_object"):
+        return False, None
     by_object, max_height = False, None
     for line in lines:
         m = SEQUENCE_RE.match(line)
@@ -236,12 +247,12 @@ def _print_facts(lines):
     return by_object, max_height
 
 
-def by_object_toolchange_lift(lines):
+def by_object_toolchange_lift(lines, cfg=None):
     """Snapmaker Orca fix #958 (head crashes in print-by-object): upstream 2.5's U1 change-filament
     G-code lifts *relatively* by an absolute target. Rewrite those lifts as absolute moves, and use
     max_print_height when the profile fell back to the 1.5 mm hop. Only the G91 / G1 Z.. F600 / G90
     triple that directly follows a tool-change comment block (before the next T command) is touched."""
-    by_object, max_height = _print_facts(lines)
+    by_object, max_height = _print_facts(lines, cfg)
     if not by_object:
         return lines
     out, i, n, in_block = [], 0, len(lines), False
@@ -272,44 +283,45 @@ def by_object_toolchange_lift(lines):
     return out
 
 
-def real_total_layers(lines):
+def real_total_layers(lines, cfg=None):
     """Snapmaker Orca writes the real layer count into SET_PRINT_STATS_INFO TOTAL_LAYER=;
     upstream writes a pre-export estimate, so the touchscreen's layer counter can overshoot.
     Print-by-object restarts the layer count per object, so it is left alone there."""
-    if _print_facts(lines)[0]:
+    if _print_facts(lines, cfg)[0]:
         return lines
-    count = sum(1 for l in lines if LAYER_RE.match(l))
+    count = sum(1 for l in lines if l[:1] != "G" and LAYER_RE.match(l))
     if not count:
         return lines
     rx = re.compile(r"^(\s*SET_PRINT_STATS_INFO\b.*\bTOTAL_LAYER=)(\d+)", re.I)
-    return [rx.sub(lambda m: m.group(1) + str(count), l) for l in lines]
+    return [rx.sub(lambda m: m.group(1) + str(count), l) if "=" in l else l for l in lines]
 
 
 def fan_off_while_probing(lines):
     """Part fan off before Z homing / plate detect / mesh (as Snapmaker Orca's start G-code)."""
-    out, start = [], _start_index(lines)
-    for i, line in enumerate(lines):
-        if start is not None and i > start and PROBING_RE.match(line):
-            prev = out[-1].strip().upper() if out else ""
-            if not prev.startswith("M107"):
-                out.append("M107 " + MARK + " fan off while probing")
-        out.append(line)
+    start = _start_index(lines)
+    if start is None:
+        return lines
+    out = lines
+    for i in reversed([i for i, l in enumerate(lines[start + 1:], start + 1)   # the prefix test skips the moves
+                       if (l[:1] in "DdBb \t" or l[:3] in ("G28", "g28")) and PROBING_RE.match(l)]):
+        if not lines[i - 1].strip().upper().startswith("M107"):
+            out = out if out is not lines else list(lines)
+            out.insert(i, "M107 " + MARK + " fan off while probing")
     return out
 
 
 def recolour_metadata(lines, mapping, heads):
     """Rewrite '; filament_colour = ...' so the printer's file list shows the assigned heads' colours."""
-    out = []
-    for line in lines:
-        m = SETTING_RE.match(line)
+    out = list(lines)
+    for i in [i for i, l in enumerate(lines) if "filament_colour" in l]:
+        m = SETTING_RE.match(lines[i])
         if m and m.group(1) == "filament_colour":
             colours = split_list(m.group(2))
             for fi, t in mapping.items():
                 c = heads[t].get("colour") if 0 <= t < len(heads) and heads[t].get("loaded") else None
                 if c and fi < len(colours):
                     colours[fi] = c
-            line = "; filament_colour = " + ";".join(colours)
-        out.append(line)
+            out[i] = "; filament_colour = " + ";".join(colours)
     return out
 
 
@@ -336,9 +348,9 @@ def process(lines, cfg, options, mapping=None, heads=None, version="0"):
     if options.get("whole_bed_mesh", True):
         lines = whole_bed_mesh(lines)
     if options.get("by_object_lift_fix", True):
-        lines = by_object_toolchange_lift(lines)
+        lines = by_object_toolchange_lift(lines, cfg)
     if options.get("real_total_layers", True):
-        lines = real_total_layers(lines)
+        lines = real_total_layers(lines, cfg)
     if options.get("fan_off_probing", True):
         lines = fan_off_while_probing(lines)
     if mapping and heads and options.get("recolour_metadata", True):
