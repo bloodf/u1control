@@ -226,6 +226,17 @@ def is_u1_name(*values):
     return any(re.search(r"snapmaker[ _-]*u1|\bu1\b", clean(v), re.I) for v in values if v)
 
 
+def selected_u1_preset(bundle):
+    """The selected printer preset when it is a Snapmaker U1, else None."""
+    preset = bundle.current_printer_preset()
+    return preset if is_u1_name(preset.config_value("printer_model"), preset.name, preset.config_value("inherits")) else None
+
+
+def preset_value(bundle, preset, key):
+    """A printer preset's own value, else the bundle's full config value."""
+    return clean(preset.config_value(key)) or clean(bundle.full_config_value(key))
+
+
 def run_off_thread(fn, timeout=20):
     """Run fn on a plugin worker thread and wait, so network I/O never blocks OrcaSlicer's UI or slicing threads."""
     box = {}
@@ -300,11 +311,10 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
         host, key = clean(cfg.get("host")), clean(cfg.get("api_key"))
         if not host:
             bundle = orca.host.preset_bundle()
-            preset = bundle.current_printer_preset()
-            if not is_u1_name(preset.config_value("printer_model"), preset.name, preset.config_value("inherits")):
+            preset = selected_u1_preset(bundle)
+            if preset is None:
                 raise ValueError(tr("Select a Snapmaker U1 printer, or set \"host\" in U1 Control's plugin config."))
-            host = clean(preset.config_value("print_host")) or clean(bundle.full_config_value("print_host"))
-            key = clean(preset.config_value("printhost_apikey")) or clean(bundle.full_config_value("printhost_apikey"))
+            host, key = preset_value(bundle, preset, "print_host"), preset_value(bundle, preset, "printhost_apikey")
             if not host:
                 raise ValueError(tr("The selected U1 has no address: click the Wi-Fi icon next to the printer and enter its IP."))
         return Target(host, key, settings.printer_label(clean(cfg.get("printer_name"))), clean(cfg.get("spoolman_url")),
@@ -1140,31 +1150,31 @@ class U1Agent(pa.PrinterAgentBase):
     # discovery and selection ---------------------------------------------------------------------------
     def _announce_host(self):
         """The U1 to list in the Device tab: the connected one, else U1 Control's own "host", else the selected U1
-        printer preset's address. OrcaSlicer discovers before it connects, so the connected one alone is never known
-        on a fresh start. "" when there is none."""
+        printer preset's address; "" when there is none. OrcaSlicer lists printers before it connects."""
         with self._lock:
             host = self.host
-        if host:
-            return host
-        host = clean(self._settings().effective().get("host"))
-        if host:
-            return host_of(host)
-        try:
+        return host or host_of(clean(self._settings().effective().get("host"))) or self._preset_host()
+
+    @staticmethod
+    def _preset_host():
+        """The selected U1 printer preset's address, read on OrcaSlicer's UI thread; "" (and why, in the log) if none."""
+        def read():
             bundle = orca.host.preset_bundle()
-            preset = bundle.current_printer_preset()
-            if not is_u1_name(preset.config_value("printer_model"), preset.name, preset.config_value("inherits")):
-                log("agent: discovery lists nothing: the selected printer is not a Snapmaker U1")
-                return ""
-            host = host_of(clean(preset.config_value("print_host")) or clean(bundle.full_config_value("print_host")))
+            preset = selected_u1_preset(bundle)
+            return None if preset is None else host_of(preset_value(bundle, preset, "print_host"))
+        try:
+            host = on_ui_thread(read)
         except Exception as e:
             log("agent: discovery lists nothing: the selected printer's address is not readable (%s)" % e)
             return ""
-        if not host:
+        if host is None:
+            log("agent: discovery lists nothing: the selected printer is not a Snapmaker U1")
+        elif not host:
             log("agent: discovery lists nothing: no U1 address set (set the printer preset's host to the U1's IP)")
-        return host
+        return host or ""
 
     def start_discovery(self, start, sending):
-        host = self._announce_host() if start else ""   # the configured printer only, never a network scan (MRA announce_printhost_device)
+        host = self._announce_host() if start else ""   # never a network scan (MRA announce_printhost_device)
         if host:
             self._emit("ssdp", json.dumps({
                 "dev_name": "Snapmaker U1", "dev_id": self.dev_id or host, "dev_ip": host,
@@ -1314,7 +1324,7 @@ class U1Agent(pa.PrinterAgentBase):
 
     def _poll(self, stop, client):
         connected, thumb = False, (None, "")   # thumb: (file name, its thumbnail URL), read once per file
-        reported = False   # the current run of failed reads is in the log
+        logged_unreachable = False   # the current run of failed reads is in the log
         while not stop.is_set():
             try:
                 if not self.firmware:
@@ -1328,7 +1338,7 @@ class U1Agent(pa.PrinterAgentBase):
                     if stop.is_set():
                         return
                     self.view = view
-                reported = False
+                logged_unreachable = False
                 if not connected:
                     connected = True   # MRA perform_connection_async: ConnectStatusOk, then printer_connected
                     threading.Thread(target=self._read_camera, args=(stop, client), name="u1control-camera",
@@ -1343,9 +1353,9 @@ class U1Agent(pa.PrinterAgentBase):
             except Exception as e:
                 if connected:
                     log("agent: the U1 stopped answering (%s)" % e)
-                elif not reported:
-                    log("agent: can't reach the U1 at %s (%s)" % (client.base, e))
-                reported = True
+                elif not logged_unreachable:
+                    log("agent: the U1 did not answer the first status read (%s)" % e)
+                logged_unreachable = True
                 connected = False
                 with self._lock:
                     if not stop.is_set():

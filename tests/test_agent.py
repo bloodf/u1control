@@ -990,43 +990,82 @@ class PluginAgentTests(unittest.TestCase):
         self.orca.host.preset_bundle = lambda: type("Bundle", (), {
             "current_printer_preset": lambda b: preset, "full_config_value": lambda b, k: values.get(k)})()
 
+    def discover(self):
+        """What discovery announces; the callback runs on the calling thread when no queue_on_main is set."""
+        found = []
+        self.agent.set_on_ssdp_msg_fn(lambda text: found.append(json.loads(text)))
+        self.assertTrue(self.agent.start_discovery(True, False))
+        return found
+
     def test_discovery_announces_the_selected_u1_before_any_connect(self):
         """OrcaSlicer asks for discovery before it connects; the Device tab lists only what discovery announced."""
-        found = []
-        self.agent.set_on_ssdp_msg_fn(lambda text: found.append(json.loads(text)))
         self.select_preset(print_host=self.fake.host)
-        self.assertTrue(self.agent.start_discovery(True, False))
-        self.assertTrue(wait_for(lambda: found))
-        self.assertEqual((found[-1]["dev_type"], found[-1]["dev_ip"]), ("797581801", self.fake.host))
+        found = self.discover()
+        self.assertEqual([(f["dev_type"], f["dev_ip"], f["dev_id"]) for f in found],
+                         [("797581801", self.fake.host, self.fake.host)])
 
-    def test_discovery_announces_nothing_for_a_printer_that_is_not_a_u1(self):
-        found = []
-        self.agent.set_on_ssdp_msg_fn(lambda text: found.append(json.loads(text)))
-        self.select_preset(name="Voron 2.4", print_host=self.fake.host, printer_model="Voron")
-        self.assertTrue(self.agent.start_discovery(True, False))
-        time.sleep(0.2)
-        self.assertEqual(found, [])
+    def test_the_announced_u1_connects_and_pushes_status(self):
+        self.select_preset(print_host=self.fake.host)
+        entry = self.discover()[0]
+        messages = []
+        self.agent.set_on_local_message_fn(lambda dev, text: messages.append((dev, json.loads(text))))
+        conn = self.orca.printer_agent.PrinterConnectionParams(dev_id=entry["dev_id"], host=entry["dev_ip"])
+        self.assertEqual(self.agent.connect_printer(conn), 0)
+        self.assertTrue(wait_for(lambda: messages))
+        self.assertEqual(messages[0][0], self.fake.host)
+        self.assertIn("print", messages[0][1])
 
-    def test_discovery_announces_nothing_when_no_address_is_known(self):
-        found = []
-        self.agent.set_on_ssdp_msg_fn(lambda text: found.append(json.loads(text)))
-        self.select_preset()
-        self.assertTrue(self.agent.start_discovery(True, False))
-        time.sleep(0.2)
-        self.assertEqual(found, [])
+    def test_discovery_reads_the_preset_on_the_ui_thread(self):
+        """From a plugin thread the preset read is handed to OrcaSlicer's UI thread (queue_on_main)."""
+        import threading
+        self.select_preset(print_host=self.fake.host)
+        queued = []
+        self.agent.set_queue_on_main_fn(lambda task: (queued.append(1), task()))
+        box = []
+        worker = threading.Thread(target=lambda: box.append(self.discover()))
+        worker.start()
+        worker.join(5)
+        self.assertEqual(len(queued), 2)   # the preset read, then the callback
+        self.assertEqual(box[0][0]["dev_ip"], self.fake.host)
 
-    def test_an_unreachable_u1_is_logged_once_not_every_poll(self):
+    def test_discovery_prefers_the_connected_u1_then_the_host_setting_over_the_preset(self):
+        self.select_preset(print_host="10.0.0.9")
+        self.ns["get_store"](self.agent).update({"host": "10.0.0.8"})
+        self.assertEqual(self.discover()[-1]["dev_ip"], "10.0.0.8")
+        self.connect()
+        self.assertEqual(self.discover()[-1]["dev_ip"], self.fake.host)
+
+    def test_discovery_logs_why_it_lists_nothing(self):
         lines = []
         self.ns["log"] = lines.append
-        self.agent.AGENT_POLL = 0.05
-        self.ns["AGENT_POLL"] = 0.05
-        port_closed = self.fake.host
+        cases = [
+            (dict(name="Voron 2.4", print_host=self.fake.host, printer_model="Voron"), "not a Snapmaker U1"),
+            (dict(), "no U1 address set")]
+        for values, reason in cases:
+            self.select_preset(**values)
+            self.assertEqual(self.discover(), [])
+            self.assertIn(reason, lines.pop())
+        self.orca.host.preset_bundle = lambda: 1 / 0
+        self.assertEqual(self.discover(), [])
+        self.assertIn("not readable", lines.pop())
+
+    def test_an_unreachable_u1_is_logged_once_not_every_poll(self):
+        lines, failed = [], []
+        self.ns["log"] = lines.append
+        self.ns["AGENT_POLL"] = 0.02
+        real = self.ns["Moonraker"]
+
+        class Counting(real):
+            def info(self):
+                failed.append(1)
+                return super().info()
+        self.ns["Moonraker"] = Counting
+        host = self.fake.host
         self.fake.close()
-        conn = self.orca.printer_agent.PrinterConnectionParams(dev_id="u1", host=port_closed)
+        conn = self.orca.printer_agent.PrinterConnectionParams(dev_id="u1", host=host)
         self.assertEqual(self.agent.connect_printer(conn), 0)
-        self.assertTrue(wait_for(lambda: any("can't reach the U1" in l for l in lines)))
-        time.sleep(0.4)
-        self.assertEqual(len([l for l in lines if "can't reach the U1" in l]), 1)
+        self.assertTrue(wait_for(lambda: len(failed) >= 4))   # four failed polls, one log line
+        self.assertEqual(len([l for l in lines if "did not answer the first status read" in l]), 1)
 
 
 def bridge_preset(name, vendor="Generic", colour="#FF0000"):
