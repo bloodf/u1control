@@ -20,7 +20,8 @@ export interface Spool { id: number; name: string; vendor: string; material: str
   remaining?: number | null; initial?: number | null; location?: string; filament_id?: number; low?: boolean; use_first?: boolean }
 export interface StockView {
   spooler: { state: string; text: string; detail?: string; version?: string; links?: number };
-  stock: { state: string; code?: string; text: string; detail?: string; rows: Spool[]; key: string; ts?: number };
+  /** code 'own': U1 Control's own Spoolman list, as Spooler shares none (origin 'printer' when read through the U1). */
+  stock: { state: string; code?: string; text: string; detail?: string; rows: Spool[]; key: string; ts?: number; origin?: string; source?: string };
   same_spoolman: boolean | null; usage: string; bindings: Record<string, number>;
 }
 export interface UsageEntry { id: string; at: number | null; spool?: number | null; grams?: number; head?: number; file?: string;

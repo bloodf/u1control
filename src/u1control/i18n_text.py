@@ -359,6 +359,8 @@ MESSAGES = {
     "the printer sent a broken answer (%s)": _m(
         "a impressora enviou uma resposta corrompida (%s)", "la impresora envió una respuesta dañada (%s)",
         "der Drucker hat eine fehlerhafte Antwort gesendet (%s)", "打印机发来的应答已损坏（%s）"),
+    "download incomplete: %d of %s bytes": _m("download incompleto: %d de %s bytes", "descarga incompleta: %d de %s bytes",
+                                              "Download unvollständig: %d von %s Bytes", "下载不完整：%d / %s 字节"),
     "download failed (%s)": _m("o download falhou (%s)", "la descarga falló (%s)", "Herunterladen fehlgeschlagen (%s)", "下载失败（%s）"),
     "upload failed (%s)": _m("o envio falhou (%s)", "la subida falló (%s)", "Hochladen fehlgeschlagen (%s)", "上传失败（%s）"),
     "can't reach the U1 at %s": _m("não foi possível alcançar a U1 em %s", "no se puede conectar con la U1 en %s",

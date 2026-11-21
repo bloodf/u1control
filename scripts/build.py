@@ -12,6 +12,7 @@ import argparse
 import base64
 import hashlib
 import re
+import sys
 import tomllib
 import zipfile
 from pathlib import Path
@@ -78,7 +79,10 @@ def dist_info(project, files):
     meta[di + "licenses/LICENSE"] = (ROOT / "LICENSE").read_bytes()
     # the Dashboard's printer photo is Snapmaker's product image: its credit travels too
     meta[di + "licenses/NOTICE.md"] = (ROOT / "NOTICE.md").read_bytes()
-    for lic in sorted((ROOT / "ui" / "node_modules" / "@orca-plugins" / "ui-foundation" / "licenses").glob("*.txt")):
+    bundled = sorted((ROOT / "ui" / "node_modules" / "@orca-plugins" / "ui-foundation" / "licenses").glob("*.txt"))
+    if not bundled:
+        sys.exit("ui/node_modules has no ui-foundation licences: run npm ci in ui/ first")
+    for lic in bundled:
         meta[di + "licenses/" + lic.name] = lic.read_bytes()
     record = []
     for path, data in {**files, **meta}.items():

@@ -57,7 +57,8 @@ def normalize_host(host):
     scheme = parts.scheme.lower()
     if scheme not in ("http", "https") or not parts.hostname:
         raise PrinterError(tr("can't read printer address %r") % host)
-    return "%s://%s%s" % (scheme, parts.netloc, parts.path.rstrip("/"))
+    netloc = parts.netloc.rpartition("@")[2]   # user:password@ never travels on (Moonraker on the U1 takes no login)
+    return "%s://%s%s" % (scheme, netloc, parts.path.rstrip("/"))
 
 
 def permission_origin(host):
@@ -118,9 +119,13 @@ class Moonraker:
         total = 0
         try:
             with self._open(req, timeout=timeout) as resp, open_out() as out:
+                length = resp.headers.get("Content-Length")
                 while True:
                     chunk = resp.read(256 * 1024)
                     if not chunk:
+                        # http.client ends a body cut short without an error: the length says it is incomplete
+                        if length and length.isdigit() and total != int(length):
+                            raise PrinterError(tr("download incomplete: %d of %s bytes") % (total, length))
                         return total
                     out.write(chunk)
                     total += len(chunk)

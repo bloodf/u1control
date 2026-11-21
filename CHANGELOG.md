@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.16.0] - 2026-11-21
 
 ### Added
 
@@ -13,12 +13,25 @@
 
 ### Changed
 
+- Shared UI 5.6.1.
 - The G-code console is now a Dashboard widget, part of the default layout, instead of a tab of its own.
 - Shared UI 5.4.0 (the dashboard grid).
 - The print setup's path preview samples 1600 segments instead of 4000 (still more than its 160 px drawing shows), so a long plate keeps its preview under the page limit with the bigger page.
 - A toolhead whose filament was unloaded but whose spool still sits in the feeder (feeder state `preload_finish`) now says **Not in the head** instead of looking loaded, and the feeder line reads in words (in the head, at the inlet, waiting for filament, unloaded) instead of the raw firmware state.
 
 ### Fixed
+
+- **The Stock tab no longer waits for ever.** With Spooler not installed, not running or sharing no stock list, the tab said "Waiting for Spooler's stock list…" indefinitely. It now lists the spools straight from the Spoolman U1 Control uses (its own address, the printer's Spoolman link, or the one Spooler uses), says so, and linking a spool to a toolhead works as usual. With no Spoolman anywhere it says to set an address in **Settings > Connection & Spoolman**, with a button to get there.
+- **Print-by-object tool changes can't send the head down into the print.** When the G-code had no `max_print_height`, the tool-change lift fix turned the profile's relative 1.5 mm hop into an absolute move to Z 1.5, which would drive the nozzle into objects already printed. That hop is now left as the relative lift it is.
+- If the pre-print script couldn't reach the U1 (a timeout, the printer busy), the print setup had already marked the G-code as done, so sending it again skipped the toolhead map and print options. The G-code is marked only once the script went through.
+- With OrcaSlicer's Print dialog, the slots picked there no longer get replaced by the automatic choice a few seconds after the U1 print setup opens; **Auto map** still re-picks every one.
+- A download from the printer (a timelapse, for example) that the connection cut short is reported as incomplete instead of being saved as if it were the whole file.
+- Opening the tab or switching printers no longer waits behind a long console command (a heat-and-wait, a homing): the connection is made at once.
+- A printer address written with a login (`http://user:password@…`) works: the login is dropped instead of breaking every request and showing the password.
+- While Klipper starts, shuts down or reports a state U1 Control doesn't know, OrcaSlicer's Device tab no longer shows a print running.
+- **Discard** of a print interrupted by a power cut waits until the U1 is idle, like **Resume**.
+- A printer that answers the connection check with an empty reply no longer makes connecting fail with an internal error.
+- Building the plugin stops with a message when the shared UI's licence texts are missing (`npm ci` not run in `ui/`), instead of making a package without them.
 
 - A job from OrcaSlicer goes to the U1 it names (the print's printer address, as OrcaSlicer's **Multi-device** tab sends it), not to the U1 the agent is connected to; the connected U1 still gets the jobs that name it.
 - **Multi-colour spools show every colour.** A toolhead loaded with a multi-colour spool set up on the printer (`filament_color_multi`) showed only its first colour. Its card's strip and spool, the Stock tab, the printer photo and the print setup now show all of them, side by side, and OrcaSlicer's filament sync receives them too.

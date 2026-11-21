@@ -42,7 +42,7 @@ FRAME_SAME_BEFORE_SLOWING = 2   # unchanged pictures in a row before asking half
 FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
 SNAPSHOT_MAX_AGE = 10.0     # s: Save picture keeps only a camera frame this fresh
 URGENT = ("emergency_stop", "pause", "cancel")   # never wait behind the command worker
-DEDICATED = URGENT + ("download", "screen_touch", "stock", "usage", "usage_ack", "snapshot")  # own short-lived thread
+DEDICATED = URGENT + ("connect", "download", "screen_touch", "stock", "usage", "usage_ack", "snapshot")  # own short-lived thread
 # ("stock" only reads files; "usage"/"usage_ack" only read or write the local ledger, never Spoolman;
 # "snapshot" only writes the last camera picture to a local file)
 THUMB_QUEUE = 8             # thumbnails waiting at most; the page asks for a few at a time
@@ -470,12 +470,13 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         with self.lock:
             if self.spoolman is not None and self.spoolman_gen == gen:
                 return self.spoolman
-        smc = sm.Spoolman(target.spoolman_url, client)
+        url = target.spoolman_url or self.spooler_spoolman()   # none set here: the one Spooler uses, if it runs
+        smc = sm.Spoolman(url, client)
         try:
             smc.connect()
         except sm.SpoolmanError:
             # "none" only on the printer's clear answer; no answer leaves it unknown.
-            if not target.spoolman_url and smc.printer_spoolman is False:
+            if not url and smc.printer_spoolman is False:
                 with self.lock:
                     if gen == self.generation:
                         self.spoolman_link = "none"
@@ -607,7 +608,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
 
     def cmd_connect(self):
         gen, client, target = self._ctx()
-        info = client.info()
+        info = client.info() or {}
         status, conclusive = ext.Extended(client).probe()
         firmware = u1.detect_firmware(info, status)
         commands = self._commands(client)
@@ -785,6 +786,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             self._require_idle()
             return self._gcode("SDCARD_PRINT_PL_RESTORE")
         if action == "discard":
+            self._require_idle()
             return self._gcode("SDCARD_PRINT_PL_CLEAR_ENV")
         raise ValueError(tr("bad action"))
 

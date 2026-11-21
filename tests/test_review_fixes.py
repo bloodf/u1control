@@ -71,6 +71,32 @@ class UrgentTests(unittest.TestCase):
         self.assertNotIn("error", call(self, svc, pub, "emergency_stop"))
         self.assertEqual(self.fake.scripts, ["M112"])
 
+    def test_connect_not_queued_behind_a_long_console_command(self):
+        svc, pub = make_service(self, self.fake)
+        release = threading.Event()
+        svc.cmd_slow = lambda: release.wait(10)
+        self.addCleanup(release.set)
+        svc.submit(1, "slow", {})
+        time.sleep(0.2)
+        svc.submit(2, "connect", {})
+        self.assertTrue(wait_for(lambda: any(m.get("id") == 2 for m in pub), 3))
+        self.assertIn("result", next(m for m in pub if m.get("id") == 2))
+
+    def test_power_loss_discard_waits_for_an_idle_printer(self):
+        fake = fakes.FakePrinter(state="printing")
+        self.addCleanup(fake.close)
+        svc, pub = make_service(self, fake)
+        self.assertIn("error", call(self, svc, pub, "power_loss", action="discard"))
+        self.assertEqual(fake.scripts, [])
+
+    def test_address_login_is_dropped(self):
+        self.assertEqual(moonraker.normalize_host("http://user:secret@192.168.1.5:7125/u1"), "http://192.168.1.5:7125/u1")
+
+    def test_unknown_klippy_state_is_not_a_running_print(self):
+        import agent
+        for state, want in (("startup", "PREPARE"), ("shutdown", "FAILED"), ("ready", "IDLE"), ("unknown", "PREPARE")):
+            self.assertEqual(agent.push_status({"state": state})["print"]["gcode_state"], want, state)
+
     def test_pause_and_cancel_are_urgent(self):
         self.assertTrue({"pause", "cancel", "emergency_stop"} <= set(service_mod.URGENT))
 
@@ -283,6 +309,22 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(os.path.basename(second), "t (1).mp4")
         self.assertEqual(os.path.getsize(second), 3 * 1024 * 1024)
 
+    def test_body_cut_short_is_not_saved_as_complete(self):
+        class Short:
+            headers = {"Content-Length": "10"}
+            def __init__(self):
+                self.parts = [b"12345", b""]
+            def read(self, n):
+                return self.parts.pop(0)
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+        client = Moonraker("192.168.1.5", opener=types.SimpleNamespace(open=lambda req, timeout=None: Short()))
+        with self.assertRaises(PrinterError) as e:
+            client.download_to("camera/t.mp4", lambda: open(os.devnull, "wb"))
+        self.assertIn("5 of 10", str(e.exception))
+
     def test_failed_download_leaves_nothing(self):
         fake = fakes.FakePrinter()
         self.addCleanup(fake.close)
@@ -387,6 +429,14 @@ class GcodeFixTests(unittest.TestCase):
         self.assertEqual(out[-3:], ["G91", "G1 Z2.4 F600", "G90"])   # later unrelated relative lift untouched
         far = ["; print_sequence = by object", "; Change Tool0 -> Tool1", "G1 X5", "G91", "G1 Z2.4 F600", "G90"]
         self.assertEqual(gcode.by_object_toolchange_lift(far), far)  # not directly after the block
+
+    def test_hop_without_max_height_stays_relative(self):
+        """The 1.5 mm fallback hop with no max_print_height in the file: as an absolute Z1.5 the head would dive
+        into the objects already printed, so it stays the relative hop it is."""
+        lines = ["; print_sequence = by object", "; Change Tool0 -> Tool1", "G91", "G1 Z1.5 F600", "G90"]
+        self.assertEqual(gcode.by_object_toolchange_lift(lines), lines)
+        lines[3] = "G1 Z1 F600"
+        self.assertEqual(gcode.by_object_toolchange_lift(lines), lines)
 
     def test_total_layers_by_layer_only(self):
         body = ["SET_PRINT_STATS_INFO TOTAL_LAYER=99", ";LAYER_CHANGE", ";LAYER_CHANGE"]

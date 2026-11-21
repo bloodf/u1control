@@ -3,9 +3,12 @@ to a toolhead. Every printer command still goes through u1control's own queue (S
 the printer the page shows; Spooler only supplies the list. Free of the `orca` module."""
 
 import peers
+import spoolman as sm
 from i18n import tr
+from moonraker import PrinterError
 
 STOCK_CHANGED = "Spooler's stock list changed since this one was shown; nothing was written. Pick the spool again."
+OWN_KEY = "spoolman:"   # the key of U1 Control's own Spoolman list (own_stock), followed by where it reads Spoolman
 
 
 def _assign_args(head, spool_id, key):
@@ -29,6 +32,48 @@ class StockMixin:
     def want_stock(self, refresh=False):
         if self.peers is not None:
             self.peers.want_stock(refresh)
+
+    def spooler_spoolman(self):
+        """The Spoolman address the running Spooler uses ("" when Spooler doesn't run here or names none)."""
+        if self.peers is None:
+            return ""
+        peer = self.peers.spooler()
+        return peer["origin"] if peer["state"] == "active" else ""
+
+    def _own_origin(self, target):
+        """Where U1 Control reads Spoolman, as own_stock's key names it."""
+        with self.lock:
+            via_printer = self.spoolman is not None and self.spoolman.via_moonraker
+        return "printer" if via_printer else peers.normalize_origin(target.spoolman_url or self.spooler_spoolman())
+
+    def own_stock(self, target, refresh=False):
+        """U1 Control's own Spoolman spools as a stock list, for when Spooler shares none (not installed, not running,
+        or no list): code "own". With no Spoolman to read, code "no_spoolman" (the page says what to set); when the
+        read fails, code "own_error" with the reason. None without a printer."""
+        if target is None:
+            return None
+        base = {**peers.parse_stock(None, None), "source": "spoolman"}
+        with self.lock:
+            spools = list(self.spools)
+        if refresh or not spools:
+            # ponytail: an empty Spoolman is read again on every stock poll (5 s); a "read once" flag if that matters
+            try:
+                self.cmd_spools()
+            except (PrinterError, sm.SpoolmanError) as e:
+                if not target.spoolman_url and not self.spooler_spoolman() and self.spoolman_link != "moonraker":
+                    return {**base, "state": "error", "code": "no_spoolman",
+                            "text": "No Spoolman to list spools from: set its address in U1 Control's settings."}
+                return {**base, "state": "error", "code": "own_error", "detail": str(e),
+                        "text": "Couldn't read Spoolman: %s" % e}
+            with self.lock:
+                spools = list(self.spools)
+        rows = [{"id": sp["id"], "filament_id": sp.get("filament_id"), "name": sp.get("name") or "",
+                 "vendor": sp.get("vendor") or "Generic", "material": sp.get("material") or "",
+                 "location": sp.get("location") or "", "colour": sp.get("colour"), "colours": sp.get("colours") or [],
+                 "remaining": sp.get("remaining"), "initial": sp.get("initial"), "low": False, "use_first": False}
+                for sp in spools if not sp.get("archived")]
+        origin = self._own_origin(target)
+        return {**base, "state": "ok", "code": "own", "text": "", "rows": rows, "key": OWN_KEY + origin, "origin": origin}
 
     def _usage_owner(self, target):
         """Who records this printer's filament use in Spoolman, for the stock view's note."""
@@ -55,21 +100,25 @@ class StockMixin:
         return mine == spooler_origin
 
     def cmd_stock(self, refresh=False):
-        """Spooler's state and stock list, with what this printer needs to use it."""
-        if self.peers is None:
-            spooler = {"state": "absent", "text": peers.STATE_TEXT["absent"], "detail": "", "version": "",
-                       "session": "", "origin": ""}
-            return {"spooler": spooler, "stock": {**peers.parse_stock(None, None), "state": "unavailable",
-                                                  "text": spooler["text"]},
-                    "same_spoolman": None, "usage": "unknown", "bindings": {}}
-        self.want_stock(bool(refresh))
+        """Spooler's state and stock list, with what this printer needs to use it. When Spooler shares no list,
+        the stock is U1 Control's own Spoolman read (own_stock), never an endless wait."""
         _, _, target = self._snapshot()
-        spooler, stock = self.peers.stock()
+        if self.peers is None:
+            spooler = {"state": "absent", "text": peers.STATE_TEXT["absent"], "detail": "", "version": "", "origin": ""}
+            stock = {**peers.parse_stock(None, None), "state": "unavailable", "code": "unavailable", "text": spooler["text"]}
+        else:
+            self.want_stock(bool(refresh))
+            spooler, stock = self.peers.stock()
+            spooler = {k: v for k, v in spooler.items() if k != "session"}
+        same = self._origin_check(target, spooler["origin"]) if spooler["state"] == "active" else None
+        if stock["state"] not in ("ok", "stale"):
+            own = self.own_stock(target, bool(refresh))
+            if own is not None:
+                stock, same = own, None
         with self.lock:
             bindings = {str(k): v for k, v in self.bindings.items()}
-        return {"spooler": {k: v for k, v in spooler.items() if k != "session"}, "stock": stock,
-                "same_spoolman": self._origin_check(target, spooler["origin"]) if spooler["state"] == "active" else None,
-                "usage": self._usage_owner(target), "bindings": bindings}
+        return {"spooler": spooler, "stock": stock, "same_spoolman": same, "usage": self._usage_owner(target),
+                "bindings": bindings}
 
     def _current_row(self, key, spool_id):
         if self.peers is None:
@@ -90,6 +139,10 @@ class StockMixin:
         and U1 Control's own Spoolman read finds that spool with the same filament. Then the normal bind."""
         head, spool_id, key = _assign_args(head, spool_id, key)
         _, _, target = self._ctx()
+        if key.startswith(OWN_KEY):   # from own_stock: U1 Control's own Spoolman, nothing of Spooler's to check
+            if target is None or key != OWN_KEY + self._own_origin(target):
+                raise ValueError(tr(STOCK_CHANGED))
+            return self.cmd_bind_spool(head, spool_id, bool(force))
         spooler, row = self._current_row(key, spool_id)
         if self._origin_check(target, spooler["origin"]) is False:
             raise ValueError(tr("U1 Control's Spoolman (%s) isn't the one Spooler uses (%s); nothing was written. "

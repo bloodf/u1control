@@ -75,7 +75,8 @@ _SUB_TYPES = {"CF": "-CF", "GF": "-GF", "SNAPSPEED": " HIGH SPEED", "HS": " HIGH
 
 # print_stats.state -> gcode_state (DM set_print_state); cancelled and error are FAILED, as MRA.
 GCODE_STATE = {"standby": "IDLE", "printing": "RUNNING", "paused": "PAUSE", "complete": "FINISH",
-               "cancelled": "FAILED", "error": "FAILED"}
+               "cancelled": "FAILED", "error": "FAILED",
+               "ready": "IDLE", "shutdown": "FAILED"}   # Klippy's own state, when print_stats gave none
 PRINT_STAGE = {"printing": 1, "paused": 2, "complete": 3, "error": 4}   # MRA mc_print_stage
 
 
@@ -148,7 +149,7 @@ def push_status(view, preferred=None, thumbnail=""):
     """{"print": {...}} for on_local_message_fn, from u1.summarize(); preferred as ams_block; thumbnail: the current
     file's picture URL (thumbnail_url), or "" for OrcaSlicer's placeholder."""
     state = view.get("state") or "standby"
-    gstate = GCODE_STATE.get(state, "RUNNING")
+    gstate = GCODE_STATE.get(state, "PREPARE")   # startup or unknown: busy for DM (no new job), but no print shown
     if gstate == "IDLE" and view.get("machine_state") not in ("", "IDLE", None):
         gstate = "PREPARE"   # loading, calibrating, updating: DM counts PREPARE as printing, so no new job starts
     active = next((e for e in view.get("extruders") or [] if e.get("active")), {})

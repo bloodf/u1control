@@ -687,9 +687,9 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
         _still_valid(ctx, host, client, heads, mapping)
         lines, mode = gcode.process(lines, cfg, {**options, **cover_fans(prefs), "purifier": purifier}, mapping, heads,
                                     VERSION)
-        gcode.write(ctx.gcode_path, lines + [agent.SETUP_DONE], newline)
         script = u1.preprint_script(mapping, prefs, commands)
         run_off_thread(lambda: client.gcode(script))
+        gcode.write(ctx.gcode_path, lines + [agent.SETUP_DONE], newline)   # marked done only once the script went
         if choice:
             remember_choice(store, options, choice)
         store.update({"printed_before": True})
@@ -764,17 +764,19 @@ def remember_choice(store, options, choice):
                       **({"purifier": choice["purifier"]} if options["mode"] == settings.EXPERT else {})})
 
 
-def open_setup(store, options, view, host, client, lines, cfg, filaments, mapping, prefs, name, cancelled):
+def open_setup(store, options, view, host, client, lines, cfg, filaments, mapping, prefs, name, cancelled,
+               keep_map=False):
     """Everything the print setup needs, then the window (job thread). prefs: the basic options as offered so far;
     the extra ones are offered only when the printer has their command. Returns ask_setup's answer plus
-    "commands". The caller remembers the options (remember_choice) only after the send went through."""
+    "commands". keep_map: the slots came from OrcaSlicer's Print dialog, so a refresh of the toolheads keeps them.
+    The caller remembers the options (remember_choice) only after the send went through."""
     commands = printer_commands(client)
     saved = options["prefs"] if options["remember_print_options"] else {}
     offered = {**prefs, **u1.offered_extras(saved, view, commands)}
     extras = {"printer": {"name": settings.printer_label(clean(options.get("printer_name"))),
                           "busy": u1.machine_busy(view), "address": host},
               "spools": setup_spools(host), "remember": bool(options["remember_print_options"]),
-              "features": u1.features(commands), "tags": rfid_flags(view)}
+              "features": u1.features(commands), "tags": rfid_flags(view), "keep_map": keep_map}
     choice = ask_setup(setup_job(lines, cfg, name, client), cancelled, filaments, view["heads"], mapping, offered,
                        options["purifier"], client, extras, options["ui_language"], host)
     return {**choice, "commands": commands}   # remembered by the caller once the print was accepted
@@ -865,6 +867,7 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
         "purifier": purifier, "auto_purifier": u1.purifier_mode(filaments),
         "printer": extras.get("printer"), "spools": extras.get("spools") or {},
         "remember": bool(extras.get("remember", True)), "tags": extras.get("tags") or [],
+        "keep_map": bool(extras.get("keep_map")),
     }
     html = page_html("setup", data, language=language)
     if len(html.encode("utf-8")) > SETUP_PAGE_LIMIT and (data["job"] or {}).get("preview"):
@@ -1565,7 +1568,7 @@ class U1Agent(pa.PrinterAgentBase):
             if not options["print_dialog"]:
                 return None
             return open_setup(self._settings(), options, view, host, client, lines, cfg, filaments, mapping, prefs,
-                              name, cancel_fn)
+                              name, cancel_fn, keep_map=True)
         return choose
 
     def start_local_print_with_record(self, params, update_fn, cancel_fn, wait_fn):

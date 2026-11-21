@@ -552,7 +552,7 @@ class DiscoveryTest(UsageTest):
             old = self.shown()["stock"]["key"]
             self.sp.stop_presence()                                     # Spooler unloaded / disabled
             view = self.svc.cmd_stock()
-            self.assertEqual((view["spooler"]["state"], view["stock"]["rows"]), ("stopped", []))
+            self.assertEqual((view["spooler"]["state"], view["stock"]["code"]), ("stopped", "own"))   # U1 Control's own read
             with self.assertRaises(ValueError):
                 self.svc.cmd_stock_assign(0, 9, old)
             self.load_spooler()                                         # reloaded: a new run

@@ -423,6 +423,16 @@ test('setup: choose a head on the card; another material needs a confirmation ti
   eq(__t.submits.length, 1, 'a second click does not send twice');
 `, { mode: 'setup' });
 
+test('setup: the Print dialog\'s slots survive a toolhead refresh; Auto map still re-picks', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  const before = qa('.su-card').map(c => c.dataset.t);
+  await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {0: 3, 1: 3, 2: 3, 3: 3}});
+  eq(qa('.su-card').map(c => c.dataset.t), before, 'a refresh keeps the slots picked in OrcaSlicer');
+  await click(byTest('automap'));
+  await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {0: 3, 1: 3, 2: 3, 3: 3}});
+  eq(q('.su-card[data-f="0"]').dataset.t, '3', 'Auto map replaces them');
+`, { mode: 'setup', data: {...SETUP_FULL, keep_map: true} });
+
 test('setup: a busy printer locks the settings and Apply', `
   await until(() => sent().some(m => m.ready), 'ready posted');
   assert(text(byTest('busy')).includes('can’t change during a print'), 'busy notice: ' + text(byTest('busy')));
@@ -517,6 +527,32 @@ test('stock: without Spooler the tab stays, says why in one row and asks for no 
   assert(!stockRows().length && !q('.sc-table') && text(byTest('stock-card')).includes('Spooler isn’t running'), 'solo U1 Control: one row saying why, no list: ' + text(byTest('stock-card')));
   await sleep(2100);
   eq(last('lease').stock, false, 'no stock lease without Spooler');
+`);
+
+test('stock: without Spooler\'s list the tab lists U1 Control\'s own Spoolman and links from it', `
+  await connect('stock', 4);
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), {spooler: SP('absent'), stock: {state: 'ok', code: 'own', text: '', rows: ROWS, key: 'spoolman:http://box:7912', origin: 'http://box:7912', source: 'spoolman'}, same_spoolman: null, usage: 'u1control', bindings: {}});
+  eq(text(q('[data-tab="stock"] .oui-appbar-count')), '2', 'the Stock tab counts the spools');
+  await tab('stock');
+  eq(stockRows().length, 2, 'the spools are listed, not a wait for Spooler');
+  assert(text(byTest('stock-own')).includes('straight from Spoolman'), 'says where the list comes from');
+  assert(!text(byTest('stock-about')).includes('through the printer'), 'not read through the printer');
+  await click(q('[data-stock="7"]'));
+  await yes();
+  eq(cmds('stock_assign').map(m => m.args.key), ['spoolman:http://box:7912'], 'links with the own list key');
+`);
+
+test('stock: with no Spoolman anywhere the tab says what to set, with the way to Settings', `
+  await connect();
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), {spooler: SP('absent'), stock: {state: 'error', code: 'no_spoolman', text: 'x', rows: [], key: '', source: 'spoolman'}, same_spoolman: null, usage: 'u1control', bindings: {}});
+  await tab('stock');
+  assert(text(byTest('stock-card')).includes('has no Spoolman address'), 'says no address is set: ' + text(byTest('stock-card')));
+  assert(!text(byTest('stock-card')).includes('Waiting'), 'no wait');
+  await click(byTest('stock-settings'));
+  await until(() => q('[aria-labelledby="oui-tab-settings"]')?.checkVisibility());
 `);
 
 test('stock lists, filters and links with the list key and printer generation', `

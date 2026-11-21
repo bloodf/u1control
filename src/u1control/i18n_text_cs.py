@@ -101,6 +101,7 @@ CS = {
     "can't read printer address %r": "adresu tiskárny nelze přečíst %r",
     "printer response too large": "odpověď tiskárny je příliš velká",
     "the printer sent a broken answer (%s)": "tiskárna poslala poškozenou odpověď (%s)",
+    "download incomplete: %d of %s bytes": "stahování neúplné: %d z %s bajtů",
     "download failed (%s)": "stahování selhalo (%s)",
     "upload failed (%s)": "nahrávání selhalo (%s)",
     "can't reach the U1 at %s": "nelze se spojit s U1 na %s",
