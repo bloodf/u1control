@@ -90,6 +90,7 @@ class FakePrinter:
         self.file_list = None   # served by /server/files/list instead of the files under that root
         self.undeletable = set()   # "timelapse/x.jpg": DELETE answers 500
         self.webcams = []   # served by /server/webcams/list
+        self.thumbnails = []   # every file's metadata thumbnails
         handler = self._handler()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -180,7 +181,8 @@ class FakePrinter:
                     return self._send(200, {"result": [{"path": n[len(root):], "size": len(fake.files[n]), "modified": 1000.0 + i,
                                                         "permissions": "rw"} for i, n in enumerate(names)]})
                 if u.path == "/server/files/metadata":
-                    return self._send(200, {"result": {"filename": q.get("filename"), "filament_weights": [3.5, 0, 0, 1.5]}})
+                    return self._send(200, {"result": {"filename": q.get("filename"), "filament_weights": [3.5, 0, 0, 1.5],
+                                                       "thumbnails": fake.thumbnails}})
                 if u.path == "/server/spoolman/status":
                     return self._send(200, {"result": {"spoolman_connected": fake.spoolman, "spool_id": None}})
                 if u.path == "/firmware-config/api/status":

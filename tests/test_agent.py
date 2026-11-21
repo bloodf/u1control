@@ -45,6 +45,42 @@ class PushTests(unittest.TestCase):
         self.assertEqual((p["nozzle_temp_range"], p["bed_temp_range"]), ([0, u1.HOTEND_MAX], [0, u1.BED_MAX]))
         self.assertEqual(p["gcode_state"], "IDLE")
 
+    def test_every_push_names_the_u1_model_for_orcaslicer_251(self):
+        """OrcaSlicer 2.5.1 makes the device of a print_host preset with printer_type = "Snapmaker U1" (the preset's
+        printer_model) and asks for discovery before the printer is connected, so the ssdp dev_type never fixes it:
+        each push carries the model_id the dialogs compare with the preset's (DeviceManager.cpp: print.printer_type)."""
+        p = agent.push_status(view())["print"]
+        self.assertEqual((p["command"], p["msg"]), ("push_status", 0))   # a full push: parse_json reads printer_type
+        self.assertEqual(p["printer_type"], "797581801")                  # resources/profiles/Snapmaker/machine/Snapmaker U1.json
+        self.assertIsInstance(p["printer_type"], str)
+
+    def test_toolheads_are_one_named_four_tray_unit_as_251_parses_it(self):
+        """DevFilaSystemParser::ParseV1_0 reads print.ams.ams[] (an array directly under print.ams reads as no unit:
+        0.15.2's Device tab showed only "Ext"), tray ids 0..3, tray_exist_bits in hex, multicolour in cols."""
+        heads_ = heads()
+        heads_[3] = {**heads_[3], "colours": ["#FF0000", "#00FF00"]}
+        ams = agent.push_status(view(heads=heads_))["print"]["ams"]
+        unit = ams["ams"][0]
+        self.assertEqual((unit["id"], unit["info"], unit["display_name"]), ("0", "0002", "U1"))
+        self.assertEqual([t["id"] for t in unit["tray"]], ["0", "1", "2", "3"])
+        self.assertEqual(ams["ams_exist_bits"], "1")
+        self.assertEqual(int(ams["tray_exist_bits"], 16), sum(1 << h["index"] for h in heads_ if h.get("loaded")))
+        self.assertEqual(unit["tray"][3]["cols"], ["FF0000FF", "00FF00FF"])
+        self.assertEqual(unit["tray"][3]["ctype"], 1)
+        self.assertEqual(unit["tray"][2]["tray_slot_placeholder"], "1")   # empty toolhead: a slot, no filament
+
+    def test_thumbnail_url_is_the_largest_beside_the_file(self):
+        meta = {"thumbnails": [{"width": 32, "height": 32, "relative_path": ".thumbs/a-32x32.png"},
+                               {"width": 300, "height": 300, "relative_path": ".thumbs/a-300x300.png"}]}
+        self.assertEqual(agent.thumbnail_url(meta, "jobs/a b.gcode", "http://u1:7125/"),
+                         "http://u1:7125/server/files/gcodes/jobs/.thumbs/a-300x300.png")
+        self.assertEqual(agent.thumbnail_url(meta, "a.gcode", "http://u1"), "http://u1/server/files/gcodes/.thumbs/a-300x300.png")
+        for bad in ({}, {"thumbnails": None}, {"thumbnails": [{"relative_path": "../x.png"}]}, None):
+            self.assertEqual(agent.thumbnail_url(bad, "a.gcode", "http://u1"), "")
+        self.assertEqual(agent.thumbnail_url(meta, "", "http://u1"), "")
+        self.assertEqual(agent.push_status(view())["print"]["thumbnail_url"], "")
+        self.assertEqual(agent.push_status(view(), thumbnail="http://u1/t.png")["print"]["thumbnail_url"], "http://u1/t.png")
+
     def test_tray_ids_prefer_the_linked_spools_preset_then_generic_by_material(self):
         block = agent.push_status(view(), lambda h: {1: "SPL00000000AB"}.get(h["index"], ""))["print"]
         self.assertEqual([t["tray_info_idx"] for t in block["ams"]["ams"][0]["tray"]],
@@ -913,6 +949,16 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(self.agent.get_camera_url(), "http://%s%s" % (self.fake.host, agent.STOCK_CAMERA))
         self.assertEqual(self.agent.get_camera_stream_mode(), pa.CameraStreamMode.HTTP_SNAPSHOT)
         self.assertEqual(self.agent.command_start_camera("dev"), 0)
+
+    def test_connected_push_reports_the_model_and_the_jobs_thumbnail(self):
+        self.fake.thumbnails = [{"width": 300, "height": 300, "relative_path": ".thumbs/a-300x300.png"}]
+        messages = []
+        self.agent.set_on_local_message_fn(lambda dev, text: messages.append(json.loads(text)))
+        self.connect()
+        self.assertTrue(wait_for(lambda: messages))
+        push = messages[0]["print"]
+        self.assertEqual(push["printer_type"], agent.U1_MODEL_ID)
+        self.assertEqual(push["thumbnail_url"], "http://%s/server/files/gcodes/.thumbs/a-300x300.png" % self.fake.host)
 
     def test_discovery_and_detect_report_the_u1_model_id(self):
         found = []

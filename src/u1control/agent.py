@@ -32,10 +32,15 @@ HAS_SDCARD_NORMAL = 1          # DevStorage.h SdcardState
 # home_flag bit 16 = is_support_pa_calibration (DM parse_home_flag). DM parses home_flag after support_flow_calibration
 # in the same push and lets the bit win (DM:1216 over DM:3277), so without it the dialog's Flow calibration box hides.
 HAS_PA_CALIBRATION = 1 << 16
-# The Snapmaker U1's model_id in OrcaSlicer's profiles (resources/profiles/Snapmaker/machine/Snapmaker U1.json). It is
-# the device's printer_type (DevManager on_machine_alive reads ssdp dev_type), which the Print dialog compares with the
-# preset's model_id (DevConfigUtil is_printer_model_compatible); MRA sends the preset's model_id the same way. The
-# plugin API doesn't show a preset's model_id, so it is written here.
+# The Snapmaker U1's model_id in OrcaSlicer's profiles (resources/profiles/Snapmaker/machine/Snapmaker U1.json). It must
+# be the device's printer_type: the Print and Send dialogs compare it with the preset's model_id
+# (DevConfigUtil::is_printer_model_compatible), Sync from AMS and the sync badges need the two equal
+# (Plater::is_same_printer_for_connected_and_selected), and the Device tab names the model from it. OrcaSlicer 2.5.1
+# creates the device of a print_host preset with printer_type = the preset's printer_model, "Snapmaker U1"
+# (GUI_App::select_machine), which matches nothing: "Unknown", and the dialogs refuse it. Every push carries it
+# (DeviceManager.cpp parse_json reads print.printer_type), as the stock Moonraker agent sets obj->printer_type at each
+# filament fetch; the ssdp dev_type alone isn't enough, as 2.5.1 asks for discovery before the printer is connected.
+# The plugin API doesn't show a preset's model_id, so it is written here.
 U1_MODEL_ID = "797581801"
 CHAMBER_LIGHT = "chamber_light"
 # The stock firmware's camera picture, renewed only for ~60 s after camera.start_monitor (u1control's own camera does the
@@ -125,7 +130,10 @@ def ams_block(heads, preferred=None):
             tray.update(tray_info_idx="", tray_type="", tray_color="00000000", tray_slot_placeholder="1")
         trays.append(tray)
     # Nested as DevFilaSystemParser::ParseV1_0 reads it: print.ams.ams, print.ams.tray_exist_bits (MRA build_ams_payload)
-    return {"ams": {"ams": [{"id": "0", "info": "0002", "tray": trays}], "ams_exist_bits": "1",
+    # display_name: the unit's name in the Device tab and the dialog's slot picker (DevFilaSystem.cpp ParseV1_0), else
+    # it is called after a Bambu AMS type
+    unit = {"id": "0", "info": "0002", "display_name": "U1", "tray": trays}
+    return {"ams": {"ams": [unit], "ams_exist_bits": "1",
                     "tray_exist_bits": "%X" % bits}}
 
 
@@ -136,8 +144,9 @@ def _remaining_minutes(view):
     return int(spent * (1 - p) / p // 60)
 
 
-def push_status(view, preferred=None):
-    """{"print": {...}} for on_local_message_fn, from u1.summarize(); preferred as ams_block."""
+def push_status(view, preferred=None, thumbnail=""):
+    """{"print": {...}} for on_local_message_fn, from u1.summarize(); preferred as ams_block; thumbnail: the current
+    file's picture URL (thumbnail_url), or "" for OrcaSlicer's placeholder."""
     state = view.get("state") or "standby"
     gstate = GCODE_STATE.get(state, "RUNNING")
     if gstate == "IDLE" and view.get("machine_state") not in ("", "IDLE", None):
@@ -148,6 +157,9 @@ def push_status(view, preferred=None):
     fan = view.get("fan") if isinstance(view.get("fan"), (int, float)) else 0
     p = {
         "command": "push_status", "msg": 0, "support_mqtt_alive": True, "sequence_id": "0",
+        "printer_type": U1_MODEL_ID,
+        # The Device tab's job picture (StatusPanel update_sdcard_subtask); empty keeps the placeholder
+        "thumbnail_url": thumbnail or "",
         "gcode_state": gstate, "mc_print_stage": PRINT_STAGE.get(state, 0),
         "mc_print_error_code": 0, "print_error": 0,
         # Both storage reports must say present or the dialog refuses LAN printing (MRA:2167-2184)
@@ -198,6 +210,20 @@ def camera_source(webcams, base):
         if absolute(cam.get("snapshot_url")):
             return "HTTP_SNAPSHOT", absolute(cam.get("snapshot_url"))
     return "HTTP_SNAPSHOT", absolute(STOCK_CAMERA)
+
+
+def thumbnail_url(metadata, filename, base):
+    """The URL of the largest thumbnail in a /server/files/metadata result for filename (relative to the gcodes root;
+    the thumbnail paths are relative to its folder), or ""."""
+    thumbs = metadata.get("thumbnails") if isinstance(metadata, dict) else None
+    thumbs = [t for t in thumbs if isinstance(t, dict) and isinstance(t.get("relative_path"), str)
+              and t["relative_path"] and ".." not in t["relative_path"].split("/")] if isinstance(thumbs, list) else []
+    if not thumbs or not filename:
+        return ""
+    best = max(thumbs, key=lambda t: (t.get("width") or 0) * (t.get("height") or 0))
+    folder = str(filename).lstrip("/").rpartition("/")[0]
+    path = (folder + "/" if folder else "") + best["relative_path"]
+    return base.rstrip("/") + "/server/files/gcodes/" + urllib.parse.quote(path)
 
 
 def monitor_due(now, watched_at, requested_at):
