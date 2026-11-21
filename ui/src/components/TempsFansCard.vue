@@ -77,5 +77,5 @@ async function setFan(id: string) {
 [data-test="temps-fans"] .oui-controls { gap: var(--oui-s2) var(--oui-s6); }
 
 /* Compact in a small widget: the readings, not the setters. */
-@container oui-widget (max-width: 300px) { [data-test="temps-fans"] .oui-control-row-control { display: none; } }
+@container oui-widget (max-width: 220px) { [data-test="temps-fans"] .oui-control-row-control { display: none; } }
 </style>

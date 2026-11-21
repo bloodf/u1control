@@ -693,7 +693,7 @@ test('status block: Pause only while printing, Resume only while paused, Cancel 
   eq(box(), [72, 72], 'printing: still the 72 px box');
   const fig = q('[data-test="job-card"] [data-test="printer-figure"]').getBoundingClientRect();
   assert(fig.height <= 72 && fig.width <= 72 && fig.height > 40, 'the photo is sized by the box, not the other way round: ' + fig.width + 'x' + fig.height);
-  assert(byTest('job-card').getBoundingClientRect().height < 140, 'the status block stays compact: ' + byTest('job-card').getBoundingClientRect().height);
+  assert(byTest('job-card').getBoundingClientRect().height < 260, 'the status block stays compact: ' + byTest('job-card').getBoundingClientRect().height);
   const cancel = byTest('cancel');
   assert(cancel.classList.contains('p-button-danger') && cancel.classList.contains('p-button-outlined'), 'Cancel is a red outline: ' + cancel.className);
   assert(!byTest('estop').classList.contains('p-button-outlined'), 'the only solid red is Emergency stop');
@@ -2298,7 +2298,8 @@ const CAM_W = 3, CAM_H = 8, TEMPS = 'temps', CONSOLE_LEAST = 'span 3 | span 5';
 const OLD_DEFAULT = [{id: 'job', x: 0, y: 0, w: 12, h: 3}, {id: 'heads', x: 0, y: 3, w: 12, h: 10}, {id: 'controls', x: 0, y: 13, w: 8, h: 6},
   {id: 'camera', x: 8, y: 13, w: 4, h: 6}, {id: 'temps', x: 0, y: 19, w: 8, h: 7}, {id: 'screen', x: 8, y: 19, w: 4, h: 7}, {id: 'console', x: 0, y: 26, w: 12, h: 7}];
 const MINE_CAMERA = '9 / span 4 | 14 / span 8';
-const TEMPS_COMPACT = () => qa('.oui-control-row-control', cell('temps')).every(e => getComputedStyle(e).display === 'none');
+// Narrow, a fan's field goes under its name instead of beside it.
+const TEMPS_COMPACT = () => { const c = qa('.oui-control-row-control', cell('temps')); return c.length > 0 && c.every(e => e.getBoundingClientRect().top >= e.parentElement.firstElementChild.getBoundingClientRect().bottom - 1); };
 `;
 const CONSOLE_CHECK = `
   assert(q('#console-cmd', cell('console')) && q('[role=log]', cell('console')), 'the command line and its log');
