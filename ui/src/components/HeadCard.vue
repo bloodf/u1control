@@ -159,7 +159,7 @@ async function savePa() {
     </template>
     <HeaterControl :id="String(i)" card />
     <template v-if="!editing">
-      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && feed.state !== 'preload_finish'"> · {{ t('heads.atInlet') }}</template></p>
+      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && !['preload_finish', 'load_finish'].includes(feed.state || '')"> · {{ t('heads.atInlet') }}</template></p>
       <p v-if="pa != null" class="oui-meta oui-row" :data-pa="i">{{ t('heads.pa', { v: pa }) }}<template v-if="head.nozzle"> · {{ tMaybe(`nozzle.${head.nozzle}`, head.nozzle) }}</template>
         <Button v-if="linked" text size="small" :label="t('heads.savePa')" :aria-label="t('heads.savePaLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`pa:${i}`)"
                 :loading="tracker.isBusy(`pa:${i}`)" :data-save-pa="i" @click="savePa" /></p>
