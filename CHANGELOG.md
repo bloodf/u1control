@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.17.0] - 2026-11-21
+
+### Added
+
+- **Nozzle check before sending.** Firmware 1.6.0 and newer report whether each toolhead has a Standard or a High Flow nozzle. The U1 print setup now compares it with the nozzle each filament was sliced for, and a filament headed for a toolhead with the other nozzle is a warning you confirm before sending, like another material. With the print setup turned off such a print is refused. On older firmware, or an OrcaSlicer that doesn't say, there is no check and no warning.
+- **multiACE support.** When [multiACE](https://github.com/decay71/multiACE) runs on the U1 (multi or head mode), U1 Control steps aside: it sends no toolhead map and leaves the G-code as sliced, so multiACE routes the filaments and its own tools accept the file. The print setup says so and still sends the print options. U1 Control never runs code the printer serves.
+- **Filament units widget** for multiACE, in the Dashboard's widget list (**Edit layout > Add**): each unit with its slots, colours and materials, which slot feeds which toolhead, temperature, humidity and drying with the time left. **Dry** and **Stop drying** ask first, use multiACE's own temperature and time for that unit, and are refused while the U1 prints or multiACE swaps. Nothing starts or restarts by itself.
+- **Pressure advance per spool.** A toolhead card shows the pressure advance the head has now; **Save to spool** keeps it on the linked Spoolman spool, for the nozzle it has (`pressure_advance_matrix`, the same field and keys as SpoolLink's pressure advance and multiACE, so the value moves with the spool). In the print setup, **Use the pressure advance stored on the spools** applies the saved values at print start, after the start sequence, only when you tick it.
+
+### Changed
+
+- The page is smaller: 29 texts nothing showed any more are gone, in every language. The plugin file is about 7 kB smaller (comment lines left out of the shipped modules, line numbers kept, and tighter compression).
+
 ## [0.16.2] - 2026-11-21
 
 ### Fixed

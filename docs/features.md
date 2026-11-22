@@ -29,6 +29,16 @@ file leaves OrcaSlicer, the way Snapmaker Orca does.
   when done when the firmware offers them.
 - The top-cover mode follows Snapmaker's rule for the filaments in the print, or the mode you pick.
 - Nothing is sent while the U1 is printing, loading, calibrating or updating.
+- Nozzle check: on firmware 1.6.0 and newer each toolhead reports its nozzle (Standard or High Flow,
+  `extruderN.nozzle_volume_type`). A filament sliced for the other nozzle type (the slice's
+  `nozzle_volume_type` for that filament's extruder, `filament_map`) is a warning to confirm. Unknown on either
+  side: no check.
+- Pressure advance per spool: **Use the pressure advance stored on the spools** (shown when a linked Spoolman
+  spool has a value for the nozzle its toolhead has) adds `SET_PRESSURE_ADVANCE` for those toolheads right after
+  `PRINT_START`, so it wins over the start sequence's flow calibration. Values are saved with **Save to spool** on
+  a toolhead card, from the pressure advance the head has at that moment, in the spool's
+  `pressure_advance_matrix` extra field (`{"0.4_standard": 0.032}`, the schema of SpoolLink's pressure advance,
+  paxx12 Extended Firmware PR #649, and of multiACE).
 
 The window (**U1 Control — print setup**) opens before every print while **Show print setup before
 sending** is on, which is the default. It shows the print and the printer, one card per filament with the head
@@ -122,6 +132,21 @@ funcionando.
 Not yet confirmed on a real printer: that OrcaSlicer's dialog shows Flow Dynamics Calibration and
 Timelapse for this agent, that its slot numbers arrive as the toolheads 1 to 4, and that flow calibration
 and time-lapse set this way take effect. See the [changelog](../CHANGELOG.md).
+
+## multiACE
+
+[multiACE](https://github.com/decay71/multiACE) drives Anycubic ACE units on the U1. U1 Control reads its
+`ace` status object ([ENGINE_API](https://github.com/decay71/multiACE/blob/main/multiace/docs/ENGINE_API.md),
+`api_version` 1) and nothing else; it never runs code the printer serves.
+
+- In **multi** or **head** mode multiACE routes the filaments, so U1 print setup and the printer agent send no
+  `SET_PRINT_EXTRUDER_MAP` / `SET_PRINT_USED_EXTRUDERS` and leave the G-code exactly as sliced (no
+  `; u1control:` lines, which multiACE's tools refuse). The print setup says so and still sends the print
+  options. In **normal** mode, or without multiACE, nothing changes.
+- **Filament units** (Dashboard widget list): units, slots with colour and material, which slot feeds which
+  toolhead, temperature, humidity, drying and time left. **Dry** / **Stop drying** send `ACE_DRY ACE=n`
+  (multiACE's own temperature and time for that unit) or `ACE_STOP_DRYING ACE=n`, after a confirmation, and are
+  refused while the U1 is busy or multiACE swaps. Nothing is started or restarted automatically.
 
 ## G-code fixes
 

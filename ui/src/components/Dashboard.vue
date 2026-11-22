@@ -5,7 +5,7 @@
 import { computed, markRaw, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import { OuiBanner, OuiDashboard, OuiEmpty, OuiHint, OuiIcon, OuiPageHeader, OuiPanel, validateLayout, replaceRetired, type OuiDashboardLabels, type OuiWidget } from '@orca-plugins/ui-foundation/src/components';
-import { camera, check, files, fan, hand, play, printer, refresh, settings, terminal, thermometer, toolhead, trash, zap } from '@orca-plugins/ui-foundation/src/icons';
+import { ace, camera, check, files, fan, hand, play, printer, refresh, settings, terminal, thermometer, toolhead, trash, zap } from '@orca-plugins/ui-foundation/src/icons';
 import JobCard from './JobCard.vue';
 import ControlsCard from './ControlsCard.vue';
 import TempsFansCard from './TempsFansCard.vue';
@@ -14,6 +14,7 @@ import ScreenCard from './ScreenCard.vue';
 import ToolheadsCard from './ToolheadsCard.vue';
 import ConsoleCard from './ConsoleCard.vue';
 import FilesCard from './FilesCard.vue';
+import AceCard from './AceCard.vue';
 import UsageCard from './UsageCard.vue';
 import SpoolerHint from './SpoolerHint.vue';
 import { s, openSettings, run, hello, controlsOff, printerName, fwText, stale, syncProject, lease } from '../app/store';
@@ -40,6 +41,7 @@ const widgets = computed<OuiWidget[]>(() => [
     settings: [{ key: 'lines', label: t('widget.lines'), default: 400, options: [100, 400, 1000].map(n) }] },
   { id: 'screen', title: t('scr.title'), icon: hand, component: markRaw(ScreenCard), w: 6, h: 4, minW: 3, minH: 4, fill: true },
   { id: 'files', title: t('nav.files'), icon: files, component: markRaw(FilesCard), w: 4, h: 3, minW: 3, minH: 3 },
+  { id: 'ace', title: t('ace.title'), icon: ace, component: markRaw(AceCard), w: 6, h: 4, minW: 3, minH: 3 },
 ]);
 // Two halves, as arranged by hand in OrcaSlicer: the print over the toolheads on the left; the controls over the
 // temperatures, beside the camera and the printer screen, on the right; the console across the bottom. Both halves end

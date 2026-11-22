@@ -89,6 +89,8 @@ From a file:
 | Your dashboard | **Edit layout** on the Dashboard: drag widgets to move them, drag their edges or corners to resize them, remove them, add them from the list, and set the ones that have settings (camera shape, console lines, which readings show). Keep several named layouts and switch between them. Layouts are saved in U1 Control's settings. |
 | Settings | Bed mesh, input shaper and flow calibration, the Extended Firmware's settings, restart Klipper, restart Moonraker and reboot. |
 | Plugins > Run | **Check U1 connection**, **Sync U1 toolheads to project filaments** and **Apply Snapmaker Orca U1 process tuning**. |
+| Nozzles and pressure advance | The print setup warns when a filament was sliced for a Standard nozzle and goes to a High Flow one, or the other way round (firmware 1.6.0+). Save a toolhead's pressure advance to its Spoolman spool and apply it at print start when you choose to. |
+| multiACE | With [multiACE](https://github.com/decay71/multiACE), U1 Control leaves the toolhead routing and the file to it, and a Dashboard widget shows the ACE units, slots, humidity and drying. |
 | Spooler | With [Spooler](https://github.com/bloodf/spooler) installed, each toolhead gets Spooler's filament profile and the **Stock** tab lists Spooler's stock. |
 
 Most of it works on the stock firmware:

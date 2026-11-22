@@ -174,6 +174,13 @@ MESSAGES = {
         "El botón Imprimir de OrcaSlicer queda en gris (solo Exportar G-code) hasta que el perfil de la impresora U1 tenga dirección: haga clic en el icono de Wi-Fi junto a la impresora e introduzca %s",
         "Die Drucken-Schaltfläche von OrcaSlicer bleibt grau (nur G-Code exportieren), bis das U1-Druckerprofil eine Adresse hat: Klicken Sie auf das WLAN-Symbol neben dem Drucker und geben Sie %s ein",
         "在 U1 打印机预设有地址之前，OrcaSlicer 的“打印”按钮保持灰色（只能导出 G-code）：请点击打印机旁的 Wi-Fi 图标并输入 %s"),
+    'Filament %d was sliced for a %s nozzle; T%d has a %s nozzle': _m('O filamento %d foi fatiado para um bico %s; T%d tem um bico %s', 'El filamento %d se laminó para una boquilla %s; T%d tiene una boquilla %s', 'Filament %d wurde für eine %s-Düse geslict; T%d hat eine %s-Düse', '耗材 %d 按 %s 喷嘴切片；T%d 装的是 %s 喷嘴'),
+    'Standard': _m('Padrão', 'Estándar', 'Standard', '标准'),
+    'High Flow': _m('Alto fluxo', 'Alto flujo', 'High Flow', '高流量'),
+    'T%d has no Spoolman spool': _m('T%d não tem bobina do Spoolman', 'T%d no tiene bobina de Spoolman', 'T%d hat keine Spoolman-Spule', 'T%d 没有绑定 Spoolman 耗材盘'),
+    "the U1 didn't report T%d's pressure advance or nozzle": _m('a U1 não informou o pressure advance ou o bico de T%d', 'la U1 no informó el pressure advance o la boquilla de T%d', 'der U1 hat Pressure Advance oder Düse von T%d nicht gemeldet', 'U1 未报告 T%d 的压力提前或喷嘴'),
+    "multiACE isn't ready (off, or swapping filament)": _m('o multiACE não está pronto (desligado ou trocando filamento)', 'multiACE no está listo (apagado o cambiando filamento)', 'multiACE ist nicht bereit (aus oder beim Filamentwechsel)', 'multiACE 未就绪（未启用或正在换料）'),
+    "that filament unit can't dry": _m('essa unidade de filamento não seca', 'esa unidad de filamento no puede secar', 'diese Filament-Einheit kann nicht trocknen', '该耗材单元无法烘干'),
     "Spooler is keeping slots synced": _m(
         "O Spooler está mantendo os slots sincronizados", "Spooler mantiene las ranuras sincronizadas",
         "Spooler hält die Plätze synchron", "Spooler 正在保持槽位同步"),

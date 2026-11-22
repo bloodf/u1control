@@ -31,7 +31,9 @@ interface Data { job: { name?: string; time?: string; weight?: number | string; 
   filaments: SetupFilament[]; heads: SetupHead[]; map: Record<string, number>; prefs: Record<string, Pref>;
   labels: Record<string, string>; levels?: Record<string, string[]>; features?: string[]; purifier: string; auto_purifier: string;
   printer?: { name: string; busy: boolean; address: string } | null; spools?: Record<string, Spool | string>; remember?: boolean; tags?: boolean[];
-  /** The slots came from OrcaSlicer's Print dialog: a refresh keeps them (Auto map still re-picks every one). */ keep_map?: boolean }
+  /** The slots came from OrcaSlicer's Print dialog: a refresh keeps them (Auto map still re-picks every one). */ keep_map?: boolean;
+  /** multiACE routes the filaments: no toolhead choice here. */ multiace?: boolean;
+  /** Pressure advance stored on each head's bound spool for its nozzle; stored_pa: use it (the last choice). */ pa?: Record<string, number>; stored_pa?: boolean }
 const D = boot.data as Data;
 const heads = ref<SetupHead[]>(D.heads);
 const spools = ref<Record<string, Spool | string>>(D.spools ?? {});
@@ -55,7 +57,7 @@ const headFill = (h: number) => headFraction(present(heads.value[h]), spoolOf(h)
 /** What is in a head, in words: its filament, "unnamed" for filament nobody has named, '' when it is empty. */
 const headName = (h: SetupHead | undefined) => (h?.loaded ? [h.type, h.sub_type].filter(Boolean).join(' ') : h?.unnamed ? t('setup.unnamed') : '');
 const headOf = (f: SetupFilament) => heads.value[map[String(f.index)]];
-const warnings = computed(() => setupWarnings(D.filaments, heads.value, map));
+const warnings = computed(() => (D.multiace ? [] : setupWarnings(D.filaments, heads.value, map)));
 const warnFor = (f: SetupFilament) => warnings.value.find(w => w.f === f.index);
 const colourHint = (f: SetupFilament) => { const h = headOf(f);
   return !!h && h.loaded && family(h.type) === family(f.type) && colourFar(f.colour, headColour(h.index)); };
@@ -66,8 +68,14 @@ const ackReset = ref(false);
 const acked = computed({ get: () => !!warnings.value.length && ackFor.value === warningKey(warnings.value),
   set: v => { ackFor.value = v ? warningKey(warnings.value) : ''; ackReset.value = false; } });
 watch(() => warningKey(warnings.value), now => { if (ackFor.value && ackFor.value !== now) { ackFor.value = ''; ackReset.value = true; } if (!now) ackReset.value = false; });
+const nozzleName = (k: string) => tMaybe(`nozzle.${k}`, k);
 const warnText = (w: (typeof warnings.value)[number]) => (w.kind === 'material'
-  ? t('setup.warn.material', { f: w.f + 1, a: w.a, n: w.h + 1, b: w.b }) : t(`setup.warn.${w.kind}`, { f: w.f + 1, n: w.h + 1 }));
+  ? t('setup.warn.material', { f: w.f + 1, a: w.a, n: w.h + 1, b: w.b })
+  : w.kind === 'nozzle' ? t('setup.warn.nozzle', { f: w.f + 1, a: nozzleName(w.a), n: w.h + 1, b: nozzleName(w.b) })
+    : t(`setup.warn.${w.kind}`, { f: w.f + 1, n: w.h + 1 }));
+// Pressure advance stored on the heads' spools (Spoolman), applied at print start only when ticked.
+const storedPa = ref(!!D.stored_pa);
+const paText = computed(() => Object.entries(D.pa ?? {}).map(([h, v]) => `T${+h + 1} ${v}`).join(', '));
 const canSend = computed(() => !sent.value && !busy.value && (!warnings.value.length || acked.value));
 const why = computed(() => sent.value ? '' : busy.value ? t('setup.busyShort') : !canSend.value ? t('setup.needAck') : '');
 
@@ -134,7 +142,8 @@ function send() {
   sent.value = true;
   const out: Record<string, Pref> = { ...prefs };
   if (recirculating.value) delete out.exhaust_fan;   // the plugin drops it too (u1.exhaust_blocked)
-  bridge.submit({ map: { ...map }, prefs: out, purifier: purifier.value, acknowledged: warnings.value.map(w => w.id), remember: remember.value });
+  bridge.submit({ map: { ...map }, prefs: out, purifier: purifier.value, acknowledged: warnings.value.map(w => w.id), remember: remember.value,
+    stored_pa: !!paText.value && storedPa.value });
 }
 const cancel = () => { if (!sent.value) bridge.submit({ cancelled: true }); };
 const openSettings = () => bridge.post({ open_settings: true });
@@ -181,7 +190,8 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
 
     <OuiBanner v-if="busy" tone="warn" :title="t('setup.busyTitle')" data-test="busy">{{ t('setup.busyText') }}</OuiBanner>
 
-    <section class="su-map" aria-labelledby="su-map-h">
+    <OuiBanner v-if="D.multiace" tone="info" :title="t('setup.aceTitle')" data-test="multiace">{{ t('setup.aceText') }}</OuiBanner>
+    <section v-else class="su-map" aria-labelledby="su-map-h">
       <h2 id="su-map-h" class="su-section">{{ t('setup.mappingTitle') }}</h2>
       <div class="su-body">
         <ul class="su-cards" role="list">
@@ -234,6 +244,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
                 :disabled="busy || sent || !prefs.flow_calibrate" aria-haspopup="dialog" @click="flowPop?.toggle($event)"><template #icon><OuiIcon :icon="more" :size="14" /></template></Button>
       </span>
       <label v-if="has('time_lapse_camera')" class="su-check" for="su-p-time_lapse_camera"><Checkbox v-model="prefs.time_lapse_camera" input-id="su-p-time_lapse_camera" binary :disabled="busy || sent" />{{ prefLabel('time_lapse_camera') }}</label>
+      <label v-if="paText" class="su-check" for="su-pa"><Checkbox v-model="storedPa" input-id="su-pa" binary :disabled="busy || sent" data-test="stored-pa" />{{ t('setup.storedPa', { list: paText }) }}</label>
       <span class="oui-spacer" />
       <span class="su-check">{{ t('setup.cover') }} <span class="oui-meta">{{ t(`purifier.${purifier}` as any) }}</span>
         <Button size="small" text severity="secondary" :aria-label="t('setup.coverMore')" :title="t('setup.coverMore')" data-test="cover-more" :disabled="busy || sent"

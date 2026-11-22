@@ -771,6 +771,41 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self._require_idle()
         return self._client().print_start(path[len(GCODE_ROOT) + 1:])
 
+    def cmd_save_pa(self, head):
+        """Save toolhead `head`'s pressure advance as the printer has it now into its bound spool (Spoolman only,
+        nothing goes to the printer), under the key of the nozzle it has: '<diameter>_<volume type>'."""
+        head = _head(head)
+        client = self._client()
+        status = client.query({u1.EXTRUDERS[head]: ["pressure_advance", "nozzle_volume_type"], "configfile": ["settings"]})
+        ext_status = status.get(u1.EXTRUDERS[head]) or {}
+        value = u1._pa_value(ext_status.get("pressure_advance"))
+        key = u1.pa_key(u1.nozzle_diameters((status.get("configfile") or {}).get("settings"))[head],
+                        u1.norm_nozzle(ext_status.get("nozzle_volume_type")))
+        with self.lock:
+            spool_id = self.bindings.get(head)
+        if spool_id is None:
+            raise ValueError(tr("T%d has no Spoolman spool") % (head + 1))
+        if value is None or key is None:
+            raise PrinterError(tr("the U1 didn't report T%d's pressure advance or nozzle") % (head + 1))
+        matrix = self._spoolman().save_pa(spool_id, key, value)
+        self._reconcile()   # the page shows the stored value from the spool list
+        return {"spool": spool_id, "key": key, "value": value, "pa": matrix}
+
+    def cmd_ace_dry(self, unit, start):
+        """multiACE: start or stop one unit's dryer. Only from the page's confirmed click, never while the U1 prints
+        or multiACE swaps; multiACE picks the temperature and time it has set for that unit."""
+        if type(unit) is not int:
+            raise ValueError(tr("that filament unit can't dry"))
+        if u1.ACE_DRY_PROBE not in self._commands(self._client()):
+            raise ValueError(tr("not supported by this firmware"))
+        view = self._require_idle()
+        ace = view.get("ace")
+        if not ace or ace["swapping"]:
+            raise PrinterError(tr("multiACE isn't ready (off, or swapping filament)"))
+        if not any(a["index"] == unit and a["connected"] and a["dryer"] for a in ace["units"]):
+            raise ValueError(tr("that filament unit can't dry"))
+        return self._gcode(u1.ace_dry_command(unit, bool(start)))
+
     def _require_idle(self):
         view = u1.summarize(self._client().query(u1.STATUS_OBJECTS))
         if u1.machine_busy(view):
@@ -822,7 +857,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             by_id = {s["id"]: s for s in self.spools}
             return {str(h): {"name": " ".join(x for x in (by_id[sid]["vendor"], by_id[sid]["name"]) if x),
                              "colour": by_id[sid].get("colour"), "colours": by_id[sid].get("colours") or [],
-                             "remaining": by_id[sid].get("remaining"), "initial": by_id[sid].get("initial")}
+                             "remaining": by_id[sid].get("remaining"), "initial": by_id[sid].get("initial"),
+                             "pa": by_id[sid].get("pa") or {}}
                     for h, sid in self.bindings.items() if sid in by_id}
 
     def cmd_bind_spool(self, head, spool_id, force=False):

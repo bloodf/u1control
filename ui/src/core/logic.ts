@@ -29,12 +29,12 @@ export function parseSpeed(raw: unknown): number | null {
 
 export const family = (t: unknown): string => ((String(t ?? '').match(/[A-Za-z]+/) || [''])[0]).toUpperCase();
 
-export interface SetupFilament { index: number; type: string; colour?: string; weight?: number }
+export interface SetupFilament { index: number; type: string; colour?: string; weight?: number; nozzle?: string }
 export interface SetupHead { index: number; loaded: boolean; unnamed?: boolean; type: string; vendor?: string; sub_type?: string; colour?: string;
-  colours?: string[]; official?: boolean }
+  colours?: string[]; official?: boolean; nozzle?: string }
 export type SetupWarning =
   | { id: string; kind: 'empty' | 'unnamed'; f: number; h: number }
-  | { id: string; kind: 'material'; f: number; h: number; a: string; b: string };
+  | { id: string; kind: 'material' | 'nozzle'; f: number; h: number; a: string; b: string };
 
 /** Same rules and ids as u1.warning_ids in the plugin, which refuses a send whose warnings weren't acknowledged. */
 export function setupWarnings(filaments: SetupFilament[], heads: SetupHead[], map: Record<string, number>): SetupWarning[] {
@@ -44,6 +44,8 @@ export function setupWarnings(filaments: SetupFilament[], heads: SetupHead[], ma
     if (!h) continue;
     if (!h.loaded) { const kind = h.unnamed ? 'unnamed' : 'empty'; out.push({ id: `${kind}:${f.index}:${h.index}`, kind, f: f.index, h: h.index }); }
     else if (family(h.type) !== family(f.type)) out.push({ id: `material:${f.index}:${h.index}`, kind: 'material', f: f.index, h: h.index, a: f.type, b: h.type });
+    // u1.nozzle_differs: the slice's nozzle type against the head's (firmware 1.6.0+); unknown on either side never warns
+    if (f.nozzle && h.nozzle && f.nozzle !== h.nozzle) out.push({ id: `nozzle:${f.index}:${h.index}`, kind: 'nozzle', f: f.index, h: h.index, a: f.nozzle, b: h.nozzle });
   }
   return out;
 }

@@ -445,9 +445,10 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
             raise JobError(tr("this G-code was not sliced for a Snapmaker U1"))
         mapping, filaments, heads, choice = None, gcode.filaments(lines, cfg), None, None
         done = setup_done(lines)
+        ace = u1.multiace(view)   # multiACE routes the filaments: no mapping, the file left as sliced
         if view is not None:
             heads = view["heads"]
-            mapping = job_mapping(ams_mapping, filaments, heads)
+            mapping = {} if ace else job_mapping(ams_mapping, filaments, heads)
             choice = choose(view, filaments, mapping, prefs, lines, cfg) if choose and not done else None
             if choice:
                 mapping, heads = choice["map"], choice.get("heads") or heads
@@ -457,8 +458,9 @@ def prepare_gcode(path, plate_index, options, view, ams_mapping, version, work_d
                 problems = u1.mapping_warnings(filaments, heads, mapping)
                 if problems:
                     raise JobError(tr("%s. Pick other slots in the print dialog, or load the filament.") % "; ".join(problems))
-        if not done:
+        if not done and not ace:
             lines, _ = gcode.process(lines, cfg, options, mapping, heads, version)
+            lines = gcode.stored_pressure_advance(lines, (choice or {}).get("pa"))
             gcode.write(tmp, lines + ([SETUP_DONE] if choice else []), newline)
         return tmp, mapping, filaments, choice
     except BaseException:
@@ -532,7 +534,8 @@ def run_job(client, path, name, plate_index, ams_mapping, options, offered_prefs
                                "Print again.") % (t + 1))
         if stage:
             stage("start")
-        client.gcode(script)
+        if script:
+            client.gcode(script)
         if cancelled and cancelled():
             raise Cancelled()
         client.print_start(filename)

@@ -522,6 +522,13 @@ class PluginFixTests(unittest.TestCase):
         self.assertEqual(build.relative_imports(src), "from . import u1\nfrom . import extended as ext\n"
                          "from .moonraker import X\n    from . import settings\nimport json\n")
 
+    def test_comment_lines_dropped_line_numbers_kept(self):
+        import build
+        src = '# head\nx = 1  # kept\n    # gone\ns = """\n# inside a string\n"""\n'
+        out = build.strip_comments(src)
+        self.assertEqual(out, '\nx = 1  # kept\n\ns = """\n# inside a string\n"""\n')
+        self.assertEqual(out.count("\n"), src.count("\n"))
+
     def test_json_for_html(self):
         _, ns = self.load()
         text = ns["json_for_html"]({"a": "</script><!-- & <b>"})

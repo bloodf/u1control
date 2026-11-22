@@ -111,6 +111,12 @@ async function choose(id: number | null) {
   if (r.ok) s.bindings = r.result.bindings; else void loadSpools(true);
 }
 const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
+// Pressure advance the head has now; Save keeps it on the linked spool (Spoolman only, keyed by the nozzle).
+const pa = computed(() => s.status?.extruders[i]?.pa ?? null);
+async function savePa() {
+  const r = await run({ key: `pa:${i}`, label: t('heads.savePaLabel', { n }), cmd: 'save_pa', args: { head: i }, okText: t('ok.savePa', { n }) });
+  if (r.ok) void loadSpools(true);
+}
 </script>
 
 <template>
@@ -154,6 +160,9 @@ const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
     <HeaterControl :id="String(i)" card />
     <template v-if="!editing">
       <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && feed.state !== 'preload_finish'"> · {{ t('heads.atInlet') }}</template></p>
+      <p v-if="pa != null" class="oui-meta oui-row" :data-pa="i">{{ t('heads.pa', { v: pa }) }}<template v-if="head.nozzle"> · {{ tMaybe(`nozzle.${head.nozzle}`, head.nozzle) }}</template>
+        <Button v-if="linked" text size="small" :label="t('heads.savePa')" :aria-label="t('heads.savePaLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`pa:${i}`)"
+                :loading="tracker.isBusy(`pa:${i}`)" :data-save-pa="i" @click="savePa" /></p>
     </template>
     <form v-else :id="`hc-form-${i}`" class="hc-form" @submit.prevent="saveEdit">
       <p class="oui-strong hc-form-title">{{ t('edit.title', { n }) }}<OuiHint v-if="tagged" :label="t('heads.tag')" :text="t('edit.rfidNote')" /></p>

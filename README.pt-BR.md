@@ -89,6 +89,8 @@ A partir de um arquivo:
 | Seu painel | **Editar layout** no Painel: arraste widgets para movê-los, arraste bordas ou cantos para redimensionar, remova, adicione da lista e ajuste os que têm configurações (formato da câmera, linhas do console, leituras mostradas). Guarde vários layouts com nome e alterne entre eles. Os layouts ficam salvos nas configurações do U1 Control. |
 | Ajustes | Malha da mesa, input shaper e calibração de fluxo, os ajustes do Extended Firmware, reiniciar o Klipper, reiniciar o Moonraker e reiniciar a impressora. |
 | Plugins > Run | **Check U1 connection**, **Sync U1 toolheads to project filaments** e **Apply Snapmaker Orca U1 process tuning**. |
+| Bicos e pressure advance | O preparo avisa quando um filamento foi fatiado para um bico Padrão e vai para um de Alto fluxo, ou o contrário (firmware 1.6.0+). Salve o pressure advance de uma cabeça na bobina do Spoolman e aplique no início da impressão quando quiser. |
+| multiACE | Com o [multiACE](https://github.com/decay71/multiACE), o U1 Control deixa o encaminhamento dos filamentos e o arquivo com ele, e um widget do Painel mostra as unidades ACE, os slots, a umidade e a secagem. |
 | Spooler | Com o [Spooler](https://github.com/bloodf/spooler) instalado, cada cabeça recebe o perfil de filamento do Spooler e a aba **Estoque** lista o estoque do Spooler. |
 
 Quase tudo funciona no firmware original:

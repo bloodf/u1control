@@ -735,7 +735,8 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
             return tr("U1 print setup already done for this G-code; nothing sent again")
         filaments = gcode.filaments(lines, cfg)
         heads = view["heads"]
-        mapping = u1.auto_map(filaments, heads)
+        ace = u1.multiace(view)   # multiACE routes the filaments: no mapping, the file left as sliced
+        mapping = {} if ace else u1.auto_map(filaments, heads)
         prefs = self._offered_prefs(options, view["options"])
         purifier, commands, choice = options["purifier"], False, None
         if options["print_dialog"]:
@@ -754,12 +755,16 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
             problems = u1.mapping_warnings(filaments, heads, mapping)
             if problems:
                 raise PrinterError(tr("%s. Turn on \"Show print setup before sending\" to choose toolheads.") % "; ".join(problems))
-        lines, mode = gcode.process(lines, cfg, {**options, **cover_fans(prefs), "purifier": purifier}, mapping, heads,
-                                    VERSION)
+        if not ace:
+            lines, mode = gcode.process(lines, cfg, {**options, **cover_fans(prefs), "purifier": purifier}, mapping,
+                                        heads, VERSION)
+            lines = gcode.stored_pressure_advance(lines, (choice or {}).get("pa"))
         _still_valid(ctx, host, client, heads, mapping)   # after the G-code work: checked right before the send
         script = u1.preprint_script(mapping, prefs, commands)
-        run_off_thread(lambda: client.gcode(script))
-        gcode.write(ctx.gcode_path, lines + [agent.SETUP_DONE], newline)   # marked done only once the script went
+        if script:
+            run_off_thread(lambda: client.gcode(script))
+        if not ace:   # marked done only once the script went
+            gcode.write(ctx.gcode_path, lines + [agent.SETUP_DONE], newline)
         if choice:
             remember_choice(store, options, choice)
         store.update({"printed_before": True})
@@ -803,6 +808,20 @@ def printer_commands(client):
         return frozenset()
 
 
+def setup_pa(heads, spools, client):
+    """{head: PA} stored on the bound spools for the nozzles the heads have; the printer's nozzle diameters are read
+    only when a bound spool has stored values. {} when none or unreadable."""
+    if not any((sp or {}).get("pa") for sp in (spools or {}).values()):
+        return {}
+    try:
+        status = run_off_thread(lambda: client.query({"configfile": ["settings"]}), timeout=10)
+        diameters = u1.nozzle_diameters((status.get("configfile") or {}).get("settings"))
+    except Exception as e:
+        log("nozzle diameters not read (%s); stored pressure advance not offered" % e)
+        return {}
+    return u1.stored_pa(heads, diameters, spools)
+
+
 def setup_job(lines, cfg, name, client):
     """The print shown at the top of the print setup, from the sliced G-code only: name, time, weight, layers,
     tool changes, plate preview and the top-down path preview."""
@@ -830,7 +849,7 @@ def setup_spools(host):
 def remember_choice(store, options, choice):
     """"Remember these options" ticked: the next print setup starts from these options."""
     if choice.get("remember"):
-        store.update({"prefs": choice["prefs"],
+        store.update({"prefs": choice["prefs"], "stored_pa": bool(choice.get("stored_pa")),
                       **({"purifier": choice["purifier"]} if options["mode"] == settings.EXPERT else {})})
 
 
@@ -846,7 +865,10 @@ def open_setup(store, options, view, host, client, lines, cfg, filaments, mappin
     extras = {"printer": {"name": settings.printer_label(clean(options.get("printer_name"))),
                           "busy": u1.machine_busy(view), "address": host},
               "spools": setup_spools(host), "remember": bool(options["remember_print_options"]),
-              "features": u1.features(commands), "tags": rfid_flags(view), "keep_map": keep_map}
+              "features": u1.features(commands), "tags": rfid_flags(view), "keep_map": keep_map,
+              "multiace": u1.multiace(view), "stored_pa": bool(options.get("stored_pa"))}
+    if not extras["multiace"]:
+        extras["pa"] = setup_pa(view["heads"], extras["spools"], client)
     choice = ask_setup(setup_job(lines, cfg, name, client), cancelled, filaments, view["heads"], mapping, offered,
                        options["purifier"], client, extras, options["ui_language"], host)
     return {**choice, "commands": commands}   # remembered by the caller once the print was accepted
@@ -889,13 +911,14 @@ def show_settings_tab():
         log("Plugin settings not opened: %r" % e)
 
 
-def _clean_answer(answer, filaments, mapping, shown, prefs, purifier, remember_default):
+def _clean_answer(answer, filaments, mapping, shown, prefs, purifier, remember_default, ace=False):
     """The window's answer, checked: toolheads in range, warnings acknowledged for the toolheads shown last,
-    only offered options (u1.pick_prefs), the exhaust fan left out while the cover recirculates."""
+    only offered options (u1.pick_prefs), the exhaust fan left out while the cover recirculates. ace: multiACE
+    routes the filaments, so there is no mapping to take or check."""
     if not isinstance(answer, dict) or answer.get("cancelled"):
         raise Cancelled()
     chosen = {}
-    for f, t in (answer.get("map") or {}).items():
+    for f, t in ({} if ace else answer.get("map") or {}).items():
         if str(f).isdigit() and isinstance(t, int) and not isinstance(t, bool) and 0 <= t < u1.TOOLHEADS \
                 and int(f) in mapping:
             chosen[int(f)] = t
@@ -945,7 +968,8 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
         "purifier": purifier, "auto_purifier": u1.purifier_mode(filaments),
         "printer": extras.get("printer"), "spools": extras.get("spools") or {},
         "remember": bool(extras.get("remember", True)), "tags": extras.get("tags") or [],
-        "keep_map": bool(extras.get("keep_map")),
+        "keep_map": bool(extras.get("keep_map")), "multiace": bool(extras.get("multiace")),
+        "pa": {str(t): v for t, v in (extras.get("pa") or {}).items()}, "stored_pa": bool(extras.get("stored_pa")),
     }
     html = page_html("setup", data, language=language)
     if len(html.encode("utf-8")) > SETUP_PAGE_LIMIT and (data["job"] or {}).get("preview"):
@@ -1022,7 +1046,11 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
                 raise PrinterError(tr("the print setup window didn't open (OrcaSlicer was busy); nothing was sent"))
     finally:
         stop.set()
-    return _clean_answer(result.get("data"), filaments, mapping, shown[-1], prefs, purifier, data["remember"])
+    answer = _clean_answer(result.get("data"), filaments, mapping, shown[-1], prefs, purifier, data["remember"],
+                           extras.get("multiace"))
+    use_pa = isinstance(result.get("data"), dict) and result["data"].get("stored_pa") is True
+    stored = {int(t): v for t, v in data["pa"].items()} if use_pa else {}
+    return {**answer, "stored_pa": use_pa, "pa": {t: stored[t] for t in set(answer["map"].values()) if t in stored}}
 
 
 HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")
