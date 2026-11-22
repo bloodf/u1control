@@ -42,3 +42,6 @@ export interface Config { settings: Record<string, any>; automations: Automation
 /** What the plugin needs and can't install (requirements.py): ok, missing, or unknown (not known yet / can't be read). */
 export interface Requirement { id: 'printer_agents' | 'extended_firmware' | 'spoolman' | 'spooler'; status: 'ok' | 'missing' | 'unknown';
   details: { version?: string; url?: string; via?: string } }
+/** A toolhead's OrcaSlicer preset as Apply to project filaments picks it (preset_matches): reasons are filmatch [code, value]. */
+export interface PresetMatch { head: number; name: string; source: 'linked' | 'remembered' | 'spooler' | 'auto' | 'none'; score: number | null;
+  reasons: unknown; confident: boolean; candidates: { name: string; score: number; reasons: unknown }[]; remembered_key: string }

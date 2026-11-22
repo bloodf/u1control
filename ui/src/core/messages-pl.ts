@@ -219,6 +219,7 @@ export const pl: Record<PolishKey, string> = {
   'heads.parkLabel': 'Parkuj T{n}',
   'heads.rfidLabel': 'Odczytaj ponownie tag RFID T{n}',
   'heads.sync': 'Zastosuj do filamentów projektu',
+  'match.title': 'Profil OrcaSlicer', 'match.none': 'Żaden profil OrcaSlicer nie pasuje', 'match.linked': 'Powiązany w Spoolmanie', 'match.spooler': 'Profil Spoolera', 'match.change': 'Zmień', 'match.score': 'Wynik {n}', 'match.auto': 'Automatycznie', 'match.autoHint': 'Zapomnij profil wybrany ręcznie', 'match.remembered': 'Wybrany ręcznie', 'match.r.material': 'materiał {v}', 'match.r.variant': 'odmiana {v}', 'match.r.vendor': 'producent {v}', 'match.r.generic': 'profil ogólny', 'match.r.other_vendor': 'inny producent ({v})', 'match.r.word': '„{v}” w nazwie', 'match.r.extra_word': '„{v}” nie ma na szpuli', 'match.r.printer': 'dla tej drukarki', 'match.r.other_printer': 'dla innej drukarki', 'match.r.nozzle': 'dysza {v} mm',
   'heads.syncHelp': 'Dobiera pasujący profil filamentu OrcaSlicer i kolor dla każdego slotu projektu na podstawie załadowanych szpul / tagów RFID.',
   'heads.syncSlow': 'Zastosuj do filamentów projektu: OrcaSlicer jeszcze nie skończył. Jeśli pyta o niezapisane zmiany profilu, odpowiedz, a filamenty zostaną zastosowane.',
   'heads.source.direct': 'Spoolman (bezpośrednio), szpule: {n}',

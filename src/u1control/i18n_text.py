@@ -32,6 +32,9 @@ MESSAGES = {
         '%s. Schalten Sie „Druckvorbereitung vor dem Senden zeigen“ ein, um die Werkzeugköpfe zu wählen.',
         '%s。请打开“发送前显示打印准备”以选择工具头。'),
     "unknown command": _m("comando desconhecido", "comando desconocido", "unbekannter Befehl", "未知命令"),
+    "no such toolhead": _m("essa cabeça não existe", "ese cabezal no existe", "diesen Werkzeugkopf gibt es nicht", "没有这个工具头"),
+    "that preset doesn't fit what T%d holds": _m("esse perfil não serve para o que está no T%d", "ese perfil no sirve para lo que tiene el T%d",
+                                                 "dieses Profil passt nicht zu dem, was T%d hat", "该预设不适合 T%d 中的耗材丝"),
     "open the U1 Control tab for this printer to change its toolheads": _m(
         "abra a aba U1 Control desta impressora para alterar as cabeças",
         "abra la pestaña U1 Control de esta impresora para cambiar sus cabezales",

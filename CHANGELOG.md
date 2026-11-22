@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Each toolhead card shows the OrcaSlicer preset Apply to project filaments gives it**, with a score and the reasons for it (material, manufacturer, subtype words, made for the U1), and marks a close call so you can check it. **Change** lists the other presets for that material and remembers the one you pick for what the toolhead holds (its Spoolman spool, else its RFID tag, else its manufacturer, material and subtype); **Automatic** forgets it. A preset linked in Spoolman still comes first, then the one you picked, then Spooler's. The choices are kept in `matches.json`: Spooler's (shared with Spooler and Kobra Control) while Spooler is installed, else U1 Control's own.
+
 ### Fixed
 
 - **Time left matches the slicer's estimate.** The Dashboard and OrcaSlicer's Device tab worked out the time left from the time spent so far, so the start sequence (heating, calibration, purge) made it hours too long early in a print, far from what the U1's screen says. It now takes the slicer's estimate stored in the file and counts down with the print's progress; a file without an estimate still uses the time spent. Thanks to @BliXem for reporting it.
@@ -10,6 +14,8 @@
 ### Changed
 
 - Internal: the filament matching code (colour distance, material names, generic preset ids and the preset choice) now comes from the shared Orca UI foundation 5.7.0, one copy for Spooler, U1 Control and Kobra Control. Presets are picked exactly as before.
+- The hand-written `profile_overrides` setting is copied into `matches.json` once and then no longer read; the picks it made stay the same.
+- Shared Orca UI foundation 5.8.0. The page keeps the message keys of its seven languages once instead of once per language, which makes it 84 kB smaller so it stays under the size OrcaSlicer on Windows can show.
 
 ## [0.17.1] - 2026-11-22
 

@@ -229,6 +229,7 @@ export const de: Record<MessageKey, string> = {
   'heads.parkLabel': 'T{n} parken',
   'heads.rfidLabel': 'RFID-Tag von T{n} erneut lesen',
   'heads.sync': 'Auf Projektfilamente anwenden',
+  'match.title': 'OrcaSlicer-Profil', 'match.none': 'Kein OrcaSlicer-Profil passt', 'match.linked': 'In Spoolman verknüpft', 'match.spooler': 'Spooler-Profil', 'match.change': 'Ändern', 'match.score': 'Punkte {n}', 'match.auto': 'Automatisch', 'match.autoHint': 'Das von Hand gewählte Profil vergessen', 'match.remembered': 'Von Hand gewählt', 'match.r.material': 'Material {v}', 'match.r.variant': 'eine {v}-Variante', 'match.r.vendor': 'Hersteller {v}', 'match.r.generic': 'Generic-Profil', 'match.r.other_vendor': 'anderer Hersteller ({v})', 'match.r.word': '„{v}“ im Namen', 'match.r.extra_word': '„{v}“ nicht auf der Spule', 'match.r.printer': 'für diesen Drucker', 'match.r.other_printer': 'für einen anderen Drucker', 'match.r.nozzle': '{v}-mm-Düse',
   'heads.syncHelp': 'Wählt anhand der geladenen Spulen und RFID-Tags für jeden Projektplatz das passende OrcaSlicer-Filamentprofil und die Farbe.',
   'heads.syncSlow': 'Auf Projektfilamente anwenden: OrcaSlicer ist noch nicht fertig. Wenn es nach ungespeicherten Profiländerungen fragt, beantworten Sie die Frage, dann werden die Filamente übernommen.',
   'heads.source.direct': 'Spoolman: {n} Spulen (direkt)',

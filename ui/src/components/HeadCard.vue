@@ -3,10 +3,12 @@ import { computed, reactive, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { OuiHint, OuiIcon, OuiLevel, OuiSlot, OuiSpool, OuiStatus } from '@orca-plugins/ui-foundation/src/components';
+import { OuiHint, OuiIcon, OuiLevel, OuiPresetMatch, OuiSlot, OuiSpool, OuiStatus } from '@orca-plugins/ui-foundation/src/components';
 import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload } from '@orca-plugins/ui-foundation/src/icons';
 import HeaterControl from './HeaterControl.vue';
-import { s, run, tracker, busy, controlsOff, loadSpools, guidedWhy } from '../app/store';
+import { s, run, tracker, busy, controlsOff, loadSpools, guidedWhy, pickPreset } from '../app/store';
+import { reasonTexts } from '../core/match';
+import type { MessageKey } from '../core/messages';
 import { ask } from '../core/dialog';
 import { t, fmt, tMaybe } from '../core/i18n';
 import { family } from '../core/logic';
@@ -111,6 +113,11 @@ async function choose(id: number | null) {
   if (r.ok) s.bindings = r.result.bindings; else void loadSpools(true);
 }
 const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
+// The OrcaSlicer preset Apply to project filaments gives this head, why, and Change (remembered by the plugin).
+const match = computed(() => s.matches[String(i)] ?? null);
+const words = (reasons: unknown) => reasonTexts(reasons, (code, v) => t(`match.r.${code}` as MessageKey, { v }));
+const BADGES: Record<string, MessageKey> = { remembered: 'match.remembered', linked: 'match.linked', spooler: 'match.spooler' };
+const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), score: t('match.score'), auto: t('match.auto'), autoHint: t('match.autoHint') }));
 // Pressure advance the head has now; Save keeps it on the linked spool (Spoolman only, keyed by the nozzle).
 const pa = computed(() => s.status?.extruders[i]?.pa ?? null);
 async function savePa() {
@@ -158,6 +165,13 @@ async function savePa() {
       </Select>
     </template>
     <HeaterControl :id="String(i)" card />
+    <div v-if="!editing && match && has" class="hc-match" :data-match="i">
+      <p class="oui-label">{{ t('match.title') }}</p>
+      <OuiPresetMatch :name="match.name" :score="match.score" :confident="match.confident" :reasons="words(match.reasons)"
+                      :badge="BADGES[match.source] ? t(BADGES[match.source]) : undefined" :remembered="match.source === 'remembered' && !!match.remembered_key"
+                      :candidates="match.source === 'linked' ? [] : match.candidates.map(c => ({ name: c.name, score: c.score, reasons: words(c.reasons) }))"
+                      :labels="matchLabels" :busy="s.matchBusy" @pick="name => pickPreset(i, name)" />
+    </div>
     <template v-if="!editing">
       <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && !['preload_finish', 'load_finish'].includes(feed.state || '')"> · {{ t('heads.atInlet') }}</template></p>
       <p v-if="pa != null" class="oui-meta oui-row" :data-pa="i">{{ t('heads.pa', { v: pa }) }}<template v-if="head.nozzle"> · {{ tMaybe(`nozzle.${head.nozzle}`, head.nozzle) }}</template>
@@ -209,6 +223,8 @@ async function savePa() {
 .oui-slot.hc .oui-slot-extra > .oui-meta { font-size: var(--oui-text-xs); line-height: 1.35; }
 .oui-slot.hc .oui-slot-actions { padding-top: 0; }
 .hc-tag { margin-inline-start: var(--oui-s2); }
+.hc-match { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--oui-border); }
+.hc-match .oui-match-name { font-size: var(--oui-text-sm); }
 .hc-pick { width: 100%; min-width: 0; }
 .hc-opt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
 .hc-form-title { display: flex; align-items: center; gap: var(--oui-s1); }
