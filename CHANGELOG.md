@@ -17,7 +17,7 @@
 
 - Internal: the filament matching code (colour distance, material names, generic preset ids and the preset choice) now comes from the shared Orca UI foundation 5.7.0, one copy for Spooler, U1 Control and Kobra Control. Presets are picked exactly as before.
 - The hand-written `profile_overrides` setting is copied into `matches.json` once and then no longer read; the picks it made stay the same.
-- Shared Orca UI foundation 5.9.0. The page keeps the message keys of its seven languages once instead of once per language, which makes it 84 kB smaller so it stays under the size OrcaSlicer on Windows can show.
+- Shared Orca UI foundation 5.9.1. The page keeps the message keys of its seven languages once instead of once per language, which makes it 84 kB smaller so it stays under the size OrcaSlicer on Windows can show.
 
 ## [0.17.1] - 2026-11-22
 
