@@ -5,6 +5,9 @@ Command names and fields come from Snapmaker's open U1 Klipper source
 """
 
 import re
+
+from filmatch import colour_distance, norm_colour  # noqa: F401  (shared with Spooler and Kobra Control)
+from filmatch import material_base as material_family  # noqa: F401
 from i18n import tr
 
 TOOLHEADS = 4         # PHYSICAL_EXTRUDER_NUM
@@ -116,29 +119,6 @@ SOFTENING_BY_TYPE = {                     # from Snapmaker's U1 filament profile
 
 def _at(values, i, default=None):
     return values[i] if isinstance(values, (list, tuple)) and 0 <= i < len(values) else default
-
-
-def norm_colour(value):
-    """'#ff0000', 'FF0000FF', 'ff0000' -> '#FF0000'; anything else -> None."""
-    m = re.fullmatch(r"#?([0-9a-fA-F]{6})([0-9a-fA-F]{2})?", str(value or "").strip())
-    return "#" + m.group(1).upper() if m else None
-
-
-def colour_distance(a, b):
-    """Weighted RGB distance ('redmean'); unknown colours are far apart."""
-    a, b = norm_colour(a), norm_colour(b)
-    if not a or not b:
-        return 765.0
-    r1, g1, b1 = (int(a[i:i + 2], 16) for i in (1, 3, 5))
-    r2, g2, b2 = (int(b[i:i + 2], 16) for i in (1, 3, 5))
-    rm = (r1 + r2) / 2
-    return ((2 + rm / 256) * (r1 - r2) ** 2 + 4 * (g1 - g2) ** 2 + (2 + (255 - rm) / 256) * (b1 - b2) ** 2) ** 0.5
-
-
-def material_family(ftype):
-    """'PLA-CF' / 'PLA Matte' / 'PLA+' -> 'PLA'."""
-    m = re.match(r"[A-Za-z]+", (ftype or "").strip())
-    return m.group(0).upper() if m else ""
 
 
 def describe_toolheads(task):

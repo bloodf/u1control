@@ -14,7 +14,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import build  # noqa: E402
 
 UI = ROOT / "src" / "u1control" / "ui"
-MAX_BUILT_BYTES = 670_000   # the zipped wheel (~653 kB): the page deflates to ~480 kB with the photo spool and the dashboard grid (foundation 5.4.0)
+MAX_BUILT_BYTES = 680_000   # the zipped wheel (~670 kB): the page deflates to ~480 kB with the photo spool and the dashboard grid (foundation 5.4.0)
 
 
 class UiAssets(unittest.TestCase):

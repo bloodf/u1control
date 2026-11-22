@@ -58,7 +58,7 @@ class Workflows(unittest.TestCase):
 
     def test_publish_runs_the_page_tests_like_ci(self):
         for step in ("actions/setup-node@", "browser-actions/setup-chrome@", "npm ci --ignore-scripts && npm run build",
-                     "git diff --exit-code -- src/u1control/ui/app.html ui/build.json",
+                     "git diff --exit-code -- src/u1control/ui/app.html src/u1control/filmatch.py ui/build.json",
                      "python -m unittest discover -s tests", "SPOOLER_SRC:", "CHROME:"):
             self.assertIn(step, CI, step)
             self.assertIn(step, PUBLISH, step)

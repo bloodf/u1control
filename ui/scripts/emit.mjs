@@ -15,3 +15,7 @@ const sha256 = createHash('sha256').update(html).digest('hex');
 const info = { file: 'src/u1control/ui/app.html', sha256, bytes: Buffer.byteLength(html), gzip: gzipSync(html, { level: 9 }).length };
 await writeFile(new URL('../build.json', import.meta.url), JSON.stringify(info, null, 2) + '\n');
 console.log(JSON.stringify(info));
+// The shared filament matcher (Python) ships in the foundation package; the plugin keeps a committed copy among its
+// modules, with LF line ends (a git checkout on Windows may give CRLF).
+const filmatch = await readFile(new URL('../node_modules/@orca-plugins/ui-foundation/python/filmatch.py', import.meta.url), 'utf8');
+await writeFile(new URL('../../src/u1control/filmatch.py', import.meta.url), filmatch.replace(/\r\n/g, '\n'));
