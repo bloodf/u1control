@@ -2111,6 +2111,34 @@ test('Apply to project filaments: busy until the plugin answers, then says what 
   await until(() => q('.oui-toast[role=alert]') && toasts().includes('no preset'), 'why not is shown, as an error: ' + toasts());
 `);
 
+test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and reasons; Change remembers another', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('preset_matches'), 'the cards ask for the presets once the heads are known');
+  const ask = last('preset_matches');
+  const choices = [{name: 'Generic PLA @U1', score: 35, reasons: [['material', 'PLA'], ['generic', ''], ['printer', '']]},
+                   {name: 'Generic PLA Silk @U1', score: 29, reasons: [['material', 'PLA'], ['extra_word', 'silk']]}];
+  const row = {head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: choices[0].reasons, confident: false, candidates: choices, remembered_key: ''};
+  await reply(ask, {matches: [row]});
+  await until(() => q('[data-match="0"]'), 'T1 shows its preset');
+  const card = q('[data-match="0"]');
+  assert(text(card).includes('Generic PLA @U1') && text(card).includes('material PLA') && text(card).includes('Score 35'), 'name, reasons, score: ' + text(card));
+  assert(q('.oui-status[data-state="warn"]', card), 'a close call is marked');
+  assert(!q('[data-match="1"]'), 'no line for a head the plugin gave no preset');
+  await click(q('.oui-match-change', card));
+  await until(() => qa('.oui-match-option', card).length === 2, 'the candidates, no Automatic while nothing was picked by hand');
+  await click(qa('.oui-match-option', card)[1]);
+  const pick = last('preset_pick');
+  eq([pick.head, pick.name], [0, 'Generic PLA Silk @U1'], 'remembered for T1');
+  await reply(pick, {matches: [{...row, name: 'Generic PLA Silk @U1', source: 'remembered', score: 29, reasons: choices[1].reasons, confident: true, remembered_key: 'mat:g|pla|'}]});
+  await until(() => text(q('[data-match="0"]')).includes('Picked by hand'), 'the new pick, marked as picked by hand');
+  await click(q('.oui-match-change', q('[data-match="0"]')));
+  const auto = () => qa('.oui-match-option', q('[data-match="0"]')).find(b => text(b).includes('Automatic'));
+  await until(auto, 'Automatic offered');
+  await click(auto());
+  eq(last('preset_pick').name, null, 'Automatic forgets the pick');
+`);
+
 // ------------------------------------------------------------------ foundation 4.2.0 on: toasts, dismissible notices, requirements
 test('toasts: bottom-left, each with a Close button, gone once closed', `
   await connect();

@@ -35,6 +35,13 @@ ans('stock', {spooler: {state: 'active', text: '', version: '0.20.1'}, stock: {s
   same_spoolman: true, usage: 'u1control', bindings: {'0': 7}});
 ans('usage', {pending: [], unconfirmed: [{id: 'a', at: null, spool: 7, grams: 12.5, head: 0, file: 'gcodes/benchy.gcode', error: 'Spoolman timed out', printer: '192.168.1.40', printer_name: 'Bench U1'}],
   acknowledged: [], acknowledged_total: 0, save_error: '', restore_notice: ''});
+// Each loaded head's preset for Apply to project filaments (T1 picked by hand, T2 a close call).
+{ const m = [...__t.sent].reverse().find(x => x.type === 'preset_matches'); const R = (n, s, r) => ({name: n, score: s, reasons: r});
+  if (m) __t.handler({type: 'reply', id: m.id, result: {matches: [
+    {head: 0, ...R('Snapmaker PLA SnapSpeed @U1', 59, [['material', 'PLA'], ['vendor', 'Snapmaker'], ['printer', '']]), source: 'remembered', confident: true, remembered_key: 'tag:04a1', candidates: []},
+    {head: 1, ...R('Generic PETG @U1', 35, [['material', 'PETG'], ['generic', ''], ['printer', '']]), source: 'auto', confident: false, remembered_key: '',
+     candidates: [R('Generic PETG @U1', 35, [['material', 'PETG']]), R('Generic PETG HF @U1', 29, [['extra_word', 'hf']])]},
+    {head: 3, ...R('Generic PLA @U1', 35, [['material', 'PLA'], ['generic', ''], ['printer', '']]), source: 'auto', confident: true, remembered_key: '', candidates: []}]}}); }
 __t.handler({type: 'config', mode: 'expert', stored: {}, version: '0.5.0', spooler: {installed: true}, settings: {mode: 'expert', host: '', api_key: '••••', printer_name: 'Bench U1', spoolman_url: 'http://192.168.1.10:7912', rfid_auto_sync: true, purifier: 'auto'},
   automations: [{key: 'rfid_auto_sync', label: 'Apply RFID tags', help: 'When a toolhead reads a new tag.', automagic: true, choices: null}, {key: 'purifier', label: 'Top cover', help: 'auto follows the rule.', automagic: 'auto', choices: ['auto','strong','off']}]});
 await settle();

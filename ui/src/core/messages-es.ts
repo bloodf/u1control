@@ -228,6 +228,7 @@ export const es: Record<MessageKey, string> = {
   'heads.parkLabel': 'Aparcar T{n}',
   'heads.rfidLabel': 'Leer de nuevo la etiqueta RFID de T{n}',
   'heads.sync': 'Aplicar a los filamentos del proyecto',
+  'match.title': 'Perfil de OrcaSlicer', 'match.none': 'Ningún perfil de OrcaSlicer sirve', 'match.linked': 'Vinculado en Spoolman', 'match.spooler': 'Perfil de Spooler', 'match.change': 'Cambiar', 'match.score': 'Puntuación {n}', 'match.auto': 'Automático', 'match.autoHint': 'Olvidar el perfil elegido a mano', 'match.remembered': 'Elegido a mano', 'match.r.material': 'material {v}', 'match.r.variant': 'variante de {v}', 'match.r.vendor': 'fabricante {v}', 'match.r.generic': 'perfil genérico', 'match.r.other_vendor': 'otro fabricante ({v})', 'match.r.word': '«{v}» en el nombre', 'match.r.extra_word': '«{v}» no está en el carrete', 'match.r.printer': 'hecho para esta impresora', 'match.r.other_printer': 'hecho para otra impresora', 'match.r.nozzle': 'boquilla de {v} mm',
   'heads.syncHelp': 'Elige, a partir de las bobinas cargadas y las etiquetas RFID, el perfil de filamento de OrcaSlicer y el color que corresponden a cada ranura del proyecto.',
   'heads.syncSlow': 'Aplicar a los filamentos del proyecto: OrcaSlicer aún no ha terminado. Si está preguntando por cambios sin guardar en el perfil, responda y se aplicarán los filamentos.',
   'heads.source.direct': 'Spoolman: {n} bobinas (directo)',

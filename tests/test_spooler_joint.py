@@ -383,7 +383,12 @@ class KeepSlotsMarkerTest(JointCase):
         self.addCleanup(lambda: sp._keep.update(run=None))
 
     def sync(self, **extra):
+        """The page's answer to Apply to project filaments; a sync that runs posts it from its own thread."""
+        before = len(getattr(self.page, "posted", []))
         self.page.on_message({"type": "sync_project", **extra})
+        deadline = time.time() + 5
+        while len(getattr(self.page, "posted", [])) == before and time.time() < deadline:
+            time.sleep(0.01)
         return self.page.posted[-1]["text"]
 
     def test_auto_sync_pauses_while_spooler_keeps_slots_and_resumes_after(self):

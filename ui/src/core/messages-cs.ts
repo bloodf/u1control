@@ -219,6 +219,7 @@ export const cs: Record<CzechKey, string> = {
   'heads.parkLabel': 'Zaparkovat T{n}',
   'heads.rfidLabel': 'Znovu přečíst RFID štítek T{n}',
   'heads.sync': 'Použít pro filamenty v projektu',
+  'match.title': 'Profil OrcaSlicer', 'match.none': 'Žádný profil OrcaSlicer nesedí', 'match.linked': 'Propojeno ve Spoolmanu', 'match.spooler': 'Profil Spooleru', 'match.change': 'Změnit', 'match.score': 'Skóre {n}', 'match.auto': 'Automaticky', 'match.autoHint': 'Zapomenout ručně vybraný profil', 'match.remembered': 'Vybráno ručně', 'match.r.material': 'materiál {v}', 'match.r.variant': 'varianta {v}', 'match.r.vendor': 'výrobce {v}', 'match.r.generic': 'obecný profil', 'match.r.other_vendor': 'jiný výrobce ({v})', 'match.r.word': '„{v}“ v názvu', 'match.r.extra_word': '„{v}“ na cívce není', 'match.r.printer': 'pro tuto tiskárnu', 'match.r.other_printer': 'pro jinou tiskárnu', 'match.r.nozzle': 'tryska {v} mm',
   'heads.syncHelp': 'Vybere odpovídající profil filamentu a barvu v OrcaSliceru pro každý slot projektu podle zavedených cívek / RFID štítků.',
   'heads.syncSlow': 'Použít pro filamenty v projektu: OrcaSlicer ještě neskončil. Pokud se ptá na neuložené změny profilu, odpověz a filamenty se použijí.',
   'heads.source.direct': 'Spoolman: {n} cívek (přímo)',

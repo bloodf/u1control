@@ -202,6 +202,8 @@ CS = {
     "U1 Control — print setup": "U1 Control — příprava tisku",
     "%s. Turn on \"Show print setup before sending\" to choose toolheads.": "%s. Zapni „Zobrazit přípravu tisku před odesláním“, abys mohl vybrat hlavy.",
     "unknown command": "neznámý příkaz",
+    "no such toolhead": "taková hlava neexistuje",
+    "that preset doesn't fit what T%d holds": "tento profil neodpovídá tomu, co je v T%d",
     "open the U1 Control tab for this printer to change its toolheads": "otevři kartu U1 Control pro tuto tiskárnu a změň její hlavy",
     "The exhaust fan stays off while the top cover recirculates (keep warm)": "Odsávací ventilátor zůstává vypnutý, dokud horní kryt recirkuluje vzduch (udržovat teplo)",
 }

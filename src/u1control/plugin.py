@@ -26,6 +26,7 @@ import spooler_bridge
 import preview
 import u1
 import usage
+import filmatch
 from filmatch import override_name, pick_filament_preset  # noqa: F401  (shared with Spooler and Kobra Control)
 from i18n import tr
 from moonraker import Moonraker, PrinterError, permission_origin
@@ -370,7 +371,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                 elif not view:
                     say(tr("No printer status yet; try again in a moment."), problems=1)
                 else:
-                    overrides = self._config()["profile_overrides"]
+                    overrides = migrated_overrides(self._settings())
 
                     def job():
                         try:
@@ -380,6 +381,20 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                             say(tr("Couldn't update the project filaments: %s") % e, problems=1)
                     if not self._background(job):
                         say(tr("Another preset update is running; try again in a moment."), problems=1)
+            elif kind in ("preset_matches", "preset_pick"):   # toolhead cards: each head's preset, why, and Change
+                rid, view, store = data.get("id"), svc.last_view, self._settings()
+
+                def matches_job():
+                    try:
+                        overrides = migrated_overrides(store)
+                        if kind == "preset_pick":
+                            name = data.get("name")
+                            pick_preset(view, bound_spool_lookup(svc), data.get("head"), name if name is None else str(name), overrides)
+                        result = {"matches": preset_matches(view, bound_spool_lookup(svc), overrides)}
+                        self.post_message({"type": "reply", "id": rid, "result": result})
+                    except Exception as e:
+                        self.post_message({"type": "reply", "id": rid, "error": str(e)})
+                threading.Thread(target=matches_job, name="u1control-matches", daemon=True).start()
             elif kind == "requirements":   # Settings > Requirements; recheck: its "Check again" (also looks for Spooler again)
                 recheck = bool(data.get("recheck"))
                 self.post_message({"type": "requirements", "items": requirements_state(svc, self._config(), recheck)})
@@ -2002,7 +2017,7 @@ def spooler_preference(presets, bound, printer_label=""):
     return prefer
 
 
-def _sync_reads(with_printer):
+def _sync_reads(with_printer=True):
     """UI thread: what sync_project needs from the presets, as plain data (filament_meta, the selected printer's
     name, inherits and model when with_printer, and user_presets)."""
     meta = filament_meta()
@@ -2013,31 +2028,140 @@ def _sync_reads(with_printer):
                   "model": clean(printer.config_value("printer_model"))}, _user_presets_safe()
 
 
-def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None):
-    """Apply each loaded toolhead's best filament preset and colour to project slot n+1.
-    A bound spool's orca_filament_preset (a user preset) comes first, then Spooler's presets for heads with a bound
-    spool (bound: head index -> spool). Returns (done, problems) as lists of strings."""
-    meta, printer, mine = on_ui_thread(lambda: _sync_reads(preset_preference is None and bool(bound)))
-    names = [m["name"] for m in meta]
-    colours = {m["name"]: m["colour"] for m in meta}
-    if printer is not None:
+# --- Remembered matches (matches.json, filmatch) ---------------------------------------------------------------------
+# The preset picked by hand for what a toolhead holds (its Spoolman spool, RFID tag, SKU, or vendor + material +
+# subtype) is kept in matches.json: Spooler's, shared with Spooler and Kobra Control, read first; U1 Control's own in
+# its storage folder. Written to Spooler's while Spooler is installed, else to U1 Control's own.
+
+def match_paths():
+    """(paths to read, Spooler's first; the path to write, "" when there is none)."""
+    shared = os.path.join(spooler_dir(), filmatch.MATCHES_FILE) if spooler_dir() else ""
+    own = os.path.join(_storage(), filmatch.MATCHES_FILE) if _storage() else ""
+    spooler_on = bool(shared) and os.path.isfile(os.path.join(spooler_dir(), spooler_bridge.SETTINGS_FILE))
+    return [p for p in (shared, own) if p], shared if spooler_on else own
+
+
+def migrated_overrides(store):
+    """profile_overrides (hand-written pins) copied once into matches.json, which takes their place: {} once copied,
+    the pins themselves while they couldn't be (pick_filament_preset still honours them then)."""
+    cfg = store.effective()
+    overrides = cfg.get("profile_overrides") or {}
+    if cfg.get("overrides_migrated") or not overrides:
+        return {}
+    path = match_paths()[1]
+    try:
+        if not path:
+            raise OSError("no folder to keep matches.json in")
+        filmatch.remember(path, filmatch.overrides_as_matches(overrides))
+    except Exception as e:
+        log("profile_overrides not copied to matches.json yet (%r); still used as they are" % e)
+        return overrides
+    store.update({"overrides_migrated": True})
+    log("profile_overrides copied to %s" % path)
+    return {}
+
+
+def _fits(name, head, tag):
+    """A preset of the toolhead's material (filmatch scores it at all)."""
+    return bool(filmatch.rank_filament_presets([name], head, tag))
+
+
+def _match_context(bound, preset_preference=None):
+    """What head_match needs, read once for every toolhead (from a plugin thread)."""
+    meta, printer, mine = on_ui_thread(_sync_reads)
+    if preset_preference is None and bound and printer is not None:
         presets = spooler_bridge.spooler_presets(meta, (printer["name"], printer["inherits"]))
         if presets:
             preset_preference = spooler_preference(presets, bound, printer["model"] or printer["name"])
-    done, problems = [], []
-    colour_ok = True   # OrcaSlicer 2.5 refuses filament_colour here: a project setting, not a filament preset one
+    paths = match_paths()[0]
+    return {"names": [m["name"] for m in meta], "colours": {m["name"]: m["colour"] for m in meta}, "mine": mine,
+            "preference": preset_preference, "printer": (printer or {}).get("model") or (printer or {}).get("name") or "",
+            "stores": [filmatch.load_matches(p) for p in paths]}
+
+
+def head_match(ctx, head, tag, spool, overrides=None):
+    """The preset sync_project applies to a toolhead, and why: {"name", "source", "score", "reasons", "confident",
+    "candidates", "keys", "remembered_key"}. source: "linked" (the spool's orca_filament_preset), "remembered" (picked
+    by hand), "spooler" (Spooler's preset of the bound spool), "auto" (the best score) or "none"."""
+    tag = tag or {}
+    names = ctx["names"]
+    ranked = filmatch.rank_filament_presets(names, head, tag, colours=ctx["colours"])
+    keys = filmatch.toolhead_keys(head, tag, (spool or {}).get("id"))
+    linked = linked_preset((spool or {}).get("orca_preset"), ctx["mine"])
+    name, source, used = (linked["name"], "linked", "") if linked else ("", "", "")
+    for key in keys if not name else ():
+        name = next((n for n in filmatch.recall(ctx["stores"], [key], ctx["printer"]) if n in names and _fits(n, head, tag)), "")
+        if name:
+            source, used = "remembered", key
+            break
+    if not name:
+        pinned = override_name(names, head, tag, overrides)
+        chosen = ctx["preference"](names, head, tag) if ctx["preference"] and not pinned else None
+        name = pick_filament_preset(names, head, tag, overrides, preference=ctx["preference"], colours=ctx["colours"])
+        source = "remembered" if pinned else "spooler" if chosen and chosen == name else "auto" if name else "none"
+    row = next((r for r in ranked if r["name"] == name), {})
+    return {"name": name, "source": source, "score": row.get("score"), "reasons": row.get("reasons") or [],
+            "confident": source != "auto" or filmatch.confident(ranked, filmatch.PRESET_MARGIN),
+            "candidates": ranked[:MATCH_CHOICES], "keys": keys, "remembered_key": used}
+
+
+MATCH_CHOICES = 5   # candidates the toolhead card offers
+
+
+def _loaded_heads(heads, tags):
     for head in heads:
         tag = (tags[head["index"]] if head["index"] < len(tags or []) else None) or None
-        if not head["loaded"] and not tag:
-            continue
+        if head["loaded"] or tag:
+            yield head, tag
+
+
+def preset_matches(view, bound, overrides=None):
+    """[{"head", ...head_match}] for each loaded toolhead (a plugin thread): what the toolhead cards show."""
+    if not view:
+        return []
+    ctx = _match_context(bound)
+    return [{"head": head["index"], **{k: v for k, v in head_match(ctx, head, tag, bound(head["index"]) if bound else None,
+                                                                    overrides).items() if k != "keys"}}
+            for head, tag in _loaded_heads(view["heads"], view["rfid"])]
+
+
+def pick_preset(view, bound, index, name, overrides=None):
+    """A toolhead card's Change: remember name for what toolhead `index` holds (its most specific key) on this
+    printer; None forgets the choice made by hand. Raises ValueError for a preset that doesn't fit."""
+    heads = (view or {}).get("heads") or []
+    if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(heads):
+        raise ValueError(tr("no such toolhead"))
+    ctx = _match_context(bound)
+    head = heads[index]
+    tags = view.get("rfid") or []
+    tag = (tags[index] if index < len(tags) else None) or None
+    match = head_match(ctx, head, tag, bound(index) if bound else None, overrides)
+    paths, write = match_paths()
+    if name is None:
+        for path in paths if match["remembered_key"] else ():
+            filmatch.remember(path, {match["remembered_key"]: ""}, ctx["printer"])
+            filmatch.remember(path, {match["remembered_key"]: ""})
+        return
+    if not isinstance(name, str) or name not in ctx["names"] or not _fits(name, head, tag or {}) or not match["keys"] or not write:
+        raise ValueError(tr("that preset doesn't fit what T%d holds") % (index + 1))
+    filmatch.remember(write, {match["keys"][0]: name}, ctx["printer"])
+
+
+def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None):
+    """Apply each loaded toolhead's best filament preset and colour to project slot n+1.
+    A bound spool's orca_filament_preset (a user preset) comes first, then the preset picked by hand (matches.json),
+    then Spooler's presets for heads with a bound spool (bound: head index -> spool). Returns (done, problems) as
+    lists of strings."""
+    ctx = _match_context(bound, preset_preference)
+    done, problems = [], []
+    colour_ok = True   # OrcaSlicer 2.5 refuses filament_colour here: a project setting, not a filament preset one
+    for head, tag in _loaded_heads(heads, tags):
         slot = head["index"] + 1
-        link = ((bound(head["index"]) if bound else None) or {}).get("orca_preset")
-        linked = linked_preset(link, mine)
-        notice = link_notice(slot, link, mine)
+        spool = bound(head["index"]) if bound else None
+        notice = link_notice(slot, (spool or {}).get("orca_preset"), ctx["mine"])
         if notice:
             problems.append(notice)
-        preset_name = linked["name"] if linked else pick_filament_preset(
-            names, head, tag, overrides, preference=preset_preference, colours=colours)
+        preset_name = head_match(ctx, head, tag, spool, overrides)["name"]
         colour = (tag or {}).get("colour") or head["colour"]
         try:
             try:
@@ -2080,7 +2204,7 @@ class SyncHeadsToProject(orca.script.ScriptPluginCapabilityBase):
             view = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS)))
         except Exception as e:
             return orca.ExecutionResult.skipped(tr("Couldn't reach the U1: %s") % e)
-        overrides = get_store(self).effective()["profile_overrides"]
+        overrides = migrated_overrides(get_store(self))
         done, problems = sync_project(view["heads"], view["rfid"], overrides, bound=bound_spool_lookup(_service))
         return orca.ExecutionResult.success(sync_message(done, problems))
 

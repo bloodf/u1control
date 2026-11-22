@@ -201,6 +201,8 @@ PL = {
     "U1 Control — print setup": "U1 Control — ustawienia druku",
     "%s. Turn on \"Show print setup before sending\" to choose toolheads.": "%s. Włącz „Pokaż ustawienia druku przed wysłaniem”, aby wybrać głowice.",
     "unknown command": "nieznane polecenie",
+    "no such toolhead": "nie ma takiej głowicy",
+    "that preset doesn't fit what T%d holds": "ten profil nie pasuje do tego, co jest w T%d",
     "open the U1 Control tab for this printer to change its toolheads": "otwórz kartę U1 Control dla tej drukarki, aby zmienić jej głowice",
     "The exhaust fan stays off while the top cover recirculates (keep warm)": "Wentylator wyciągowy pozostaje wyłączony, gdy górna pokrywa recyrkuluje powietrze (utrzymuj ciepło)",
 }
