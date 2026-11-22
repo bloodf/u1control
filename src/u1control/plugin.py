@@ -1626,11 +1626,11 @@ class U1Agent(pa.PrinterAgentBase):
             elif kind == "set_light":
                 client.gcode(agent.LIGHT_ON if command["on"] else agent.LIGHT_OFF)
             elif kind == "gcode":
-                if agent.guarded_line(command["script"]):   # home, heaters, fans: as the tab, only on an idle U1
+                if agent.guarded_line(command["script"]):   # home, heaters, fans: limits, and the U1's state
                     why = agent.line_refusal(command["script"], u1.summarize(client.query(u1.STATUS_OBJECTS)))
                     if why:
                         raise PrinterError(why)
-                client.gcode(command["script"], timeout=DEVICE_GCODE_TIMEOUT)
+                client.gcode(agent.device_script(command["script"]), timeout=DEVICE_GCODE_TIMEOUT)
             ok = True
         except Exception as e:
             log("agent: Device tab %s failed: %s" % (kind, e))

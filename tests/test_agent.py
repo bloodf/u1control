@@ -128,6 +128,9 @@ class PushTests(unittest.TestCase):
         p = agent.push_status(view(state="printing"))["print"]
         self.assertEqual((p["gcode_state"], p["mc_percent"], p["mc_remaining_time"]), ("RUNNING", 25, 30))
         self.assertEqual((p["layer_num"], p["total_layer_num"], p["fan_gear"]), (3, 10, 128))
+        p = agent.push_status(view(aux_fan=0.2))["print"]   # DevFan ParseV1_0: aux fan (big_fan1) in the second byte
+        self.assertEqual((p["fan_gear"] & 0xFF, p["fan_gear"] >> 8 & 0xFF, p["fan_gear"] >> 16), (128, 51, 0))
+        self.assertIs(p["support_aux_fan"], True)            # DevFan ParseV2_0: the fan pop-up offers it
         self.assertEqual(p["lights_report"], [{"node": "chamber_light", "mode": "on"}])
         self.assertEqual(agent.push_status(view(state="complete"))["print"]["gcode_state"], "FINISH")
 
@@ -165,9 +168,14 @@ class CommandTests(unittest.TestCase):
         self.assertIsNone(agent.line_refusal("M117 x", printing))
         for line in ("G28 \n", "G28 X\n", "M140 S60\n", "M104 S200\n", "M104 T3 S200", "M106 P1 S255 \n", "M140 S0"):
             self.assertIsNone(agent.line_refusal(line, idle), line)
-        for line in ("G28 \n", "M140 S60\n", "M104 S200\n", "M106 P1 S128 \n"):
+        for line in ("G28 \n", "G28 X\n", "M106 P1 S128 \n", "M106 P2 S0", "M109 S200", "M140 S60\nG28"):
             self.assertIn("busy", agent.line_refusal(line, printing), line)
             self.assertIn("busy", agent.line_refusal(line, view(state="paused")), line)
+        for line in ("M140 S60\n", "M104 S200\n", "M104 T2 S0"):   # heater targets, as the dashboard's temperatures
+            self.assertIsNone(agent.line_refusal(line, printing), line)
+            self.assertIsNone(agent.line_refusal(line, view(state="paused")), line)
+        for line in ("M140 S%d" % (u1.BED_MAX + 1), "M104 S%d" % (u1.HOTEND_MAX + 1), "M104 T4 S200"):
+            self.assertIsNotNone(agent.line_refusal(line, printing), line)   # the limits hold while printing too
         self.assertIn("busy", agent.line_refusal("G28", view(machine_state="AUTO_LOAD")))
         for line, top in (("M140 S%d" % (u1.BED_MAX + 1), u1.BED_MAX), ("M104 S%d" % (u1.HOTEND_MAX + 1), u1.HOTEND_MAX),
                           ("M104 S-5", u1.HOTEND_MAX), ("M140", u1.BED_MAX), ("M140 Sabc", u1.BED_MAX), ("M106 S256", 255)):
@@ -178,6 +186,20 @@ class CommandTests(unittest.TestCase):
         self.assertEqual(agent.line_refusal("M109 T4 S200", idle), "bad toolhead")
         for line in ("M104 T4 S200", "M104 T-1 S200", "M104 T1.5 S200", "M104 T S200"):
             self.assertEqual(agent.line_refusal(line, idle), "bad toolhead", line)
+
+    def test_device_tab_fans_become_the_u1s_fan_lines(self):
+        """DevFan command_control_fan sends M106 P<FanType> S<0..255>. The U1's firmware knows only P2 (fan.py
+        aux_cool_fan_id: cavity_fan), so P1 runs as the dashboard's part fan line; P3 (chamber) is refused."""
+        idle = view()
+        self.assertEqual(agent.device_script("M106 P1 S255 \n"), u1.fan_command("part", 100))
+        self.assertEqual(agent.device_script("M106 P1 S128"), "M106 S128")
+        self.assertEqual(agent.device_script("M106 P2 S51 \n"), u1.fan_command("aux", 20))
+        self.assertEqual(agent.device_script("M106 P2 S0"), "SET_FAN_SPEED FAN=cavity_fan SPEED=0.00")
+        for line in ("M140 S60\n", "G28 \n", "M106 S100", "M117 hi"):
+            self.assertEqual(agent.device_script(line), line)             # anything else is sent exactly as given
+        for line in ("M106 P3 S255 \n", "M106 P0 S10", "M106 P1.5 S10", "M106 P S10"):
+            self.assertEqual(agent.line_refusal(line, idle), "the U1 has no such fan (%s)" % " ".join(line.split()))
+        self.assertIsNone(agent.line_refusal("M106 P2 S255", idle))
 
     def test_camera_is_moonrakers_first_enabled_webcam(self):
         base = "http://10.0.0.2:7125"
@@ -938,17 +960,23 @@ class PluginAgentTests(unittest.TestCase):
         self.agent.set_on_local_message_fn(lambda dev, text: messages.append(json.loads(text)))
         self.connect()
         self.fake.state = "printing"
-        for i, line in enumerate(("G28 \n", "M140 S60\n", "M104 S200\n", "M106 P1 S255 \n")):
+        for i, line in enumerate(("G28 X\n", "M106 P1 S255 \n", "M140 S%d" % (u1.BED_MAX + 1))):
             self.assertEqual(self.device_line(messages, line, "p%d" % i), "failed")
         self.fake.state = "paused"
-        self.assertEqual(self.device_line(messages, "G28 X\n", "paused"), "failed")
+        self.assertEqual(self.device_line(messages, "G28 \n", "paused"), "failed")
+        self.assertEqual(self.fake.scripts, [])                          # no homing or fan while printing or paused
+        self.assertEqual(self.device_line(messages, "M104 S200\n", "heat"), "success")   # as the dashboard allows
         self.fake.state = "standby"
-        for i, line in enumerate(("M140 S%d" % (u1.BED_MAX + 1), "M104 S%d" % (u1.HOTEND_MAX + 1), "M104 T4 S200", "M106 S300")):
+        for i, line in enumerate(("M140 S%d" % (u1.BED_MAX + 1), "M104 S%d" % (u1.HOTEND_MAX + 1), "M104 T4 S200",
+                                  "M106 S300", "M106 P3 S255 \n")):
             self.assertEqual(self.device_line(messages, line, "r%d" % i), "failed")
-        self.assertEqual(self.fake.scripts, [])                          # nothing refused reached the printer
+        self.assertEqual(self.fake.scripts, ["M104 S200\n"])            # nothing refused reached the printer
         self.assertEqual(self.device_line(messages, "M140 S60\n", "ok"), "success")
         self.assertEqual(self.device_line(messages, "G28 \n", "home"), "success")
-        self.assertEqual(self.fake.scripts, ["M140 S60\n", "G28 \n"])
+        self.assertEqual(self.device_line(messages, "M106 P1 S255 \n", "fan"), "success")
+        self.assertEqual(self.device_line(messages, "M106 P2 S128 \n", "aux"), "success")
+        self.assertEqual(self.fake.scripts, ["M104 S200\n", "M140 S60\n", "G28 \n", "M106 S255",
+                                             "SET_FAN_SPEED FAN=cavity_fan SPEED=0.50"])
 
     def test_device_tab_camera_is_the_printers_webcam_read_at_connect(self):
         pa = self.orca.printer_agent

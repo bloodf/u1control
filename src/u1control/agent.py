@@ -143,6 +143,7 @@ def push_status(view, preferred=None, thumbnail=""):
     bed = view.get("bed") or {}
     progress = view.get("progress") if isinstance(view.get("progress"), (int, float)) else 0
     fan = view.get("fan") if isinstance(view.get("fan"), (int, float)) else 0
+    aux = view.get("aux_fan") if isinstance(view.get("aux_fan"), (int, float)) else 0
     p = {
         "command": "push_status", "msg": 0, "support_mqtt_alive": True, "sequence_id": "0",
         "printer_type": U1_MODEL_ID,
@@ -159,7 +160,11 @@ def push_status(view, preferred=None, thumbnail=""):
         "nozzle_temp_range": [0, u1.HOTEND_MAX], "bed_temp_range": [0, u1.BED_MAX],
         "nozzle_temper": active.get("temp") or 0, "nozzle_target_temper": active.get("target") or 0,
         "bed_temper": bed.get("temp") or 0, "bed_target_temper": bed.get("target") or 0,
-        "fan_gear": int(max(0.0, min(1.0, fan)) * 255 + 0.5),
+        # DevFan ParseV1_0: part fan in the low byte, aux fan (big_fan1) in the next
+        "fan_gear": int(max(0.0, min(1.0, fan)) * 255 + 0.5) | int(max(0.0, min(1.0, aux)) * 255 + 0.5) << 8,
+        # DevFan ParseV2_0: the Device tab's fan pop-up offers the aux fan (and, as OrcaSlicer ties the two, a
+        # chamber fan the U1 doesn't have: its line is refused, line_refusal)
+        "support_aux_fan": True,
         "subtask_name": view.get("filename") or "", "gcode_file": view.get("filename") or "",
         "mc_percent": int(round(max(0.0, min(1.0, progress)) * 100)),
         "mc_remaining_time": _remaining_minutes(view),
@@ -278,6 +283,12 @@ def parse_command(json_str):
 # Their heat-and-wait forms (M109, M190) take the same limits. SET_HEATER_TEMPERATURE is left to Klipper's max_temp.
 GUARDED = {"G28": None, "M104": u1.HOTEND_MAX, "M109": u1.HOTEND_MAX, "M140": u1.BED_MAX, "M190": u1.BED_MAX,
            "M106": 255}   # code -> highest S
+# Setting a heater target also runs while the U1 prints or is paused, as the dashboard's temperatures do
+# (service.cmd_temperature); homing, fans and the heat-and-wait forms only on an idle U1.
+WHILE_BUSY = ("M104", "M140")
+# Device tab fan (DevFan FanType, M106 P) -> u1.fan_command's fan. The U1's firmware knows only P2 (fan.py
+# aux_cool_fan_id), so P1 runs as the dashboard's part fan line; P3 (chamber) has no fan on the U1.
+DEVICE_FANS = {1: "part", 2: "aux"}
 
 
 def guarded_line(script):
@@ -300,9 +311,10 @@ def guarded_line(script):
 
 def line_refusal(script, view):
     """Why the Device tab may not run the guarded_line lines of script now (translated), or None. Only while the U1
-    is idle, as the tab's commands; heater targets 0..the U1 limit, fan 0..255, toolhead T0..T3."""
+    is idle (heater targets, WHILE_BUSY, at any time); heater targets 0..the U1 limit, fan 0..255 and only the U1's
+    fans (DEVICE_FANS), toolhead T0..T3."""
     lines = guarded_line(script)
-    if lines and u1.machine_busy(view):
+    if any(code not in WHILE_BUSY for _, code, _ in lines) and u1.machine_busy(view):
         return tr("the U1 is busy (%s)") % (view.get("machine_state") or view.get("state") or "").lower()
     for text, code, args in lines:
         top, s, t = GUARDED[code], args.get("S"), args.get("T", 0)
@@ -310,7 +322,22 @@ def line_refusal(script, view):
             return tr("%s out of range (0 to %d)") % (text, top)
         if code in ("M104", "M109") and (t is None or t != int(t) or not 0 <= t < u1.TOOLHEADS):
             return tr("bad toolhead")
+        if code == "M106" and "P" in args and args["P"] not in DEVICE_FANS:
+            return tr("the U1 has no such fan (%s)") % text
     return None
+
+
+def device_script(script):
+    """script as the U1 runs it: each Device tab fan line (M106 P1 or P2, checked by line_refusal) becomes the
+    dashboard's line for that fan (u1.fan_command); every other line is sent as given."""
+    lines, out = str(script or "").splitlines(), []
+    for line in lines:
+        found = guarded_line(line)
+        if found and found[0][1] == "M106" and found[0][2].get("P") in DEVICE_FANS:
+            args = found[0][2]
+            line = u1.fan_command(DEVICE_FANS[int(args["P"])], args["S"] * 100 / 255)
+        out.append(line)
+    return script if out == lines else "\n".join(out)
 
 
 # ---------------------------------------------------------------- print job

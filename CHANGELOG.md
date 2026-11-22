@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Bed, nozzle, fans and Home from OrcaSlicer's Device tab** (u1control as the printer agent). The fan pop-up now offers the part fan and the aux fan and shows their speeds. The part fan used to do nothing: OrcaSlicer sends it as `M106 P1`, a fan number the U1's firmware doesn't have, so it is now sent as the dashboard's part fan line, and the aux fan as the dashboard's aux fan line. OrcaSlicer also shows a chamber fan, which the U1 doesn't have: that one is refused and logged. Bed and nozzle temperatures can now be changed while the U1 prints or is paused, as on the dashboard, still only from 0 up to the U1's limits (nozzle 320 °C, bed 110 °C); the nozzle setting is for the active toolhead, the one the Device tab shows. Home and the fans stay refused while the U1 prints, is paused, loads or calibrates. Nothing is sent unless you use the control. Builds on @Veisen's work in [#72](https://github.com/bloodf/u1control/pull/72).
+
 ## [0.18.0] - 2026-11-22
 
 ### Added

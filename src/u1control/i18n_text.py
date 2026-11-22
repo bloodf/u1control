@@ -351,6 +351,8 @@ MESSAGES = {
     "bad toolhead": _m("cabeça inválida", "cabezal no válido", "ungültiger Werkzeugkopf", "工具头无效"),
     "%s out of range (0 to %d)": _m("%s fora do intervalo (0 a %d)", "%s fuera de rango (0 a %d)",
                                     "%s außerhalb des Bereichs (0 bis %d)", "%s 超出范围（0 至 %d）"),
+    "the U1 has no such fan (%s)": _m("a U1 não tem esse ventilador (%s)", "la U1 no tiene ese ventilador (%s)",
+                                      "der U1 hat diesen Lüfter nicht (%s)", "U1 没有这个风扇（%s）"),
     "unknown fan %r": _m("ventilador desconhecido: %r", "ventilador desconocido: %r", "unbekannter Lüfter: %r", "未知的风扇：%r"),
     "spool #%s not found": _m("bobina #%s não encontrada", "no se encontró la bobina #%s",
                               "Spule #%s nicht gefunden", "找不到料盘 #%s"),

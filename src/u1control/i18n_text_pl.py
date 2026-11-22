@@ -97,6 +97,7 @@ PL = {
     "the U1 is busy (%s)": "U1 jest zajęta (%s)",
     "unknown calibration": "nieznana kalibracja",
     "bad action": "nieprawidłowa akcja",
+    "the U1 has no such fan (%s)": "U1 nie ma takiego wentylatora (%s)",
     "bad toolhead": "nieprawidłowa głowica",
     "%s out of range (0 to %d)": "%s poza zakresem (0 do %d)",
     "unknown fan %r": "nieznany wentylator: %r",
