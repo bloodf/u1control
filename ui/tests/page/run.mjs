@@ -343,18 +343,22 @@ test('settings: Open Filament Database is off by default; on and saved, its list
   await click(byTest('ofd-refresh'));
   eq(last('ofd').refresh, true, 'Read again asks OFD now');
 `);
-test('toolhead cards: Open Filament Database proposals are listed, marked untuned, and not installable yet', `
+test('toolhead cards: an Open Filament Database proposal is marked untuned; picking it installs it by its id', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('preset_matches'), 'asked');
   await reply(last('preset_matches'), {matches: [{head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: [['material', 'PLA']], confident: true, remembered_key: '',
     candidates: [{name: 'Generic PLA @U1', score: 35, reasons: [['material', 'PLA']]}],
-    ofd: [{name: 'Polymaker Panchroma Matte PLA (OFD)', score: 58, reasons: [['material', 'PLA'], ['vendor', 'Polymaker']]}]}]});
+    ofd: [{id: 'f667', name: 'Polymaker Panchroma Matte PLA (OFD)', score: 58, reasons: [['material', 'PLA'], ['vendor', 'Polymaker']]}]}]});
   await until(() => q('[data-match="0"]'), 'T1 line');
   await click(q('.oui-match-change', q('[data-match="0"]')));
   await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'the candidate and the proposal');
   const ofdRow = qa('.oui-match-option', q('[data-match="0"]'))[1];
-  assert(text(ofdRow).includes('OFD, untuned') && ofdRow.disabled, 'marked and not pickable: ' + text(ofdRow));
+  assert(text(ofdRow).includes('OFD, untuned') && !ofdRow.disabled, 'marked and pickable: ' + text(ofdRow));
+  await click(ofdRow);
+  eq([last('preset_pick').head, last('preset_pick').ofd], [0, 'f667'], 'installed by its OFD id');
+  await reply(last('preset_pick'), {matches: [], note: 'Spooler puts it into its preset of spool #7 on its next sync'});
+  await until(() => toasts().includes('spool #7'), 'the note is shown: ' + toasts());
 `);
 
 test('settings draft survives mode switch; Saved needs the plugin answer', `
