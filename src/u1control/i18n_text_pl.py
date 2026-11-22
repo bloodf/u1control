@@ -113,6 +113,7 @@ PL = {
     "download incomplete: %d of %s bytes": "pobieranie niepełne: %d z %s bajtów",
     "download failed (%s)": "pobieranie nie powiodło się (%s)",
     "upload failed (%s)": "wysyłanie nie powiodło się (%s)",
+    "waiting for your answer to OrcaSlicer's network permission for %s": 'czekam na twoją odpowiedź na pytanie OrcaSlicer o dostęp do sieci dla %s',
     "can't reach the U1 at %s": "nie można połączyć się z U1 pod adresem %s",
     "websocket calls need plain http": "wywołania websocket wymagają zwykłego http",
     "printer refused the websocket": "drukarka odrzuciła websocket",

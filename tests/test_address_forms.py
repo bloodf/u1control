@@ -119,6 +119,31 @@ class AddressFormTests(unittest.TestCase):
         self.assertEqual(permission_origin(""), "")
         self.assertEqual(permission_origin("ftp://x"), "")
 
+    def test_host_asked_for_before_any_exact_url(self):
+        """GitHub #73: a printer not declared at load is asked for once as scheme://host, not per thumbnail."""
+        asked, clock = [], [1000.0]
+
+        def orca(origin):   # OrcaSlicer's audit hook: refuses until the user says yes
+            asked.append(origin)
+            if len(asked) < 3:
+                raise PermissionError("pending")
+
+        thumb = "http://192.168.1.5:7125/server/files/gcodes/.thumbs/a-300x300.png"
+        with mock.patch.object(moonraker, "_host_wide", set()), mock.patch.object(moonraker, "_host_asked", {}), \
+                mock.patch.object(moonraker._PROBE, "open", side_effect=orca), \
+                mock.patch.object(moonraker.time, "monotonic", lambda: clock[0]):
+            for _ in range(5):   # refused without reaching the printer, and without asking again
+                self.assertRaises(PermissionError, moonraker._NO_PROXY.open, thumb, timeout=0.01)
+            self.assertEqual(asked, ["http://192.168.1.5"])
+            clock[0] += 10
+            self.assertRaises(PermissionError, moonraker.ask_host_wide, thumb)
+            clock[0] += 19   # back-off doubled: not yet
+            self.assertRaises(PermissionError, moonraker.ask_host_wide, "http://192.168.1.5/screen/touch?a=tap&x=1&y=2")
+            clock[0] += 1
+            moonraker.ask_host_wide(thumb)
+            moonraker.ask_host_wide("http://192.168.1.5/server/files/timelapse/v.mp4")
+            self.assertEqual(asked, ["http://192.168.1.5"] * 3)
+
 
 if __name__ == "__main__":
     unittest.main()
