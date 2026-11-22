@@ -2,6 +2,7 @@ import { computed, reactive, ref } from 'vue';
 import * as bridge from '../core/bridge';
 import { message } from '../core/tracker';
 import { t, onLangPref } from '../core/i18n';
+import { onThemePref } from '../core/theme';
 import { hello, onConfig, onRfid, tracker } from './store';
 import type { Config } from './types';
 
@@ -61,6 +62,7 @@ export async function save(): Promise<void> {
 
 export function installSettings(): () => void {
   onLangPref(value => bridge.post({ type: 'ui_language', value }));
+  onThemePref(value => bridge.post({ type: 'ui_theme', value }));
   const a = onConfig(fill);
   const b = onRfid(m => {
     if (rfidAuto) { bridge.post({ type: 'sync_project', auto: true }); return; }

@@ -1,4 +1,21 @@
+import { ref } from 'vue';
 import { applyOrcaTheme, type OrcaTheme } from '@orca-plugins/ui-foundation/src';
+import { boot } from './boot';
+
+// Settings > Appearance: 'auto' follows OrcaSlicer (then the system); 'light' / 'dark' force one. The choice lives in
+// the plugin's settings (boot "theme").
+export type ThemePref = 'auto' | OrcaTheme;
+const isPref = (v: unknown): v is ThemePref => v === 'auto' || v === 'light' || v === 'dark';
+export const themePref = ref<ThemePref>(isPref(boot.theme) ? boot.theme : 'auto');
+let persistTheme: (value: ThemePref) => void = () => {};
+let reapply: () => void = () => {};
+export function onThemePref(fn: (value: ThemePref) => void): void { persistTheme = fn; }
+export function setThemePref(value: ThemePref): void {
+  if (!isPref(value)) return;
+  themePref.value = value;
+  persistTheme(value);
+  reapply();
+}
 
 // The host paints the page through --orca-bg (as the previous pages assumed). We read the resolved colour and
 // follow it; without it the system preference decides. Changes are picked up while the page runs (B-11).
@@ -20,9 +37,10 @@ export function detectTheme(): OrcaTheme {
 }
 
 export function followHostTheme(onChange?: (t: OrcaTheme) => void): () => void {
-  const forced = new URLSearchParams(location.search).get('theme');
+  const url = new URLSearchParams(location.search).get('theme');
   let current: OrcaTheme | null = null;
   const apply = () => {
+    const forced = url === 'dark' || url === 'light' ? url : themePref.value;
     const next: OrcaTheme = forced === 'dark' || forced === 'light' ? forced : detectTheme();
     if (next === current) return;
     current = next;
@@ -30,6 +48,7 @@ export function followHostTheme(onChange?: (t: OrcaTheme) => void): () => void {
     onChange?.(next);
   };
   apply();
+  reapply = apply;
   const mq = matchMedia('(prefers-color-scheme: dark)');
   mq.addEventListener('change', apply);
   const obs = new MutationObserver(apply);

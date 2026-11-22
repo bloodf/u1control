@@ -606,6 +606,10 @@ export const zhCN: Record<MessageKey, string> = {
   'lang.pl': 'Polski',
   'lang.cs': 'Čeština',
   'lang.help': '“自动”先跟随 OrcaSlicer 的语言，其次是系统语言。您的选择只保存在此 OrcaSlicer 中。',
+  'theme.label': '主题',
+  'theme.auto': '自动',
+  'theme.light': '浅色',
+  'theme.dark': '深色',
   'about.text': 'U1 Control {version} · 独立项目，并非由 Snapmaker 制作。',
 
   'auto.auto_add_pipeline': '把“U1 print setup”添加到 U1 工艺预设',
