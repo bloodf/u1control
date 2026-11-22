@@ -1,0 +1,8 @@
+version = 1
+revision = 3
+requires-python = ">=3.12"
+
+[[package]]
+name = "u1control"
+version = "0.18.0"
+source = { virtual = "." }

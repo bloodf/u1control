@@ -8,7 +8,7 @@ export interface Tag { vendor?: string; manufacturer?: string; type?: string; su
 export interface Driver { name: string; temp: number | null; state: 'ok' | 'otpw' | 'ot' | null }
 export interface Status {
   state: string; message?: string; filename?: string; progress?: number; layer?: number; total_layers?: number;
-  print_duration?: number; total_duration?: number; extruders: Heater[]; bed: Heater; heads: Head[];
+  print_duration?: number; total_duration?: number; left?: number | null; extruders: Heater[]; bed: Heater; heads: Head[];
   rfid?: (Tag | null)[]; options?: Record<string, boolean>; features?: string[]; purifier?: { fitted?: boolean; mode?: string | number; recirculating?: boolean; exhaust?: number | null; inner?: number | null };
   fan?: number | null; aux_fan?: number | null; chamber?: number | null; drivers?: Driver[];
   feed?: { state?: string; detected?: boolean }[]; busy?: boolean; machine_state?: string; bindings?: Record<string, number>;
@@ -42,3 +42,7 @@ export interface Config { settings: Record<string, any>; automations: Automation
 /** What the plugin needs and can't install (requirements.py): ok, missing, or unknown (not known yet / can't be read). */
 export interface Requirement { id: 'printer_agents' | 'extended_firmware' | 'spoolman' | 'spooler'; status: 'ok' | 'missing' | 'unknown';
   details: { version?: string; url?: string; via?: string } }
+/** A toolhead's OrcaSlicer preset as Apply to project filaments picks it (preset_matches): reasons are filmatch [code, value]. */
+export interface PresetMatch { head: number; name: string; source: 'linked' | 'remembered' | 'spooler' | 'auto' | 'none'; score: number | null;
+  reasons: unknown; confident: boolean; candidates: { name: string; score: number; reasons: unknown }[]; remembered_key: string;
+  /** Open Filament Database proposals, while it is on. */ ofd?: { id: string; name: string; score: number; reasons: unknown }[] }

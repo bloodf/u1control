@@ -26,6 +26,8 @@ import spooler_bridge
 import preview
 import u1
 import usage
+import filmatch
+from filmatch import override_name, pick_filament_preset  # noqa: F401  (shared with Spooler and Kobra Control)
 from i18n import tr
 from moonraker import Moonraker, PrinterError, permission_origin
 from service import Service, Target
@@ -369,7 +371,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                 elif not view:
                     say(tr("No printer status yet; try again in a moment."), problems=1)
                 else:
-                    overrides = self._config()["profile_overrides"]
+                    overrides = migrated_overrides(self._settings())
 
                     def job():
                         try:
@@ -379,6 +381,33 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                             say(tr("Couldn't update the project filaments: %s") % e, problems=1)
                     if not self._background(job):
                         say(tr("Another preset update is running; try again in a moment."), problems=1)
+            elif kind == "ofd":   # Settings: the Open Filament Database line; refresh: Read again (only while it is on)
+                rid, store = data.get("id"), self._settings()
+
+                def ofd_job():
+                    try:
+                        self.post_message({"type": "reply", "id": rid, "result": ofd_status(store, data.get("refresh") is True)})
+                    except Exception as e:
+                        self.post_message({"type": "reply", "id": rid, "error": str(e)})
+                threading.Thread(target=ofd_job, name="u1control-ofd", daemon=True).start()
+            elif kind in ("preset_matches", "preset_pick"):   # toolhead cards: each head's preset, why, and Change
+                rid, view, store = data.get("id"), svc.last_view, self._settings()
+
+                def matches_job():
+                    try:
+                        overrides = migrated_overrides(store)
+                        note = ""
+                        if kind == "preset_pick" and isinstance(data.get("ofd"), str):
+                            note = install_ofd(view, bound_spool_lookup(svc), data.get("head"), data["ofd"], store)
+                        elif kind == "preset_pick":
+                            name = data.get("name")
+                            pick_preset(view, bound_spool_lookup(svc), data.get("head"), name if name is None else str(name), overrides)
+                        result = {"matches": preset_matches(view, bound_spool_lookup(svc), overrides,
+                                                            bool(store.effective().get("ofd_enabled"))), "note": note}
+                        self.post_message({"type": "reply", "id": rid, "result": result})
+                    except Exception as e:
+                        self.post_message({"type": "reply", "id": rid, "error": str(e)})
+                threading.Thread(target=matches_job, name="u1control-matches", daemon=True).start()
             elif kind == "requirements":   # Settings > Requirements; recheck: its "Check again" (also looks for Spooler again)
                 recheck = bool(data.get("recheck"))
                 self.post_message({"type": "requirements", "items": requirements_state(svc, self._config(), recheck)})
@@ -1129,9 +1158,11 @@ def network_grants(cap):
     try:   # never presets here: reading them while OrcaSlicer loads them crashed 2.5.1
         cfg = get_store(cap).effective()
         addresses += [clean(cfg.get("host")), clean(cfg.get("spoolman_url"))] + cfg["network_origins"]
+        ofd = [filmatch.OFD_ORIGIN] if cfg.get("ofd_enabled") else []   # the Open Filament Database, only while it is on
     except Exception as e:
         log("network permission: settings not readable at load (%s)" % e)
-    return _origins(addresses)
+        ofd = []
+    return _origins(addresses) + ofd
 
 
 def _origins(addresses):
@@ -1434,7 +1465,7 @@ class U1Agent(pa.PrinterAgentBase):
         return preferred
 
     def _poll(self, stop, client):
-        connected, thumb = False, (None, "")   # thumb: (file name, its thumbnail URL), read once per file
+        connected, thumb = False, (None, "", None)   # thumb: (file name, thumbnail URL, estimated_time), once per file
         logged_unreachable = False   # the current run of failed reads is in the log
         while not stop.is_set():
             try:
@@ -1458,7 +1489,8 @@ class U1Agent(pa.PrinterAgentBase):
                     self._emit("local_connect", 0, dev_id, "0")
                     self._emit("printer_connected", dev_id)
                 if view.get("filename") != thumb[0]:
-                    thumb = (view.get("filename"), self._thumbnail(client, view.get("filename")))
+                    thumb = (view.get("filename"),) + self._thumbnail(client, view.get("filename"))
+                view["estimated_time"] = thumb[2]
                 self._message(agent.push_status(view, self._preferred(), thumb[1]))
                 self._keep_camera(stop, client)
             except Exception as e:
@@ -1476,14 +1508,16 @@ class U1Agent(pa.PrinterAgentBase):
 
     @staticmethod
     def _thumbnail(client, filename):
-        """The Device tab's picture of the file the U1 prints or printed last, or "" (no file, no thumbnail)."""
+        """(The Device tab's picture of the file the U1 prints or printed last, or "" (no file, no thumbnail); the
+        slicer's estimated_time of that file, or None)."""
         if not filename:
-            return ""
+            return "", None
         try:
-            return agent.thumbnail_url(client.metadata(filename.lstrip("/")), filename, client.base or "")
+            meta = client.metadata(filename.lstrip("/"))
+            return agent.thumbnail_url(meta, filename, client.base or ""), meta.get("estimated_time")
         except Exception as e:   # no metadata (file gone, or not a print file): OrcaSlicer's placeholder
             log("agent: thumbnail of %s not read (%s)" % (filename, e))
-            return ""
+            return "", None
 
     def _read_camera(self, stop, client):
         try:
@@ -1818,76 +1852,6 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
         return orca.ExecutionResult.success("%s. %s" % (about % (client.address, fw["version"]), loaded))
 
 
-SUB_TYPE_WORDS = {"matte", "silk", "snapspeed", "hf", "cf", "gf", "basic", "pro", "lite", "tough", "galaxy",
-                  "marble", "glow", "sparkle", "wood", "metal", "high", "speed", "rapid"}
-
-
-def _words(text):
-    return set(re.findall(r"[a-z0-9]+", (text or "").lower()))
-
-
-def override_name(names, head, tag, overrides):
-    """User-pinned preset: UID: first, then SKU:, then "Vendor|TYPE|SubType". Only if it exists."""
-    pins = {str(k).strip().lower(): v for k, v in (overrides or {}).items()}
-    tag = tag or {}
-    vendor = tag.get("vendor") or tag.get("manufacturer") or head.get("vendor") or ""
-    ftype = tag.get("type") or head.get("type") or ""
-    sub = tag.get("sub_type") or head.get("sub_type") or ""
-    keys = ["uid:" + str(tag.get("uid") or ""), "sku:" + str(tag.get("sku") or ""),
-            "%s|%s|%s" % (vendor, ftype, sub), "%s|%s|" % (vendor, ftype)]
-    for key in keys:
-        name = pins.get(key.lower())
-        if name in names:
-            return name
-    return ""
-
-
-def pick_filament_preset(names, head, tag=None, overrides=None, printer_hint="U1", preference=None, colours=None):
-    """Best Orca filament preset name for what a toolhead (and its RFID tag) holds, or "".
-    preference(names, head, tag) -> name or None is consulted after overrides, before scoring.
-    colours: preset name -> "#RRGGBB"; the nearest colour wins between equally scored presets."""
-    tag = tag or {}
-    pinned = override_name(names, head, tag, overrides)
-    if pinned:
-        return pinned
-    if preference:
-        chosen = preference(names, head, tag)
-        if chosen in names:
-            return chosen
-    ftype = (tag.get("type") or head.get("type") or "").upper()
-    family = u1.material_family(ftype)
-    vendor = (tag.get("vendor") or tag.get("manufacturer") or head.get("vendor") or "").lower()
-    sub = _words(tag.get("sub_type") or head.get("sub_type")) - {"basic"}
-    on_printer = re.compile(r"@\s*(snapmaker\s*)?%s\b" % re.escape(printer_hint), re.I)
-
-    def score(name):
-        n, up = name.lower(), name.upper()
-        if not family or not re.search(r"\b%s" % re.escape(family), up):
-            return None
-        s = 20 if re.search(r"(?<![A-Z0-9])%s(?![A-Z0-9+])" % re.escape(ftype), up.replace(" ", "-")) else 5
-        if vendor and vendor in n:
-            s += 30
-        elif "generic" in n:
-            s += 5
-        if on_printer.search(name):
-            s += 10
-        elif "@" in name:
-            s -= 10
-        if "0.4" in name:
-            s += 1
-        extra = (_words(name) & SUB_TYPE_WORDS) - {"basic"}
-        s += 8 * len(sub & extra) - 6 * len(extra - sub)
-        return s
-
-    want = tag.get("colour") or head.get("colour")
-
-    def far(name):
-        return u1.colour_distance(want, colours.get(name)) if colours and want else 0
-
-    ranked = sorted(((-r, far(n), len(n), n) for r, n in ((score(n), n) for n in names) if r is not None))
-    return ranked[0][3] if ranked else ""
-
-
 def spooler_dir():
     try:
         return spooler_bridge.data_dir(_storage_or_raise())
@@ -2068,7 +2032,7 @@ def spooler_preference(presets, bound, printer_label=""):
     return prefer
 
 
-def _sync_reads(with_printer):
+def _sync_reads(with_printer=True):
     """UI thread: what sync_project needs from the presets, as plain data (filament_meta, the selected printer's
     name, inherits and model when with_printer, and user_presets)."""
     meta = filament_meta()
@@ -2079,31 +2043,242 @@ def _sync_reads(with_printer):
                   "model": clean(printer.config_value("printer_model"))}, _user_presets_safe()
 
 
-def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None):
-    """Apply each loaded toolhead's best filament preset and colour to project slot n+1.
-    A bound spool's orca_filament_preset (a user preset) comes first, then Spooler's presets for heads with a bound
-    spool (bound: head index -> spool). Returns (done, problems) as lists of strings."""
-    meta, printer, mine = on_ui_thread(lambda: _sync_reads(preset_preference is None and bool(bound)))
-    names = [m["name"] for m in meta]
-    colours = {m["name"]: m["colour"] for m in meta}
-    if printer is not None:
+# --- Remembered matches (matches.json, filmatch) ---------------------------------------------------------------------
+# The preset picked by hand for what a toolhead holds (its Spoolman spool, RFID tag, SKU, or vendor + material +
+# subtype) is kept in matches.json: Spooler's, shared with Spooler and Kobra Control, read first; U1 Control's own in
+# its storage folder. Written to Spooler's while Spooler is installed, else to U1 Control's own.
+
+def match_paths():
+    """(paths to read, Spooler's first; the path to write, "" when there is none)."""
+    shared = os.path.join(spooler_dir(), filmatch.MATCHES_FILE) if spooler_dir() else ""
+    own = os.path.join(_storage(), filmatch.MATCHES_FILE) if _storage() else ""
+    spooler_on = bool(shared) and os.path.isfile(os.path.join(spooler_dir(), spooler_bridge.SETTINGS_FILE))
+    return [p for p in (shared, own) if p], shared if spooler_on else own
+
+
+def migrated_overrides(store):
+    """profile_overrides (hand-written pins) copied once into matches.json, which takes their place: {} once copied,
+    the pins themselves while they couldn't be (pick_filament_preset still honours them then)."""
+    cfg = store.effective()
+    overrides = cfg.get("profile_overrides") or {}
+    if cfg.get("overrides_migrated") or not overrides:
+        return {}
+    path = match_paths()[1]
+    try:
+        if not path:
+            raise OSError("no folder to keep matches.json in")
+        filmatch.remember(path, filmatch.overrides_as_matches(overrides))
+    except Exception as e:
+        log("profile_overrides not copied to matches.json yet (%r); still used as they are" % e)
+        return overrides
+    store.update({"overrides_migrated": True})
+    log("profile_overrides copied to %s" % path)
+    return {}
+
+
+# --- Open Filament Database (Settings, off by default) ----------------------------------------------------------------
+# While it is on, the toolhead cards also list the OFD presets of the head's manufacturer and material (filmatch.rank_ofd)
+# from OFD's index, kept a day in Spooler's folder (ofd/, shared) while Spooler is installed, else in U1 Control's own.
+# While it is off nothing is fetched and OrcaSlicer is not asked for access to OFD.
+
+def ofd_folder():
+    """The folder OFD's index is kept in ("" when there is none)."""
+    shared, own = spooler_dir(), _storage()
+    if shared and os.path.isfile(os.path.join(shared, spooler_bridge.SETTINGS_FILE)):
+        return os.path.join(shared, filmatch.OFD_DIR)
+    return os.path.join(own, filmatch.OFD_DIR) if own else ""
+
+
+def ofd_status(store, refresh=False):
+    """Settings' OFD line: {"on"} and, while on, {"fetched", "version", "count", "stale", "error"}. Plugin thread."""
+    folder = ofd_folder()
+    if not store.effective().get("ofd_enabled") or not folder:
+        return {"on": False}
+    found = filmatch.ofd_index(folder, force=refresh)
+    return {"on": True, "count": len(found["profiles"]), **{k: found[k] for k in ("fetched", "version", "stale", "error")}}
+
+
+def ofd_proposals(profiles, head, tag, spool):
+    """OFD presets for what a toolhead holds: its tag's (or spool's, or head's) manufacturer and material."""
+    return filmatch.rank_ofd(profiles, *_ofd_observation(head, tag, spool), MATCH_CHOICES)
+
+
+# --- Installing an OFD preset (Change on a toolhead card) ------------------------------------------------------------
+# With Spooler installed and the toolhead linked to a Spoolman spool, Spooler installs it: U1 Control remembers
+# "ofd:<id>" as the parent of that spool's filament in Spooler's matches.json, and Spooler's preset of the filament then
+# carries OFD's values (its own filament_id, so the printer agent's tray id loads it). Otherwise U1 Control installs it
+# itself: flattened (filmatch.flatten_ofd) with a filament_id of its own, in its own local bundle OFD_BUNDLE in the
+# signed-in account's folder, never a user's preset folder or another plugin's bundle.
+OFD_BUNDLE = "u1control_ofd"
+OFD_ID_PREFIX = "UOD"   # no OrcaSlicer system id starts with it (theirs: OF..., GF..., ...); Spooler's: SPL
+
+
+def _ofd_parent_config(name):
+    """UI thread: the settings of the system preset an OFD preset inherits, as OrcaSlicer serializes them; None when
+    OrcaSlicer has no such preset."""
+    preset = orca.host.preset_bundle().filaments.find_preset(name)
+    if preset is None or not getattr(preset, "is_system", False):
+        return None
+    return {str(k): str(preset.config_value(k)) for k in preset.config_keys() if preset.config_value(k) is not None}
+
+
+def install_ofd(view, bound, index, ofd_id, store):
+    """A toolhead card's Change to an OFD proposal (plugin thread). Returns a note for the page ("" when it is in
+    use now). Raises ValueError with the reason when it can't be used."""
+    heads = (view or {}).get("heads") or []
+    folder = ofd_folder() if store.effective().get("ofd_enabled") else ""
+    if not folder or not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(heads):
+        raise ValueError(tr("that preset doesn't fit what T%d holds") % ((index if isinstance(index, int) else 0) + 1))
+    head, tags = heads[index], view.get("rfid") or []
+    tag = (tags[index] if index < len(tags) else None) or None
+    spool = bound(index) if bound else None
+    profiles = filmatch.ofd_index(folder)["profiles"]
+    profile = next((p for p in filmatch.rank_ofd(profiles, *_ofd_observation(head, tag, spool), 0) if p["id"] == ofd_id), None)
+    if profile is None:
+        raise ValueError(tr("that preset doesn't fit what T%d holds") % (index + 1))
+    config = on_ui_thread(lambda: _ofd_parent_config(profile["inherits"]))
+    entry = next(p for p in profiles if p["id"] == ofd_id)
+    preset, problem = filmatch.ofd_preset(folder, entry, parents={profile["inherits"]} if config else set())
+    if problem:
+        raise ValueError(tr("the Open Filament Database preset can't be used: %s") % problem)
+    shared = spooler_dir()
+    if shared and os.path.isfile(os.path.join(shared, spooler_bridge.SETTINGS_FILE)) and (spool or {}).get("filament_id") is not None:
+        filmatch.remember(os.path.join(shared, filmatch.MATCHES_FILE), {"filament:%s" % spool["filament_id"]: "ofd:" + ofd_id})
+        return tr("Spooler puts it into its preset of spool #%s on its next sync") % spool.get("id")
+    name = filmatch.safe_preset_name(preset["name"])
+    flat = filmatch.flatten_ofd(preset, config, filmatch.own_filament_id(OFD_ID_PREFIX, ofd_id), name)
+    root = os.path.dirname(shared) if shared else ""
+    if not root:
+        raise ValueError(tr("OrcaSlicer's data folder was not found"))
+    ctx = _match_context(bound)
+    folders = filmatch.user_folders(root, [p["file"] for p in ctx["mine"]])
+    filmatch.install_bundle(root, folders, OFD_BUNDLE, "U1 Control (Open Filament Database)", VERSION, {name + ".json": flat},
+                            orca.host.preset.bundles.reload_local)
+    names = [m["name"] for m in on_ui_thread(filament_meta)]
+    installed = next((n for n in names if n.rsplit("/", 1)[-1] == name and OFD_BUNDLE in n), "_local/%s/%s" % (OFD_BUNDLE, name))
+    keys = filmatch.toolhead_keys(head, tag, (spool or {}).get("id"))
+    write = match_paths()[1]
+    if keys and write:
+        filmatch.remember(write, {keys[0]: installed}, ctx["printer"])
+    return ""
+
+
+def _ofd_observation(head, tag, spool):
+    """(vendor, material, name) rank_ofd looks for, for what a toolhead holds."""
+    tag = tag or {}
+    vendor = tag.get("vendor") or tag.get("manufacturer") or (spool or {}).get("vendor") or head.get("vendor") or ""
+    material = tag.get("type") or head.get("type") or ""
+    name = " ".join(str(x) for x in ((spool or {}).get("name"), tag.get("sub_type") or head.get("sub_type")) if x)
+    return vendor, material, name
+
+
+def _fits(name, head, tag):
+    """A preset of the toolhead's material (filmatch scores it at all)."""
+    return bool(filmatch.rank_filament_presets([name], head, tag))
+
+
+def _match_context(bound, preset_preference=None):
+    """What head_match needs, read once for every toolhead (from a plugin thread)."""
+    meta, printer, mine = on_ui_thread(_sync_reads)
+    if preset_preference is None and bound and printer is not None:
         presets = spooler_bridge.spooler_presets(meta, (printer["name"], printer["inherits"]))
         if presets:
             preset_preference = spooler_preference(presets, bound, printer["model"] or printer["name"])
-    done, problems = [], []
-    colour_ok = True   # OrcaSlicer 2.5 refuses filament_colour here: a project setting, not a filament preset one
+    paths = match_paths()[0]
+    return {"names": [m["name"] for m in meta], "colours": {m["name"]: m["colour"] for m in meta}, "mine": mine,
+            "preference": preset_preference, "printer": (printer or {}).get("model") or (printer or {}).get("name") or "",
+            "stores": [filmatch.load_matches(p) for p in paths]}
+
+
+def head_match(ctx, head, tag, spool, overrides=None):
+    """The preset sync_project applies to a toolhead, and why: {"name", "source", "score", "reasons", "confident",
+    "candidates", "keys", "remembered_key"}. source: "linked" (the spool's orca_filament_preset), "remembered" (picked
+    by hand), "spooler" (Spooler's preset of the bound spool), "auto" (the best score) or "none"."""
+    tag = tag or {}
+    names = ctx["names"]
+    ranked = filmatch.rank_filament_presets(names, head, tag, colours=ctx["colours"])
+    keys = filmatch.toolhead_keys(head, tag, (spool or {}).get("id"))
+    linked = linked_preset((spool or {}).get("orca_preset"), ctx["mine"])
+    name, source, used = (linked["name"], "linked", "") if linked else ("", "", "")
+    for key in keys if not name else ():
+        name = next((n for n in filmatch.recall(ctx["stores"], [key], ctx["printer"]) if n in names and _fits(n, head, tag)), "")
+        if name:
+            source, used = "remembered", key
+            break
+    if not name:
+        pinned = override_name(names, head, tag, overrides)
+        chosen = ctx["preference"](names, head, tag) if ctx["preference"] and not pinned else None
+        name = pick_filament_preset(names, head, tag, overrides, preference=ctx["preference"], colours=ctx["colours"])
+        source = "remembered" if pinned else "spooler" if chosen and chosen == name else "auto" if name else "none"
+    row = next((r for r in ranked if r["name"] == name), {})
+    return {"name": name, "source": source, "score": row.get("score"), "reasons": row.get("reasons") or [],
+            "confident": source != "auto" or filmatch.confident(ranked, filmatch.PRESET_MARGIN),
+            "candidates": ranked[:MATCH_CHOICES], "keys": keys, "remembered_key": used}
+
+
+MATCH_CHOICES = 5   # candidates the toolhead card offers
+
+
+def _loaded_heads(heads, tags):
     for head in heads:
         tag = (tags[head["index"]] if head["index"] < len(tags or []) else None) or None
-        if not head["loaded"] and not tag:
-            continue
+        if head["loaded"] or tag:
+            yield head, tag
+
+
+def preset_matches(view, bound, overrides=None, ofd=False):
+    """[{"head", ...head_match, "ofd"}] for each loaded toolhead (a plugin thread): what the toolhead cards show. ofd:
+    the Open Filament Database is on, so its proposals are added (its index read again when a day old)."""
+    if not view:
+        return []
+    ctx = _match_context(bound)
+    folder = ofd_folder() if ofd else ""
+    profiles = filmatch.ofd_index(folder)["profiles"] if folder else []
+    out = []
+    for head, tag in _loaded_heads(view["heads"], view["rfid"]):
+        spool = bound(head["index"]) if bound else None
+        match = {k: v for k, v in head_match(ctx, head, tag, spool, overrides).items() if k != "keys"}
+        out.append({"head": head["index"], **match, "ofd": ofd_proposals(profiles, head, tag, spool) if profiles else []})
+    return out
+
+
+def pick_preset(view, bound, index, name, overrides=None):
+    """A toolhead card's Change: remember name for what toolhead `index` holds (its most specific key) on this
+    printer; None forgets the choice made by hand. Raises ValueError for a preset that doesn't fit."""
+    heads = (view or {}).get("heads") or []
+    if not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(heads):
+        raise ValueError(tr("no such toolhead"))
+    ctx = _match_context(bound)
+    head = heads[index]
+    tags = view.get("rfid") or []
+    tag = (tags[index] if index < len(tags) else None) or None
+    match = head_match(ctx, head, tag, bound(index) if bound else None, overrides)
+    paths, write = match_paths()
+    if name is None:
+        for path in paths if match["remembered_key"] else ():
+            filmatch.remember(path, {match["remembered_key"]: ""}, ctx["printer"])
+            filmatch.remember(path, {match["remembered_key"]: ""})
+        return
+    if not isinstance(name, str) or name not in ctx["names"] or not _fits(name, head, tag or {}) or not match["keys"] or not write:
+        raise ValueError(tr("that preset doesn't fit what T%d holds") % (index + 1))
+    filmatch.remember(write, {match["keys"][0]: name}, ctx["printer"])
+
+
+def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None):
+    """Apply each loaded toolhead's best filament preset and colour to project slot n+1.
+    A bound spool's orca_filament_preset (a user preset) comes first, then the preset picked by hand (matches.json),
+    then Spooler's presets for heads with a bound spool (bound: head index -> spool). Returns (done, problems) as
+    lists of strings."""
+    ctx = _match_context(bound, preset_preference)
+    done, problems = [], []
+    colour_ok = True   # OrcaSlicer 2.5 refuses filament_colour here: a project setting, not a filament preset one
+    for head, tag in _loaded_heads(heads, tags):
         slot = head["index"] + 1
-        link = ((bound(head["index"]) if bound else None) or {}).get("orca_preset")
-        linked = linked_preset(link, mine)
-        notice = link_notice(slot, link, mine)
+        spool = bound(head["index"]) if bound else None
+        notice = link_notice(slot, (spool or {}).get("orca_preset"), ctx["mine"])
         if notice:
             problems.append(notice)
-        preset_name = linked["name"] if linked else pick_filament_preset(
-            names, head, tag, overrides, preference=preset_preference, colours=colours)
+        preset_name = head_match(ctx, head, tag, spool, overrides)["name"]
         colour = (tag or {}).get("colour") or head["colour"]
         try:
             try:
@@ -2146,7 +2321,7 @@ class SyncHeadsToProject(orca.script.ScriptPluginCapabilityBase):
             view = run_off_thread(lambda: u1.summarize(client.query(u1.STATUS_OBJECTS)))
         except Exception as e:
             return orca.ExecutionResult.skipped(tr("Couldn't reach the U1: %s") % e)
-        overrides = get_store(self).effective()["profile_overrides"]
+        overrides = migrated_overrides(get_store(self))
         done, problems = sync_project(view["heads"], view["rfid"], overrides, bound=bound_spool_lookup(_service))
         return orca.ExecutionResult.success(sync_message(done, problems))
 

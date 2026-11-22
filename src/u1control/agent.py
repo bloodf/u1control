@@ -22,8 +22,10 @@ import re
 import urllib.parse
 import zipfile
 
+import filmatch
 import gcode
 import u1
+from filmatch import GENERIC_IDS  # noqa: F401
 from i18n import tr
 from moonraker import UploadCancelled as Cancelled  # noqa: F401  (raised by run_job and send_job)
 
@@ -59,17 +61,7 @@ FILAMENT_FAMILIES = {
     "PA": "PA", "PA-CF": "PA-CF", "PPA-CF": "PPA-CF", "PPA-GF": "PPA-GF", "PC": "PC", "PVA": "PVA",
     "HIPS": "HIPS", "BVOH": "BVOH", "TPU": "TPU",
 }
-# filament_id of each "Generic <family> @System" preset in OrcaSlicer's OrcaFilamentLibrary (resources/profiles/
-# OrcaFilamentLibrary/filament, resolved through "inherits", OrcaSlicer main 32f6db87). OrcaSlicer's plugin API
-# doesn't show a preset's filament_id, so they are listed here. An id OrcaSlicer doesn't know still works: its sync
-# from AMS then takes "Generic <tray_type>" (PresetBundle::sync_ams_list); only an empty one becomes "Generic PLA".
-GENERIC_IDS = {
-    "ABS": "OFY9muEs", "ASA": "OFLPAxz3", "BVOH": "OFo2UF2C", "CoPE": "OFjt9en1", "EVA": "OFCD8qiU",
-    "HIPS": "OFsFon5l", "PA": "OFg8ndtj", "PA-CF": "OFQLcbps", "PC": "OFLakOUI", "PCTG": "OFu1evlr",
-    "PE": "OFPklMI1", "PETG": "OFYPdQJh", "PHA": "OF74KeQR", "PLA": "OFDSrzZ8", "PLA High Speed": "OFmpMwxS",
-    "PLA Matte": "OFmY0l6t", "PLA Silk": "OFesA6rF", "PLA-CF": "OFWbdGsC", "PP": "OF1UNk9P", "PPA-CF": "OF8tPByX",
-    "PPA-GF": "OF8Tlg47", "PVA": "OFDvXujf", "SBS": "OFhQfUQY", "TPU": "OFgbpcy9",
-}
+# GENERIC_IDS (filament_id of each "Generic <family> @System" preset) comes from filmatch.
 _SUB_TYPES = {"CF": "-CF", "GF": "-GF", "SNAPSPEED": " HIGH SPEED", "HS": " HIGH SPEED", "SILK": " SILK",
               "WOOD": " WOOD", "MATTE": " MATTE", "MARBLE": " MARBLE"}
 
@@ -97,15 +89,12 @@ def tray_type(ftype, sub_type=""):
 def material_family(material):
     """OrcaFilamentLibrary family of a material, or None: the table, else the longest family named in it as a
     whole word."""
-    text = " ".join(str(material or "").split()).upper()
-    return FILAMENT_FAMILIES.get(text) or next(
-        (FILAMENT_FAMILIES[k] for k in sorted(FILAMENT_FAMILIES, key=len, reverse=True)
-         if re.search(r"(?<![A-Z0-9])%s(?![A-Z0-9])" % re.escape(k), text)), None)
+    return filmatch.generic_family(material, FILAMENT_FAMILIES)
 
 
 def generic_filament_id(material):
     """filament_id of the material's "Generic <family> @System" preset, or ""."""
-    return GENERIC_IDS.get(material_family(material), "")
+    return filmatch.generic_filament_id(material, FILAMENT_FAMILIES)
 
 
 def _rgba(colour):
@@ -139,10 +128,8 @@ def ams_block(heads, preferred=None):
 
 
 def _remaining_minutes(view):
-    p, spent = view.get("progress"), view.get("print_duration")
-    if not isinstance(p, (int, float)) or not isinstance(spent, (int, float)) or p <= 0.0 or p >= 1.0:
-        return 0
-    return int(spent * (1 - p) / p // 60)
+    left = u1.time_left(view)
+    return 0 if left is None else int(left // 60)
 
 
 def push_status(view, preferred=None, thumbnail=""):

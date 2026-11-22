@@ -319,6 +319,48 @@ test('extended settings render the release format and an unfinished log is not A
   assert(alerts().includes('Result unknown'), 'an unfinished log is not Applied: ' + alerts());
 `, { needsGroups: true });
 
+test('settings: Open Filament Database is off by default; on and saved, its list line and Read again', `
+  await connect();
+  const config = {type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: true}, automations: [],
+    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: '', ofd_enabled: false}};
+  await post(config);
+  await tab('settings');
+  await until(() => q('.oui-settings-link[data-section="connection"]'), 'settings shown');
+  await click(q('.oui-settings-link[data-section="connection"]'));
+  await until(() => q('#ofd-on'), 'the OFD row');
+  assert(!q('#ofd-on').checked && !byTest('ofd-state'), 'off by default, nothing more shown');
+  await click(q('#ofd-on'));
+  await until(() => byTest('ofd-state'), 'turned on');
+  assert(text(byTest('ofd-state')).includes('Save to turn it on') && text(byTest('ofd-state')).includes('MIT'), 'saved first; the licence is named: ' + text(byTest('ofd-state')));
+  assert(!last('ofd'), 'nothing asked before the save');
+  await click(byTest('save'));
+  eq(last('save_settings').settings.ofd_enabled, true, 'saved on');
+  await reply(last('save_settings'), {saved: true});
+  await post({...config, settings: {...config.settings, ofd_enabled: true}});
+  await until(() => last('ofd'), 'once saved on, the line asks for the kept list');
+  await reply(last('ofd'), {on: true, fetched: 1795371399, version: '2026.11.22', count: 2133, stale: false, error: ''});
+  await until(() => text(byTest('ofd-state')).includes('2133'), 'the list line: ' + text(byTest('ofd-state')));
+  await click(byTest('ofd-refresh'));
+  eq(last('ofd').refresh, true, 'Read again asks OFD now');
+`);
+test('toolhead cards: an Open Filament Database proposal is marked untuned; picking it installs it by its id', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('preset_matches'), 'asked');
+  await reply(last('preset_matches'), {matches: [{head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: [['material', 'PLA']], confident: true, remembered_key: '',
+    candidates: [{name: 'Generic PLA @U1', score: 35, reasons: [['material', 'PLA']]}],
+    ofd: [{id: 'f667', name: 'Polymaker Panchroma Matte PLA (OFD)', score: 58, reasons: [['material', 'PLA'], ['vendor', 'Polymaker']]}]}]});
+  await until(() => q('[data-match="0"]'), 'T1 line');
+  await click(q('.oui-match-change', q('[data-match="0"]')));
+  await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'the candidate and the proposal');
+  const ofdRow = qa('.oui-match-option', q('[data-match="0"]'))[1];
+  assert(text(ofdRow).includes('OFD, untuned') && !ofdRow.disabled, 'marked and pickable: ' + text(ofdRow));
+  await click(ofdRow);
+  eq([last('preset_pick').head, last('preset_pick').ofd], [0, 'f667'], 'installed by its OFD id');
+  await reply(last('preset_pick'), {matches: [], note: 'Spooler puts it into its preset of spool #7 on its next sync'});
+  await until(() => toasts().includes('spool #7'), 'the note is shown: ' + toasts());
+`);
+
 test('settings draft survives mode switch; Saved needs the plugin answer', `
   await connect();
   const config = {type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: true},
@@ -2109,6 +2151,34 @@ test('Apply to project filaments: busy until the plugin answers, then says what 
   await click(byTest('sync'));
   await reply(last('sync_project'), {text: 'Project filaments unchanged. Problems: filament 1: no preset', done: 0, problems: 1});
   await until(() => q('.oui-toast[role=alert]') && toasts().includes('no preset'), 'why not is shown, as an error: ' + toasts());
+`);
+
+test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and reasons; Change remembers another', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('preset_matches'), 'the cards ask for the presets once the heads are known');
+  const ask = last('preset_matches');
+  const choices = [{name: 'Generic PLA @U1', score: 35, reasons: [['material', 'PLA'], ['generic', ''], ['printer', '']]},
+                   {name: 'Generic PLA Silk @U1', score: 29, reasons: [['material', 'PLA'], ['extra_word', 'silk']]}];
+  const row = {head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: choices[0].reasons, confident: false, candidates: choices, remembered_key: ''};
+  await reply(ask, {matches: [row]});
+  await until(() => q('[data-match="0"]'), 'T1 shows its preset');
+  const card = q('[data-match="0"]');
+  assert(text(card).includes('Generic PLA @U1') && text(card).includes('material PLA') && text(card).includes('Score 35'), 'name, reasons, score: ' + text(card));
+  assert(q('.oui-status[data-state="warn"]', card), 'a close call is marked');
+  assert(!q('[data-match="1"]'), 'no line for a head the plugin gave no preset');
+  await click(q('.oui-match-change', card));
+  await until(() => qa('.oui-match-option', card).length === 2, 'the candidates, no Automatic while nothing was picked by hand');
+  await click(qa('.oui-match-option', card)[1]);
+  const pick = last('preset_pick');
+  eq([pick.head, pick.name], [0, 'Generic PLA Silk @U1'], 'remembered for T1');
+  await reply(pick, {matches: [{...row, name: 'Generic PLA Silk @U1', source: 'remembered', score: 29, reasons: choices[1].reasons, confident: true, remembered_key: 'mat:g|pla|'}]});
+  await until(() => text(q('[data-match="0"]')).includes('Picked by hand'), 'the new pick, marked as picked by hand');
+  await click(q('.oui-match-change', q('[data-match="0"]')));
+  const auto = () => qa('.oui-match-option', q('[data-match="0"]')).find(b => text(b).includes('Automatic'));
+  await until(auto, 'Automatic offered');
+  await click(auto());
+  eq(last('preset_pick').name, null, 'Automatic forgets the pick');
 `);
 
 // ------------------------------------------------------------------ foundation 4.2.0 on: toasts, dismissible notices, requirements

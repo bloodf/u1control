@@ -6,6 +6,23 @@
 
 - **Bed, nozzle, fans and Home from OrcaSlicer's Device tab** (u1control as the printer agent). The fan pop-up now offers the part fan and the aux fan and shows their speeds. The part fan used to do nothing: OrcaSlicer sends it as `M106 P1`, a fan number the U1's firmware doesn't have, so it is now sent as the dashboard's part fan line, and the aux fan as the dashboard's aux fan line. OrcaSlicer also shows a chamber fan, which the U1 doesn't have: that one is refused and logged. Bed and nozzle temperatures can now be changed while the U1 prints or is paused, as on the dashboard, still only from 0 up to the U1's limits (nozzle 320 °C, bed 110 °C); the nozzle setting is for the active toolhead, the one the Device tab shows. Home and the fans stay refused while the U1 prints, is paused, loads or calibrates. Nothing is sent unless you use the control. Builds on @Veisen's work in [#72](https://github.com/bloodf/u1control/pull/72).
 
+## [0.18.0] - 2026-11-22
+
+### Added
+
+- **See and change the preset each toolhead gets.** Each toolhead card shows the OrcaSlicer preset **Apply to project filaments** gives it, with a score and the reasons (material, manufacturer, subtype words, made for the U1), and marks a close call so you can check it. **Change** picks another preset for that material and remembers it for what the toolhead holds (its Spoolman spool, else its RFID tag, else its manufacturer, material and subtype); **Automatic** forgets it. A preset linked in Spoolman still comes first, then your pick, then Spooler's. Picks are kept in `matches.json`, shared with Spooler and Kobra Control when Spooler is installed.
+- **Open Filament Database presets (off by default).** Turn on **Open Filament Database** in Settings > Connection and a toolhead card's **Change** list also offers the community presets from the [Open Filament Database](https://openfilamentdatabase.org) for the head's manufacturer and material, marked "OFD, untuned". Picking one installs it: through Spooler when Spooler is installed and the toolhead has a Spoolman spool, otherwise into U1 Control's own preset bundle (`u1control_ofd`), never into your own presets. The list is read at most once a day and kept for offline use; while the option is off U1 Control never contacts OFD.
+
+### Fixed
+
+- **Time left matches the slicer's estimate.** The Dashboard and OrcaSlicer's Device tab worked out the time left from the time spent so far, so heating, calibration and purge made it hours too long early in a print. It now counts down the slicer's estimate with the print's progress. Thanks to @BliXem for reporting it.
+- **The status no longer freezes after the U1 stops answering for a while.** An unexpected error could stop status updates until OrcaSlicer restarted; U1 Control now carries on, and OrcaSlicer's log (`log/python_*.log`) says when the U1 stopped answering, why, and when it came back. Reported by @Vito1973.
+
+### Changed
+
+- Shared Orca UI foundation 5.10.0; the page is 84 kB smaller, so it stays under the size OrcaSlicer on Windows can show.
+- Internal: the filament matching code is now shared with Spooler and Kobra Control (presets are picked exactly as before), and the hand-written `profile_overrides` setting is moved into `matches.json` once, keeping the same picks.
+
 ## [0.17.1] - 2026-11-22
 
 ### Fixed

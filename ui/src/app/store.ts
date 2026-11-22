@@ -4,7 +4,7 @@ import { Tracker, message, type RunOptions } from '../core/tracker';
 import { t } from '../core/i18n';
 import { ask, cancelDialog } from '../core/dialog';
 import { autoRefresh, cleanEvery, userBusy, REFRESH_DEFAULT_S } from '../core/autorefresh';
-import type { Config, Heater, Info, Requirement, Spool, Status, StockView, UsageView } from './types';
+import type { Config, Heater, Info, PresetMatch, Requirement, Spool, Status, StockView, UsageView } from './types';
 
 export type Phase = 'connecting' | 'connected' | 'noTarget' | 'unreachable';
 export const LIMITS = { hotend: 320, bed: 110 };
@@ -56,6 +56,9 @@ export const s = reactive({
   requirements: [] as Requirement[],
   reqChecking: false,
   syncing: false,                   // "Apply to project filaments" sent, no answer yet
+  /** Each loaded toolhead's preset for Apply to project filaments, by head index (preset_matches). */
+  matches: {} as Record<string, PresetMatch>,
+  matchBusy: false,
 });
 
 export const tracker = new Tracker(
@@ -147,6 +150,26 @@ export async function syncProject(): Promise<void> {
     s.syncing = false;
   }
 }
+
+// ------------------------------------------------------------------ toolhead presets (filmatch)
+// Read again whenever what a toolhead holds changes (filament, RFID tag, linked spool); Change remembers another preset.
+const takeMatches = (r: any) => { s.matches = Object.fromEntries(((r?.matches ?? []) as PresetMatch[]).map(m => [String(m.head), m])); };
+export async function loadMatches(): Promise<void> {
+  try { takeMatches(await bridge.request({ type: 'preset_matches' })); } catch { /* the cards just show no preset line */ }
+}
+export async function pickPreset(head: number, name: string | null, ofd?: string): Promise<void> {
+  if (s.matchBusy) return;
+  s.matchBusy = true;
+  try {
+    const r = await bridge.request({ type: 'preset_pick', head, name, ...(ofd ? { ofd } : {}) });
+    takeMatches(r);
+    if (r?.note) tracker.notify('info', String(r.note));
+  }
+  catch (e) { tracker.notify('error', t('msg.failed', { action: t('match.change'), error: message(e) })); }
+  finally { s.matchBusy = false; }
+}
+const holds = () => JSON.stringify([(s.status?.heads ?? []).map(h => [h.loaded, h.type, h.vendor, h.sub_type, h.colour]),
+  (s.status?.rfid ?? []).map(g => g && [g.uid, g.sku, g.vendor, g.manufacturer, g.type, g.sub_type]), s.bindings]);
 
 let helloInFlight = false;
 export async function hello(): Promise<void> {
@@ -288,6 +311,7 @@ export function start(): () => void {
   const offCfg = onConfig(m => { const v = cleanEvery(m.settings?.spoolman_refresh_s); if (v !== s.refreshS) { s.refreshS = v; auto.restart(); } });
   // Spooler says right away when it linked or unlinked a spool (its presence's "links"): re-read without waiting.
   const offLinks = watch(() => s.stock?.spooler?.links, (now, was) => { if (was !== undefined && now !== was) void loadSpools(true); });
+  const offHolds = watch(holds, (now, was) => { if (now !== was && s.status) void loadMatches(); });
   void hello();
-  return () => { off(); offCfg(); offLinks(); auto.stop(); document.removeEventListener('visibilitychange', onVis); timers.forEach(clearInterval); };
+  return () => { off(); offCfg(); offLinks(); offHolds(); auto.stop(); document.removeEventListener('visibilitychange', onVis); timers.forEach(clearInterval); };
 }
