@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Open Filament Database proposals (off by default).** Settings > Connection has a new **Open Filament Database** option. Turned on and saved, a toolhead card's **Change** list also shows the presets the [Open Filament Database](https://openfilamentdatabase.org) (a free community list of filaments, MIT licence) has for the head's manufacturer and material, marked "OFD, untuned"; they can't be installed from there yet. U1 Control reads OFD's list at most once a day (into Spooler's folder when Spooler is installed, else its own), keeps using the last list when the network is down, and says in Settings which list it has, with **Read again**. While the option is off U1 Control never contacts OFD, and OrcaSlicer is asked for access to it only once it is on.
+
 - **Each toolhead card shows the OrcaSlicer preset Apply to project filaments gives it**, with a score and the reasons for it (material, manufacturer, subtype words, made for the U1), and marks a close call so you can check it. **Change** lists the other presets for that material and remembers the one you pick for what the toolhead holds (its Spoolman spool, else its RFID tag, else its manufacturer, material and subtype); **Automatic** forgets it. A preset linked in Spoolman still comes first, then the one you picked, then Spooler's. The choices are kept in `matches.json`: Spooler's (shared with Spooler and Kobra Control) while Spooler is installed, else U1 Control's own.
 
 ### Fixed
@@ -15,7 +17,7 @@
 
 - Internal: the filament matching code (colour distance, material names, generic preset ids and the preset choice) now comes from the shared Orca UI foundation 5.7.0, one copy for Spooler, U1 Control and Kobra Control. Presets are picked exactly as before.
 - The hand-written `profile_overrides` setting is copied into `matches.json` once and then no longer read; the picks it made stay the same.
-- Shared Orca UI foundation 5.8.0. The page keeps the message keys of its seven languages once instead of once per language, which makes it 84 kB smaller so it stays under the size OrcaSlicer on Windows can show.
+- Shared Orca UI foundation 5.9.1. The page keeps the message keys of its seven languages once instead of once per language, which makes it 84 kB smaller so it stays under the size OrcaSlicer on Windows can show.
 
 ## [0.17.1] - 2026-11-22
 

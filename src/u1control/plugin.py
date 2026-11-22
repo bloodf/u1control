@@ -381,6 +381,15 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                             say(tr("Couldn't update the project filaments: %s") % e, problems=1)
                     if not self._background(job):
                         say(tr("Another preset update is running; try again in a moment."), problems=1)
+            elif kind == "ofd":   # Settings: the Open Filament Database line; refresh: Read again (only while it is on)
+                rid, store = data.get("id"), self._settings()
+
+                def ofd_job():
+                    try:
+                        self.post_message({"type": "reply", "id": rid, "result": ofd_status(store, data.get("refresh") is True)})
+                    except Exception as e:
+                        self.post_message({"type": "reply", "id": rid, "error": str(e)})
+                threading.Thread(target=ofd_job, name="u1control-ofd", daemon=True).start()
             elif kind in ("preset_matches", "preset_pick"):   # toolhead cards: each head's preset, why, and Change
                 rid, view, store = data.get("id"), svc.last_view, self._settings()
 
@@ -390,7 +399,8 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                         if kind == "preset_pick":
                             name = data.get("name")
                             pick_preset(view, bound_spool_lookup(svc), data.get("head"), name if name is None else str(name), overrides)
-                        result = {"matches": preset_matches(view, bound_spool_lookup(svc), overrides)}
+                        result = {"matches": preset_matches(view, bound_spool_lookup(svc), overrides,
+                                                            bool(store.effective().get("ofd_enabled")))}
                         self.post_message({"type": "reply", "id": rid, "result": result})
                     except Exception as e:
                         self.post_message({"type": "reply", "id": rid, "error": str(e)})
@@ -1145,9 +1155,11 @@ def network_grants(cap):
     try:   # never presets here: reading them while OrcaSlicer loads them crashed 2.5.1
         cfg = get_store(cap).effective()
         addresses += [clean(cfg.get("host")), clean(cfg.get("spoolman_url"))] + cfg["network_origins"]
+        ofd = [filmatch.OFD_ORIGIN] if cfg.get("ofd_enabled") else []   # the Open Filament Database, only while it is on
     except Exception as e:
         log("network permission: settings not readable at load (%s)" % e)
-    return _origins(addresses)
+        ofd = []
+    return _origins(addresses) + ofd
 
 
 def _origins(addresses):
@@ -2061,6 +2073,37 @@ def migrated_overrides(store):
     return {}
 
 
+# --- Open Filament Database (Settings, off by default) ----------------------------------------------------------------
+# While it is on, the toolhead cards also list the OFD presets of the head's manufacturer and material (filmatch.rank_ofd)
+# from OFD's index, kept a day in Spooler's folder (ofd/, shared) while Spooler is installed, else in U1 Control's own.
+# While it is off nothing is fetched and OrcaSlicer is not asked for access to OFD.
+
+def ofd_folder():
+    """The folder OFD's index is kept in ("" when there is none)."""
+    shared, own = spooler_dir(), _storage()
+    if shared and os.path.isfile(os.path.join(shared, spooler_bridge.SETTINGS_FILE)):
+        return os.path.join(shared, filmatch.OFD_DIR)
+    return os.path.join(own, filmatch.OFD_DIR) if own else ""
+
+
+def ofd_status(store, refresh=False):
+    """Settings' OFD line: {"on"} and, while on, {"fetched", "version", "count", "stale", "error"}. Plugin thread."""
+    folder = ofd_folder()
+    if not store.effective().get("ofd_enabled") or not folder:
+        return {"on": False}
+    found = filmatch.ofd_index(folder, force=refresh)
+    return {"on": True, "count": len(found["profiles"]), **{k: found[k] for k in ("fetched", "version", "stale", "error")}}
+
+
+def ofd_proposals(profiles, head, tag, spool):
+    """OFD presets for what a toolhead holds: its tag's (or spool's, or head's) manufacturer and material."""
+    tag = tag or {}
+    vendor = tag.get("vendor") or tag.get("manufacturer") or (spool or {}).get("vendor") or head.get("vendor") or ""
+    material = tag.get("type") or head.get("type") or ""
+    name = " ".join(str(x) for x in ((spool or {}).get("name"), tag.get("sub_type") or head.get("sub_type")) if x)
+    return filmatch.rank_ofd(profiles, vendor, material, name, MATCH_CHOICES)
+
+
 def _fits(name, head, tag):
     """A preset of the toolhead's material (filmatch scores it at all)."""
     return bool(filmatch.rank_filament_presets([name], head, tag))
@@ -2115,14 +2158,20 @@ def _loaded_heads(heads, tags):
             yield head, tag
 
 
-def preset_matches(view, bound, overrides=None):
-    """[{"head", ...head_match}] for each loaded toolhead (a plugin thread): what the toolhead cards show."""
+def preset_matches(view, bound, overrides=None, ofd=False):
+    """[{"head", ...head_match, "ofd"}] for each loaded toolhead (a plugin thread): what the toolhead cards show. ofd:
+    the Open Filament Database is on, so its proposals are added (its index read again when a day old)."""
     if not view:
         return []
     ctx = _match_context(bound)
-    return [{"head": head["index"], **{k: v for k, v in head_match(ctx, head, tag, bound(head["index"]) if bound else None,
-                                                                    overrides).items() if k != "keys"}}
-            for head, tag in _loaded_heads(view["heads"], view["rfid"])]
+    folder = ofd_folder() if ofd else ""
+    profiles = filmatch.ofd_index(folder)["profiles"] if folder else []
+    out = []
+    for head, tag in _loaded_heads(view["heads"], view["rfid"]):
+        spool = bound(head["index"]) if bound else None
+        match = {k: v for k, v in head_match(ctx, head, tag, spool, overrides).items() if k != "keys"}
+        out.append({"head": head["index"], **match, "ofd": ofd_proposals(profiles, head, tag, spool) if profiles else []})
+    return out
 
 
 def pick_preset(view, bound, index, name, overrides=None):
