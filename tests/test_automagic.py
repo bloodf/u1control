@@ -52,6 +52,17 @@ class SettingsTests(unittest.TestCase):
         write(os.path.join(d, "settings.json"), json.dumps({"camera_fps": 60}))
         self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["camera_fps"], 5)  # hand-edited
 
+    def test_ui_theme(self):
+        """Settings > Appearance: auto by default, only auto/light/dark are kept."""
+        st, d = self.store()
+        self.assertEqual(st.effective()["ui_theme"], "auto")
+        self.assertEqual(st.update({"ui_theme": "dark"})["ui_theme"], "dark")
+        for bad in ("purple", True, None, 1):
+            self.assertEqual(st.update({"ui_theme": bad})["ui_theme"], "dark", bad)
+        self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["ui_theme"], "dark")  # persisted
+        write(os.path.join(d, "settings.json"), json.dumps({"ui_theme": "neon"}))
+        self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["ui_theme"], "auto")  # hand-edited
+
     def test_callable_backend(self):
         box = {}
         st = settings.Store(load=lambda: box.get("t", "{}"), save=lambda t: box.update(t=t))

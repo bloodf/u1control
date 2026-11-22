@@ -606,6 +606,10 @@ export const es: Record<MessageKey, string> = {
   'lang.pl': 'Polski',
   'lang.cs': 'Čeština',
   'lang.help': 'Automático sigue el idioma de OrcaSlicer y después el del sistema. Su elección se guarda solo en este OrcaSlicer.',
+  'theme.label': 'Tema',
+  'theme.auto': 'Automático',
+  'theme.light': 'Claro',
+  'theme.dark': 'Oscuro',
   'about.text': 'U1 Control {version} · Proyecto independiente, no creado por Snapmaker.',
 
   'auto.auto_add_pipeline': 'Añadir «U1 print setup» a los perfiles de proceso de la U1',

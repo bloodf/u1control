@@ -108,11 +108,12 @@ def use_language(cap=None):
     i18n.use(i18n.resolve(choice, _host_language()))
 
 
-def page_html(mode, data=None, language="auto"):
+def page_html(mode, data=None, language="auto", theme="auto"):
     """The one compiled Vue page (ui/ -> src/u1control/ui/app.html) with its boot payload: the tab ("app") or the
-    U1 print setup window ("setup", with the job data). `language`: the user's explicit choice, "auto" otherwise."""
+    U1 print setup window ("setup", with the job data). `language`/`theme`: the user's explicit choice, "auto" otherwise."""
     boot = {"mode": mode, "version": VERSION, "lang": _host_language(),
-            "pref": language if language in settings.UI_LANGUAGES else "auto"}
+            "pref": language if language in settings.UI_LANGUAGES else "auto",
+            "theme": theme if theme in settings.UI_THEMES else "auto"}
     if data is not None:
         boot["data"] = data
     return _asset("app.html").replace("__BOOT__", json_for_html(boot), 1)
@@ -302,7 +303,8 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
 
     def get_ui(self):
         use_language(self)
-        return page_html("app", language=self._config()["ui_language"])
+        cfg = self._config()
+        return page_html("app", language=cfg["ui_language"], theme=cfg["ui_theme"])
 
     def _settings(self):
         return get_store(self)
@@ -416,6 +418,8 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
             elif kind == "ui_language":   # the page's language choice; nothing else is touched
                 self._settings().update({"ui_language": data.get("value")})
                 use_language(self)
+            elif kind == "ui_theme":      # the page's light/dark choice; nothing else is touched
+                self._settings().update({"ui_theme": data.get("value")})
             elif kind == "camera_fps":    # the camera card's frame rate; an invalid value keeps the stored one
                 svc.set_camera_fps(self._settings().update({"camera_fps": data.get("value")})["camera_fps"])
             elif kind == "dashboard":   # the Dashboard's layouts, saved by the page; an invalid value keeps the stored one
@@ -905,7 +909,8 @@ def open_setup(store, options, view, host, client, lines, cfg, filaments, mappin
                           "busy": u1.machine_busy(view), "address": host},
               "spools": setup_spools(host), "remember": bool(options["remember_print_options"]),
               "features": u1.features(commands), "tags": rfid_flags(view), "keep_map": keep_map,
-              "multiace": u1.multiace(view), "stored_pa": bool(options.get("stored_pa"))}
+              "multiace": u1.multiace(view), "stored_pa": bool(options.get("stored_pa")),
+              "ui_theme": options["ui_theme"]}
     if not extras["multiace"]:
         extras["pa"] = setup_pa(view["heads"], extras["spools"], client)
     choice = ask_setup(setup_job(lines, cfg, name, client), cancelled, filaments, view["heads"], mapping, offered,
@@ -1010,16 +1015,16 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
         "keep_map": bool(extras.get("keep_map")), "multiace": bool(extras.get("multiace")),
         "pa": {str(t): v for t, v in (extras.get("pa") or {}).items()}, "stored_pa": bool(extras.get("stored_pa")),
     }
-    html = page_html("setup", data, language=language)
+    html = page_html("setup", data, language=language, theme=extras.get("ui_theme", "auto"))
     if len(html.encode("utf-8")) > SETUP_PAGE_LIMIT and (data["job"] or {}).get("preview"):
         # A page this big stays blank in OrcaSlicer's WebView2 on Windows (never "ready": the window times out).
         log("print setup: the plate preview makes the page %d bytes; shown without it" % len(html.encode("utf-8")))
         data["job"] = {**data["job"], "preview": None}
-        html = page_html("setup", data, language=language)
+        html = page_html("setup", data, language=language, theme=extras.get("ui_theme", "auto"))
     if len(html.encode("utf-8")) > WEBVIEW_PAGE_LIMIT and (data["job"] or {}).get("thumbnail"):
         log("print setup: the G-code thumbnail makes the page %d bytes; shown without it" % len(html.encode("utf-8")))
         data["job"] = {**data["job"], "thumbnail": None}
-        html = page_html("setup", data, language=language)
+        html = page_html("setup", data, language=language, theme=extras.get("ui_theme", "auto"))
     html = html.replace("<head>", "<head>" + SHOWN_PING, 1)
     done, alive, wanted, stop = (threading.Event() for _ in range(4))
     result = {}

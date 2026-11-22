@@ -5,6 +5,7 @@ export interface Boot {
   version: string;
   lang: string | null;
   pref?: 'auto' | 'en' | 'pt-BR' | 'es' | 'de' | 'zh-CN' | 'pl' | 'cs';
+  theme?: 'auto' | 'light' | 'dark';
   data?: unknown;
 }
 
