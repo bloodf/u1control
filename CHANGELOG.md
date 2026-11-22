@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Time left matches the slicer's estimate.** The Dashboard and OrcaSlicer's Device tab worked out the time left from the time spent so far, so the start sequence (heating, calibration, purge) made it hours too long early in a print, far from what the U1's screen says. It now takes the slicer's estimate stored in the file and counts down with the print's progress; a file without an estimate still uses the time spent. Thanks to @BliXem for reporting it.
+- **The status keeps coming after the U1 stops answering for a while.** An unexpected error could end the thread that reads the printer's status, and the page then showed the last values until OrcaSlicer restarted; it now carries on and reads again. OrcaSlicer's log (`log/python_*.log`) now says when the U1 stopped answering, with the reason, and when it answers again, to find the cause of a lost connection. Reported by @Vito1973.
+
 ### Changed
 
 - Internal: the filament matching code (colour distance, material names, generic preset ids and the preset choice) now comes from the shared Orca UI foundation 5.7.0, one copy for Spooler, U1 Control and Kobra Control. Presets are picked exactly as before.

@@ -636,6 +636,21 @@ def nozzle_differs(f, h):
     return bool(f.get("nozzle") and h.get("nozzle") and f["nozzle"] != h["nozzle"])
 
 
+def time_left(view):
+    """Seconds left of the print in view, or None. With the slicer's estimate (file metadata estimated_time):
+    its share still to print, as the slicer's own remaining-time count says it. Progress is the slicer's M73 P when
+    the G-code has it (OrcaSlicer writes it), else the file position. Without an estimate: time spent per progress,
+    which the start sequence (heating, calibration, purge) inflates early in a print."""
+    p, est, spent = view.get("progress"), view.get("estimated_time"), view.get("print_duration")
+    if isinstance(p, bool) or not isinstance(p, (int, float)) or not 0 <= p < 1:
+        return None
+    if not isinstance(est, bool) and isinstance(est, (int, float)) and est > 0:
+        return est * (1 - p)
+    if not isinstance(spent, bool) and isinstance(spent, (int, float)) and spent > 0 and p > 0.01:
+        return spent * (1 - p) / p
+    return None
+
+
 def _pa_value(value):
     return round(float(value), 4) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 

@@ -8,7 +8,7 @@ export interface Tag { vendor?: string; manufacturer?: string; type?: string; su
 export interface Driver { name: string; temp: number | null; state: 'ok' | 'otpw' | 'ot' | null }
 export interface Status {
   state: string; message?: string; filename?: string; progress?: number; layer?: number; total_layers?: number;
-  print_duration?: number; total_duration?: number; extruders: Heater[]; bed: Heater; heads: Head[];
+  print_duration?: number; total_duration?: number; left?: number | null; extruders: Heater[]; bed: Heater; heads: Head[];
   rfid?: (Tag | null)[]; options?: Record<string, boolean>; features?: string[]; purifier?: { fitted?: boolean; mode?: string | number; recirculating?: boolean; exhaust?: number | null; inner?: number | null };
   fan?: number | null; aux_fan?: number | null; chamber?: number | null; drivers?: Driver[];
   feed?: { state?: string; detected?: boolean }[]; busy?: boolean; machine_state?: string; bindings?: Record<string, number>;
