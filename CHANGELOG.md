@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.17.1] - 2026-11-22
+
+### Fixed
+
+- **OrcaSlicer no longer asks for network permission once per file.** With a U1 (or Spoolman) first used since OrcaSlicer started, every G-code thumbnail, time-lapse picture and tap on the printer screen raised its own permission prompt, because OrcaSlicer saves a runtime approval for the exact address it saw. U1 Control now asks once for the whole printer (`http://<address>`), which covers every page and port on it, and waits for your answer before reaching the printer for anything else. Thanks to @rp86 for reporting it (#73).
+- With u1control as the printer agent, the U1 shows in OrcaSlicer's **Device** tab printer list and connects on a fresh start. OrcaSlicer lists printers before it connects, and the agent announced the U1 only once connected, so it never appeared; it now announces the address from U1 Control's `host` setting or the selected U1 printer preset. The log says why when nothing is listed, and once when the U1 doesn't answer. From @rp86 (#92).
+- A toolhead card no longer says "filament at inlet" when the filament is in the head. From @xtronets (#91).
+
 ## [0.17.0] - 2026-11-21
 
 ### Added
