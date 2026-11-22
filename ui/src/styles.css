@@ -41,3 +41,6 @@
 .u1-table tbody tr:last-child > td { border-bottom-width: 0; }
 .u1-table tbody tr:hover > td { background: var(--oui-raised); }
 .u1-table :is(th, td).oui-num, .u1-table :is(th, td).oui-end { text-align: end; }
+/* OrcaSlicer's injected defaults colour h1-h6 and th with its own theme (--orca-fg/-muted); with Theme forced to the
+   other one they would vanish. Ours follow the page's theme. */
+.orca-ui :is(h1,h2,h3,h4,h5,h6){color:inherit}.orca-ui th{color:var(--oui-muted)}
