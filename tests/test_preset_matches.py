@@ -99,5 +99,48 @@ class PresetMatchTests(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.storage, filmatch.MATCHES_FILE)))
 
 
+class OfdTests(PresetMatchTests):
+    """The Open Filament Database: off by default and never contacted then; on, its proposals are added from the index
+    kept in Spooler's folder (Spooler installed) or U1 Control's own, read again once a day."""
+
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+        with open(os.path.join(ROOT, "tests", "fixtures", "ofd_index.json"), "rb") as f:
+            body = f.read()
+
+        def get(url, headers=None):
+            self.calls.append(url)
+            return 200, body, {}
+        original = self.ns["filmatch"]._ofd_get
+        self.ns["filmatch"]._ofd_get = get
+        self.addCleanup(setattr, self.ns["filmatch"], "_ofd_get", original)
+        self.store = self.ns["settings"].Store(path=os.path.join(self.storage, "settings.json"))
+        self.polymaker = [{"vendor": "Polymaker", "type": "PLA", "sub_type": "Matte"} if h["index"] == self.pla else None for h in self.heads]
+
+    def test_off_by_default(self):
+        self.assertFalse(self.store.effective()["ofd_enabled"])
+        self.assertEqual(self.ns["ofd_status"](self.store, refresh=True), {"on": False})
+        matches = self.ns["preset_matches"]({**self.view, "rfid": self.polymaker}, None, ofd=False)
+        self.assertTrue(matches and all(m["ofd"] == [] for m in matches))
+        self.assertEqual(self.calls, [])
+        self.assertNotIn(filmatch.OFD_ORIGIN, self.ns["network_grants"](type("Cap", (), {})()))
+
+    def test_on(self):
+        self.store.update({"ofd_enabled": True})
+        state = self.ns["ofd_status"](self.store)
+        self.assertEqual((state["on"], state["error"]), (True, ""))
+        self.assertTrue(os.path.exists(os.path.join(self.storage, filmatch.OFD_DIR, filmatch.OFD_INDEX)))   # no Spooler: own folder
+        row = next(m for m in self.ns["preset_matches"]({**self.view, "rfid": self.polymaker}, None, ofd=True) if m["head"] == self.pla)
+        self.assertIn("Polymaker For Production Matte PLA (OFD)", [c["name"] for c in row["ofd"]])
+        self.assertEqual(len(self.calls), 1)
+        self.ns["ofd_status"](self.store, refresh=True)
+        self.assertEqual(len(self.calls), 2)
+        os.makedirs(self.spooler, exist_ok=True)
+        with open(os.path.join(self.spooler, "spooler_settings.json"), "w", encoding="utf-8") as f:
+            f.write("{}")
+        self.assertEqual(self.ns["ofd_folder"](), os.path.join(self.spooler, filmatch.OFD_DIR))   # Spooler's, shared
+
+
 if __name__ == "__main__":
     unittest.main()
