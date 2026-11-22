@@ -100,4 +100,4 @@ jobs:
         working-directory: ui
         run: npm ci --ignore-scripts && npm run build
       - name: Committed page matches the build
-        run: git diff --exit-code -- src/u1control/ui/app.html ui/build.json
+        run: git diff --exit-code -- src/u1control/ui/app.html src/u1control/filmatch.py ui/build.json

@@ -26,6 +26,7 @@ import spooler_bridge
 import preview
 import u1
 import usage
+from filmatch import override_name, pick_filament_preset  # noqa: F401  (shared with Spooler and Kobra Control)
 from i18n import tr
 from moonraker import Moonraker, PrinterError, permission_origin
 from service import Service, Target
@@ -1816,76 +1817,6 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
                                        if h["loaded"] else tr("not named") if h.get("unnamed") else tr("empty")) for h in heads)
         about = tr("U1 at %s (Extended Firmware %s)") if fw["kind"] == "extended" else tr("U1 at %s (official firmware %s)")
         return orca.ExecutionResult.success("%s. %s" % (about % (client.address, fw["version"]), loaded))
-
-
-SUB_TYPE_WORDS = {"matte", "silk", "snapspeed", "hf", "cf", "gf", "basic", "pro", "lite", "tough", "galaxy",
-                  "marble", "glow", "sparkle", "wood", "metal", "high", "speed", "rapid"}
-
-
-def _words(text):
-    return set(re.findall(r"[a-z0-9]+", (text or "").lower()))
-
-
-def override_name(names, head, tag, overrides):
-    """User-pinned preset: UID: first, then SKU:, then "Vendor|TYPE|SubType". Only if it exists."""
-    pins = {str(k).strip().lower(): v for k, v in (overrides or {}).items()}
-    tag = tag or {}
-    vendor = tag.get("vendor") or tag.get("manufacturer") or head.get("vendor") or ""
-    ftype = tag.get("type") or head.get("type") or ""
-    sub = tag.get("sub_type") or head.get("sub_type") or ""
-    keys = ["uid:" + str(tag.get("uid") or ""), "sku:" + str(tag.get("sku") or ""),
-            "%s|%s|%s" % (vendor, ftype, sub), "%s|%s|" % (vendor, ftype)]
-    for key in keys:
-        name = pins.get(key.lower())
-        if name in names:
-            return name
-    return ""
-
-
-def pick_filament_preset(names, head, tag=None, overrides=None, printer_hint="U1", preference=None, colours=None):
-    """Best Orca filament preset name for what a toolhead (and its RFID tag) holds, or "".
-    preference(names, head, tag) -> name or None is consulted after overrides, before scoring.
-    colours: preset name -> "#RRGGBB"; the nearest colour wins between equally scored presets."""
-    tag = tag or {}
-    pinned = override_name(names, head, tag, overrides)
-    if pinned:
-        return pinned
-    if preference:
-        chosen = preference(names, head, tag)
-        if chosen in names:
-            return chosen
-    ftype = (tag.get("type") or head.get("type") or "").upper()
-    family = u1.material_family(ftype)
-    vendor = (tag.get("vendor") or tag.get("manufacturer") or head.get("vendor") or "").lower()
-    sub = _words(tag.get("sub_type") or head.get("sub_type")) - {"basic"}
-    on_printer = re.compile(r"@\s*(snapmaker\s*)?%s\b" % re.escape(printer_hint), re.I)
-
-    def score(name):
-        n, up = name.lower(), name.upper()
-        if not family or not re.search(r"\b%s" % re.escape(family), up):
-            return None
-        s = 20 if re.search(r"(?<![A-Z0-9])%s(?![A-Z0-9+])" % re.escape(ftype), up.replace(" ", "-")) else 5
-        if vendor and vendor in n:
-            s += 30
-        elif "generic" in n:
-            s += 5
-        if on_printer.search(name):
-            s += 10
-        elif "@" in name:
-            s -= 10
-        if "0.4" in name:
-            s += 1
-        extra = (_words(name) & SUB_TYPE_WORDS) - {"basic"}
-        s += 8 * len(sub & extra) - 6 * len(extra - sub)
-        return s
-
-    want = tag.get("colour") or head.get("colour")
-
-    def far(name):
-        return u1.colour_distance(want, colours.get(name)) if colours and want else 0
-
-    ranked = sorted(((-r, far(n), len(n), n) for r, n in ((score(n), n) for n in names) if r is not None))
-    return ranked[0][3] if ranked else ""
 
 
 def spooler_dir():
