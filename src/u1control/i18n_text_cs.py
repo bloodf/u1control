@@ -98,6 +98,7 @@ CS = {
     "the U1 is busy (%s)": "U1 je zaneprázdněná (%s)",
     "unknown calibration": "neznámá kalibrace",
     "bad action": "neplatná akce",
+    "the U1 has no such fan (%s)": "U1 takový ventilátor nemá (%s)",
     "bad toolhead": "neplatná hlava",
     "%s out of range (0 to %d)": "%s mimo rozsah (0 až %d)",
     "unknown fan %r": "neznámý ventilátor: %r",
