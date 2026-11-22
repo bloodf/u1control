@@ -41,11 +41,12 @@ AUTOMATIONS = [
     ("time_lapse_camera", "Print option: time-lapse", "Default for the print setup.", False, "bool"),
 ]
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
-EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "stored_pa": False, "ui_language": "auto", "camera_fps": 5,
+EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "stored_pa": False, "ui_language": "auto", "ui_theme": "auto", "camera_fps": 5,
          "network_origins": [],   # scheme://host of printers and Spoolman used: the network grants asked for at load
          "spoolman_refresh_s": 30,
          "dashboard": {}}   # the Dashboard's layouts (clean_dashboard); {} = the page's default   # the page re-reads Spoolman this often while it shows (0 = off; 10-300)
 UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl", "cs")   # "auto": OrcaSlicer's language, then the system's
+UI_THEMES = ("auto", "light", "dark")   # "auto": OrcaSlicer's background, then the system's light/dark mode
 CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
 REFRESH_RANGE = (10, 300)      # spoolman_refresh_s: 0 (off) or seconds in this range
 
@@ -144,6 +145,8 @@ class Store:
                     out[key] = stored if mode == EXPERT and _valid(kind, stored) else default
             if mode == EXPERT and d.get("print_dialog") == "never":   # the choice before it became on/off
                 out["print_dialog"] = False
+            if out["ui_theme"] not in UI_THEMES:
+                out["ui_theme"] = EXTRA["ui_theme"]
             if out["camera_fps"] not in CAMERA_FPS:
                 out["camera_fps"] = EXTRA["camera_fps"]
             if not valid_refresh(out["spoolman_refresh_s"]):
@@ -165,6 +168,9 @@ class Store:
                         data[key] = value
                 elif key == "ui_language":
                     if value in UI_LANGUAGES:
+                        data[key] = value
+                elif key == "ui_theme":
+                    if value in UI_THEMES:
                         data[key] = value
                 elif key == "camera_fps":
                     if type(value) is int and value in CAMERA_FPS:

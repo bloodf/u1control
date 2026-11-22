@@ -603,6 +603,10 @@ export const en = {
   'lang.pl': 'Polski',
   'lang.cs': 'Čeština',
   'lang.help': 'Automatic follows OrcaSlicer’s language, then the system’s. Your choice is kept in this OrcaSlicer only.',
+  'theme.label': 'Theme',
+  'theme.auto': 'Automatic',
+  'theme.light': 'Light',
+  'theme.dark': 'Dark',
   'about.text': 'U1 Control {version} · Independent project, not made by Snapmaker.',
 
   'auto.auto_add_pipeline': 'Add “U1 print setup” to U1 process presets',
@@ -1426,6 +1430,10 @@ export const ptBR: Record<MessageKey, string> = {
   'lang.pl': 'Polski',
   'lang.cs': 'Čeština',
   'lang.help': 'Automático segue o idioma do OrcaSlicer e depois o do sistema. A escolha fica guardada só neste OrcaSlicer.',
+  'theme.label': 'Tema',
+  'theme.auto': 'Automático',
+  'theme.light': 'Claro',
+  'theme.dark': 'Escuro',
   'about.text': 'U1 Control {version} · Projeto independente, não feito pela Snapmaker.',
 
   'auto.auto_add_pipeline': 'Adicionar “U1 print setup” aos perfis de processo da U1',

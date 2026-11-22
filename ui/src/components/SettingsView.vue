@@ -7,6 +7,7 @@ import Checkbox from 'primevue/checkbox';
 import ToggleSwitch from 'primevue/toggleswitch';
 import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiRequirement, OuiStatus, type OuiSettingsSection } from '@orca-plugins/ui-foundation/src/components';
 import { circleCheck, clipboard, info, languages, plug, printer, save as saveIcon, target, wrench, zap } from '@orca-plugins/ui-foundation/src/icons';
+import { themePref, setThemePref, type ThemePref } from '../core/theme';
 import FirmwareCard from './FirmwareCard.vue';
 import SettingsPages from './SettingsPages.vue';
 import { s, run, tracker, controlsOff, busy, loadSpools, printerName, targetKnown, loadRequirements, checkRequirements } from '../app/store';
@@ -52,6 +53,7 @@ async function calibrate(kind: string, name: string) {
 // mistake for a broken setup.
 const pipe = computed(() => config.value?.pipeline ?? null);
 const dialogRule = computed(() => tMaybe(`ps.dialog.${config.value?.settings.print_dialog}`, ''));
+const themeOptions = computed(() => (['auto', 'light', 'dark'] as const).map(value => ({ value, label: t(`theme.${value}`) })));
 const langOptions = computed(() => [
   { value: 'auto', label: t('lang.auto', { current: t(`lang.${autoLocale.value}`) }) },
   ...LOCALES.map(value => ({ value, label: t(`lang.${value}`) }))]);
@@ -204,6 +206,10 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
         <OuiFormRow :label="t('lang.label')" :hint="t('lang.help')">
           <Select :model-value="langPref" :options="langOptions" option-label="label" option-value="value" :aria-label="t('lang.label')" data-test="lang"
                   @update:model-value="setLangPref($event as LangPref)" />
+        </OuiFormRow>
+        <OuiFormRow :label="t('theme.label')">
+          <Select :model-value="themePref" :options="themeOptions" option-label="label" option-value="value" :aria-label="t('theme.label')" data-test="theme"
+                  @update:model-value="setThemePref($event as ThemePref)" />
         </OuiFormRow>
       </OuiFormSection>
 

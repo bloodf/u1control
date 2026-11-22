@@ -997,6 +997,19 @@ test('X04: an explicit language choice wins over the host and is kept', `
   assert(text(q('[data-tab="settings"]')).includes('Ajustes'), 'back to the host language');
 `, { lang: 'pt_BR' });
 
+test('appearance: light or dark can be forced in Settings and is kept', `
+  await connect();
+  await tab('settings');
+  await pick(byTest('theme'), 'Dark');
+  await until(() => document.documentElement.dataset.orcaUiTheme === 'dark', 'dark theme applied');
+  eq(last('ui_theme').value, 'dark', 'kept in the plugin settings');
+  await pick(byTest('theme'), 'Light');
+  await until(() => document.documentElement.dataset.orcaUiTheme === 'light', 'light theme applied');
+  eq(last('ui_theme').value, 'light', 'light kept');
+  await pick(byTest('theme'), 'Automatic');
+  eq(last('ui_theme').value, 'auto', 'automatic again');
+`);
+
 test('i18n: host language de_DE gives de, including safety dialogs and errors', `
   await until(() => last('hello'));
   eq(document.documentElement.lang, 'de', 'lang attribute');
