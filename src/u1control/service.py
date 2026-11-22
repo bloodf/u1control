@@ -132,6 +132,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.follow_wait, self.follow_retry_at = 0.0, 0.0   # spool follow back-off after a failed Spoolman read
         self.spools, self.bindings, self.written = [], {}, {}
         self.last_heads, self.last_view, self.last_rfid = None, None, None
+        self.job_estimate = (None, None)   # (file name, its slicer estimated_time): read once per file
         self.last_frame_at = 0.0
         self.frame_interval = FRAME_MIN_INTERVAL   # the camera_fps ceiling
         self.frame_wait = FRAME_MIN_INTERVAL       # what is asked now: between frame_interval and FRAME_SLOWEST
@@ -300,39 +301,49 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     # ------------------------------------------------------------------ monitor
 
     def _watch(self):
-        next_status = 0.0
+        next_status, failing = 0.0, False   # failing: the last status read failed (logged once per outage)
         while not self.closed:
-            now = time.monotonic()
-            with self.lock:
-                active = now < self.lease_until and self.client is not None
-                camera = active and self.camera_on
-                screen = active and self.screen_on
-                gen, client, target = self.generation, self.client, self.target
-            if not active:
-                time.sleep(0.25)
-                continue
-            if now >= next_status:
-                next_status = now + STATUS_EVERY
-                try:
-                    self._push_status()
-                except Exception as e:
-                    next_status = time.monotonic() + STATUS_RETRY
-                    self._status_failed(gen)
-                    if self._current(gen):
-                        self.publish({"type": "offline", "error": str(e)})
-            if screen and now >= self.screen_at:
-                with self._bound(gen, client, target):
-                    self._push_screen()
-            if camera and now >= self.camera_retry_at and self._frame_due():
-                try:
+            try:
+                now = time.monotonic()
+                with self.lock:
+                    active = now < self.lease_until and self.client is not None
+                    camera = active and self.camera_on
+                    screen = active and self.screen_on
+                    gen, client, target = self.generation, self.client, self.target
+                if not active:
+                    time.sleep(0.25)
+                    continue
+                if now >= next_status:
+                    next_status = now + STATUS_EVERY
+                    try:
+                        self._push_status()
+                        if failing:
+                            self.log("u1control: the U1 answers again")
+                        failing = False
+                    except Exception as e:
+                        next_status = time.monotonic() + STATUS_RETRY
+                        if not failing:
+                            self.log("u1control: status read failed: %s" % e)
+                        failing = True
+                        self._status_failed(gen)
+                        if self._current(gen):
+                            self.publish({"type": "offline", "error": str(e)})
+                if screen and now >= self.screen_at:
                     with self._bound(gen, client, target):
-                        self._push_frame()
-                except Exception as e:   # the camera has its own error and retry: status keeps going
-                    self.camera_retry_at = time.monotonic() + CAMERA_RETRY
-                    if self._current(gen):
-                        self.publish({"type": "camera_error", "error": str(e)})
-            else:
-                self._idle(camera)
+                        self._push_screen()
+                if camera and now >= self.camera_retry_at and self._frame_due():
+                    try:
+                        with self._bound(gen, client, target):
+                            self._push_frame()
+                    except Exception as e:   # the camera has its own error and retry: status keeps going
+                        self.camera_retry_at = time.monotonic() + CAMERA_RETRY
+                        if self._current(gen):
+                            self.publish({"type": "camera_error", "error": str(e)})
+                else:
+                    self._idle(camera)
+            except Exception as e:   # never let the monitor die: the page would get no status again until a restart
+                self.log("u1control: monitor round failed: %s\n%s" % (e, traceback.format_exc()))
+                time.sleep(STATUS_RETRY)
 
     def _idle(self, camera):
         """Between monitor rounds: wake when the page shows the last frame or the next one is due, not on a fast tick."""
@@ -359,6 +370,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             view = u1.summarize(status)
             view["busy"] = u1.machine_busy(view)
             view["spool_ids"] = (status.get("print_task_config") or {}).get("filament_spool_id")
+            view["estimated_time"] = self._estimate(client, view["filename"])
+            view["left"] = u1.time_left(view)
             self._spoolman_follow(view, gen)
             for job, outcome in self.ledger.observe(target.ident, view["state"], view["filename"]):
                 self._settle(job, outcome)
@@ -372,6 +385,20 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             self._rfid_follow(view, gen)
             if self._current(gen):
                 self.publish({"type": "status", "data": view})
+
+    def _estimate(self, client, filename):
+        """The slicer's estimated_time of filename (file metadata), or None; asked once per file."""
+        if not filename or self.job_estimate[0] == filename:
+            return self.job_estimate[1]
+        try:
+            est = (client.metadata(filename.lstrip("/")) or {}).get("estimated_time")
+        except (PrinterError, OSError, ValueError, AttributeError) as e:   # file gone, or not a print file
+            self.log("u1control: estimated time of %s not read (%s)" % (filename, e))
+            if not getattr(e, "status", None):
+                return None   # no answer: asked again with the next status
+            est = None
+        self.job_estimate = (filename, est)
+        return est
 
     def _status_failed(self, gen):
         """The printer stopped answering: check its firmware again once it is back (it may have been reflashed)."""

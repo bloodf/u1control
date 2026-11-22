@@ -18,10 +18,8 @@ const chip = computed<OuiState>(() => (({ printing: 'busy', paused: 'pending', c
 const job = computed(() => printing.value || (!!st.value?.filename && ['complete', 'cancelled', 'error'].includes(state.value)));
 // A print that reports no fraction is shown as unknown, never as 0 %.
 const pct = computed(() => (typeof st.value?.progress === 'number' ? Math.max(0, Math.min(100, st.value.progress * 100)) : null));
-const left = computed(() => {
-  const d = st.value;
-  return d && (d.progress ?? 0) > 0.01 && d.print_duration ? d.print_duration / (d.progress as number) - d.print_duration : null;
-});
+// Seconds left, worked out by the plugin (u1.time_left): the slicer's estimate when the file has one.
+const left = computed(() => st.value?.left ?? null);
 const finishes = computed(() => (state.value === 'printing' && left.value != null ? fmt.time(s.now / 1000 + left.value) : null));
 const machine = computed(() => {
   const m = st.value?.machine_state;

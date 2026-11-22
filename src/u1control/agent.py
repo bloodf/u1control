@@ -128,10 +128,8 @@ def ams_block(heads, preferred=None):
 
 
 def _remaining_minutes(view):
-    p, spent = view.get("progress"), view.get("print_duration")
-    if not isinstance(p, (int, float)) or not isinstance(spent, (int, float)) or p <= 0.0 or p >= 1.0:
-        return 0
-    return int(spent * (1 - p) / p // 60)
+    left = u1.time_left(view)
+    return 0 if left is None else int(left // 60)
 
 
 def push_status(view, preferred=None, thumbnail=""):

@@ -91,6 +91,7 @@ class FakePrinter:
         self.undeletable = set()   # "timelapse/x.jpg": DELETE answers 500
         self.webcams = []   # served by /server/webcams/list
         self.thumbnails = []   # every file's metadata thumbnails
+        self.estimated_time = None   # every file's metadata estimated_time (the slicer's estimate, s)
         self.extra = {}   # more status objects (multiACE's "ace", extruder fields, configfile), merged into status()
         self.fields = []   # Spoolman spool extra fields (GET /api/v1/field/spool)
         handler = self._handler()
@@ -185,7 +186,7 @@ class FakePrinter:
                                                         "permissions": "rw"} for i, n in enumerate(names)]})
                 if u.path == "/server/files/metadata":
                     return self._send(200, {"result": {"filename": q.get("filename"), "filament_weights": [3.5, 0, 0, 1.5],
-                                                       "thumbnails": fake.thumbnails}})
+                                                       "thumbnails": fake.thumbnails, "estimated_time": fake.estimated_time}})
                 if u.path == "/server/spoolman/status":
                     return self._send(200, {"result": {"spoolman_connected": fake.spoolman, "spool_id": None}})
                 if u.path == "/firmware-config/api/status":
