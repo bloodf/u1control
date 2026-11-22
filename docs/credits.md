@@ -9,6 +9,12 @@ u1control is built from the public sources of Snapmaker's
 Ideas came from the SnapSend, U1 Sync & Send, Set & Send and
 [orca-snapmaker-u1-camera-plugin](https://github.com/lanwen/orca-snapmaker-u1-camera-plugin) plugins.
 
+The multiACE support talks to [multiACE](https://github.com/decay71/multiACE) only through its documented `ace`
+status object and G-code commands (`multiace/docs/ENGINE_API.md`); no multiACE code is copied or run. The per-spool
+pressure advance uses the `pressure_advance_matrix` Spoolman field and keys of pechex's SpoolLink pressure advance
+(U1 Extended Firmware PR #649), which multiACE also uses. The Czech names of the Extended Firmware's settings are
+Veisen's translation.
+
 u1control is an independent project. It is not made or supported by Snapmaker.
 
 Printer photo: Snapmaker product image. The picture of the U1 on the Dashboard (`ui/src/assets/printer`) is cut out

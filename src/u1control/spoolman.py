@@ -23,6 +23,9 @@ from i18n import tr
 
 LOCATION_FMT = "%s T%d"
 PRESET_FIELD = "orca_filament_preset"   # Spoolman extra field, spool then filament: an OrcaSlicer filament preset name
+# Spool extra field shared with SpoolLink's pressure advance (paxx12 Extended Firmware PR #649) and multiACE: a JSON
+# object {"<nozzle diameter>_<nozzle volume type>": PA}, e.g. {"0.4_standard": 0.032}. Same name and keys, on purpose.
+PA_FIELD = "pressure_advance_matrix"
 
 
 class SpoolmanError(RuntimeError):
@@ -96,6 +99,18 @@ class Spoolman:
     def use_weight(self, spool_id, grams):
         return self.call("PUT", "/v1/spool/%d/use" % int(spool_id), body={"use_weight": round(float(grams), 2)})
 
+    def save_pa(self, spool_id, key, value):
+        """Merge {key: value} into the spool's PA_FIELD, creating the text field first when Spoolman lacks it
+        (a PATCH with an unknown extra key is refused). Returns the spool's new matrix."""
+        fields = self.call("GET", "/v1/field/spool") or []
+        if PA_FIELD not in {str(f.get("key")) for f in fields if isinstance(f, dict)}:
+            self.call("POST", "/v1/field/spool/" + PA_FIELD, body={"name": "Pressure Advance Matrix", "field_type": "text"})
+        spool = self.call("GET", "/v1/spool/%d" % int(spool_id)) or {}
+        matrix = {**pa_matrix(spool), key: round(float(value), 6)}
+        extra = {**(spool.get("extra") or {}), PA_FIELD: json.dumps(json.dumps(matrix))}   # Spoolman replaces all extras
+        self.call("PATCH", "/v1/spool/%d" % int(spool_id), body={"extra": extra})
+        return matrix
+
 
 # ---------------------------------------------------------------------- matching
 
@@ -116,6 +131,23 @@ def preset_link(obj):
     except ValueError:
         value = raw
     return value.strip() if isinstance(value, str) else ""   # null, true, numbers, lists, objects: no name
+
+
+def pa_matrix(spool):
+    """The spool's PA_FIELD as {key: float}. Spoolman keeps a text extra JSON-encoded, so the value is usually a JSON
+    string holding the JSON object; a bare object is taken too. Anything unreadable is {}."""
+    raw = ((spool or {}).get("extra") or {}).get(PA_FIELD)
+    for _ in range(2):
+        if isinstance(raw, str):
+            try:
+                raw = json.loads(raw)
+            except ValueError:
+                return {}
+    out = {}
+    for k, v in (raw.items() if isinstance(raw, dict) else ()):
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            out[str(k)] = float(v)
+    return out
 
 
 def spool_view(spool):
@@ -139,6 +171,7 @@ def spool_view(spool):
         "extruder_temp": f.get("settings_extruder_temp"),
         "bed_temp": f.get("settings_bed_temp"),
         "orca_preset": preset_link(spool) or preset_link(f),
+        "pa": pa_matrix(spool),
     }
 
 

@@ -68,6 +68,11 @@ TASK_FIELDS = ("filament_vendor", "filament_type", "filament_sub_type", "filamen
 DRIVERS = (("X", "tmc2240 stepper_x"), ("Y", "tmc2240 stepper_y"), ("Z", "tmc2209 stepper_z"),
            *(("T%d" % (i + 1), "tmc2209 " + name) for i, name in enumerate(EXTRUDERS)))
 
+# multiACE's `ace` status object, the fields its ENGINE_API (api_version 1) calls stable. Not the spool tables.
+ACE_FIELDS = ("api_version", "mode", "head_source", "swap_in_progress", "aces")
+ACE_API = 1
+ACE_DRY_PROBE = "ACE_DRY"   # the printer's command list has it with multiACE installed
+
 STATUS_OBJECTS = {
     "webhooks": None,
     "print_stats": None,
@@ -89,7 +94,9 @@ STATUS_OBJECTS = {
     "filament_detect": ["info", "state"],   # RFID: Snapmaker, OpenRFID, OpenSpool, external readers
     "filament_feed left": None,   # keyed extruderN: channel_state, filament_detected, ...
     "filament_feed right": None,
-    **{name: ["temperature", "target", "state"] for name in EXTRUDERS},
+    # nozzle_volume_type: standard | high_flow (firmware 1.6.0+, absent before); pressure_advance: Klipper's own
+    **{name: ["temperature", "target", "state", "nozzle_volume_type", "pressure_advance"] for name in EXTRUDERS},
+    "ace": list(ACE_FIELDS),   # multiACE (decay71/multiACE, docs/ENGINE_API.md); absent without it
 }
 
 # Top-cover purifier commands as Snapmaker's U1 start G-code emits them.
@@ -393,7 +400,7 @@ def summarize(status):
         e = status.get(name) or {}
         # "state" is the park detector: ACTIVATE = on the carriage, PARKED = in its dock (park_detector.py)
         temps.append({"temp": e.get("temperature"), "target": e.get("target"), "active": name == active,
-                      "picked": e.get("state") == "ACTIVATE"})
+                      "picked": e.get("state") == "ACTIVATE", "pa": _pa_value(e.get("pressure_advance"))})
     purifier = status.get("purifier") or {}
     return {
         "state": stats.get("state") or (status.get("webhooks") or {}).get("state", "unknown"),
@@ -409,7 +416,8 @@ def summarize(status):
         "bed": {"temp": (status.get("heater_bed") or {}).get("temperature"),
                 "target": (status.get("heater_bed") or {}).get("target")},
         "extruders": temps,
-        "heads": describe_toolheads(task),
+        "heads": [{**h, "nozzle": norm_nozzle((status.get(EXTRUDERS[h["index"]]) or {}).get("nozzle_volume_type"))}
+                  for h in describe_toolheads(task)],
         "options": printer_options(task, status.get("defect_detection")),
         "tuning": printer_tuning(task, status.get("defect_detection")),
         "light": bool(led[0][3]) if led and led[0] and len(led[0]) > 3 else None,
@@ -427,6 +435,7 @@ def summarize(status):
         "power_loss": bool(sd.get("pl_env_valid")) and not is_busy(stats.get("state")),
         "reprint": task.get("reprint_info") if sd.get("pl_env_valid") else None,
         "exceptions": (status.get("exception_manager") or {}).get("exceptions") or [],
+        "ace": ace_view(status.get("ace")),
     }
 
 
@@ -543,12 +552,16 @@ def mapping_warnings(filaments, heads, mapping):
             out.append(tr("Filament %d → T%d: toolhead is empty") % (fi + 1, t + 1))
         elif material_family(f.get("type")) != material_family(h["type"]):
             out.append(tr("Filament %d (%s) → T%d loaded with %s") % (fi + 1, f.get("type"), t + 1, h["type"]))
+        if nozzle_differs(f, h):
+            out.append(tr("Filament %d was sliced for a %s nozzle; T%d has a %s nozzle")
+                       % (fi + 1, nozzle_name(f["nozzle"]), t + 1, nozzle_name(h["nozzle"])))
     return out
 
 
 def warning_ids(filaments, heads, mapping):
     """Stable ids of a mapping's warnings, the ones the print setup must have acknowledged before sending:
-    "empty:<filament>:<toolhead>", "unnamed:<filament>:<toolhead>" and "material:<filament>:<toolhead>" (0-based).
+    "empty:<filament>:<toolhead>", "unnamed:<filament>:<toolhead>", "material:<filament>:<toolhead>" and
+    "nozzle:<filament>:<toolhead>" (0-based).
     The page builds the same ids from what it shows; a mismatch (another mapping, toolheads refreshed meanwhile) means nothing is sent."""
     out = []
     by_index = {f["index"]: f for f in filaments}
@@ -562,15 +575,18 @@ def warning_ids(filaments, heads, mapping):
             out.append("empty:%d:%d" % (fi, t))
         elif material_family(f.get("type")) != material_family(h["type"]):
             out.append("material:%d:%d" % (fi, t))
+        if nozzle_differs(f, h):
+            out.append("nozzle:%d:%d" % (fi, t))
     return out
 
 
 def preprint_script(mapping, prefs, commands=False):
     """Commands Snapmaker Orca sends before a print starts (refused by firmware mid-print). commands: see
-    clean_prefs."""
+    clean_prefs. An empty mapping (multiACE routes the filaments) sends the print options only."""
     lines = ["SET_PRINT_EXTRUDER_MAP CONFIG_EXTRUDER=%d MAP_EXTRUDER=%d" % (f, t) for f, t in sorted(mapping.items())]
     used = sorted(set(mapping.values()))
-    lines.append("SET_PRINT_USED_EXTRUDERS EXTRUDERS=" + ",".join(map(str, used)))
+    if used:
+        lines.append("SET_PRINT_USED_EXTRUDERS EXTRUDERS=" + ",".join(map(str, used)))
     lines += preference_commands(clean_prefs(prefs, commands), used)   # a key not offered: the printer keeps its setting
     return "\n".join(lines)
 
@@ -619,3 +635,102 @@ def purifier_mode(filaments):
         if s <= WEAK_COOL_MAX:
             mode = "weak"
     return mode
+
+
+# --------------------------------------------------------------------- nozzles and pressure advance
+
+NOZZLE_NAMES = {"standard": "Standard", "high_flow": "High Flow"}
+
+
+def norm_nozzle(value):
+    """'High Flow' (OrcaSlicer), 'high_flow' (the U1) -> 'high_flow'; '' when unknown (older firmware says nothing)."""
+    return "_".join(str(value or "").strip().lower().split())
+
+
+def nozzle_name(kind):
+    return tr(NOZZLE_NAMES[kind]) if kind in NOZZLE_NAMES else kind
+
+
+def nozzle_differs(f, h):
+    """The filament was sliced for another nozzle type than the head has; unknown on either side never warns."""
+    return bool(f.get("nozzle") and h.get("nozzle") and f["nozzle"] != h["nozzle"])
+
+
+def _pa_value(value):
+    return round(float(value), 4) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
+
+
+def pa_key(diameter, nozzle):
+    """Key of a spool's pressure_advance_matrix (the SpoolLink PR #649 / multiACE schema): '0.4_standard'.
+    None when the diameter is unknown. A firmware that reports no nozzle type has standard nozzles only."""
+    try:
+        return "%g_%s" % (float(diameter), nozzle or "standard")
+    except (TypeError, ValueError):
+        return None
+
+
+def stored_pa(heads, diameters, spools):
+    """{head: pressure advance} stored on each head's bound spool for the nozzle it has now. spools: {head: spool
+    view with "pa"}; diameters: [mm per head] from the printer's config."""
+    out = {}
+    for t, sp in (spools or {}).items():
+        t = int(t)
+        key = pa_key(_at(diameters, t), (_at(heads, t) or {}).get("nozzle"))
+        value = ((sp or {}).get("pa") or {}).get(key) if key else None
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and 0 <= value < 2:
+            out[t] = round(float(value), 4)
+    return out
+
+
+def nozzle_diameters(settings):
+    """[mm per head] from configfile.settings (extruder, extruder1..3 nozzle_diameter); None where missing."""
+    settings = settings if isinstance(settings, dict) else {}
+    return [(settings.get(name) or {}).get("nozzle_diameter") for name in EXTRUDERS]
+
+
+def pa_command(head, value):
+    return "SET_PRESSURE_ADVANCE EXTRUDER=%s ADVANCE=%.4f" % (EXTRUDERS[int(head)], float(value))
+
+
+# --------------------------------------------------------------------- multiACE (read-only, dry on a click)
+
+def _rgb(value):
+    if isinstance(value, (list, tuple)) and len(value) == 3 and all(isinstance(c, int) for c in value):
+        return "#%02X%02X%02X" % tuple(max(0, min(255, c)) for c in value)
+    return norm_colour(value)
+
+
+def ace_view(ace):
+    """multiACE's ace object for the page and the print setup, or None when it is absent, off (mode "normal") or
+    speaks another api_version. units: one per place; heads: {"0".."3": [unit, slot] | None}."""
+    if not isinstance(ace, dict) or ace.get("api_version") != ACE_API or ace.get("mode") not in ("multi", "head"):
+        return None
+    units = []
+    for i, a in enumerate(ace.get("aces") or []):
+        if not isinstance(a, dict) or a.get("unit_present") is False:
+            continue
+        dryer = a.get("dryer_status") if isinstance(a.get("dryer_status"), dict) else {}
+        drying = str(dryer.get("status") or "").lower() not in ("", "stop", "free", "unknown")
+        slots = [{"material": str(sl.get("material") or ""), "status": str(sl.get("status") or ""),
+                  "brand": str(sl.get("brand") or ""),
+                  "colour": _rgb(sl.get("color")) if sl.get("material") or sl.get("color") not in ([0, 0, 0], None) else None}
+                 for sl in (a.get("slots") or []) if isinstance(sl, dict)]
+        units.append({"index": a.get("idx", i), "name": str(a.get("unit_name") or ""), "connected": bool(a.get("connected")),
+                      "temp": a.get("temp"), "humidity": a.get("humidity"), "slots": slots,
+                      "dryer": bool((a.get("caps") or {}).get("has_dryer", True)),
+                      "drying": {"temp": dryer.get("target_temp"), "left": dryer.get("remain_time")} if drying else None})
+    heads, sources = {}, ace.get("head_source") if isinstance(ace.get("head_source"), dict) else {}
+    for h in range(TOOLHEADS):
+        src = sources.get(str(h))
+        heads[str(h)] = [src.get("ace_index", src.get("ace")), src.get("slot")] if isinstance(src, dict) else None
+    return {"mode": ace["mode"], "swapping": bool(ace.get("swap_in_progress")), "units": units, "heads": heads}
+
+
+def multiace(view):
+    """True when multiACE routes the filaments: U1 Control then leaves the toolhead mapping and the file to it."""
+    return bool((view or {}).get("ace"))
+
+
+def ace_dry_command(unit, start):
+    """Start (with multiACE's own temperature and time for that unit) or stop one unit's dryer."""
+    return ("ACE_DRY ACE=%d" if start else "ACE_STOP_DRYING ACE=%d") % int(unit)

@@ -85,14 +85,28 @@ def used_tools(lines):
     return seen
 
 
+def sliced_nozzles(cfg):
+    """[nozzle type per filament] the slice was made for ('standard', 'high_flow', '' unknown): each filament's
+    extruder (filament_map, 1-based; the filament's own index when absent) and that extruder's nozzle_volume_type."""
+    kinds = [u1.norm_nozzle(v) for v in split_list(cfg.get("nozzle_volume_type"), numeric=True)]
+    fmap = split_list(cfg.get("filament_map"), numeric=True)
+    out = []
+    for i in range(u1.MAX_FILAMENTS):
+        e = u1._at(fmap, i)
+        e = int(e) - 1 if str(e or "").isdigit() and 1 <= int(e) <= u1.TOOLHEADS else i
+        out.append(u1._at(kinds, e, ""))
+    return out
+
+
 def filaments(lines, cfg):
-    """[{index, type, colour, softening, weight}] for the filaments the print uses."""
+    """[{index, type, colour, softening, weight, name, nozzle}] for the filaments the print uses."""
     types = split_list(cfg.get("filament_type"))
     colours = split_list(cfg.get("filament_colour"))
     soft = split_list(cfg.get("temperature_vitrification"), numeric=True)
     weights = split_list(cfg.get("filament used [g]") or cfg.get("filament_used_g"), numeric=True)
     names = split_list(cfg.get("filament_settings_id"))
     used = used_tools(lines) or list(range(min(len(types), u1.TOOLHEADS) or 1))
+    nozzles = sliced_nozzles(cfg)
     out = []
     for i in used:
         out.append({
@@ -102,6 +116,7 @@ def filaments(lines, cfg):
             "softening": _num(u1._at(soft, i)),
             "weight": _num(u1._at(weights, i)),
             "name": u1._at(names, i, ""),
+            "nozzle": u1._at(nozzles, i, ""),
         })
     return out
 
@@ -323,6 +338,17 @@ def recolour_metadata(lines, mapping, heads):
                     colours[fi] = c
             out[i] = "; filament_colour = " + ";".join(colours)
     return out
+
+
+def stored_pressure_advance(lines, values):
+    """values {head: PA}: SET_PRESSURE_ADVANCE for those heads right after PRINT_START, so the start sequence
+    (flow calibration included) can't overwrite it. Unchanged without a PRINT_START line."""
+    at = _start_index(lines)
+    if at is None or not values:
+        return lines
+    added = [u1.pa_command(t, v) + "  " + MARK + " spool pressure advance"
+             for t, v in sorted(values.items())]
+    return lines[:at + 1] + added + lines[at + 1:]
 
 
 def tag_slicer(lines, version):

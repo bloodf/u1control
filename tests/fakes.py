@@ -91,6 +91,8 @@ class FakePrinter:
         self.undeletable = set()   # "timelapse/x.jpg": DELETE answers 500
         self.webcams = []   # served by /server/webcams/list
         self.thumbnails = []   # every file's metadata thumbnails
+        self.extra = {}   # more status objects (multiACE's "ace", extruder fields, configfile), merged into status()
+        self.fields = []   # Spoolman spool extra fields (GET /api/v1/field/spool)
         handler = self._handler()
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -123,7 +125,8 @@ class FakePrinter:
                 "extruder": {"temperature": 210.0, "target": 210}, "led cavity_led": {"color_data": [[0, 0, 0, 1]]},
                 "purifier": {"power_detected": True}, "display_status": {"progress": 0.3},
                 "filament_detect": {"info": fake_tag_info(self.tags)},
-                "filament_feed left": {"extruder0": {"channel_state": "load_finish", "filament_detected": True}}}
+                "filament_feed left": {"extruder0": {"channel_state": "load_finish", "filament_detected": True}},
+                **self.extra}
 
     def _handler(self):
         fake = self
@@ -203,6 +206,11 @@ class FakePrinter:
                     return self._send(200, {"status": "healthy"})
                 if u.path == "/api/v1/spool":
                     return self._send(200, fake.spools)
+                if u.path == "/api/v1/field/spool":
+                    return self._send(200, fake.fields)
+                if u.path.startswith("/api/v1/spool/"):
+                    sid = int(u.path.rsplit("/", 1)[-1])
+                    return self._send(200, next(s for s in fake.spools if s["id"] == sid))
                 return self._send(404, {"error": {"message": "not found"}})
 
             def do_POST(self):
@@ -237,6 +245,9 @@ class FakePrinter:
                 if u.path == "/server/files/move":
                     fake.moved.append((body.get("source"), body.get("dest")))
                     return self._send(200, {"result": {"action": "move_file"}})
+                if u.path.startswith("/api/v1/field/spool/"):
+                    fake.fields.append({"key": u.path.rsplit("/", 1)[-1], **body})
+                    return self._send(200, fake.fields)
                 if u.path == "/screen/touch":
                     fake.taps.append(q)
                     return self._send(200, {"status": "ok"})

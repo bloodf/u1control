@@ -2326,14 +2326,17 @@ test('settings pages: Open Settings with no printer opens Connection', PAGES_JS 
 const DASH_PLUGIN = `
 const STORE = dash => post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'automagic', dashboard: dash}});
 async function READY(dash) { await connect(); if (dash !== undefined) await STORE(dash); await post({type: 'status', data: VIEW()}); }
-const DEFAULT_IDS = ['job', 'heads', 'controls', 'temps', 'camera', 'screen', 'console'];
-const DEFAULT_ORDER = ['job', 'controls', 'heads', 'temps', 'camera', 'screen', 'console'];
-const ALL_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'console', 'screen', 'files'];
-const MOVER = 'camera', MOVER_FROM = '10 / span 3 | 5 / span 8', MOVE_COLS = 3, MOVER_TO = '7 / span 3 | 5 / span 8';
+const DEFAULT_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'screen', 'console'];
+const DEFAULT_ORDER = ['job', 'temps', 'controls', 'heads', 'camera', 'screen', 'console'];
+const ALL_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'console', 'screen', 'files', 'ace'];
+const MOVER = 'camera', MOVER_FROM = '6 / span 3 | 8 / span 8', MOVE_COLS = -3, MOVER_TO = '9 / span 3 | 8 / span 8';
 const CAM_W = 3, CAM_H = 8, TEMPS = 'temps', CONSOLE_LEAST = 'span 3 | span 5';
 const OLD_DEFAULT = [{id: 'job', x: 0, y: 0, w: 12, h: 3}, {id: 'heads', x: 0, y: 3, w: 12, h: 10}, {id: 'controls', x: 0, y: 13, w: 8, h: 6},
   {id: 'camera', x: 8, y: 13, w: 4, h: 6}, {id: 'temps', x: 0, y: 19, w: 8, h: 7}, {id: 'screen', x: 8, y: 19, w: 4, h: 7}, {id: 'console', x: 0, y: 26, w: 12, h: 7}];
 const MINE_CAMERA = '9 / span 4 | 14 / span 8';
+// 0.16.0's default, also replaced while untouched
+const DEFAULT_016 = [{id: 'job', x: 0, y: 0, w: 6, h: 2}, {id: 'heads', x: 0, y: 2, w: 6, h: 14}, {id: 'controls', x: 6, y: 0, w: 6, h: 4},
+  {id: 'temps', x: 6, y: 4, w: 3, h: 8}, {id: 'camera', x: 9, y: 4, w: 3, h: 8}, {id: 'screen', x: 6, y: 12, w: 6, h: 4}, {id: 'console', x: 0, y: 16, w: 12, h: 6}];
 // Narrow, a fan's field goes under its name instead of beside it.
 const TEMPS_COMPACT = () => { const c = qa('.oui-control-row-control', cell('temps')); return c.length > 0 && c.every(e => e.getBoundingClientRect().top >= e.parentElement.firstElementChild.getBoundingClientRect().bottom - 1); };
 `;
@@ -2568,6 +2571,15 @@ test('dashboard: a layout still as the first default gets the new one; an arrang
   await click(byTest('dash-save'));
   eq(saved().layouts[1].items.map(i => i.id), DEFAULT_IDS, 'Reset to default gives the new default');
   eq(place(MOVER), MOVER_FROM, 'with its places');
+`);
+test('dashboard: 0.16.0\'s untouched default gets the arranged one; with multiACE the filament units join under the toolheads', DASH_JS + `
+  await READY({v: 1, active: 0, layouts: [{name: 'Default', items: DEFAULT_016}]});
+  eq(shown(), DEFAULT_IDS, 'the new default');
+  eq(place(MOVER), MOVER_FROM, 'camera at its new place');
+  await post({type: 'status', data: {...VIEW(), ace: {mode: 'multi', swapping: false, heads: {'0': [0, 1]}, units: []}}});
+  await settle();
+  eq(place('ace'), '1 / span 5 | 19 / span 6', 'filament units under the toolheads');
+  eq(place(MOVER), MOVER_FROM, 'nothing else moved');
 `);
 for (const size of [[1280, 800], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
   await READY();

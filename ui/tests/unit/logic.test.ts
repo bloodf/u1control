@@ -43,6 +43,13 @@ test('setup warnings: a head with filament nobody has named is not called empty'
   assert.deepEqual(w.map(x => x.kind), ['unnamed', 'empty']);
 });
 
+test('setup warnings: a nozzle type other than the slice\'s, only when both are known', () => {
+  const heads = [{ index: 0, loaded: true, type: 'PLA', nozzle: 'high_flow' }, { index: 1, loaded: true, type: 'PETG', nozzle: '' }];
+  const fils = [{ index: 0, type: 'PLA', nozzle: 'standard' }, { index: 1, type: 'PLA', nozzle: 'standard' }];
+  assert.equal(warningKey(setupWarnings(fils, heads, { 0: 0, 1: 1 })), 'nozzle:0:0,material:1:1');   // as u1.warning_ids
+  assert.deepEqual(setupWarnings([{ index: 0, type: 'PLA' }], heads, { 0: 0 }), []);
+});
+
 test('move targets exclude the current folder, the item and its subfolders', () => {
   assert.deepEqual(moveTargets(['gcodes', 'gcodes/a', 'gcodes/a/b', 'gcodes/c'], 'gcodes', 'a'), ['gcodes/c']);
   assert.deepEqual(boundHeads({}, { 0: 7 }), { 7: 'T1' });
