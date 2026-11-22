@@ -45,4 +45,4 @@ export interface Requirement { id: 'printer_agents' | 'extended_firmware' | 'spo
 /** A toolhead's OrcaSlicer preset as Apply to project filaments picks it (preset_matches): reasons are filmatch [code, value]. */
 export interface PresetMatch { head: number; name: string; source: 'linked' | 'remembered' | 'spooler' | 'auto' | 'none'; score: number | null;
   reasons: unknown; confident: boolean; candidates: { name: string; score: number; reasons: unknown }[]; remembered_key: string;
-  /** Open Filament Database proposals, while it is on. */ ofd?: { name: string; score: number; reasons: unknown }[] }
+  /** Open Filament Database proposals, while it is on. */ ofd?: { id: string; name: string; score: number; reasons: unknown }[] }
