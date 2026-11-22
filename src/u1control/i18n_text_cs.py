@@ -114,6 +114,7 @@ CS = {
     "download incomplete: %d of %s bytes": "stahování neúplné: %d z %s bajtů",
     "download failed (%s)": "stahování selhalo (%s)",
     "upload failed (%s)": "nahrávání selhalo (%s)",
+    "waiting for your answer to OrcaSlicer's network permission for %s": 'čekám na tvou odpověď na dotaz OrcaSliceru na síťové oprávnění pro %s',
     "can't reach the U1 at %s": "nelze se spojit s U1 na %s",
     "websocket calls need plain http": "volání websocket vyžadují prosté http",
     "printer refused the websocket": "tiskárna odmítla websocket",

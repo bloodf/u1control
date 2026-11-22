@@ -387,6 +387,10 @@ MESSAGES = {
     "upload failed (%s)": _m("o envio falhou (%s)", "la subida falló (%s)", "Hochladen fehlgeschlagen (%s)", "上传失败（%s）"),
     "can't reach the U1 at %s": _m("não foi possível alcançar a U1 em %s", "no se puede conectar con la U1 en %s",
                                    "der U1 ist unter %s nicht erreichbar", "无法连接位于 %s 的 U1"),
+    "waiting for your answer to OrcaSlicer's network permission for %s": _m("aguardando sua resposta ao pedido de permissão de rede do OrcaSlicer para %s",
+             "esperando tu respuesta al permiso de red de OrcaSlicer para %s",
+             "warte auf deine Antwort zur Netzwerkberechtigung von OrcaSlicer für %s",
+             "正在等待你对 OrcaSlicer 网络权限（%s）的答复"),
     "websocket calls need plain http": _m(
         "chamadas por websocket precisam de http simples", "las llamadas por websocket necesitan http sin cifrar",
         "WebSocket-Aufrufe benötigen unverschlüsseltes http", "WebSocket 调用需要使用普通 http"),

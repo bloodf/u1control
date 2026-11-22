@@ -14,6 +14,7 @@ import os
 import socket
 import ssl
 import struct
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -25,7 +26,6 @@ from i18n import tr
 
 MOONRAKER_PORT = 7125
 MAX_BODY = 64 * 1024 * 1024
-_NO_PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
 
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -70,6 +70,45 @@ def permission_origin(host):
         return ""
     name = parts.hostname
     return "%s://%s" % (parts.scheme, "[%s]" % name if ":" in name else name)
+
+
+# OrcaSlicer saves a runtime network approval for the exact URL it saw, so a printer or Spoolman not declared at load
+# (first used this session) asked once per thumbnail, time-lapse picture and screen tap (GitHub #73). Before anything
+# else goes to a host, OrcaSlicer is asked for the bare scheme://host: that approval covers every path and port on it.
+_PROBE = urllib.request.OpenerDirector()   # no handlers: open() raises urllib's audit event and reaches nothing
+_host_wide = set()    # scheme://host OrcaSlicer let through
+_host_asked = {}      # scheme://host -> (time of the last refused ask, seconds before asking again)
+_host_lock = threading.Lock()
+HOST_ASK_RETRY, HOST_ASK_RETRY_MAX = 10.0, 60.0
+
+
+def ask_host_wide(url):
+    """Raise PermissionError until OrcaSlicer lets scheme://host of url through. Asked again only after a back-off:
+    OrcaSlicer 2.5.1 shows one dialog per refused attempt, and there is no way to ask whether a grant exists."""
+    origin = permission_origin(url)
+    if not origin or origin in _host_wide:
+        return
+    now = time.monotonic()
+    with _host_lock:
+        last, wait = _host_asked.get(origin, (None, 0.0))
+        if last is not None and now - last < wait:
+            raise PermissionError(tr("waiting for your answer to OrcaSlicer's network permission for %s") % origin)
+        _host_asked[origin] = (now, min(max(wait * 2, HOST_ASK_RETRY), HOST_ASK_RETRY_MAX))
+    _PROBE.open(origin)   # OrcaSlicer raises PermissionError while the answer is pending or no
+    _host_wide.add(origin)
+
+
+class _AskHostWide(urllib.request.BaseHandler):
+    """Runs before urllib's audit event, so the exact URL is only judged once its host is let through."""
+
+    def http_request(self, req):
+        ask_host_wide(req.full_url)
+        return req
+
+    https_request = http_request
+
+
+_NO_PROXY = urllib.request.build_opener(urllib.request.ProxyHandler({}), _AskHostWide())
 
 
 class Moonraker:
@@ -295,6 +334,8 @@ class Moonraker:
         """One JSON-RPC call over Moonraker's websocket. Some U1 methods (camera.*, printer.emergency_stop)
         are registered for websocket/MQTT only, not HTTP."""
         base = self.base or self.candidates[0]
+        if method != "printer.emergency_stop":   # never held back by a pending ask; OrcaSlicer still judges it
+            ask_host_wide(base)
         parts = urllib.parse.urlsplit(base)
         secure = parts.scheme == "https"   # wss: TLS to the proxy, verified as any https request is
         port = parts.port or (443 if secure else 80)
