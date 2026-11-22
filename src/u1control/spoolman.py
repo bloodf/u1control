@@ -107,7 +107,8 @@ class Spoolman:
             self.call("POST", "/v1/field/spool/" + PA_FIELD, body={"name": "Pressure Advance Matrix", "field_type": "text"})
         spool = self.call("GET", "/v1/spool/%d" % int(spool_id)) or {}
         matrix = {**pa_matrix(spool), key: round(float(value), 6)}
-        self.call("PATCH", "/v1/spool/%d" % int(spool_id), body={"extra": {PA_FIELD: json.dumps(json.dumps(matrix))}})
+        extra = {**(spool.get("extra") or {}), PA_FIELD: json.dumps(json.dumps(matrix))}   # Spoolman replaces all extras
+        self.call("PATCH", "/v1/spool/%d" % int(spool_id), body={"extra": extra})
         return matrix
 
 

@@ -142,10 +142,12 @@ class PressureAdvance(unittest.TestCase):
         with self.assertRaises(ValueError):
             svc.cmd_save_pa(1)   # no spool on T2
         svc.bindings[1] = 9
+        fake.spools[1]["extra"] = {sm.PRESET_FIELD: '"My PLA"'}
         result = svc.cmd_save_pa(1)
         self.assertEqual((result["key"], result["value"]), ("0.4_high_flow", 0.0375))
         self.assertEqual(fake.fields[0]["key"], sm.PA_FIELD)
         self.assertEqual(sm.pa_matrix(fake.patches[-1][1]), {"0.4_high_flow": 0.0375})
+        self.assertEqual(fake.patches[-1][1]["extra"][sm.PRESET_FIELD], '"My PLA"')   # other extras kept
         self.assertEqual(fake.scripts, [])   # nothing went to the printer
 
 

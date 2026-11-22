@@ -719,9 +719,9 @@ def ace_view(ace):
                       "temp": a.get("temp"), "humidity": a.get("humidity"), "slots": slots,
                       "dryer": bool((a.get("caps") or {}).get("has_dryer", True)),
                       "drying": {"temp": dryer.get("target_temp"), "left": dryer.get("remain_time")} if drying else None})
-    heads = {}
+    heads, sources = {}, ace.get("head_source") if isinstance(ace.get("head_source"), dict) else {}
     for h in range(TOOLHEADS):
-        src = (ace.get("head_source") or {}).get(str(h))
+        src = sources.get(str(h))
         heads[str(h)] = [src.get("ace_index", src.get("ace")), src.get("slot")] if isinstance(src, dict) else None
     return {"mode": ace["mode"], "swapping": bool(ace.get("swap_in_progress")), "units": units, "heads": heads}
 
