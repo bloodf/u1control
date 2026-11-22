@@ -11,6 +11,7 @@
 
 ### Changed
 
+- **A new default dashboard**, arranged by hand: the print over the toolheads on the left; the temperatures and the controls, then the camera and the printer screen, then the console on the right. A Default never arranged (0.16.0's included) gets it; layouts you saved stay exactly as saved. With multiACE running, the filament units join it under the toolheads.
 - The page is smaller: 29 texts nothing showed any more are gone, in every language. The plugin file is about 7 kB smaller (comment lines left out of the shipped modules, line numbers kept, and tighter compression).
 
 ## [0.16.2] - 2026-11-21

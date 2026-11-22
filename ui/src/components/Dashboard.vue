@@ -43,15 +43,16 @@ const widgets = computed<OuiWidget[]>(() => [
   { id: 'files', title: t('nav.files'), icon: files, component: markRaw(FilesCard), w: 4, h: 3, minW: 3, minH: 3 },
   { id: 'ace', title: t('ace.title'), icon: ace, component: markRaw(AceCard), w: 6, h: 4, minW: 3, minH: 3 },
 ]);
-// Two halves, as arranged by hand in OrcaSlicer: the print over the toolheads on the left; the controls over the
-// temperatures, beside the camera and the printer screen, on the right; the console across the bottom. Both halves end
-// on the same row, and rows grow to fit content, so there are no holes. Files is in the catalogue.
+// As the owner arranged it by hand: the print over the toolheads on the left; temperatures and controls, then the camera
+// and the printer screen, then the console on the right. Files is in the catalogue; the filament units (multiACE) join
+// under the toolheads only when multiACE runs, so a Default never arranged gets them and nothing else moves.
 const defaults = computed(() => ({ name: t('layout.default'), items: [
-  { id: 'job', x: 0, y: 0, w: 6, h: 2 }, { id: 'heads', x: 0, y: 2, w: 6, h: 14 },
-  { id: 'controls', x: 6, y: 0, w: 6, h: 4 }, { id: 'temps', x: 6, y: 4, w: 3, h: 8 }, { id: 'camera', x: 9, y: 4, w: 3, h: 8 }, { id: 'screen', x: 6, y: 12, w: 6, h: 4 },
-  { id: 'console', x: 0, y: 16, w: 12, h: 6 }] }));
+  { id: 'job', x: 0, y: 0, w: 5, h: 4 }, { id: 'heads', x: 0, y: 4, w: 5, h: 14 },
+  { id: 'temps', x: 5, y: 0, w: 3, h: 7 }, { id: 'controls', x: 8, y: 0, w: 4, h: 7 }, { id: 'camera', x: 5, y: 7, w: 3, h: 8 }, { id: 'screen', x: 8, y: 7, w: 4, h: 8 },
+  { id: 'console', x: 5, y: 15, w: 7, h: 6 }, ...(s.status?.ace ? [{ id: 'ace', x: 0, y: 18, w: 5, h: 6 }] : [])] }));
 // Earlier defaults: a layout still exactly as one of them is given today's.
-const RETIRED = [[{ id: 'job', x: 0, y: 0, w: 12, h: 3 }, { id: 'heads', x: 0, y: 3, w: 12, h: 10 }, { id: 'controls', x: 0, y: 13, w: 8, h: 6 },
+const RETIRED = [[{ id: 'job', x: 0, y: 0, w: 6, h: 2 }, { id: 'heads', x: 0, y: 2, w: 6, h: 14 }, { id: 'controls', x: 6, y: 0, w: 6, h: 4 },
+  { id: 'temps', x: 6, y: 4, w: 3, h: 8 }, { id: 'camera', x: 9, y: 4, w: 3, h: 8 }, { id: 'screen', x: 6, y: 12, w: 6, h: 4 }, { id: 'console', x: 0, y: 16, w: 12, h: 6 }],[{ id: 'job', x: 0, y: 0, w: 12, h: 3 }, { id: 'heads', x: 0, y: 3, w: 12, h: 10 }, { id: 'controls', x: 0, y: 13, w: 8, h: 6 },
   { id: 'camera', x: 8, y: 13, w: 4, h: 6 }, { id: 'temps', x: 0, y: 19, w: 8, h: 7 }, { id: 'screen', x: 8, y: 19, w: 4, h: 7 }, { id: 'console', x: 0, y: 26, w: 12, h: 7 }],
 [{ id: 'job', x: 0, y: 0, w: 12, h: 3 }, { id: 'heads', x: 0, y: 3, w: 12, h: 10 }, { id: 'temps', x: 0, y: 13, w: 8, h: 7 }, { id: 'camera', x: 8, y: 13, w: 4, h: 7 },
   { id: 'controls', x: 0, y: 20, w: 8, h: 6 }, { id: 'screen', x: 8, y: 20, w: 4, h: 6 }, { id: 'console', x: 0, y: 26, w: 12, h: 6 }]];
