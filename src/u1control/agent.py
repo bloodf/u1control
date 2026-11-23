@@ -92,6 +92,29 @@ def material_family(material):
     return filmatch.generic_family(material, FILAMENT_FAMILIES)
 
 
+# filament_id of Snapmaker's own "@U1" presets (OrcaSlicer resources/profiles/Snapmaker/filament), by the type and
+# sub-type the U1 reads from a Snapmaker spool's tag: sync from AMS then loads e.g. "Snapmaker PLA SnapSpeed @U1",
+# not "Generic PLA High Speed". Unknown pairs keep the Generic preset.
+SNAPMAKER_IDS = {
+    ("PLA", ""): "OFlufQpZ", ("PLA", "BASIC"): "OFhmxnYw", ("PLA", "SNAPSPEED"): "OFwhLMs4",
+    ("PLA", "MATTE"): "OFF9cgY5", ("PLA", "SILK"): "OFWgFOjn", ("PLA", "ECO"): "OFpu74Qe",
+    ("PLA", "GLOW"): "OFfD87Gy", ("PLA", "LITE"): "OFEOnBj6", ("PLA", "METAL"): "OFtybfNX",
+    ("PLA", "TRANSLUCENT"): "OFLTYJW0", ("PLA", "WOOD"): "OFdd8ZqJ", ("PLA", "CF"): "OFhQf8ou",
+    ("PLA-CF", ""): "OFhQf8ou", ("PETG", ""): "OF4WB37S", ("PETG", "HF"): "OFL9aRjN",
+    ("PETG", "TRANSLUCENT"): "OFW8lqnb", ("PETG", "CF"): "OFOwQuZM", ("PETG-CF", ""): "OFOwQuZM",
+    ("PET", ""): "OFQYaiGg", ("ABS", ""): "OF72YYTd", ("ASA", ""): "OF1d7c3A", ("PA-CF", ""): "OFEmsric",
+    ("PVA", ""): "OFyhjiNs", ("TPU", ""): "OF65InrS",
+}
+
+
+def snapmaker_filament_id(head):
+    """filament_id of Snapmaker's own U1 preset for a head holding a Snapmaker spool, or ""."""
+    if str(head.get("vendor") or "").strip().casefold() != "snapmaker":
+        return ""
+    key = (str(head.get("type") or "").strip().upper(), str(head.get("sub_type") or "").strip().upper())
+    return SNAPMAKER_IDS.get(key, "")
+
+
 def generic_filament_id(material):
     """filament_id of the material's "Generic <family> @System" preset, or ""."""
     return filmatch.generic_filament_id(material, FILAMENT_FAMILIES)
@@ -105,7 +128,8 @@ def _rgba(colour):
 def ams_block(heads, preferred=None):
     """The four toolheads as one four-tray unit (MRA build_ams_payload: id "0", info "0002"), tray id = toolhead.
     tray_info_idx is what OrcaSlicer's AMS sync matches presets on (filament_id): preferred(head) first (the
-    Spooler preset of the head's Spoolman spool, or ""), else the Generic preset of the head's material."""
+    Spooler preset of the head's Spoolman spool, or ""), then Snapmaker's own preset for a Snapmaker spool, else the
+    Generic preset of the head's material."""
     trays, bits = [], 0
     for h in heads[:u1.TOOLHEADS]:
         tray = {"id": str(h["index"]), "tag_uid": "0000000000000000"}
@@ -115,7 +139,8 @@ def ams_block(heads, preferred=None):
             colour = _rgba(h.get("colour"))
             colours = [_rgba(c) for c in h.get("colours") or []] or [colour]
             tray.update(tray_type=material, tray_color=colour, cols=colours, ctype=1, remain=-1,
-                        tray_info_idx=(preferred(h) if preferred else "") or generic_filament_id(material))
+                        tray_info_idx=(preferred(h) if preferred else "") or snapmaker_filament_id(h)
+                        or generic_filament_id(material))
         else:
             tray.update(tray_info_idx="", tray_type="", tray_color="00000000", tray_slot_placeholder="1")
         trays.append(tray)

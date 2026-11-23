@@ -1233,6 +1233,7 @@ class U1Agent(pa.PrinterAgentBase):
         self._mine = []                      # user_presets(), for spools linked to one of them (orca_filament_preset)
         self._links = ([], {})               # (spools, {toolhead: spool id}) the agent read from Spoolman itself
         self._links_busy = threading.Lock()
+        self._tray_log = {}                  # {toolhead: what the log last said about its tray preset}
         self.base = ""
         self.camera_url = ""                 # the Device tab's camera (agent.camera_source), read at each connect
         self.camera_mode = "None_"
@@ -1435,13 +1436,19 @@ class U1Agent(pa.PrinterAgentBase):
 
     def _bound_spools(self):
         """{toolhead index: Spoolman spool} for this U1's toolheads linked to spools: the tab's (up to date with
-        every link made there, Extended Firmware's too) when it shows this U1, else the agent's own read."""
+        every link made there, Extended Firmware's too) when it shows this U1, else the agent's own read: the links
+        Extended Firmware keeps on the U1, or else Spoolman locations."""
         svc = _service
         spools, bindings = self._links
+        tab = False
         if svc is not None:
             with svc.lock:
                 if svc.target and _hostname(svc.target.host) == _hostname(self.host) and svc.spools:
-                    spools, bindings = list(svc.spools), dict(svc.bindings)
+                    spools, bindings, tab = list(svc.spools), dict(svc.bindings), True
+        if not tab:
+            ids = (self.view or {}).get("spool_ids")
+            if isinstance(ids, list) and any(ids):   # Extended Firmware's own links, over Spoolman locations
+                bindings = {t: sid for t, sid in enumerate(ids) if isinstance(sid, int) and sid > 0}
         by_id = {s["id"]: s for s in spools}
         return {h: by_id[sid] for h, sid in bindings.items() if sid in by_id}
 
@@ -1466,7 +1473,14 @@ class U1Agent(pa.PrinterAgentBase):
 
         def preferred(head):   # a linked standalone user preset first, else the Spooler preset
             spool = bound.get(head["index"])
-            return linked_filament_id(spool, mine) or spooler_bridge.tray_filament_id(spool, presets, profiles, label)
+            fid = linked_filament_id(spool, mine) or spooler_bridge.tray_filament_id(spool, presets, profiles, label)
+            seen = (spool and spool.get("id"), fid, bool(profiles), len(presets))
+            if spool and self._tray_log.get(head["index"]) != seen:   # once per change: why a tray got its preset
+                self._tray_log[head["index"]] = seen
+                log("agent: T%d spool %s -> %s" % (head["index"] + 1, spool.get("id"), fid or
+                    "no preset id (Spooler profiles %s, %d Spooler presets for %s)"
+                    % ("read" if profiles else "not found", len(presets), label or "?")))
+            return fid
         return preferred
 
     def _poll(self, stop, client):
@@ -1480,7 +1494,10 @@ class U1Agent(pa.PrinterAgentBase):
                         if stop.is_set():
                             return
                         self.firmware = firmware
-                view = u1.summarize(client.query(u1.STATUS_OBJECTS))
+                status = client.query(u1.STATUS_OBJECTS)
+                view = u1.summarize(status)
+                # Extended Firmware keeps each head's Spoolman spool on the U1 itself: the trays know it with the tab shut
+                view["spool_ids"] = (status.get("print_task_config") or {}).get("filament_spool_id")
                 with self._lock:   # a disconnect or reconnect meanwhile: this answer is about the old printer
                     if stop.is_set():
                         return
@@ -1858,8 +1875,10 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
 
 
 def spooler_dir():
+    """Spooler's data folder, from the plugin's storage folder or, before OrcaSlicer gave it (it answers only inside a
+    plugin callback), from where this plugin is installed: both are under <data dir>/orca_plugins."""
     try:
-        return spooler_bridge.data_dir(_storage_or_raise())
+        return spooler_bridge.data_dir(_storage() or os.path.dirname(os.path.abspath(__file__)))
     except Exception:
         return ""
 
