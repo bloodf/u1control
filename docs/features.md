@@ -224,6 +224,28 @@ Automagic is the default: everything that can run by itself does, and the print 
 when a decision is needed. Expert turns each step into a setting. Your Expert choices are kept while
 Automagic is on. See [settings.md](settings.md) for every setting.
 
+## Filament colours in the project
+
+OrcaSlicer 2.5 doesn't let plugins set a project filament's colour. **Apply to project filaments** in the
+U1 Control tab sets each slot's preset and says that the colours weren't changed. To get presets and colours
+in one click, let OrcaSlicer sync them through the printer agent:
+
+1. Make u1control the U1's printer agent ([Printer agent](#printer-agent), steps 1 to 3). Turning OrcaSlicer's developer
+   mode off later keeps the agent in use.
+2. With the U1 selected, press the **sync** button next to the project's filaments in the sidebar (or **Sync
+   filaments** in the Device tab).
+
+Each slot then gets its toolhead's colour and a preset, the first of:
+
+- the preset of the spool linked to the toolhead: its standalone `orca_filament_preset`, else its Spooler
+  preset (the link comes from the U1 on the Extended Firmware, so the U1 Control tab needn't be open);
+- Snapmaker's own preset for a Snapmaker spool read from its tag (for example *Snapmaker PLA SnapSpeed @U1*);
+- the Generic preset of the toolhead's material.
+
+OrcaSlicer loads only a standalone preset (no parent) compatible with the selected printer; Spooler's
+presets are. **Apply to project filaments** picks the same spool presets first; a preset picked by hand on
+a toolhead card for a whole brand and material doesn't replace them, one picked for that spool does.
+
 ## Works with Spooler
 
 <picture>
