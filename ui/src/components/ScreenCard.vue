@@ -25,7 +25,8 @@ function toScreen(img: HTMLImageElement, cx: number, cy: number, clamp: boolean)
 const TAP_SLOP = 6, STEP = 3, MAX_POINTS = 5000;   // CSS px: under TAP_SLOP is a tap; a point is kept every STEP
 let drag: { id: number; x: number; y: number; lx: number; ly: number; far: boolean; points: [number, number][] } | null = null;
 function down(e: PointerEvent) {
-  if (drag || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  if (!e.isPrimary || (e.pointerType === 'mouse' && e.button !== 0)) return;
+  drag = null;   // a press the picture never saw the end of (it was swapped out) doesn't block this one
   const img = e.currentTarget as HTMLImageElement, p = toScreen(img, e.clientX, e.clientY, true);
   if (!p) return;
   img.setPointerCapture(e.pointerId);

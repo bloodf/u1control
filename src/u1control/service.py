@@ -92,6 +92,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.log = log
         self.client_factory = client_factory
         self.lock = threading.RLock()
+        self._touch_lock = threading.Lock()   # one touchscreen gesture at a time
         self._op = threading.local()   # (generation, client, target, pinned) of the request this thread runs
         self.target = None
         self.client = None
@@ -788,7 +789,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         x, y = int(x), int(y)
         if not (0 <= x < 4096 and 0 <= y < 4096):
             raise ValueError(tr("touch outside the screen"))
-        self._client().raw("POST", "%s?a=tap&x=%d&y=%d" % (EXT_TOUCH, x, y), b"", timeout=4)
+        with self._touch_lock:
+            self._client().raw("POST", "%s?a=tap&x=%d&y=%d" % (EXT_TOUCH, x, y), b"", timeout=4)
         with self.lock:
             self.screen_at = 0.0   # show the result of the tap right away
         return True
@@ -811,16 +813,17 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
 
         def send(query):
             client.raw("POST", "%s?%s" % (EXT_TOUCH, query), b"", timeout=4)
-        send("a=down&x=%d&y=%d" % path[0])
-        try:
-            for pt in path[1:]:
-                send("a=move&x=%d&y=%d" % pt)
-        finally:
+        with self._touch_lock:   # the firmware has one touch slot: one gesture at a time
             try:
-                send("a=up")   # never leave the touchscreen pressed
+                send("a=down&x=%d&y=%d" % path[0])
+                for pt in path[1:]:
+                    send("a=move&x=%d&y=%d" % pt)
             finally:
-                with self.lock:
-                    self.screen_at = 0.0
+                try:
+                    send("a=up")   # never leave the touchscreen pressed
+                finally:
+                    with self.lock:
+                        self.screen_at = 0.0
         return True
 
     def cmd_print_file(self, path):

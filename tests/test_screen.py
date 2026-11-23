@@ -67,6 +67,11 @@ class ScreenTests(unittest.TestCase):
         self.assertIn("error", self.swipe([[1, 1], [2, 2], [3, 3]]))
         self.assertEqual([t["a"] for t in self.fake.taps], ["down", "move", "up"])
 
+    def test_swipe_releases_when_the_press_itself_fails(self):
+        self.fake.fail_touch = "down"   # the firmware may have acted on it before answering with an error
+        self.assertIn("error", self.swipe([[1, 1], [2, 2]]))
+        self.assertEqual([t["a"] for t in self.fake.taps], ["down", "up"])
+
 
 if __name__ == "__main__":
     unittest.main()
