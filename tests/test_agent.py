@@ -738,6 +738,20 @@ class PluginAgentTests(unittest.TestCase):
         self.agent.view = dict(self.agent.view, spool_ids=[0, 0, 0, 0])   # none on the U1: Spoolman locations
         self.assertEqual(list(self.agent._bound_spools()), [0])
 
+    def test_a_queued_refresh_never_brings_back_older_spooler_profiles(self):
+        """_preferred reads profiles.json on the poll thread and queues a UI-thread refresh; a refresh that runs after
+        a newer read must not put the older profiles back."""
+        queued, reads = [], [{"v": 1}, {"v": 2}]
+        self.ns["spooler_bridge"].read_json = lambda folder, name: reads.pop(0)
+        self.ns["filament_catalog"] = lambda: (["new presets"], "U1")
+        self.ns["user_presets"] = lambda: []
+        self.agent.set_queue_on_main_fn(queued.append)
+        self.agent._preferred()
+        self.agent._catalog_at = 0.0
+        self.agent._preferred()   # a newer read, before the first refresh ran
+        queued[0]()   # the first read's refresh runs late: it must not carry its older profiles back
+        self.assertEqual((self.agent._catalog, self.agent._profiles), ((["new presets"], "U1"), {"v": 2}))
+
     def test_toolhead_linked_to_a_standalone_user_preset_reports_its_id(self):
         """orca_filament_preset naming a standalone user preset: its filament_id (from its file), which OrcaSlicer's
         sync from AMS loads. One that inherits has its parent's id, so the sync can't load it: the usual id. Presets

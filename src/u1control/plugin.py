@@ -1228,7 +1228,8 @@ class U1Agent(pa.PrinterAgentBase):
         self.client = None
         self.view = None
         self.firmware = ""
-        self._catalog = ([], "", None)       # (Spooler presets, printer label, Spooler's profiles.json) for tray ids
+        self._catalog = ([], "")             # (Spooler presets, printer label) for tray ids: written on the UI thread only
+        self._profiles = None                # Spooler's profiles.json: written by the poll thread only
         self._catalog_at = 0.0
         self._mine = []                      # user_presets(), for spools linked to one of them (orca_filament_preset)
         self._links = ([], {})               # (spools, {toolhead: spool id}) the agent read from Spoolman itself
@@ -1402,7 +1403,7 @@ class U1Agent(pa.PrinterAgentBase):
                 self._commands.put(None)
             self._worker = None
 
-    def _refresh_catalog(self, profiles=None):
+    def _refresh_catalog(self):
         """UI thread, no I/O: re-read Spooler's presets (it adds its own at any time), then the toolheads' links
         from Spoolman on a thread of their own, so sync from AMS knows them without the tab ever opening."""
         try:
@@ -1413,7 +1414,7 @@ class U1Agent(pa.PrinterAgentBase):
             log("agent: filament presets not readable (%s); trays show generic presets" % e)
             return
         self._mine = mine
-        self._catalog = (presets, label, profiles if profiles is not None else self._catalog[2])
+        self._catalog = (presets, label)
         args = (clean(cfg.get("spoolman_url")), settings.printer_label(clean(cfg.get("printer_name"))))
         threading.Thread(target=self._load_links, args=args, name="u1control-links", daemon=True).start()
 
@@ -1463,11 +1464,11 @@ class U1Agent(pa.PrinterAgentBase):
             if not profiles and "profiles" not in _logged_once:
                 _logged_once.add("profiles")
                 log("agent: Spooler's profiles.json not read from %r" % (folder,))
-            self._catalog = self._catalog[:2] + (profiles or {},)   # now: plain data, it needn't wait for the UI thread
+            self._profiles = profiles or {}   # now: plain data; the queued refresh no longer carries (older) profiles
             if on_main is not None:
-                on_main(lambda: self._refresh_catalog(profiles or {}))
+                on_main(self._refresh_catalog)
         bound = self._bound_spools()
-        presets, label, profiles = self._catalog
+        (presets, label), profiles = self._catalog, self._profiles
         mine = self._mine
 
         if mine and on_main is not None:   # ponytail: no readable user preset at all -> no notice; Apply gives one
