@@ -41,6 +41,32 @@ class ScreenTests(unittest.TestCase):
         self.assertEqual(self.fake.taps, [{"a": "tap", "x": "512", "y": "300"}])
         self.assertIn("error", call(self, self.svc, self.pub, "screen_touch", x=-1, y=5))
 
+    def swipe(self, points):
+        return call(self, self.svc, self.pub, "screen_swipe", points=points)
+
+    def test_swipe_sends_down_moves_up_in_order(self):
+        self.assertTrue(self.swipe([[10, 20], [11, 30], [12, 40]])["result"])
+        self.assertEqual(self.fake.taps, [{"a": "down", "x": "10", "y": "20"}, {"a": "move", "x": "11", "y": "30"},
+                                          {"a": "move", "x": "12", "y": "40"}, {"a": "up"}])
+
+    def test_swipe_refuses_bad_points_before_sending(self):
+        for bad in ([[1, 1], [4096, 5]], [[1, 1], [-1, 5]], [[1, 1]], [[1, 1], [2]], [[1, 1], ["a", 2]], "xy", None):
+            self.assertIn("error", self.swipe(bad), bad)
+        self.assertEqual(self.fake.taps, [])
+
+    def test_swipe_thins_long_paths_keeping_ends(self):
+        self.assertTrue(self.swipe([[i, 2 * i] for i in range(200)])["result"])
+        taps = self.fake.taps
+        self.assertEqual(len(taps), 24 + 1)             # 24 points: down + 23 moves, then up
+        self.assertEqual(taps[0], {"a": "down", "x": "0", "y": "0"})
+        self.assertEqual(taps[-2], {"a": "move", "x": "199", "y": "398"})
+        self.assertEqual(taps[-1], {"a": "up"})
+
+    def test_swipe_still_releases_when_a_move_fails(self):
+        self.fake.fail_touch = "move"
+        self.assertIn("error", self.swipe([[1, 1], [2, 2], [3, 3]]))
+        self.assertEqual([t["a"] for t in self.fake.taps], ["down", "move", "up"])
+
 
 if __name__ == "__main__":
     unittest.main()

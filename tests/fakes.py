@@ -79,6 +79,7 @@ class FakePrinter:
         self.patches, self.uses = [], []
         self.screen = None   # PNG bytes served at /screen/snapshot (Extended Firmware remote screen)
         self.taps = []
+        self.fail_touch = None   # touch action (e.g. "move") answered with a 500
         self.made, self.moved = [], []
         self.ext_error = None   # HTTP status the Firmware Config API answers with instead (e.g. 503 while it starts)
         self.ext_probes = 0     # GET /firmware-config/api/status requests
@@ -251,6 +252,8 @@ class FakePrinter:
                     return self._send(200, fake.fields)
                 if u.path == "/screen/touch":
                     fake.taps.append(q)
+                    if q.get("a") == fake.fail_touch:
+                        return self._send(500, {"error": {"message": "touch failed"}})
                     return self._send(200, {"status": "ok"})
                 if u.path.startswith("/firmware-config/api/settings/"):
                     return self._send(200, b"running...\nSUCCESS: Setting updated successfully\n", "text/plain")
