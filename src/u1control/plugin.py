@@ -1458,7 +1458,12 @@ class U1Agent(pa.PrinterAgentBase):
             on_main = self._cb.get("queue_on_main")
         if time.time() - self._catalog_at >= CATALOG_EVERY:   # this thread may read files, not presets
             self._catalog_at = time.time()
-            profiles = spooler_bridge.read_json(spooler_dir(), spooler_bridge.PROFILES_FILE)
+            folder = spooler_dir()
+            profiles = spooler_bridge.read_json(folder, spooler_bridge.PROFILES_FILE)
+            if not profiles and "profiles" not in _logged_once:
+                _logged_once.add("profiles")
+                log("agent: Spooler's profiles.json not read from %r" % (folder,))
+            self._catalog = self._catalog[:2] + (profiles or {},)   # now: plain data, it needn't wait for the UI thread
             if on_main is not None:
                 on_main(lambda: self._refresh_catalog(profiles or {}))
         bound = self._bound_spools()
