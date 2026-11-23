@@ -2135,6 +2135,19 @@ test('requirements: printer screen stays on stock firmware, off, with its reason
   assert(!byTest('screen-show').disabled, 'on the Extended Firmware it can be shown');
 `);
 
+const SCREEN_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAFACAIAAADrqjgsAAADa0lEQVR42u3UMQ0AAAzDsEIv9NLYJBtCjqQAnBQJAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABDFoCAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwa4KMBzpk0vRTU3HUAAAAASUVORK5CYII=';   // 480 x 320, as the U1 sends it
+test('printer screen: the whole 480 x 320 picture is shown, nothing cut off', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('screen-show'));
+  await post({type: 'screen', image: '${SCREEN_PNG}'});
+  await until(() => { const i = q('.u1-view-screen img'); return i && i.complete && i.naturalWidth; }, 'the picture loads');
+  const img = q('.u1-view-screen img');
+  await until(() => { const f = q('.u1-view-screen').getBoundingClientRect(); return Math.abs(f.width / f.height - 1.5) < 0.02; }, 'the frame takes the picture proportions (3:2)');
+  const f = q('.u1-view-screen').getBoundingClientRect(), r = img.getBoundingClientRect();
+  assert(r.height <= f.height + 1 && r.width <= f.width + 1, 'the picture fits its frame: ' + JSON.stringify([r.width, r.height, f.width, f.height]));
+`);
+
 test('requirements: no Spoolman turns stock links off with the reason', `
   await connect();
   await post({type: 'status', data: VIEW()});
@@ -2664,6 +2677,46 @@ test('dashboard: 0.16.0\'s untouched default gets the arranged one; with multiAC
   eq(place('ace'), '1 / span 5 | 19 / span 6', 'filament units under the toolheads');
   eq(place(MOVER), MOVER_FROM, 'nothing else moved');
 `);
+const SCREEN_SHOWN = `
+  await click(byTest('screen-show'));
+  await post({type: 'screen', image: '${SCREEN_PNG}'});
+  await until(() => { const i = q('.u1-view-screen img'); return i && i.complete && i.naturalWidth; }, 'the picture loads');
+`;
+test('printer screen on the dashboard: bottom row beside the camera; a click on the picture is sent in its own pixels', DASH_JS + `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+` + SCREEN_SHOWN + `
+  const r = id => cell(id).getBoundingClientRect(), s = r('screen'), cam = r('camera'), c = r('console');
+  assert(Math.abs(s.top - cam.top) < 2 && s.left >= cam.right - 1, 'the screen sits beside the camera, in the bottom row: ' + JSON.stringify([s.top, cam.top, s.left, cam.right]));
+  assert(s.top >= r('controls').bottom - 1 && s.bottom <= c.top + 1, 'under the controls, above the console');
+  const f = q('.u1-view-screen').getBoundingClientRect(), i = q('.u1-view-screen img').getBoundingClientRect();
+  assert(f.bottom <= s.bottom + 1 && f.right <= s.right + 1 && i.height <= f.height + 1, 'the picture is not cut off by its widget');
+  await mouse(q('.u1-view-screen img'));   // the centre: 480 x 320 -> 240, 160
+  await until(() => cmds('screen_touch').length, 'a touch is sent');
+  const near = (a, x, y) => Math.abs(a.x - x) <= 1 && Math.abs(a.y - y) <= 1;   // the click lands on a CSS pixel
+  assert(near(cmds('screen_touch').at(-1).args, 240, 160), 'the centre of the picture: ' + JSON.stringify(cmds('screen_touch').at(-1).args));
+  await reply(last('cmd', 'screen_touch'), true);   // the first touch is done: the page takes the next
+  const j = q('.u1-view-screen img').getBoundingClientRect(), k = j.width / 480;   // after the first click scrolled it into view
+  await cdp({op: 'clickAt', x: j.left + 120 * k, y: j.top + 80 * k});   // a quarter in: 120, 80
+  await until(() => cmds('screen_touch').length === 2, 'the second touch is sent');
+  assert(near(cmds('screen_touch').at(-1).args, 120, 80), 'a point off the centre keeps its place: ' + JSON.stringify(cmds('screen_touch').at(-1).args));
+`, { size: [1280, 800] });
+
+test('printer screen in a narrow window: after the camera, before the console; a click is sent in the picture pixels', DASH_JS + `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+` + SCREEN_SHOWN + `
+  assert(q('.oui-dash-grid[data-narrow]'), 'one column');
+  const top = id => cell(id).getBoundingClientRect().top;
+  assert(top('camera') < top('screen') && top('screen') < top('console'), 'reading order: ' + [top('camera'), top('screen'), top('console')]);
+  const f = q('.u1-view-screen').getBoundingClientRect();
+  assert(Math.abs(f.width / f.height - 1.5) < 0.02, 'the frame keeps 3:2: ' + f.width + 'x' + f.height);
+  await mouse(q('.u1-view-screen img'));
+  await until(() => cmds('screen_touch').length, 'a touch is sent');
+  const a = cmds('screen_touch').at(-1).args;
+  assert(Math.abs(a.x - 240) <= 1 && Math.abs(a.y - 160) <= 1, 'the centre of the picture: ' + JSON.stringify(a));
+`, { size: [480, 900] });
+
 for (const size of [[1280, 800], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
   await READY();
   const bad = qa('.oui-dash-cell').map(c => [c.dataset.widget, q('.oui-panel-body', c)]).filter(([, b]) => b && (b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1))

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import Button from 'primevue/button';
 import { OuiEmpty, OuiIcon, OuiPanel, OuiWidgetMaximize } from '@orca-plugins/ui-foundation/src/components';
 import { hand, x } from '@orca-plugins/ui-foundation/src/icons';
@@ -9,6 +9,9 @@ import { t } from '../core/i18n';
 /** The remote screen is the Extended Firmware's: on other firmware the card stays, off, and says why. */
 const off = computed(() => (s.info?.firmware.kind === 'extended' ? '' : s.info?.firmware.kind === 'stock' ? t('scr.needsExt') : t('reason.waiting')));
 
+/** The picture's own size (the U1 sends 480 x 320): the frame takes its proportions, so nothing is cut off. */
+const dim = ref({ w: 480, h: 320 });
+function sized(e: Event) { const i = e.currentTarget as HTMLImageElement; if (i.naturalWidth && i.naturalHeight) dim.value = { w: i.naturalWidth, h: i.naturalHeight }; }
 function toggle() { s.scrOn = !s.scrOn; if (!s.scrOn) { s.screen = ''; s.screenError = ''; } lease(); }
 function tap(e: MouseEvent) {
   const img = e.currentTarget as HTMLImageElement;
@@ -28,17 +31,17 @@ function tap(e: MouseEvent) {
       <OuiWidgetMaximize />
     </template>
     <OuiEmpty v-if="!s.scrOn || off" compact :icon="hand" :title="t('scr.off')" :text="off || undefined" data-test="screen-card" />
-    <div v-else class="u1-view-screen" :role="s.screen ? undefined : 'status'">
-      <img v-if="s.screen" :src="s.screen" :alt="t('scr.alt')" @click="tap">
+    <div v-else class="u1-view-screen" :style="{ '--u1-scr-w': dim.w, '--u1-scr-h': dim.h }" :role="s.screen ? undefined : 'status'">
+      <img v-if="s.screen" :src="s.screen" :alt="t('scr.alt')" @load="sized" @click="tap">
       <OuiEmpty v-else :state="s.screenError ? 'error' : 'loading'" :title="s.screenError || t('scr.connecting')" />
     </div>
   </OuiPanel>
 </template>
 <style>
-/* The touchscreen's own 1024 x 600, on the neutral track every picture sits on. The picture is fitted, never cropped: a
-   click is mapped back to the screen's pixels. */
-.u1-view-screen { display: grid; place-items: center; overflow: hidden; aspect-ratio: 1024 / 600; background: var(--oui-inset); border-radius: 0 0 var(--oui-radius-lg) var(--oui-radius-lg); }
-/* On the dashboard grid the screen fits the widget both ways and keeps its 1024 x 600. */
-.oui-dash-grid:not([data-narrow]) .u1-view-screen { width: min(100%, 100cqh * 1024 / 600); margin-inline: auto; border-radius: 0; }
-.u1-view-screen img { width: 100%; height: 100%; object-fit: contain; cursor: pointer; }
+/* The touchscreen at its own proportions, on the neutral track every picture sits on. The picture is fitted, never
+   cropped: a click is mapped back to the screen's pixels. */
+.u1-view-screen { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; overflow: hidden; aspect-ratio: var(--u1-scr-w) / var(--u1-scr-h); background: var(--oui-inset); border-radius: 0 0 var(--oui-radius-lg) var(--oui-radius-lg); }
+/* On the dashboard grid the screen fits the widget both ways and keeps its proportions. */
+.oui-dash-grid:not([data-narrow]) .u1-view-screen { width: min(100%, 100cqh * var(--u1-scr-w) / var(--u1-scr-h)); margin-inline: auto; border-radius: 0; }
+.u1-view-screen img { width: 100%; height: 100%; min-height: 0; object-fit: contain; cursor: pointer; }
 </style>
