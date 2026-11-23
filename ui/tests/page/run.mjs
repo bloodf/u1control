@@ -2135,6 +2135,18 @@ test('requirements: printer screen stays on stock firmware, off, with its reason
   assert(!byTest('screen-show').disabled, 'on the Extended Firmware it can be shown');
 `);
 
+test('printer screen: the whole 480 x 320 picture is shown, nothing cut off', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('screen-show'));
+  await post({type: 'screen', image: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAFACAIAAADrqjgsAAADa0lEQVR42u3UMQ0AAAzDsEIv9NLYJBtCjqQAnBQJAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABDFoCAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwa4KMBzpk0vRTU3HUAAAAASUVORK5CYII='});
+  await until(() => { const i = q('.u1-view-screen img'); return i && i.complete && i.naturalWidth; }, 'the picture loads');
+  const img = q('.u1-view-screen img');
+  await until(() => { const f = q('.u1-view-screen').getBoundingClientRect(); return Math.abs(f.width / f.height - 1.5) < 0.02; }, 'the frame takes the picture proportions (3:2)');
+  const f = q('.u1-view-screen').getBoundingClientRect(), r = img.getBoundingClientRect();
+  assert(r.height <= f.height + 1 && r.width <= f.width + 1, 'the picture fits its frame: ' + JSON.stringify([r.width, r.height, f.width, f.height]));
+`);
+
 test('requirements: no Spoolman turns stock links off with the reason', `
   await connect();
   await post({type: 'status', data: VIEW()});
