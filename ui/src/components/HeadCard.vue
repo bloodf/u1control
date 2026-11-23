@@ -3,7 +3,7 @@ import { computed, reactive, ref } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { OuiHint, OuiIcon, OuiLevel, OuiPresetMatch, OuiSlot, OuiSpool, OuiStatus } from '@orca-plugins/ui-foundation/src/components';
+import { fuzzyFilter, OuiHint, OuiIcon, OuiLevel, OuiPresetMatch, OuiSlot, OuiSpool, OuiStatus } from '@orca-plugins/ui-foundation/src/components';
 import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload } from '@orca-plugins/ui-foundation/src/icons';
 import HeaterControl from './HeaterControl.vue';
 import { s, run, tracker, busy, controlsOff, loadSpools, guidedWhy, pickPreset } from '../app/store';
@@ -87,15 +87,32 @@ const colours = computed(() => headColours(linked.value, head.value));
 const fraction = computed(() => headFraction(has.value, linked.value));
 const grams = (v: number) => Math.round(v).toLocaleString(document.documentElement.lang || undefined);
 const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material, grams: fmt.grams(sp.remaining) });
+// The chooser's search: brand, name and material by fuzzyFilter (foundation: case and accents ignored, letters in order, best
+// first); a spool's ID only ever matches exactly: "12" or "#12" lists that spool and nothing fuzzy (a bare number is an ID, so a
+// brand like "3D" is typed with a letter, "3d x"). While it is typed the list is only the hits, without "no spool" (Enter on the
+// first hit must never unlink), and nothing is bound until one is chosen.
+// ponytail: Select still runs its own "contains" pass; every option carries the typed text as `q` so it keeps all of ours.
+const query = ref('');
+const idQuery = computed(() => /^#?(\d+)$/.exec(query.value.trim()));
+const hits = computed(() => {
+  const m = idQuery.value;
+  const byId = m ? s.spools.filter(sp => sp.id === Number(m[1])) : [];
+  const fuzzy = m ? [] : fuzzyFilter(s.spools, query.value, sp => [sp.vendor, sp.name, sp.material].filter(Boolean).join(' ')).map(r => r.item);
+  return [...byId, ...fuzzy.filter(sp => !byId.includes(sp))];
+});
 const groups = computed(() => {
   const fam = head.value?.type ? family(head.value.type) : '';
-  const fit = s.spools.filter(sp => !fam || family(sp.material) === fam);
-  const rest = s.spools.filter(sp => !fit.includes(sp));
-  const opt = (sp: Spool) => ({ value: sp.id, label: label(sp), sp });
-  return [
-    { label: t('pick.fit'), items: [{ value: 0, label: t('pick.none'), sp: null }, ...fit.map(opt)] },
-    ...(rest.length ? [{ label: t('pick.other'), items: rest.map(opt) }] : []),
-  ];
+  const searching = !!query.value.trim();
+  const list = searching ? hits.value : s.spools;
+  const fit = list.filter(sp => !fam || family(sp.material) === fam);
+  const rest = list.filter(sp => !fit.includes(sp));
+  const opt = (sp: Spool) => ({ value: sp.id, label: label(sp), sp, q: query.value });
+  return searching
+    ? [...(fit.length ? [{ label: t('pick.fit'), items: fit.map(opt) }] : []), ...(rest.length ? [{ label: t('pick.other'), items: rest.map(opt) }] : [])]
+    : [
+      { label: t('pick.fit'), items: [{ value: 0, label: t('pick.none'), sp: null, q: '' }, ...fit.map(opt)] },
+      ...(rest.length ? [{ label: t('pick.other'), items: rest.map(opt) }] : []),
+    ];
 });
 async function choose(id: number | null) {
   if (!id) {
@@ -150,9 +167,9 @@ async function savePa() {
     <!-- The nozzle heater stays on screen while the Edit form is open: its reading and Off must not disappear. -->
     <template v-if="!editing">
       <Select v-if="s.spools.length" :model-value="bound ?? 0" :options="groups" option-group-label="label" option-group-children="items" size="small"
-              option-label="label" option-value="value" filter :filter-placeholder="t('pick.filter')" :aria-label="t('pick.label', { n })"
+              option-label="label" option-value="value" filter :filter-fields="['q']" reset-filter-on-hide :filter-placeholder="t('pick.filter')" :aria-label="t('pick.label', { n })"
               :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" :pt="{ label: { 'aria-describedby': offWhy } }" class="hc-pick" :data-focus-key="`pick:${i}`" :data-pick="i"
-              @update:model-value="choose">
+              @update:model-value="choose" @filter="e => (query = e.value)" @hide="query = ''">
         <template #value="{ value }">
           <span class="hc-opt"><OuiSpool v-if="value" :color="spoolOf(value)?.colour" :colors="spoolOf(value)?.colours" :fraction="spoolFraction(spoolOf(value)?.remaining, spoolOf(value)?.initial)" :size="22" />
             <span class="oui-truncate">{{ value ? label(spoolOf(value) ?? { id: value, vendor: '', name: '', material: '' } as Spool) : t('pick.choose') }}</span></span>

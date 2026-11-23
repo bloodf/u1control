@@ -3,7 +3,7 @@ import { computed, ref } from 'vue';
 import Button from 'primevue/button';
 import { OuiEmpty, OuiIcon, OuiPanel, OuiWidgetMaximize } from '@orca-plugins/ui-foundation/src/components';
 import { hand, x } from '@orca-plugins/ui-foundation/src/icons';
-import { s, lease, run } from '../app/store';
+import { s, lease, run, tracker } from '../app/store';
 import { t } from '../core/i18n';
 
 /** The remote screen is the Extended Firmware's: on other firmware the card stays, off, and says why. */
@@ -31,7 +31,7 @@ function tap(e: MouseEvent) {
       <OuiWidgetMaximize />
     </template>
     <OuiEmpty v-if="!s.scrOn || off" compact :icon="hand" :title="t('scr.off')" :text="off || undefined" data-test="screen-card" />
-    <div v-else class="u1-view-screen" :style="{ '--u1-scr-w': dim.w, '--u1-scr-h': dim.h }" :role="s.screen ? undefined : 'status'">
+    <div v-else class="u1-view-screen" :style="{ '--u1-scr-w': dim.w, '--u1-scr-h': dim.h }" :role="s.screen ? undefined : 'status'" :aria-busy="tracker.isBusy('screen')" :data-busy="tracker.isBusy('screen') || undefined">
       <img v-if="s.screen" :src="s.screen" :alt="t('scr.alt')" @load="sized" @click="tap">
       <OuiEmpty v-else :state="s.screenError ? 'error' : 'loading'" :title="s.screenError || t('scr.connecting')" />
     </div>
@@ -44,4 +44,6 @@ function tap(e: MouseEvent) {
 /* On the dashboard grid the screen fits the widget both ways and keeps its proportions. */
 .oui-dash-grid:not([data-narrow]) .u1-view-screen { width: min(100%, 100cqh * var(--u1-scr-w) / var(--u1-scr-h)); margin-inline: auto; border-radius: 0; }
 .u1-view-screen img { width: 100%; height: 100%; min-height: 0; object-fit: contain; cursor: pointer; }
+/* A tap waiting for the printer: said by the cursor, never by anything that takes room. Taps stay allowed. */
+.u1-view-screen[data-busy] img { cursor: progress; }
 </style>

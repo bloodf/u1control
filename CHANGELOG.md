@@ -1,5 +1,15 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Fuzzy search in the spool chooser.** Typing in a toolhead's spool list finds spools by brand or name with the letters in order ("prus", "creme", "cb" for Crème Brûlée); case and accents do not matter. Spools that fit the toolhead's material stay listed before the others, each group best match first. An ID finds only that spool (`12` or `#12`), never by its letters, and "No spool" is not offered while you search.
+
+### Fixed
+
+- **No more flashing notice and jumping page when you press a control on the Printer tab.** A command waiting for the printer used to open a banner above the content and remove it again, shifting everything down and back up. The wait is now announced to screen readers only, the pressed control shows its spinner, and the answer is still a toast.
+
 ## [0.19.0] - 2026-11-22
 
 ### Added
