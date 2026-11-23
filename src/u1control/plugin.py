@@ -2222,14 +2222,18 @@ def _match_context(bound, preset_preference=None):
 def head_match(ctx, head, tag, spool, overrides=None):
     """The preset sync_project applies to a toolhead, and why: {"name", "source", "score", "reasons", "confident",
     "candidates", "keys", "remembered_key"}. source: "linked" (the spool's orca_filament_preset), "remembered" (picked
-    by hand), "spooler" (Spooler's preset of the bound spool), "auto" (the best score) or "none"."""
+    by hand; for a bound spool with a Spooler preset only one remembered for that spool or its tag), "spooler" (Spooler's
+    preset of the bound spool), "auto" (the best score) or "none"."""
     tag = tag or {}
     names = ctx["names"]
     ranked = filmatch.rank_filament_presets(names, head, tag, colours=ctx["colours"])
     keys = filmatch.toolhead_keys(head, tag, (spool or {}).get("id"))
     linked = linked_preset((spool or {}).get("orca_preset"), ctx["mine"])
     name, source, used = (linked["name"], "linked", "") if linked else ("", "", "")
+    spooler_first = bool(spool and ctx["preference"] and ctx["preference"](names, head, tag))
     for key in keys if not name else ():
+        if spooler_first and key.startswith("mat:"):
+            break   # a bound spool's Spooler preset is more specific than a pick remembered for a whole vendor + material
         name = next((n for n in filmatch.recall(ctx["stores"], [key], ctx["printer"]) if n in names and _fits(n, head, tag)), "")
         if name:
             source, used = "remembered", key
