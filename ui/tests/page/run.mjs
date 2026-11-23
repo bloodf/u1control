@@ -2232,6 +2232,51 @@ test('screen: a tap on the picture waits without moving the page, can be repeate
   eq(qa('.oui-toast').length, 0, 'an answered tap says nothing');
   watch.disconnect();
   eq(banners, [], 'a banner never flashed');
+
+`);
+
+const SCREEN_JS = `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('screen-show'));
+  const cv = document.createElement('canvas'); cv.width = 200; cv.height = 100;
+  await post({type: 'screen', image: cv.toDataURL('image/png')});
+  await until(() => q('.u1-view-screen img') && q('.u1-view-screen img').naturalWidth === 200, 'the picture loads');
+  const img = q('.u1-view-screen img'); img.scrollIntoView({block: 'center'}); await settle();
+  const r = img.getBoundingClientRect(), k = Math.min(r.width / 200, r.height / 100), ox = (r.width - 200 * k) / 2, oy = (r.height - 100 * k) / 2;
+  const at = (px, py) => [r.left + ox + (px + 0.5) * k, r.top + oy + (py + 0.5) * k];
+  const mouseAt = (type, x, y) => cdp({op: 'mouse', type, x, y});
+`;
+test('printer screen: dragging on the picture sends one swipe with the screen\'s own pixels', SCREEN_JS + `
+  const [x0, y0] = at(20, 30), [x1, y1] = at(180, 70);
+  await mouseAt('mousePressed', x0, y0);
+  for (let i = 1; i <= 8; i++) await mouseAt('mouseMoved', x0 + (x1 - x0) * i / 8, y0 + (y1 - y0) * i / 8);
+  await mouseAt('mouseMoved', r.right + 300, r.top - 300);   // leaves the picture: the swipe ends where it left
+  await mouseAt('mouseReleased', r.right + 300, r.top - 300);
+  await until(() => cmds('screen_swipe').length, 'the swipe is sent');
+  await sleep(150);
+  eq(cmds('screen_swipe').length, 1, 'one command for the whole drag');
+  eq(cmds('screen_touch').length, 0, 'and no tap');
+  const pts = cmds('screen_swipe')[0].args.points;
+  eq(pts[0], [20, 30], 'starts where it went down');
+  eq(pts[pts.length - 1], [199, 0], 'ends clamped to the picture corner');
+  assert(pts.length >= 5 && pts.length <= 12, 'points are thinned: ' + pts.length);
+  assert(pts.every(p => p[0] >= 0 && p[0] < 200 && p[1] >= 0 && p[1] < 100), 'all inside the picture');
+  eq(getComputedStyle(img).touchAction, 'none', 'the page does not scroll while dragging');
+  eq(getComputedStyle(img).userSelect, 'none', 'nor select');
+`);
+
+test('printer screen: a press without movement still sends exactly one tap', SCREEN_JS + `
+  const [x, y] = at(100, 50);
+  await mouseAt('mousePressed', x, y);
+  await mouseAt('mouseMoved', x + 2, y + 1);
+  await mouseAt('mouseReleased', x, y);
+  await until(() => cmds('screen_touch').length, 'the tap is sent');
+  await sleep(150);
+  eq(cmds('screen_touch').length, 1, 'one tap');
+  eq(cmds('screen_swipe').length, 0, 'no swipe');
+  const a = cmds('screen_touch')[0].args;
+  assert(Math.abs(a.x - 100) <= 1 && Math.abs(a.y - 50) <= 1, 'at the pixel pressed (give or take a whole pixel): ' + JSON.stringify(a));
 `);
 
 test('requirements: no Spoolman turns stock links off with the reason', `
