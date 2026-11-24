@@ -41,14 +41,16 @@ AUTOMATIONS = [
     ("time_lapse_camera", "Print option: time-lapse", "Default for the print setup.", False, "bool"),
 ]
 CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolman_url": "", "profile_overrides": {}}
-EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "stored_pa": False, "ui_language": "auto", "ui_theme": "auto", "camera_fps": 5,
+EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "stored_pa": False, "ui_language": "auto", "ui_theme": "auto", "ui_clock": "auto", "camera_fps": 5,
          "network_origins": [],   # scheme://host of printers and Spoolman used: the network grants asked for at load
          "spoolman_refresh_s": 30,
          "overrides_migrated": False,
+         "show_preset_match": True,   # the toolhead cards show the preset each head gets (off: hidden, still used)
          "ofd_enabled": False,   # Open Filament Database proposals on the toolhead cards; off: never contacted   # profile_overrides copied into matches.json once (filmatch); then read no more
          "dashboard": {}}   # the Dashboard's layouts (clean_dashboard); {} = the page's default   # the page re-reads Spoolman this often while it shows (0 = off; 10-300)
 UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl", "cs")   # "auto": OrcaSlicer's language, then the system's
 UI_THEMES = ("auto", "light", "dark")   # "auto": OrcaSlicer's background, then the system's light/dark mode
+UI_CLOCKS = ("auto", "24", "12")   # times of day: "auto" = the page language's usual clock
 CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
 REFRESH_RANGE = (10, 300)      # spoolman_refresh_s: 0 (off) or seconds in this range
 
@@ -149,6 +151,8 @@ class Store:
                 out["print_dialog"] = False
             if out["ui_theme"] not in UI_THEMES:
                 out["ui_theme"] = EXTRA["ui_theme"]
+            if out["ui_clock"] not in UI_CLOCKS:
+                out["ui_clock"] = EXTRA["ui_clock"]
             if out["camera_fps"] not in CAMERA_FPS:
                 out["camera_fps"] = EXTRA["camera_fps"]
             if not valid_refresh(out["spoolman_refresh_s"]):
@@ -173,6 +177,9 @@ class Store:
                         data[key] = value
                 elif key == "ui_theme":
                     if value in UI_THEMES:
+                        data[key] = value
+                elif key == "ui_clock":
+                    if value in UI_CLOCKS:
                         data[key] = value
                 elif key == "camera_fps":
                     if type(value) is int and value in CAMERA_FPS:

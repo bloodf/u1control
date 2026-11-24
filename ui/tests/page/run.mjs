@@ -458,6 +458,14 @@ test('setup: the print, the printer, a card per filament with its head, spool an
   eq(getComputedStyle(c0.querySelector('.hp-strand')).stroke, 'rgb(108, 191, 90)', 'strand in the Spoolman colour');
   eq(getComputedStyle(q('.su-card[data-f="3"] .hp-strand')).stroke, 'rgb(245, 158, 11)', 'no spool: the printer colour');
   assert(byTest('preview') && byTest('preview').getAttribute('aria-label').includes('Top view'), 'preview drawn');
+  const pv = byTest('preview'), k = pv.width / 200, cellAt = (x, y) => {   // the fixture's 120-cell map in 188 px
+    const d = pv.getContext('2d').getImageData(Math.round((6 + (x + 0.5) * 188 / 120) * k), Math.round((6 + (119 - y + 0.5) * 188 / 120) * k), 1, 1).data;
+    return [d[0], d[1], d[2], d[3]];
+  };
+  const tray = cellAt(100, 60), inlay = cellAt(30, 88), outside = cellAt(1, 1);
+  assert(tray[3] === 255 && tray[1] > tray[0] && tray[1] > tray[2], 'tray in its head colour (green): ' + tray);
+  assert(inlay[2] > tray[2] + 40, 'the filament under the top shows through (blue): ' + inlay + ' vs ' + tray);
+  eq(outside[3], 0, 'nothing printed: transparent');
   assert(byTest('prefs') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
   assert(!alerts() && !byTest('send').disabled && text(byTest('send')) === 'Apply & continue', 'nothing to confirm');
   await click(byTest('send'));
@@ -1105,6 +1113,17 @@ test('appearance: light or dark can be forced in Settings and is kept', `
   eq(last('ui_theme').value, 'light', 'light kept');
   await pick(byTest('theme'), 'Automatic');
   eq(last('ui_theme').value, 'auto', 'automatic again');
+`);
+
+test('clock: a 24-hour or 12-hour clock can be picked in Settings and is kept', `
+  await connect();
+  await tab('settings');
+  await pick(byTest('clock'), '24-hour (14:30)');
+  eq(last('ui_clock').value, '24', 'kept in the plugin settings');
+  await pick(byTest('clock'), '12-hour (2:30 PM)');
+  eq(last('ui_clock').value, '12', '12-hour kept');
+  await pick(byTest('clock'), 'Automatic');
+  eq(last('ui_clock').value, 'auto', 'automatic again');
 `);
 
 test('i18n: host language de_DE gives de, including safety dialogs and errors', `
@@ -2263,6 +2282,21 @@ test('Apply to project filaments: busy until the plugin answers, then says what 
   await click(byTest('sync'));
   await reply(last('sync_project'), {text: 'Project filaments unchanged. Problems: filament 1: no preset', done: 0, problems: 1});
   await until(() => q('.oui-toast[role=alert]') && toasts().includes('no preset'), 'why not is shown, as an error: ' + toasts());
+`);
+
+test('toolhead cards: the matched preset can be hidden in Settings, and comes back', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('preset_matches'), 'the cards ask for the presets');
+  await reply(last('preset_matches'), {matches: [{head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: [], confident: true, candidates: [], remembered_key: ''}]});
+  await until(() => q('[data-match="0"]'), 'shown by default');
+  const cfg = show => post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'automagic', show_preset_match: show}});
+  await cfg(false);
+  await until(() => !q('[data-match="0"]'), 'hidden when switched off');
+  await cfg(true);
+  await until(() => q('[data-match="0"]'), 'back when switched on');
+  await tab('settings');
+  await until(() => byTest('match-show'), 'the switch in Settings');
 `);
 
 test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and reasons; Change remembers another', `

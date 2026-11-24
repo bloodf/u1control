@@ -81,5 +81,10 @@ test('numbers, sizes, durations and dates follow the language', () => {
   const day = Date.UTC(2026, 10, 16, 12) / 1000;
   assert.match(f('de').dateTime(day), /16\.11\.26/); assert.match(f('pl').dateTime(day), /16\.11\.2026/);
   assert.equal(f('pl').number(1234.5, 1), '1234,5'); assert.equal(f('pl').duration(3900), '1 h 5 min');
+  const at = Date.UTC(2026, 10, 16, 14, 30) / 1000, local = new Date(at * 1000);
+  const h24 = `${local.getHours()}:${String(local.getMinutes()).padStart(2, '0')}`;
+  assert.match(formats('en', { hm: '', m: '' }, '24').time(at), new RegExp(`^0?${h24}$`));   // Settings > Language > Clock
+  assert.match(formats('de', { hm: '', m: '' }, '12').time(at), /AM|PM|vorm|nachm/i);
+  assert.equal(formats('en', { hm: '', m: '' }, 'auto').time(at), formats('en', { hm: '', m: '' }).time(at));
   assert.match(f('cs').number(1234.5, 1), /^1\s234,5$/); assert.match(f('cs').dateTime(day), /16\.\s?11\.\s?26/); assert.match(f('zh-CN').dateTime(day), /2026\/11\/16/);
 });

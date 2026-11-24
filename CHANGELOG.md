@@ -2,6 +2,15 @@
 
 ## [Unreleased]
 
+### Added
+
+- **24-hour or 12-hour clock.** Settings > Language has a **Clock** choice: Automatic (the language's usual clock, as before), 24-hour or 12-hour. It sets how times of day read, such as **Finishes** on the Dashboard; English used to always show a 12-hour clock. Asked for by @BliXem.
+- **Hide the matched preset on the toolhead cards.** Settings > Connection has **Show the matched preset on the toolhead cards** (on by default). Turned off, the cards no longer show the OrcaSlicer preset each head gets with its score and Change; Apply to project filaments still uses the same match. From @xtronets (#118).
+
+### Changed
+
+- **The print setup's preview is a real top view.** Instead of a few sampled outer walls drawn as thin lines (a tangle on busy plates), the window shows the print as seen from above: every filament filled in the colour of the toolhead it is mapped to, shaded by height with darker edges so parts and steps read at a glance. A filament printed under another one, like text or an inlay in the first layers, shows through faintly with its outline. The prime tower, skirt and brim are left out so the parts fill the view. Long prints are sampled (all of the top layers, the rest spread over the height), so preparing it stays around a second. From @xtronets (#119).
+
 ## [0.19.1] - 2026-11-23
 
 ### Added

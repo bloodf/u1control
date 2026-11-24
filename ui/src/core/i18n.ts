@@ -5,7 +5,7 @@ import { de } from './messages-de';
 import { zhCN } from './messages-zh';
 import { pl } from './messages-pl';
 import { cs } from './messages-cs';
-import { formats, interpolate, isLocale, pluralKey, resolveLocale, type LangPref, type Locale } from './i18n-core';
+import { formats, interpolate, isClock, isLocale, pluralKey, resolveLocale, type ClockPref, type LangPref, type Locale } from './i18n-core';
 import { boot } from './boot';
 
 const PREF_KEY = 'u1control.lang';
@@ -48,7 +48,17 @@ export function tMaybe(key: string, fallback: string, params?: Record<string, un
   return key in en ? t(key as MessageKey, params) : fallback;
 }
 
-const f = computed(() => formats(locale.value, { hm: t('dur.hm'), m: t('dur.m') }));
+// Settings > Language "Clock": the choice lives in the plugin's settings (boot "clock"), 'auto' = the language's usual clock.
+export const clockPref = ref<ClockPref>(isClock((boot as { clock?: unknown }).clock) ? (boot as { clock: ClockPref }).clock : 'auto');
+let persistClock: (value: ClockPref) => void = () => {};
+export function onClockPref(fn: (value: ClockPref) => void): void { persistClock = fn; }
+export function setClockPref(value: ClockPref): void {
+  if (!isClock(value)) return;
+  clockPref.value = value;
+  persistClock(value);
+}
+
+const f = computed(() => formats(locale.value, { hm: t('dur.hm'), m: t('dur.m') }, clockPref.value));
 export const fmt = {
   number: (v: number, digits = 0) => f.value.number(v, digits),
   grams: (v: number | null | undefined) => f.value.grams(v),
