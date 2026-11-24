@@ -1969,8 +1969,8 @@ test('time-lapses: one row per video with its cover; saving says where the file 
   eq(cmds('download').map(m => [m.args, m.gen]), [[{path: 'timelapse/benchy_20261116130921.mp4'}, 1]], 'one download, from the writable root');
   assert(btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'no delete while that video is being saved');
   assert(!btn('Delete the time-lapse vase_20261115080000.mp4').disabled && !btn('Save the time-lapse vase_20261115080000.mp4').disabled, 'the other rows stay usable');
-  await reply(last('cmd', 'download'), '/home/u/Downloads/u1control/benchy_20261116130921.mp4');
-  await until(() => toasts().includes('Saved to /home/u/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
+  await reply(last('cmd', 'download'), '/example/user/Downloads/u1control/benchy_20261116130921.mp4');
+  await until(() => toasts().includes('Saved to /example/user/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
   assert(!btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'delete is back');
   await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
   assert(!btn('Save the time-lapse vase_20261115080000.mp4').disabled && !btn('Delete the time-lapse vase_20261115080000.mp4').disabled, 'saving and deleting stay on while printing');
@@ -2081,7 +2081,7 @@ test('camera: save the picture on screen', `
   await click(byTest('cam-save'));
   const cmd = last('cmd', 'snapshot');
   eq(cmd.args, {}, 'asks the plugin to save its last picture');
-  await reply(cmd, '/home/u/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
+  await reply(cmd, '/example/user/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
   await until(() => toasts().includes('Saved to'), 'says where it was saved');
 `);
 
