@@ -226,6 +226,43 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   }
 `);
 
+test('spool chooser search: brand, accents and abbreviations match fuzzily; an ID only matches exactly; nothing binds while searching', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [
+    {id: 7, name: 'Matte Black', vendor: 'Prusament', material: 'PLA', colour: '#111111', remaining: 500, initial: 1000},
+    {id: 12, name: 'Crème Brûlée', vendor: 'Polymaker', material: 'PLA', colour: '#eeddaa', remaining: 800, initial: 1000},
+    {id: 120, name: 'Grey', vendor: 'Acme', material: 'PLA', colour: '#888888', remaining: 900, initial: 1000},
+    {id: 5, name: 'Red', vendor: '3DJake', material: 'PLA', colour: '#cc0000', remaining: 700, initial: 1000}], bindings: {}, via: 'direct'});
+  await settle();
+  const pickRoot = q('.hc-pick');
+  pickRoot.querySelector('[role=combobox]').click();
+  await until(() => q('.p-select-overlay .p-select-filter'), 'the search box opens');
+  const opts = () => qa('.p-select-overlay [role=option]').map(o => text(o));
+  const search = async v => { await type(q('.p-select-overlay .p-select-filter'), v); await settle(); return opts(); };
+  assert(opts().some(o => o.includes('No spool')), 'without a search the list starts with No spool');
+  let r = await search('prus');
+  assert(r.length === 1 && r[0].includes('Matte Black'), 'brand: ' + r);
+  r = await search('creme');
+  assert(r.length === 1 && r[0].includes('Crème'), 'accents and case do not matter: ' + r);
+  r = await search('cb');
+  assert(r.length === 1 && r[0].includes('Crème'), 'name abbreviation (word starts): ' + r);
+  assert(!r.some(o => o.includes('No spool')), 'No spool is not offered while searching, so Enter cannot unlink');
+  r = await search('12');
+  assert(r.length === 1 && r[0].includes('Crème') && !r.some(o => o.includes('Grey')), 'a plain ID matches that spool only, not 120: ' + r);
+  r = await search('#120');
+  assert(r.length === 1 && r[0].includes('Grey'), '#ID matches that spool: ' + r);
+  r = await search('#1');
+  assert(r.length === 0, 'an ID is never matched by its letters: ' + r);
+  r = await search('3');
+  eq(r, [], 'a bare number is an ID only: "3" does not fuzzy-match the brand 3DJake');
+  r = await search('3d');
+  assert(r.length === 1 && r[0].includes('3DJake'), 'with a letter it is a brand search: ' + r);
+  eq(cmds('bind_spool').length + cmds('unbind_spool').length, 0, 'nothing is bound or unbound while searching');
+  await press('Escape'); await settle();
+`);
+
 test('the printer photo: spools in the Spoolman colour, else the printer colour, else empty; the active spool lit', `
   await connect();
   await post({type: 'status', data: VIEW({state: 'printing', filename: 'cube.gcode', progress: 0.5, extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1})),
@@ -926,7 +963,7 @@ test('B-04/B-05: one command per action, visible waiting, unknown after timeout,
   byTest('pause').click(); byTest('pause').click(); await settle();
   eq(cmds('pause').length, 1, 'double click sends once');
   assert(byTest('pause').disabled, 'pause disabled while waiting');
-  assert(text(q('.notices [role=status]')).includes('Pause: waiting for the printer'), 'waiting is visible');
+  assert(text(q('.notices [role=status]')).includes('Pause: waiting for the printer'), 'waiting is announced');
   assert(!byTest('estop').disabled, 'E-stop never waits behind another command');
   await click(byTest('estop')); await yes();
   eq(cmds('emergency_stop').length, 1, 'E-stop sent while pause is pending');
@@ -945,6 +982,24 @@ test('B-04/B-05: one command per action, visible waiting, unknown after timeout,
   await click(dismiss);
   assert(!alerts().includes('Emergency stop failed'), 'dismissed by the user');
 `, { slow: true });
+
+test('a command waiting for the printer does not move the page: announced, no box in the flow, no flash', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  const layout = () => [byTest('job-card'), q('.u1-top'), q('.notices')].map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]; });
+  const before = layout(), seen = [];
+  const watch = new MutationObserver(() => { if (q('.notices .oui-banner')) seen.push('banner'); });
+  watch.observe(q('.notices'), {childList: true, subtree: true});
+  await click(byTest('pause')); await settle();
+  eq(cmds('pause').length, 1, 'sent');
+  assert(text(q('.notices [role=status]')).includes('Pause: waiting for the printer'), 'announced to assistive tech');
+  assert(!q('.notices .oui-banner') && q('.notices [role=status]').classList.contains('oui-sr'), 'no banner box in the page flow');
+  eq(layout(), before, 'layout unchanged while the command waits');
+  await reply(cmds('pause')[0], true); await settle();
+  eq(layout(), before, 'layout unchanged after the answer');
+  watch.disconnect();
+  eq(seen, [], 'a banner never flashed');
+`);
 
 test('B-01: focus and typed values survive 2 s status ticks; dialogs return focus after a tick', `
   await connect();
@@ -2146,6 +2201,37 @@ test('printer screen: the whole 480 x 320 picture is shown, nothing cut off', `
   await until(() => { const f = q('.u1-view-screen').getBoundingClientRect(); return Math.abs(f.width / f.height - 1.5) < 0.02; }, 'the frame takes the picture proportions (3:2)');
   const f = q('.u1-view-screen').getBoundingClientRect(), r = img.getBoundingClientRect();
   assert(r.height <= f.height + 1 && r.width <= f.width + 1, 'the picture fits its frame: ' + JSON.stringify([r.width, r.height, f.width, f.height]));
+`);
+
+test('screen: a tap on the picture waits without moving the page, can be repeated, and says nothing when answered', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('screen-show'));
+  const svg = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="600"><rect width="1024" height="600" fill="#123"/></svg>');
+  await post({type: 'screen', image: svg});
+  await until(() => q('.u1-view-screen img') && q('.u1-view-screen img').naturalWidth === 1024, 'the screen picture is shown');
+  q('.u1-view-screen img').scrollIntoView({block: 'center'}); await settle();   // the real click scrolls first: do it before measuring
+  const layout = () => [q('.u1-top'), q('.notices'), q('.u1-view-screen'), byTest('job-card')].map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]; });
+  const before = layout(), banners = [];
+  const watch = new MutationObserver(() => { if (q('.notices .oui-banner')) banners.push('banner'); });
+  watch.observe(q('.notices'), {childList: true, subtree: true});
+  await mouse(q('.u1-view-screen img')); await settle();
+  eq(cmds('screen_touch').length, 1, 'the tap is sent');
+  eq(q('.u1-view-screen').getAttribute('aria-busy'), 'true', 'busy for assistive tech while the printer has not answered');
+  eq(getComputedStyle(q('.u1-view-screen img')).cursor, 'progress', 'the cursor says the tap is waiting');
+  assert(text(q('.notices [role=status]')).includes('waiting for the printer'), 'waiting is announced');
+  eq(layout(), before, 'layout unchanged while the tap waits');
+  await mouse(q('.u1-view-screen img')); await settle();
+  eq(cmds('screen_touch').length, 2, 'a second tap is sent while the first waits');
+  eq(layout(), before, 'layout unchanged after a repeat tap');
+  for (const m of cmds('screen_touch')) await reply(m, true);
+  await settle();
+  eq(q('.u1-view-screen').getAttribute('aria-busy'), 'false', 'not busy once answered');
+  eq(getComputedStyle(q('.u1-view-screen img')).cursor, 'pointer', 'the cursor is a pointer again');
+  eq(layout(), before, 'layout unchanged after the answers');
+  eq(qa('.oui-toast').length, 0, 'an answered tap says nothing');
+  watch.disconnect();
+  eq(banners, [], 'a banner never flashed');
 `);
 
 test('requirements: no Spoolman turns stock links off with the reason', `

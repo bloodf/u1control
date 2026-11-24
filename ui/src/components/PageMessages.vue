@@ -5,7 +5,6 @@ import { OuiBanner, OuiIcon } from '@orca-plugins/ui-foundation/src/components';
 import { refresh, settings } from '@orca-plugins/ui-foundation/src/icons';
 import { s, openSettings, tracker, hello, printerName, statusAge, controlsOff, busy, STALE_STATUS_S } from '../app/store';
 import { t, fmt } from '../core/i18n';
-import { split } from '../core/tracker';
 
 // What the whole page has to say, once, under the page header of the open tab (App.vue moves it there): why the printer's controls are off (no
 // printer, offline, still connecting, busy) and which commands are still waiting for an answer. What a command
@@ -64,10 +63,11 @@ const close = computed(() => t('common.close'));
         <OuiBanner :show="show.busy" id="heads-why" role="none" data-test="heads-why" tone="info" dismissible :dismiss-key="`busy:${addr}`" :close-label="close" :title="t('reason.busy') + t('common.period')">{{ t('busy.body') }}</OuiBanner>
     </div>
     <section class="notices" :aria-label="t('msg.region')">
-      <!-- Commands still waiting for the printer; what they answer is a toast. -->
-      <div role="status" aria-live="polite" class="u1-live">
-        <OuiBanner v-for="p in waiting" :key="'p-' + p.key" role="none" tone="neutral" :title="split(t('msg.waiting', { action: p.label }))[0]"
-                   dismissible :dismiss-key="`waiting:${p.key}:${p.startedAt}`" :close-label="close">{{ split(t('msg.waiting', { action: p.label }))[1] }}</OuiBanner>
+      <!-- Commands still waiting for the printer: announced, never drawn in the page flow. A box that appeared and
+           left on every click pushed the page down and up; the pressed control shows its own spinner (:loading)
+           and what the command answered is a toast. -->
+      <div role="status" aria-live="polite" class="oui-sr" data-test="pending">
+        <p v-for="p in waiting" :key="'p-' + p.key">{{ t('msg.waiting', { action: p.label }) }}</p>
       </div>
     </section>
   </div>
