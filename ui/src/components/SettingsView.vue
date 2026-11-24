@@ -13,7 +13,8 @@ import SettingsPages from './SettingsPages.vue';
 import { s, run, tracker, controlsOff, busy, loadSpools, printerName, targetKnown, loadRequirements, checkRequirements } from '../app/store';
 import { config, form, dirty, saving, save, discard, valueOf } from '../app/settings';
 import { ask } from '../core/dialog';
-import { t, tMaybe, langPref, setLangPref, autoLocale, fmt } from '../core/i18n';
+import { t, tMaybe, langPref, setLangPref, autoLocale, fmt, clockPref, setClockPref } from '../core/i18n';
+import type { ClockPref } from '../core/i18n-core';
 import { LOCALES } from '../core/i18n-core';
 import type { Automation, Requirement } from '../app/types';
 import type { LangPref } from '../core/i18n-core';
@@ -72,6 +73,7 @@ async function calibrate(kind: string, name: string) {
 const pipe = computed(() => config.value?.pipeline ?? null);
 const dialogRule = computed(() => tMaybe(`ps.dialog.${config.value?.settings.print_dialog}`, ''));
 const themeOptions = computed(() => (['auto', 'light', 'dark'] as const).map(value => ({ value, label: t(`theme.${value}`) })));
+const clockOptions = computed(() => (['auto', '24', '12'] as const).map(value => ({ value, label: t(`clock.${value}`) })));
 const langOptions = computed(() => [
   { value: 'auto', label: t('lang.auto', { current: t(`lang.${autoLocale.value}`) }) },
   ...LOCALES.map(value => ({ value, label: t(`lang.${value}`) }))]);
@@ -239,6 +241,10 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
         <OuiFormRow :label="t('theme.label')">
           <Select :model-value="themePref" :options="themeOptions" option-label="label" option-value="value" :aria-label="t('theme.label')" data-test="theme"
                   @update:model-value="setThemePref($event as ThemePref)" />
+        </OuiFormRow>
+        <OuiFormRow :label="t('clock.label')" :hint="t('clock.help')">
+          <Select :model-value="clockPref" :options="clockOptions" option-label="label" option-value="value" :aria-label="t('clock.label')" data-test="clock"
+                  @update:model-value="setClockPref($event as ClockPref)" />
         </OuiFormRow>
       </OuiFormSection>
 

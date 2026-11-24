@@ -1115,6 +1115,17 @@ test('appearance: light or dark can be forced in Settings and is kept', `
   eq(last('ui_theme').value, 'auto', 'automatic again');
 `);
 
+test('clock: a 24-hour or 12-hour clock can be picked in Settings and is kept', `
+  await connect();
+  await tab('settings');
+  await pick(byTest('clock'), '24-hour (14:30)');
+  eq(last('ui_clock').value, '24', 'kept in the plugin settings');
+  await pick(byTest('clock'), '12-hour (2:30 PM)');
+  eq(last('ui_clock').value, '12', '12-hour kept');
+  await pick(byTest('clock'), 'Automatic');
+  eq(last('ui_clock').value, 'auto', 'automatic again');
+`);
+
 test('i18n: host language de_DE gives de, including safety dialogs and errors', `
   await until(() => last('hello'));
   eq(document.documentElement.lang, 'de', 'lang attribute');

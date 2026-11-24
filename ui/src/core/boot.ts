@@ -6,6 +6,7 @@ export interface Boot {
   lang: string | null;
   pref?: 'auto' | 'en' | 'pt-BR' | 'es' | 'de' | 'zh-CN' | 'pl' | 'cs';
   theme?: 'auto' | 'light' | 'dark';
+  clock?: 'auto' | '24' | '12';
   data?: unknown;
 }
 

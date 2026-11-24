@@ -611,6 +611,11 @@ export const es: Record<MessageKey, string> = {
   'theme.auto': 'Automático',
   'theme.light': 'Claro',
   'theme.dark': 'Oscuro',
+  'clock.label': 'Reloj',
+  'clock.auto': 'Automático',
+  'clock.24': '24 horas (14:30)',
+  'clock.12': '12 horas (2:30 p. m.)',
+  'clock.help': 'Cómo se muestran las horas, por ejemplo cuándo termina una impresión. Automático usa el reloj habitual del idioma.',
   'about.text': 'U1 Control {version} · Proyecto independiente, no creado por Snapmaker.',
 
   'auto.auto_add_pipeline': 'Añadir «U1 print setup» a los perfiles de proceso de la U1',

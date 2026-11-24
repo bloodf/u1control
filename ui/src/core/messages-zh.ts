@@ -611,6 +611,11 @@ export const zhCN: Record<MessageKey, string> = {
   'theme.auto': '自动',
   'theme.light': '浅色',
   'theme.dark': '深色',
+  'clock.label': '时钟',
+  'clock.auto': '自动',
+  'clock.24': '24 小时制（14:30）',
+  'clock.12': '12 小时制（下午2:30）',
+  'clock.help': '时间的显示方式，例如打印何时完成。“自动”使用该语言的常用时钟。',
   'about.text': 'U1 Control {version} · 独立项目，并非由 Snapmaker 制作。',
 
   'auto.auto_add_pipeline': '把“U1 print setup”添加到 U1 工艺预设',

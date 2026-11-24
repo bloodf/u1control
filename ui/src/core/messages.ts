@@ -610,6 +610,11 @@ export const en = {
   'theme.auto': 'Automatic',
   'theme.light': 'Light',
   'theme.dark': 'Dark',
+  'clock.label': 'Clock',
+  'clock.auto': 'Automatic',
+  'clock.24': '24-hour (14:30)',
+  'clock.12': '12-hour (2:30 PM)',
+  'clock.help': 'How times of day are shown, such as when a print finishes. Automatic uses the language’s usual clock.',
   'about.text': 'U1 Control {version} · Independent project, not made by Snapmaker.',
 
   'auto.auto_add_pipeline': 'Add “U1 print setup” to U1 process presets',
@@ -1440,6 +1445,11 @@ export const ptBR: Record<MessageKey, string> = {
   'theme.auto': 'Automático',
   'theme.light': 'Claro',
   'theme.dark': 'Escuro',
+  'clock.label': 'Relógio',
+  'clock.auto': 'Automático',
+  'clock.24': '24 horas (14:30)',
+  'clock.12': '12 horas (2:30 PM)',
+  'clock.help': 'Como os horários aparecem, por exemplo quando uma impressão termina. Automático usa o relógio habitual do idioma.',
   'about.text': 'U1 Control {version} · Projeto independente, não feito pela Snapmaker.',
 
   'auto.auto_add_pipeline': 'Adicionar “U1 print setup” aos perfis de processo da U1',
