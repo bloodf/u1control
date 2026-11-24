@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Hide the matched preset on the toolhead cards.** Settings > Connection has **Show the matched preset on the toolhead cards** (on by default). Turned off, the cards no longer show the OrcaSlicer preset each head gets with its score and Change; Apply to project filaments still uses the same match. From @xtronets.
+
 ## [0.19.0] - 2026-11-22
 
 ### Added

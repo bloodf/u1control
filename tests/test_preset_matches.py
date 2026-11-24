@@ -120,6 +120,9 @@ class OfdTests(PresetMatchTests):
 
     def test_off_by_default(self):
         self.assertFalse(self.store.effective()["ofd_enabled"])
+        self.assertTrue(self.store.effective()["show_preset_match"])     # shown unless switched off
+        self.assertFalse(self.store.update({"show_preset_match": False})["show_preset_match"])
+        self.assertFalse(self.store.update({"show_preset_match": "no"})["show_preset_match"])   # not a bool: ignored
         self.assertEqual(self.ns["ofd_status"](self.store, refresh=True), {"on": False})
         matches = self.ns["preset_matches"]({**self.view, "rfid": self.polymaker}, None, ofd=False)
         self.assertTrue(matches and all(m["ofd"] == [] for m in matches))

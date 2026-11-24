@@ -203,6 +203,9 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
           <OuiFormRow :label="t('conn.name')" for="c-name"><InputText id="c-name" v-model="form.name" /></OuiFormRow>
           <OuiFormRow :label="t('conn.sm')" for="c-sm"><InputText id="c-sm" v-model="form.spoolman" class="oui-mono" :placeholder="t('conn.smPh')" /></OuiFormRow>
         </form>
+        <OuiFormRow :label="t('match.show')" for="match-show" :hint="t('match.showHelp')">
+          <ToggleSwitch input-id="match-show" :model-value="valueOf('show_preset_match') !== false" data-test="match-show"
+                        @update:model-value="setDraft('show_preset_match', $event)" /></OuiFormRow>
         <OuiFormRow :label="t('ofd.title')" for="ofd-on" :hint="t('ofd.help')">
           <ToggleSwitch input-id="ofd-on" :model-value="!!valueOf('ofd_enabled')" data-test="ofd-on" @update:model-value="setDraft('ofd_enabled', $event)" /></OuiFormRow>
         <div v-if="valueOf('ofd_enabled')" class="oui-row u1-ofd" data-test="ofd-state">
