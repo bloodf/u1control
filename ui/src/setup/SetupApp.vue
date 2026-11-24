@@ -22,12 +22,13 @@ import { colourFar, family, setupWarnings, warningKey, type SetupFilament, type 
 import ConfirmDialog from '../components/ConfirmDialog.vue';
 import HeadPicture from './HeadPicture.vue';
 import HeadsSettings from './HeadsSettings.vue';
-import PathPreview, { type PathData } from './PathPreview.vue';
+import TopView from './TopView.vue';
+import type { TopViewData } from './top-view';
 
 type Pref = boolean | string | number | number[];
 interface Spool { name: string; colour?: string | null; colours?: string[]; remaining?: number | null; initial?: number | null }
 interface Data { job: { name?: string; time?: string; weight?: number | string; layers?: number | string; tool_changes?: number; address?: string;
-    thumbnail?: string; preview?: PathData | null };
+    thumbnail?: string; preview?: TopViewData | null };
   filaments: SetupFilament[]; heads: SetupHead[]; map: Record<string, number>; prefs: Record<string, Pref>;
   labels: Record<string, string>; levels?: Record<string, string[]>; features?: string[]; purifier: string; auto_purifier: string;
   printer?: { name: string; busy: boolean; address: string } | null; spools?: Record<string, Spool | string>; remember?: boolean; tags?: boolean[];
@@ -218,7 +219,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
             </button>
           </li>
         </ul>
-        <PathPreview v-if="D.job.preview" :paths="D.job.preview" :colours="toolColours" :label="t('setup.preview')" data-test="preview" />
+        <TopView v-if="D.job.preview" :view="D.job.preview" :colours="toolColours" :label="t('setup.preview')" data-test="preview" />
       </div>
       <div class="su-tools">
         <Button size="small" severity="secondary" :label="t('setup.refresh')" data-test="refresh" :disabled="sent" @click="refresh"><template #icon><OuiIcon :icon="refreshIcon" :size="14" /></template></Button>
@@ -381,7 +382,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
   .su-head { grid-template-columns: auto minmax(0, 1fr); }
   .su-printer { grid-column: 1 / -1; justify-items: start; text-align: start; }
   .su-body { flex-direction: column; align-items: stretch; }
-  .su-body > .pp { align-self: center; }
+  .su-body > .tv { align-self: center; }
   .su-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
 </style>
