@@ -197,6 +197,12 @@ Para uma etiqueta RFID, no modo Especialista, `profile_overrides` escolhe um per
 </details>
 
 <details>
+<summary>Aplicar aos filamentos do projeto escolhe os perfis certos, mas não as cores. Como ter os dois?</summary>
+
+O OrcaSlicer 2.5 não deixa plugins mudarem a cor dos filamentos, então **Aplicar aos filamentos do projeto** muda só os perfis e avisa. A sincronização do próprio OrcaSlicer faz as duas coisas. Use o u1control como agente de impressora da U1 ([passos](docs/features.md#printer-agent)) e clique no botão de **sincronizar** ao lado dos filamentos do projeto, na barra lateral (ou **Sync filaments** na aba Device). Cada slot recebe a cor da cabeça e o perfil do que ela tem: o perfil do Spooler (ou o seu perfil independente) da bobina ligada à cabeça, o perfil da própria Snapmaker para uma bobina Snapmaker, ou então o Generic. [Detalhes](docs/features.md#filament-colours-in-the-project).
+</details>
+
+<details>
 <summary>O U1 Control é feito pela Snapmaker?</summary>
 
 Não. É um projeto independente, não feito nem suportado pela Snapmaker, feito a partir dos códigos públicos da Snapmaker e do U1 Extended Firmware. [Créditos](docs/credits.md).

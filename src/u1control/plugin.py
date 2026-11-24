@@ -1228,11 +1228,13 @@ class U1Agent(pa.PrinterAgentBase):
         self.client = None
         self.view = None
         self.firmware = ""
-        self._catalog = ([], "", None)       # (Spooler presets, printer label, Spooler's profiles.json) for tray ids
+        self._catalog = ([], "")             # (Spooler presets, printer label) for tray ids: written on the UI thread only
+        self._profiles = None                # Spooler's profiles.json: written by the poll thread only
         self._catalog_at = 0.0
         self._mine = []                      # user_presets(), for spools linked to one of them (orca_filament_preset)
         self._links = ([], {})               # (spools, {toolhead: spool id}) the agent read from Spoolman itself
         self._links_busy = threading.Lock()
+        self._tray_log = {}                  # {toolhead: what the log last said about its tray preset}
         self.base = ""
         self.camera_url = ""                 # the Device tab's camera (agent.camera_source), read at each connect
         self.camera_mode = "None_"
@@ -1401,7 +1403,7 @@ class U1Agent(pa.PrinterAgentBase):
                 self._commands.put(None)
             self._worker = None
 
-    def _refresh_catalog(self, profiles=None):
+    def _refresh_catalog(self):
         """UI thread, no I/O: re-read Spooler's presets (it adds its own at any time), then the toolheads' links
         from Spoolman on a thread of their own, so sync from AMS knows them without the tab ever opening."""
         try:
@@ -1412,7 +1414,7 @@ class U1Agent(pa.PrinterAgentBase):
             log("agent: filament presets not readable (%s); trays show generic presets" % e)
             return
         self._mine = mine
-        self._catalog = (presets, label, profiles if profiles is not None else self._catalog[2])
+        self._catalog = (presets, label)
         args = (clean(cfg.get("spoolman_url")), settings.printer_label(clean(cfg.get("printer_name"))))
         threading.Thread(target=self._load_links, args=args, name="u1control-links", daemon=True).start()
 
@@ -1435,13 +1437,19 @@ class U1Agent(pa.PrinterAgentBase):
 
     def _bound_spools(self):
         """{toolhead index: Spoolman spool} for this U1's toolheads linked to spools: the tab's (up to date with
-        every link made there, Extended Firmware's too) when it shows this U1, else the agent's own read."""
+        every link made there, Extended Firmware's too) when it shows this U1, else the agent's own read: the links
+        Extended Firmware keeps on the U1, or else Spoolman locations."""
         svc = _service
         spools, bindings = self._links
+        tab = False
         if svc is not None:
             with svc.lock:
                 if svc.target and _hostname(svc.target.host) == _hostname(self.host) and svc.spools:
-                    spools, bindings = list(svc.spools), dict(svc.bindings)
+                    spools, bindings, tab = list(svc.spools), dict(svc.bindings), True
+        if not tab:
+            ids = (self.view or {}).get("spool_ids")
+            if isinstance(ids, list) and any(ids):   # Extended Firmware's own links, over Spoolman locations
+                bindings = {t: sid for t, sid in enumerate(ids) if isinstance(sid, int) and sid > 0}
         by_id = {s["id"]: s for s in spools}
         return {h: by_id[sid] for h, sid in bindings.items() if sid in by_id}
 
@@ -1451,11 +1459,16 @@ class U1Agent(pa.PrinterAgentBase):
             on_main = self._cb.get("queue_on_main")
         if time.time() - self._catalog_at >= CATALOG_EVERY:   # this thread may read files, not presets
             self._catalog_at = time.time()
-            profiles = spooler_bridge.read_json(spooler_dir(), spooler_bridge.PROFILES_FILE)
+            folder = spooler_dir()
+            profiles = spooler_bridge.read_json(folder, spooler_bridge.PROFILES_FILE)
+            if not profiles and "profiles" not in _logged_once:
+                _logged_once.add("profiles")
+                log("agent: Spooler's profiles.json not read from %r" % (folder,))
+            self._profiles = profiles or {}   # now: plain data; the queued refresh no longer carries (older) profiles
             if on_main is not None:
-                on_main(lambda: self._refresh_catalog(profiles or {}))
+                on_main(self._refresh_catalog)
         bound = self._bound_spools()
-        presets, label, profiles = self._catalog
+        (presets, label), profiles = self._catalog, self._profiles
         mine = self._mine
 
         if mine and on_main is not None:   # ponytail: no readable user preset at all -> no notice; Apply gives one
@@ -1466,7 +1479,14 @@ class U1Agent(pa.PrinterAgentBase):
 
         def preferred(head):   # a linked standalone user preset first, else the Spooler preset
             spool = bound.get(head["index"])
-            return linked_filament_id(spool, mine) or spooler_bridge.tray_filament_id(spool, presets, profiles, label)
+            fid = linked_filament_id(spool, mine) or spooler_bridge.tray_filament_id(spool, presets, profiles, label)
+            seen = (spool and spool.get("id"), fid, bool(profiles), len(presets))
+            if spool and self._tray_log.get(head["index"]) != seen:   # once per change: why a tray got its preset
+                self._tray_log[head["index"]] = seen
+                log("agent: T%d spool %s -> %s" % (head["index"] + 1, spool.get("id"), fid or
+                    "no preset id (Spooler profiles %s, %d Spooler presets for %s)"
+                    % ("read" if profiles else "not found", len(presets), label or "?")))
+            return fid
         return preferred
 
     def _poll(self, stop, client):
@@ -1480,7 +1500,10 @@ class U1Agent(pa.PrinterAgentBase):
                         if stop.is_set():
                             return
                         self.firmware = firmware
-                view = u1.summarize(client.query(u1.STATUS_OBJECTS))
+                status = client.query(u1.STATUS_OBJECTS)
+                view = u1.summarize(status)
+                # Extended Firmware keeps each head's Spoolman spool on the U1 itself: the trays know it with the tab shut
+                view["spool_ids"] = (status.get("print_task_config") or {}).get("filament_spool_id")
                 with self._lock:   # a disconnect or reconnect meanwhile: this answer is about the old printer
                     if stop.is_set():
                         return
@@ -1858,8 +1881,10 @@ class CheckConnection(orca.script.ScriptPluginCapabilityBase):
 
 
 def spooler_dir():
+    """Spooler's data folder, from the plugin's storage folder or, before OrcaSlicer gave it (it answers only inside a
+    plugin callback), from where this plugin is installed: both are under <data dir>/orca_plugins."""
     try:
-        return spooler_bridge.data_dir(_storage_or_raise())
+        return spooler_bridge.data_dir(_storage() or os.path.dirname(os.path.abspath(__file__)))
     except Exception:
         return ""
 
@@ -2198,14 +2223,18 @@ def _match_context(bound, preset_preference=None):
 def head_match(ctx, head, tag, spool, overrides=None):
     """The preset sync_project applies to a toolhead, and why: {"name", "source", "score", "reasons", "confident",
     "candidates", "keys", "remembered_key"}. source: "linked" (the spool's orca_filament_preset), "remembered" (picked
-    by hand), "spooler" (Spooler's preset of the bound spool), "auto" (the best score) or "none"."""
+    by hand; for a bound spool with a Spooler preset only one remembered for that spool or its tag), "spooler" (Spooler's
+    preset of the bound spool), "auto" (the best score) or "none"."""
     tag = tag or {}
     names = ctx["names"]
     ranked = filmatch.rank_filament_presets(names, head, tag, colours=ctx["colours"])
     keys = filmatch.toolhead_keys(head, tag, (spool or {}).get("id"))
     linked = linked_preset((spool or {}).get("orca_preset"), ctx["mine"])
     name, source, used = (linked["name"], "linked", "") if linked else ("", "", "")
+    spooler_first = bool(spool and ctx["preference"] and ctx["preference"](names, head, tag))
     for key in keys if not name else ():
+        if spooler_first and key.startswith("mat:"):
+            break   # a bound spool's Spooler preset is more specific than a pick remembered for a whole vendor + material
         name = next((n for n in filmatch.recall(ctx["stores"], [key], ctx["printer"]) if n in names and _fits(n, head, tag)), "")
         if name:
             source, used = "remembered", key

@@ -87,6 +87,41 @@ class PresetMatchTests(unittest.TestCase):
         os.remove(os.path.join(self.storage, filmatch.MATCHES_FILE))
         self.assertEqual(self.applied()[self.pla + 1], "Generic PLA @U1")
 
+    def test_a_bound_spools_spooler_preset_beats_a_vendor_material_pick(self):
+        """A preset remembered for a whole vendor + material (mat: key) doesn't replace the Spooler preset of the spool
+        bound to the toolhead; one remembered for that very spool still does, and without a bound spool the mat: pick
+        is used as before."""
+        head = self.heads[self.pla]
+        spooler = "_local/spooler/Acme PLA @Snapmaker U1"
+        names = NAMES + [spooler]
+        path = os.path.join(self.root, "m.json")
+        mat = [k for k in filmatch.toolhead_keys(head) if k.startswith("mat:")][0]
+        filmatch.remember(path, {mat: "Polymaker PLA @U1"})
+        ctx = lambda: {"names": names, "colours": {}, "mine": [], "printer": "",   # noqa: E731
+                       "preference": lambda n, h, t: spooler, "stores": [filmatch.load_matches(path)]}
+        spool = {"id": 7}
+        match = self.ns["head_match"](ctx(), head, {}, spool)
+        self.assertEqual((match["name"], match["source"]), (spooler, "spooler"))
+        self.assertEqual(self.ns["head_match"](ctx(), head, {}, None)["name"], "Polymaker PLA @U1")   # no spool bound
+        filmatch.remember(path, {"spool:7": "Generic PLA Silk @U1"})   # picked by hand for this spool
+        match = self.ns["head_match"](ctx(), head, {}, spool)
+        self.assertEqual((match["name"], match["source"]), ("Generic PLA Silk @U1", "remembered"))
+
+    def test_a_bound_spools_tag_pick_and_linked_preset_beat_the_spooler_preset(self):
+        """With a bound spool: a pick remembered for the tag still beats its Spooler preset (only mat: is skipped), and
+        the spool's linked user preset beats both."""
+        head = self.heads[self.pla]
+        spooler = "_local/spooler/Acme PLA @Snapmaker U1"
+        path = os.path.join(self.root, "m.json")
+        filmatch.remember(path, {"tag:ab12": "Generic PLA Silk @U1"})
+        ctx = {"names": NAMES + [spooler], "colours": {}, "mine": [], "printer": "",
+               "preference": lambda n, h, t: spooler, "stores": [filmatch.load_matches(path)]}
+        match = self.ns["head_match"](ctx, head, {"uid": "AB12"}, {"id": 7})
+        self.assertEqual((match["name"], match["source"], match["remembered_key"]), ("Generic PLA Silk @U1", "remembered", "tag:ab12"))
+        ctx["mine"] = [{"name": "My PLA", "inherits": "", "file": ""}]
+        match = self.ns["head_match"](ctx, head, {"uid": "AB12"}, {"id": 7, "orca_preset": "my pla"})
+        self.assertEqual((match["name"], match["source"]), ("My PLA", "linked"))
+
     def test_profile_overrides_move_once(self):
         head = self.heads[self.pla]
         store = self.ns["settings"].Store(path=os.path.join(self.storage, "settings.json"))
