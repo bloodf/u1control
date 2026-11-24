@@ -2273,6 +2273,21 @@ test('Apply to project filaments: busy until the plugin answers, then says what 
   await until(() => q('.oui-toast[role=alert]') && toasts().includes('no preset'), 'why not is shown, as an error: ' + toasts());
 `);
 
+test('toolhead cards: the matched preset can be hidden in Settings, and comes back', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('preset_matches'), 'the cards ask for the presets');
+  await reply(last('preset_matches'), {matches: [{head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: [], confident: true, candidates: [], remembered_key: ''}]});
+  await until(() => q('[data-match="0"]'), 'shown by default');
+  const cfg = show => post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'automagic', show_preset_match: show}});
+  await cfg(false);
+  await until(() => !q('[data-match="0"]'), 'hidden when switched off');
+  await cfg(true);
+  await until(() => q('[data-match="0"]'), 'back when switched on');
+  await tab('settings');
+  await until(() => byTest('match-show'), 'the switch in Settings');
+`);
+
 test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and reasons; Change remembers another', `
   await connect();
   await post({type: 'status', data: VIEW()});
