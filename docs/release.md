@@ -53,24 +53,26 @@ GitHub": `on: release: types: [published]`, `id-token: write`, audience `orcaclo
 ## Orca Cloud listing
 
 The workflow publishes the wheel and the changelog only. The listing's text and images are set by hand on Orca
-Cloud (Edit plugin), and change when the artwork or the page changes, not with every release.
+Cloud (Edit plugin), and change when the artwork or the page changes, not with every release. The listing is in
+English only; README.md is the full description it links to.
 
-| Slot | English | Portuguese | Size |
-|---|---|---|---|
-| Tile | `assets/orca-cloud/u1control-tile.png` | the same file | 512×512 |
-| Main image | `assets/orca-cloud/u1control-main-en.png` | `u1control-main-pt-BR.png` | 1600×900 |
-| Square image | `assets/orca-cloud/u1control-main-square-en.png` | `u1control-main-square-pt-BR.png` | 900×900 |
-| Gallery 1, print setup | `assets/orca-cloud/u1control-feature-01-setup-en.png` | `u1control-feature-01-setup-pt-BR.png` | 1600×900 |
-| Gallery 2, dashboard | `assets/orca-cloud/u1control-feature-02-dashboard-en.png` | `u1control-feature-02-dashboard-pt-BR.png` | 1600×900 |
-| Gallery 3, toolheads and spools | `assets/orca-cloud/u1control-feature-03-filament-en.png` | `u1control-feature-03-filament-pt-BR.png` | 1600×900 |
-| Gallery 4, files | `assets/orca-cloud/u1control-feature-04-files-en.png` | `u1control-feature-04-files-pt-BR.png` | 1600×900 |
-| Description | [orca-cloud-description.md](orca-cloud-description.md), English block | Portuguese block | under 4000 characters each |
-| GitHub social preview | `assets/social/u1control-social-preview-en.png` | `u1control-social-preview-pt-BR.png` | 1280×640 |
+| Slot | File | Size |
+|---|---|---|
+| Tile | `assets/orca-cloud/u1control-tile.png` | 512×512 |
+| Main image | `assets/orca-cloud/u1control-main-en.png` | 1600×900 |
+| Square image | `assets/orca-cloud/u1control-main-square-en.png` | 900×900 |
+| Gallery 1, print setup | `assets/orca-cloud/u1control-feature-01-setup-en.png` | 1600×900 |
+| Gallery 2, dashboard | `assets/orca-cloud/u1control-feature-02-dashboard-en.png` | 1600×900 |
+| Gallery 3, toolheads and spools | `assets/orca-cloud/u1control-feature-03-filament-en.png` | 1600×900 |
+| Gallery 4, files | `assets/orca-cloud/u1control-feature-04-files-en.png` | 1600×900 |
+| Description | [orca-cloud-description.md](orca-cloud-description.md) | under 4000 characters |
+| GitHub social preview | `assets/social/u1control-social-preview-en.png` | 1280×640 |
 
-Every image is a PNG under Orca Cloud's 2 MB limit; the largest is about 1.2 MB. The GitHub social preview is
-set under the repository's Settings > Social preview. `assets/marketing/asset-manifest.json` lists each file with
-its source, size, bytes and hash, and `python3 scripts/render_images.py` makes them again (see
-[CONTRIBUTING.md](../CONTRIBUTING.md#assets)).
+Every image is a PNG under Orca Cloud's 2 MB limit; the largest is about 1.2 MB. The dashboard images show the
+Dashboard in its default layout. The GitHub social preview is set under the repository's Settings > Social preview.
+`assets/marketing/asset-manifest.json` lists each file with its source, size, bytes and hash, and
+`python3 scripts/render_images.py` makes them again, in English (see [CONTRIBUTING.md](../CONTRIBUTING.md#assets)).
+The Portuguese gallery, hero and README images that README.pt-BR.md shows are no longer re-rendered.
 
 ## Local gates
 
