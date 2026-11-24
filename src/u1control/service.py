@@ -769,6 +769,36 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self._require_idle()
         return self._gcode(u1.unload_command(head))
 
+    def cmd_unload_many(self, heads):
+        """Unload several toolheads one after another, as the screen does (u1.unload_batch). The batch is always
+        ended, also after a failed step, so no nozzle is left hot. A firmware without the batch macro gets the
+        single unloads in turn."""
+        order = []
+        for value in heads or []:
+            head = _head(value)
+            if head not in order:
+                order.append(head)
+        if not order:
+            raise ValueError(tr("no toolhead chosen"))
+        order.sort()
+        self._require_idle()
+        if u1.BATCH_MACRO not in self.gcode_cmds:
+            for head in order:
+                self._gcode(u1.unload_command(head))
+            return {"ok": True, "heads": order, "batch": False}
+        start, steps, end = u1.unload_batch(order)
+        self._gcode(start)
+        try:
+            for lines in steps:
+                for line in lines:
+                    self._gcode(line)
+        finally:
+            try:
+                self._gcode(end)
+            except Exception as error:   # the step's own error matters more
+                self.log("u1control: unload batch: ending it failed: %s" % error)
+        return {"ok": True, "heads": order, "batch": True}
+
     def cmd_park(self, head):
         """Put toolhead `head` back in its dock (the screen's park), e.g. after a manual bed mesh left it picked up."""
         head = _head(head)

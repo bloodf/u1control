@@ -160,6 +160,31 @@ test('feeder: a spool unloaded from the head but still in the feeder says so', `
   eq(meta[2], 'Feeder: waiting for filament', 'T3 waits for filament');
 `);
 
+test('unload several: tick the loaded heads, one confirmation, the batch command', `
+  await connect();
+  // T3 has its filament only at the inlet: nothing to unload there
+  await post({type: 'status', data: VIEW({feed: [{state: 'load_finish'}, {state: 'load_finish'}, {state: 'preload_finish', detected: true}, {state: 'load_finish'}]})});
+  await until(() => byTest('unload-many'), 'Unload several on the Toolheads card');
+  assert(!byTest('unload-many-bar'), 'no head toggles until asked');
+  await click(byTest('unload-many'));
+  await until(() => byTest('unload-many-bar'), 'the head toggles');
+  eq(qa('[data-many]').map(b => b.getAttribute('aria-pressed')), ['true', 'true', 'false', 'true'], 'the loaded heads are ticked');
+  assert(q('[data-many="2"]').disabled, 'a head with nothing in it cannot be ticked');
+  await click(q('[data-many="1"]'));
+  assert(text(byTest('unload-many-go')).includes('(2)'), 'the button counts the ticked heads');
+  await click(byTest('unload-many-go'));
+  assert(dialogOpen() && dialogText().includes('T1, T4'), 'asks once, naming the heads');
+  await no();
+  eq(cmds('unload_many'), [], 'cancel sends nothing');
+  await click(byTest('unload-many-go'));
+  await yes();
+  eq(cmds('unload_many').map(m => m.args.heads), [[0, 3]], 'one command for T1 and T4');
+  await reply(last('cmd', 'unload_many'), {ok: true, heads: [0, 3], batch: true});
+  await until(() => !byTest('unload-many-bar'), 'the toggles close when done');
+  await post({type: 'status', data: VIEW({busy: true, machine_state: 'AUTO_UNLOAD'})});
+  await until(() => byTest('unload-many').disabled, 'off while the printer is busy');
+`);
+
 test('park: only the head on the carriage offers Park, and it asks first', `
   await connect();
   await post({type: 'status', data: VIEW()});

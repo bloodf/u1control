@@ -12,7 +12,7 @@ import type { MessageKey } from '../core/messages';
 import { ask } from '../core/dialog';
 import { t, fmt, tMaybe } from '../core/i18n';
 import { family } from '../core/logic';
-import { headColours, headFraction, levelTone, present, spoolFraction } from '../core/spool-level';
+import { AT_INLET, headColours, headFraction, levelTone, present, spoolFraction } from '../core/spool-level';
 import type { Spool, Tag } from '../app/types';
 
 // One toolhead as a neutral card: a 4 px strip of its filament's colour, the spool, what is left of the linked
@@ -29,7 +29,7 @@ const active = computed(() => !!s.status?.extruders[i]?.active);
 const has = computed(() => present(head.value));
 // The feeder knows whether the filament went all the way into the toolhead (load_finish) or only waits at the
 // inlet (preload_finish, e.g. after Unload): the RFID tag and filament_exist stay set either way.
-const notInHead = computed(() => has.value && ['preload_finish', 'wait_insert', 'unload_finish'].includes(feed.value.state || ''));
+const notInHead = computed(() => has.value && AT_INLET.includes(feed.value.state || ''));
 const feedText = computed(() => (feed.value.state ? tMaybe(`heads.feedState.${feed.value.state}`, feed.value.state) : '—'));
 // On the carriage (park detector ACTIVATE): offer Park, e.g. after a manual bed mesh left the head picked up.
 const picked = computed(() => !!s.status?.extruders[i]?.picked);

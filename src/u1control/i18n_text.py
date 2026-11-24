@@ -349,6 +349,7 @@ MESSAGES = {
     "unknown calibration": _m("calibração desconhecida", "calibración desconocida", "unbekannte Kalibrierung", "未知的校准"),
     "bad action": _m("ação inválida", "acción no válida", "ungültige Aktion", "操作无效"),
     "bad toolhead": _m("cabeça inválida", "cabezal no válido", "ungültiger Werkzeugkopf", "工具头无效"),
+    "no toolhead chosen": _m("nenhuma cabeça escolhida", "ningún cabezal elegido", "kein Werkzeugkopf gewählt", "未选择工具头"),
     "%s out of range (0 to %d)": _m("%s fora do intervalo (0 a %d)", "%s fuera de rango (0 a %d)",
                                     "%s außerhalb des Bereichs (0 bis %d)", "%s 超出范围（0 至 %d）"),
     "the U1 has no such fan (%s)": _m("a U1 não tem esse ventilador (%s)", "la U1 no tiene ese ventilador (%s)",

@@ -99,6 +99,7 @@ PL = {
     "bad action": "nieprawidłowa akcja",
     "the U1 has no such fan (%s)": "U1 nie ma takiego wentylatora (%s)",
     "bad toolhead": "nieprawidłowa głowica",
+    "no toolhead chosen": "nie wybrano żadnej głowicy",
     "%s out of range (0 to %d)": "%s poza zakresem (0 do %d)",
     "unknown fan %r": "nieznany wentylator: %r",
     "spool #%s not found": "nie znaleziono szpuli #%s",

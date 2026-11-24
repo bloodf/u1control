@@ -1,5 +1,11 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- **Unload several toolheads at once**, as on the printer's screen. **Unload several…** on the Toolheads card lets you tick the loaded heads and unload them with one confirmation. U1 Control sends the screen's own sequence (`AUTO_FEEDING_BATCH`, read from klippy.log): the heads go one after another, the next one preheats while the current one is prepared, and the batch is always ended so no nozzle is left hot. Firmware without that macro gets the single unloads in turn. From @xtronets.
+
 ## [0.19.0] - 2026-11-22
 
 ### Added

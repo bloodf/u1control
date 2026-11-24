@@ -289,6 +289,50 @@ class PrinterTests(unittest.TestCase):
             raise RuntimeError(reply["error"])
         return reply["result"]
 
+    def test_unload_many_as_the_screen(self):
+        # the screen's batch (klippy.log: FEED_AUTO ... ACTION=DOING STAGE=prepare|doing): heads in order, the next
+        # one preheating with the current one, the batch ended
+        self.fake.commands["AUTO_FEEDING_BATCH"] = ""
+        svc, pub = self._service()
+        self._call(svc, pub, "connect")
+        self.fake.scripts.clear()
+        result = self._call(svc, pub, "unload_many", heads=[2, 0, 2])
+        self.assertEqual((result["heads"], result["batch"]), ([0, 2], True))
+        self.assertEqual(self.fake.scripts, [
+            "AUTO_FEEDING_BATCH ACTION=START",
+            "AUTO_FEEDING_BATCH ACTION=DOING STAGE=prepare EXTRUDER=0 UNLOAD=1 NEXT_EXTRUDER=2",
+            "AUTO_FEEDING_BATCH ACTION=DOING STAGE=doing EXTRUDER=0 UNLOAD=1",
+            "AUTO_FEEDING_BATCH ACTION=DOING STAGE=prepare EXTRUDER=2 UNLOAD=1",
+            "AUTO_FEEDING_BATCH ACTION=DOING STAGE=doing EXTRUDER=2 UNLOAD=1",
+            "AUTO_FEEDING_BATCH"])
+
+    def test_unload_many_ends_the_batch_after_a_failure(self):
+        self.fake.commands["AUTO_FEEDING_BATCH"] = ""
+        svc, pub = self._service()
+        self._call(svc, pub, "connect")
+        self.fake.scripts.clear()
+        send = svc._gcode
+
+        def failing(script):
+            if "STAGE=doing EXTRUDER=1" in script:
+                raise PrinterError("unload failed")
+            return send(script)
+        svc._gcode = failing
+        with self.assertRaises(RuntimeError):
+            self._call(svc, pub, "unload_many", heads=[1, 3])
+        self.assertEqual(self.fake.scripts[-1], "AUTO_FEEDING_BATCH")       # nozzles not left hot
+        self.assertNotIn("STAGE=prepare EXTRUDER=3", " ".join(self.fake.scripts))
+
+    def test_unload_many_without_the_batch_macro(self):
+        svc, pub = self._service()
+        self._call(svc, pub, "connect")
+        self.fake.scripts.clear()
+        result = self._call(svc, pub, "unload_many", heads=[3, 1])
+        self.assertFalse(result["batch"])
+        self.assertEqual(self.fake.scripts, ["AUTO_FEEDING EXTRUDER=1 UNLOAD=1", "AUTO_FEEDING EXTRUDER=3 UNLOAD=1"])
+        with self.assertRaises(RuntimeError):
+            self._call(svc, pub, "unload_many", heads=[])
+
     def test_service_files_and_firmware(self):
         svc, pub = self._service()
         self.assertEqual(self._call(svc, pub, "connect")["firmware"]["kind"], "stock")

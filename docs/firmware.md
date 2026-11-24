@@ -37,6 +37,7 @@ Firmware), `filament_detect` (RFID tags), `filament_feed left|right` (feeder sta
 | Filament in a head | `SET_PRINT_FILAMENT_CONFIG CONFIG_EXTRUDER= VENDOR= FILAMENT_TYPE= FILAMENT_SUBTYPE= FILAMENT_COLOR_RGBA=` (`FORCE=1` only when you confirm overwriting an RFID spool) |
 | Spool in a head (Extended Firmware) | `SET_SPOOL_ID CHANNEL=<head> SPOOL_ID=<id>` |
 | Load / unload | `AUTO_FEEDING EXTRUDER=<head> LOAD=1` / `UNLOAD=1` |
+| Unload several (as the screen) | `AUTO_FEEDING_BATCH ACTION=START`; per head `AUTO_FEEDING_BATCH ACTION=DOING STAGE=prepare EXTRUDER=<head> UNLOAD=1` (`NEXT_EXTRUDER=<next head>` but for the last) and `... STAGE=doing EXTRUDER=<head> UNLOAD=1`; then `AUTO_FEEDING_BATCH` to end it. Without the macro: `AUTO_FEEDING ... UNLOAD=1` per head |
 | Read the tag again | `FILAMENT_DT_UPDATE CHANNEL=<head>` |
 | Top cover | `SET_PURIFIER_MODE MODE=...` |
 | Chamber light | `SET_LED LED=cavity_led WHITE=0|1 SYNC=0` |

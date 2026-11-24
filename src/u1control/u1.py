@@ -465,6 +465,24 @@ def unload_command(head):
     return "AUTO_FEEDING EXTRUDER=%d UNLOAD=1" % int(head)
 
 
+BATCH_MACRO = "AUTO_FEEDING_BATCH"
+
+
+def unload_batch(heads):
+    """The screen's "unload several" (u1-klipper lava/fluidd.cfg AUTO_FEEDING_BATCH; seen in klippy.log as FEED_AUTO
+    ... ACTION=DOING STAGE=prepare|doing): START keeps the nozzle targets, each head is prepared (picked and heated,
+    the next head preheating with it: NEXT_EXTRUDER) then unloaded, and the call without ACTION ends the batch
+    (nozzles back to their targets while printing or paused, else off). Returns (start, [lines per head], end)."""
+    heads = [int(h) for h in heads]
+    steps = []
+    for k, head in enumerate(heads):
+        prepare = "%s ACTION=DOING STAGE=prepare EXTRUDER=%d UNLOAD=1" % (BATCH_MACRO, head)
+        if k + 1 < len(heads):
+            prepare += " NEXT_EXTRUDER=%d" % heads[k + 1]
+        steps.append([prepare, "%s ACTION=DOING STAGE=doing EXTRUDER=%d UNLOAD=1" % (BATCH_MACRO, head)])
+    return "%s ACTION=START" % BATCH_MACRO, steps, BATCH_MACRO
+
+
 def park_command(head):
     """Put a picked-up toolhead back in its dock: PARK_<extruder name> (extruder.py registers PARK_EXTRUDER,
     PARK_EXTRUDER1..3; it homes first if needed)."""
