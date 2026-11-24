@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.19.1] - 2026-11-23
+
 ### Added
 
 - **Fuzzy search in the spool chooser.** Typing in a toolhead's spool list finds spools by brand or name with the letters in order ("prus", "creme", "cb" for Crème Brûlée); case and accents do not matter. Spools that fit the toolhead's material stay listed before the others, each group best match first. An ID finds only that spool (`12` or `#12`), never by its letters, and "No spool" is not offered while you search.
