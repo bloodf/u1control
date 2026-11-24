@@ -197,6 +197,12 @@ For an RFID tag, in Expert mode `profile_overrides` picks an exact filament pres
 </details>
 
 <details>
+<summary>Apply to project filaments picks the right presets but not the colours. How do I get both?</summary>
+
+OrcaSlicer 2.5 doesn't let plugins set filament colours, so **Apply to project filaments** changes the presets only and says so. OrcaSlicer's own sync does both. Make u1control the U1's printer agent ([steps](docs/features.md#printer-agent)), then press the **sync** button next to the project's filaments in the sidebar (or **Sync filaments** in the Device tab). Each slot gets the toolhead's colour and the preset of what it holds: the Spooler (or your own standalone) preset of the spool linked to the toolhead, Snapmaker's own preset for a Snapmaker spool, or else the Generic one. [Details](docs/features.md#filament-colours-in-the-project).
+</details>
+
+<details>
 <summary>Is U1 Control made by Snapmaker?</summary>
 
 No. It is an independent project, not made or supported by Snapmaker, built from Snapmaker's public sources and the U1 Extended Firmware. [Credits](docs/credits.md). Printer photo: Snapmaker product image ([NOTICE.md](NOTICE.md)).
