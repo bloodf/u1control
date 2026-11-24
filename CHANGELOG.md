@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-11-24
+
 ### Added
 
 - **24-hour or 12-hour clock.** Settings > Language has a **Clock** choice: Automatic (the language's usual clock, as before), 24-hour or 12-hour. It sets how times of day read, such as **Finishes** on the Dashboard; English used to always show a 12-hour clock. Asked for by @BliXem.
