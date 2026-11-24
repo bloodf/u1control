@@ -641,7 +641,7 @@ class BusyAndTagTests(unittest.TestCase):
 
     def test_guided_commands_refuse_a_busy_machine(self):
         with_machine(self.fake, "BED_LEVELING")
-        for cmd, args in (("cmd_load", (1,)), ("cmd_unload", (1,)), ("cmd_unload_many", ([0, 1],)), ("cmd_park", (1,)), ("cmd_preferences", ({"bed_level": True},)),
+        for cmd, args in (("cmd_load", (1,)), ("cmd_unload", (1,)), ("cmd_unload_many", ([0, 1],)), ("cmd_load_many", ([0, 1],)), ("cmd_park", (1,)), ("cmd_preferences", ({"bed_level": True},)),
                           ("cmd_set_filament", (1, "Generic", "PLA", "#FFFFFF")), ("cmd_bind_spool", (1, 7))):
             with self.assertRaises(PrinterError, msg=cmd):
                 getattr(self.svc, cmd)(*args)

@@ -770,9 +770,16 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         return self._gcode(u1.unload_command(head))
 
     def cmd_unload_many(self, heads):
-        """Unload several toolheads one after another, as the screen does (u1.unload_batch). The batch is always
-        ended, also after a failed step, so no nozzle is left hot. A firmware without the batch macro gets the
-        single unloads in turn."""
+        """Unload several toolheads one after another, as the screen does (u1.unload_batch)."""
+        return self._feed_many(heads, u1.unload_batch, u1.unload_command)
+
+    def cmd_load_many(self, heads):
+        """Load several toolheads (filament waiting at their inlets) one after another, as the screen does."""
+        return self._feed_many(heads, u1.load_batch, u1.load_command)
+
+    def _feed_many(self, heads, batch, single):
+        """The screen's AUTO_FEEDING_BATCH for the heads in order. The batch is always ended, also after a failed
+        step, so no nozzle is left hot. A firmware without the batch macro gets the single commands in turn."""
         order = []
         for value in heads or []:
             head = _head(value)
@@ -784,9 +791,9 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self._require_idle()
         if u1.BATCH_MACRO not in self.gcode_cmds:
             for head in order:
-                self._gcode(u1.unload_command(head))
+                self._gcode(single(head))
             return {"ok": True, "heads": order, "batch": False}
-        start, steps, end = u1.unload_batch(order)
+        start, steps, end = batch(order)
         self._gcode(start)
         try:
             for lines in steps:
@@ -796,7 +803,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             try:
                 self._gcode(end)
             except Exception as error:   # the step's own error matters more
-                self.log("u1control: unload batch: ending it failed: %s" % error)
+                self.log("u1control: feeding batch: ending it failed: %s" % error)
         return {"ok": True, "heads": order, "batch": True}
 
     def cmd_park(self, head):

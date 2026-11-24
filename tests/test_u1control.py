@@ -323,6 +323,25 @@ class PrinterTests(unittest.TestCase):
         self.assertEqual(self.fake.scripts[-1], "AUTO_FEEDING_BATCH")       # nozzles not left hot
         self.assertNotIn("STAGE=prepare EXTRUDER=3", " ".join(self.fake.scripts))
 
+    def test_load_many_as_the_screen(self):
+        # klippy.log of the screen's load: FEED_AUTO ... ACTION=DOING EXTRUDER=0 NEXT_EXTRUDER=1 LOAD=1, no stages
+        self.fake.commands["AUTO_FEEDING_BATCH"] = ""
+        svc, pub = self._service()
+        self._call(svc, pub, "connect")
+        self.fake.scripts.clear()
+        self._call(svc, pub, "load_many", heads=[1, 0])
+        self.assertEqual(self.fake.scripts, [
+            "AUTO_FEEDING_BATCH ACTION=START",
+            "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=0 LOAD=1 NEXT_EXTRUDER=1",
+            "AUTO_FEEDING_BATCH ACTION=DOING EXTRUDER=1 LOAD=1",
+            "AUTO_FEEDING_BATCH"])
+        self.fake.commands.pop("AUTO_FEEDING_BATCH")
+        svc2, pub2 = self._service()
+        self._call(svc2, pub2, "connect")
+        self.fake.scripts.clear()
+        self._call(svc2, pub2, "load_many", heads=[2, 3])
+        self.assertEqual(self.fake.scripts, ["AUTO_FEEDING EXTRUDER=2 LOAD=1", "AUTO_FEEDING EXTRUDER=3 LOAD=1"])
+
     def test_unload_many_without_the_batch_macro(self):
         svc, pub = self._service()
         self._call(svc, pub, "connect")

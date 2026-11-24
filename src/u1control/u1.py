@@ -483,6 +483,19 @@ def unload_batch(heads):
     return "%s ACTION=START" % BATCH_MACRO, steps, BATCH_MACRO
 
 
+def load_batch(heads):
+    """The screen's "load several" (klippy.log: FEED_AUTO ... ACTION=DOING EXTRUDER=0 NEXT_EXTRUDER=1 LOAD=1): as
+    unload_batch, but one step per head, no prepare/doing stages. Returns (start, [lines per head], end)."""
+    heads = [int(h) for h in heads]
+    steps = []
+    for k, head in enumerate(heads):
+        line = "%s ACTION=DOING EXTRUDER=%d LOAD=1" % (BATCH_MACRO, head)
+        if k + 1 < len(heads):
+            line += " NEXT_EXTRUDER=%d" % heads[k + 1]
+        steps.append([line])
+    return "%s ACTION=START" % BATCH_MACRO, steps, BATCH_MACRO
+
+
 def park_command(head):
     """Put a picked-up toolhead back in its dock: PARK_<extruder name> (extruder.py registers PARK_EXTRUDER,
     PARK_EXTRUDER1..3; it homes first if needed)."""

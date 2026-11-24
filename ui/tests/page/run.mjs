@@ -165,24 +165,41 @@ test('unload several: tick the loaded heads, one confirmation, the batch command
   // T3 has its filament only at the inlet: nothing to unload there
   await post({type: 'status', data: VIEW({feed: [{state: 'load_finish'}, {state: 'load_finish'}, {state: 'preload_finish', detected: true}, {state: 'load_finish'}]})});
   await until(() => byTest('unload-many'), 'Unload several on the Toolheads card');
-  assert(!byTest('unload-many-bar'), 'no head toggles until asked');
+  assert(!byTest('many-bar'), 'no head toggles until asked');
   await click(byTest('unload-many'));
-  await until(() => byTest('unload-many-bar'), 'the head toggles');
+  await until(() => byTest('many-bar'), 'the head toggles');
   eq(qa('[data-many]').map(b => b.getAttribute('aria-pressed')), ['true', 'true', 'false', 'true'], 'the loaded heads are ticked');
   assert(q('[data-many="2"]').disabled, 'a head with nothing in it cannot be ticked');
   await click(q('[data-many="1"]'));
-  assert(text(byTest('unload-many-go')).includes('(2)'), 'the button counts the ticked heads');
-  await click(byTest('unload-many-go'));
+  assert(text(byTest('many-go')).includes('(2)'), 'the button counts the ticked heads');
+  await click(byTest('many-go'));
   assert(dialogOpen() && dialogText().includes('T1, T4'), 'asks once, naming the heads');
   await no();
   eq(cmds('unload_many'), [], 'cancel sends nothing');
-  await click(byTest('unload-many-go'));
+  await click(byTest('many-go'));
   await yes();
   eq(cmds('unload_many').map(m => m.args.heads), [[0, 3]], 'one command for T1 and T4');
   await reply(last('cmd', 'unload_many'), {ok: true, heads: [0, 3], batch: true});
-  await until(() => !byTest('unload-many-bar'), 'the toggles close when done');
+  await until(() => !byTest('many-bar'), 'the toggles close when done');
   await post({type: 'status', data: VIEW({busy: true, machine_state: 'AUTO_UNLOAD'})});
   await until(() => byTest('unload-many').disabled, 'off while the printer is busy');
+`);
+
+test('load several: only heads with filament waiting at the inlet, one confirmation, the batch command', `
+  await connect();
+  // T1 loaded, T2 and T4 wait at the inlet, T3 has nothing inserted
+  await post({type: 'status', data: VIEW({feed: [{state: 'load_finish', detected: true}, {state: 'preload_finish', detected: true},
+    {state: 'wait_insert', detected: false}, {state: 'unload_finish', detected: true}]})});
+  await until(() => byTest('load-many'), 'Load several on the Toolheads card');
+  assert(!byTest('unload-many'), 'one head to unload: no Unload several');
+  await click(byTest('load-many'));
+  await until(() => byTest('many-bar'), 'the head toggles');
+  eq(qa('[data-many]').map(b => b.disabled), [true, false, true, false], 'only the heads with filament at the inlet');
+  await click(byTest('many-go'));
+  assert(dialogOpen() && dialogText().includes('T2, T4'), 'asks once, naming the heads');
+  await yes();
+  eq(cmds('load_many').map(m => m.args.heads), [[1, 3]], 'one command for T2 and T4');
+  eq(cmds('unload_many'), [], 'nothing unloaded');
 `);
 
 test('park: only the head on the carriage offers Park, and it asks first', `
