@@ -2,6 +2,7 @@
 top-cover fans, Heads settings, the Plugin settings link, the job facts and the preview. Never contacts a printer:
 FakePrinter is a local HTTP server."""
 
+import base64
 import json
 import os
 import re
@@ -29,35 +30,64 @@ class PreviewTests(unittest.TestCase):
              ";LAYER_CHANGE", "T0", "M83", "G1 X0 Y0", "G1 X10 Y0 E0.5", "G1 X10 Y10 E0.5",
              "T1", "G1 X0 Y10 E0.5", "G1 X0 Y0", "T0", ";LAYER_CHANGE", "G1 X20 Y20 E1"]
 
-    def test_paths_by_tool_and_bounds(self):
-        p = preview.paths(self.LINES)
-        self.assertEqual(p["tools"]["0"][:4], [0.0, 0.0, 10.0, 0.0])
-        self.assertEqual(p["tools"]["1"], [10.0, 10.0, 0.0, 10.0])
-        self.assertEqual(p["bounds"], [0.0, 0.0, 20.0, 20.0])
+    @staticmethod
+    def cells(view):
+        """[(tool, height, tools)] per cell, row by row from the front, from the run-length map."""
+        raw, out = base64.b64decode(view["runs"]), []
+        for i in range(0, len(raw), 4):
+            out += [tuple(raw[i + 1:i + 4])] * raw[i]
+        return out
 
-    def test_budget_samples_layers(self):
-        lines = []
-        for layer in range(100):
-            lines += [";LAYER_CHANGE", "G1 X0 Y0"] + ["G1 X%d Y1 E%d" % (i, layer * 50 + i) for i in range(1, 50)]
-        small = preview.paths(lines, budget=500)   # absolute E (M82): extrusion is the rise in E
-        drawn = sum(len(v) // 4 for v in small["tools"].values())
-        self.assertTrue(0 < drawn <= 500, drawn)
-        self.assertIsNone(preview.paths(["G28", "G1 X1 Y1"]))
+    def at(self, view, x, y):
+        x0, y0, x1, y1 = view["bounds"]
+        cell = max(x1 - x0, y1 - y0) / max(view["w"], view["h"])
+        return self.cells(view)[int((y - y0) / cell) * view["w"] + int((x - x0) / cell)]
 
-    def test_long_print_shows_its_footprint_not_its_top(self):
-        # More moves than budget x layers used to leave only the top layer: here a 2 mm triangle, not the 100 mm
-        # square every other layer prints. Named features: the outer walls are drawn, the infill isn't.
-        square = ["G1 X%d Y0 E0.1" % x for x in range(1, 101)] + ["G1 X100 Y%d E0.1" % y for y in range(1, 101)]
+    def test_top_view_by_tool_and_bounds(self):
+        v = preview.top_view(self.LINES)
+        self.assertEqual(v["bounds"], [-1.0, -1.0, 21.0, 21.0])   # the extrusion with 1 mm around
+        self.assertEqual(v["w"], preview.CELLS)
+        self.assertEqual(len(self.cells(v)), v["w"] * v["h"])
+        self.assertEqual(self.at(v, 5, 0)[0], 0)          # T0's first wall
+        self.assertEqual(self.at(v, 5, 10)[0], 1)         # T1's
+        self.assertEqual(self.at(v, 15, 15)[0], 0)        # the second layer's line, on top
+        self.assertEqual(self.at(v, 15, 15)[1], 255)
+        self.assertLess(self.at(v, 5, 0)[1], 255)          # the first layer is lower
+        self.assertEqual(self.at(v, 7, 3), (255, 0, 0))   # nothing printed
+        self.assertEqual(self.at(v, 1, 3)[0], 255)        # the travel move is not drawn
+        self.assertIsNone(preview.top_view(["G28", "G1 X1 Y1"]))
+        self.assertIsNone(preview.top_view([";LAYER_CHANGE", "G1 X1 Y1", "G1 X5 Y1"]))
+
+    def test_hidden_filament_is_kept_under_the_top(self):
+        # White text in the first layer (T1) under a blue top (T0): the top view's cell is blue, with T1 in its tools
+        lines = ["M83", ";LAYER_CHANGE", "T1", "G1 X4 Y5", "G1 X6 Y5 E0.1"]
+        for _ in range(3):
+            lines += [";LAYER_CHANGE", "T0"] + sum((["G1 X0 Y%d" % y, "G1 X10 Y%d E0.5" % y] for y in range(11)), [])
+        v = preview.top_view(lines)
+        tool, height, tools = self.at(v, 5, 5)
+        self.assertEqual((tool, height), (0, 255))
+        self.assertEqual(tools, 0b11)
+        self.assertEqual(self.at(v, 1, 1)[2], 0b01)
+
+    def test_prime_tower_and_skirt_left_out(self):
+        lines = ["M83", ";LAYER_CHANGE", ";TYPE:Skirt", "G1 X-30 Y0", "G1 X-30 Y30 E1", ";TYPE:Prime tower",
+                 "G1 X100 Y100", "G1 X120 Y100 E1", ";TYPE:Outer wall", "G1 X0 Y0", "G1 X10 Y0 E1"]
+        self.assertEqual(preview.top_view(lines)["bounds"], [-1.0, -1.0, 11.0, 1.0])
+
+    def test_long_print_samples_its_layers(self):
+        # 2000 layers of a 100 mm square: only MAX_LAYERS are parsed, the top ones always, and it stays quick
         lines = ["M83"]
-        for _ in range(20):
-            lines += [";LAYER_CHANGE", "G1 X0 Y0", ";TYPE:Outer wall"] + square
-            lines += [";TYPE:Sparse infill", "G1 X10 Y10", "G1 X90 Y90 E2"]
-        lines += [";LAYER_CHANGE", "G1 X50 Y50", ";TYPE:Outer wall", "G1 X52 Y50 E0.1", "G1 X51 Y52 E0.1"]
-        p = preview.paths(lines, budget=50)
-        self.assertEqual(p["bounds"], [0.0, 0.0, 100.0, 100.0])
-        self.assertLessEqual(sum(len(v) // 4 for v in p["tools"].values()), 50)
-        segments = [p["tools"]["0"][i:i + 4] for i in range(0, len(p["tools"]["0"]), 4)]
-        self.assertNotIn([10.0, 10.0, 90.0, 90.0], segments)   # infill left out
+        for layer in range(2000):
+            lines += [";LAYER_CHANGE", "G1 X0 Y0"] + ["G1 X%d Y%d E0.1" % (x, layer % 100) for x in range(1, 101)]
+        lines += [";LAYER_CHANGE", "T1", "G1 X40 Y40", "G1 X60 Y40 E1"]
+        started = time.time()
+        v = preview.top_view(lines)
+        self.assertLess(time.time() - started, 5)
+        self.assertEqual(self.at(v, 50, 40)[:2], (1, 255))   # the last layer
+        self.assertEqual(v["bounds"], [-1.0, -1.0, 101.0, 100.0])
+        printed = sum(1 for c in self.cells(v) if c[0] != 255)
+        self.assertGreater(printed, len(self.cells(v)) // 3)   # sampled layers from all of the height
+        self.assertLess(len(v["runs"]), 60000)
 
     def test_tool_changes(self):
         self.assertEqual(preview.tool_changes(self.LINES), 2)
@@ -150,8 +180,8 @@ class WindowTests(unittest.TestCase):   # noqa: D101
 
     def test_preview_left_out_when_the_page_would_be_too_big(self):
         real = self.ns["preview"]
-        big = {"bounds": [0, 0, 1, 1], "tools": {"0": [0.0, 0.0, 1.0, 1.0] * 50000}}   # ~1 MB of JSON
-        self.ns["preview"] = type("P", (), {"paths": staticmethod(lambda lines: big),
+        big = {"w": 1, "h": 1, "bounds": [0, 0, 1, 1], "runs": "A" * 1000000}   # ~1 MB of JSON
+        self.ns["preview"] = type("P", (), {"top_view": staticmethod(lambda lines: big),
                                             "tool_changes": staticmethod(real.tool_changes)})
         self.addCleanup(self.ns.__setitem__, "preview", real)
         windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})

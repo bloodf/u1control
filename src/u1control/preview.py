@@ -1,20 +1,20 @@
 """The print setup's small top-down preview and job facts, read from the sliced G-code only (never the printer).
 Free of the `orca` module."""
 
+import base64
 import bisect
+import math
 import re
 
-MAX_SEGMENTS = 1200   # ~32 KB of JSON at most. The print setup page already carries ~1.41 MB (seven languages, the
-                      # dashboard grid) and has to stay under plugin.SETUP_PAGE_LIMIT with the preview, or the
-                      # preview is left out; OrcaSlicer's WebView2 on Windows leaves a much bigger page blank. The
-                      # preview is drawn 160 px wide: 1200 segments of joined outlines are more than it can show.
-SAMPLED_LAYERS = 12   # layers drawn on top of each other, the first one included: the footprint shows
+CELLS = 200          # the top view's longer side, in cells: ~0.5-1.4 mm each on a U1 bed
+MAX_LAYERS = 150     # layers rasterized at most: all of a short print, else the top TOP_LAYERS and the rest sampled
+TOP_LAYERS = 40      # always all of them: the top surface the view shows comes from there
+SKIPPED = ("prime tower", "wipe tower", "skirt", "brim", "custom")   # not the print itself: the view zooms on the parts
 MOVE_RE = re.compile(r"^G[0-3](?:\s|$)")
 WORD_RE = re.compile(r"([XYE])(-?\d*\.?\d+)")
 TOOL_RE = re.compile(r"^T(\d+)\s*(?:;.*)?$")
 LAYER_RE = re.compile(r"^\s*;\s*(CHANGE_LAYER|LAYER_CHANGE)\s*$")
 TYPE_RE = re.compile(r"^;\s*(?:TYPE|FEATURE):\s*(.*)$")
-OUTLINE = ("outer wall", "overhang wall")   # the features drawn when the G-code names them
 
 
 def tool_changes(lines):
@@ -30,15 +30,15 @@ def tool_changes(lines):
     return count
 
 
-def paths(lines, budget=MAX_SEGMENTS):
-    """{"bounds": [x0, y0, x1, y1], "tools": {"<T index>": [x0, y0, x1, y1, ...]}}: the extruding XY moves of
-    up to SAMPLED_LAYERS layers spread over the whole height from the first layer up (the start G-code before the
-    first layer is left out), every k-th one so the total stays under budget segments, seen from the top. Arcs are
-    drawn as chords. None when the G-code has no extrusion.
+def top_view(lines, cells=CELLS):
+    """The print seen from the top as a small map, for the print setup's preview: per cell the filament (G-code tool)
+    of the topmost extrusion there, how high that is (1-255, 0 = nothing printed) and which filaments are anywhere
+    in that column (a bit per tool), so the page can show a filament hidden under the top surface. Run-length
+    encoded: {"w", "h", "bounds": [x0, y0, x1, y1], "runs": base64 of (count, tool, height, tools) quads, row by
+    row from the front (y0)}. None when the G-code has no extrusion.
 
-    One cheap pass finds the layers, tool changes and extrusion modes; only the sampled layers are parsed (a
-    12-hour print has millions of moves). Sampling the layers by move count alone left a long print with its top
-    layer only, a few lines."""
+    One cheap pass finds the layers, tool changes and extrusion modes; only up to MAX_LAYERS layers are parsed (a
+    12-hour print has millions of moves): the top TOP_LAYERS and an even sample of those below. The page draws it."""
     starts, tool_at, rel_at, typed = [], [], [], False
     for i, line in enumerate(lines):
         c = line[:1]
@@ -56,59 +56,104 @@ def paths(lines, budget=MAX_SEGMENTS):
                 typed = bool(TYPE_RE.match(line))
     if not starts:
         return None
-    step = -(-len(starts) // SAMPLED_LAYERS)
-    picked = [(starts[k], starts[k + 1] if k + 1 < len(starts) else len(lines)) for k in range(0, len(starts), step)]
-    runs = [run for a, b in picked for run in _runs(lines, a, b, tool_at, rel_at, typed)]
-    if not runs:
+    count = len(starts)
+    if count <= MAX_LAYERS:
+        chosen = list(range(count))
+    else:
+        below = count - TOP_LAYERS
+        step = below / (MAX_LAYERS - TOP_LAYERS)
+        chosen = sorted({int(k * step) for k in range(MAX_LAYERS - TOP_LAYERS)}) + list(range(below, count))
+    layers = []   # (layer index, [(tool, width, x0, y0, x1, y1)])
+    for k in chosen:
+        a, b = starts[k], starts[k + 1] if k + 1 < count else len(lines)
+        segs = _segments(lines, a, b, tool_at, rel_at, typed)
+        if segs:
+            layers.append((k, segs))
+    if not layers:
         return None
-    lo, hi = 1, max(len(points) for _, points in runs)   # the smallest k that keeps every k-th point under budget
-    while lo < hi:
-        k = (lo + hi) // 2
-        if sum(-(-(len(points) - 1) // k) for _, points in runs) <= budget:
-            hi = k
-        else:
-            lo = k + 1
-    tools, count = {}, 0
-    for tool, points in runs:
-        kept = points[::lo] if (len(points) - 1) % lo == 0 else points[::lo] + [points[-1]]
-        for (x0, y0), (x1, y1) in zip(kept, kept[1:]):
-            if count >= budget:
-                break
-            tools.setdefault(str(tool), []).extend((x0, y0, x1, y1))
-            count += 1
-    xs = [v for seg in tools.values() for v in seg[0::2]]
-    ys = [v for seg in tools.values() for v in seg[1::2]]
-    return {"bounds": [min(xs), min(ys), max(xs), max(ys)], "tools": tools}
+    xs = [v for _, segs in layers for s in segs for v in (s[2], s[4])]
+    ys = [v for _, segs in layers for s in segs for v in (s[3], s[5])]
+    x0, y0, x1, y1 = min(xs) - 1, min(ys) - 1, max(xs) + 1, max(ys) + 1
+    cell = max(x1 - x0, y1 - y0) / cells
+    w, h = max(1, math.ceil((x1 - x0) / cell)), max(1, math.ceil((y1 - y0) / cell))
+    tool_of, height, tools = bytearray([255]) * (w * h), bytearray(w * h), bytearray(w * h)
+    top = max(k for k, _ in layers)
+    for k, segs in layers:   # bottom up: a higher layer paints over a lower one
+        level = 1 + round(254 * k / top) if top else 255
+        for t, width, ax, ay, bx, by in segs:
+            _paint(tool_of, height, tools, w, h, (ax - x0) / cell, (ay - y0) / cell, (bx - x0) / cell, (by - y0) / cell,
+                   max(0.5, width / 2 / cell), t, level)
+    return {"w": w, "h": h, "bounds": [round(x0, 2), round(y0, 2), round(x1, 2), round(y1, 2)],
+            "runs": _encode(tool_of, height, tools)}
 
 
-def _runs(lines, a, b, tool_at, rel_at, typed):
-    """[(tool, [(x, y), ...])]: the unbroken extruding paths of the layer starting at line a (up to line b); only
-    its outer walls when the G-code names its features (typed): the outline, not the infill hatching."""
+def _paint(tool_of, height, tools, w, h, ax, ay, bx, by, radius, tool, level):
+    """A line `radius` cells thick from (ax, ay) to (bx, by): the cells it covers get tool at level."""
+    bit = 1 << min(tool, 7)
+    steps = max(1, int(math.hypot(bx - ax, by - ay) * 2))
+    reach = int(math.ceil(radius))
+    near = radius * radius + 0.25
+    for n in range(steps + 1):
+        px, py = ax + (bx - ax) * n / steps, ay + (by - ay) * n / steps
+        cx, cy = int(px), int(py)
+        for yy in range(max(0, cy - reach), min(h, cy + reach + 1)):
+            row = yy * w
+            for xx in range(max(0, cx - reach), min(w, cx + reach + 1)):
+                if reach and (xx + 0.5 - px) ** 2 + (yy + 0.5 - py) ** 2 > near:
+                    continue
+                i = row + xx
+                tools[i] |= bit
+                if level >= height[i]:
+                    height[i], tool_of[i] = level, tool
+
+
+def _encode(tool_of, height, tools):
+    out, n = bytearray(), len(tool_of)
+    i = 0
+    while i < n:
+        j = i + 1
+        while j < n and j - i < 255 and tool_of[j] == tool_of[i] and height[j] == height[i] and tools[j] == tools[i]:
+            j += 1
+        out += bytes((j - i, tool_of[i], height[i], tools[i]))
+        i = j
+    return base64.b64encode(bytes(out)).decode("ascii")
+
+
+def _segments(lines, a, b, tool_at, rel_at, typed):
+    """[(tool, width, x0, y0, x1, y1)]: the extruding XY moves of the layer from line a to b, all features but
+    SKIPPED ones (the prime tower, skirt...), with the line width the G-code gives (;WIDTH:, else 0.45 mm)."""
     tool, relative = _last(tool_at, a, 0), _last(rel_at, a, False)
-    drawn = not typed
     x, y, e = _position_before(lines, a)
-    runs, points = [], None
+    width, drawn, out = 0.45, True, []
     for line in lines[a + 1:b]:
-        c = line[:4]
-        if c.startswith("T"):
+        c = line[:1]
+        if c == "T":
             m = TOOL_RE.match(line)
             if m:
-                tool, points = int(m.group(1)), None
+                tool = int(m.group(1))
             continue
-        if c.startswith(";"):
+        if c == ";":
             m = TYPE_RE.match(line)
             if m:
-                drawn, points = not typed or m.group(1).strip().lower() in OUTLINE, None
+                drawn = not m.group(1).strip().lower().startswith(SKIPPED)
+            elif line.startswith(";WIDTH:"):
+                try:
+                    width = float(line[7:]) or width
+                except ValueError:
+                    pass
             continue
-        if c.startswith("M83"):
+        if line.startswith("M83"):
             relative = True
-        elif c.startswith("M82"):
+            continue
+        if line.startswith("M82"):
             relative = False
-        elif c.startswith("G92"):
+            continue
+        if line.startswith("G92"):
             m = re.search(r"E(-?\d*\.?\d+)", line)
             if m:
                 e = float(m.group(1))
-        if not MOVE_RE.match(line):
+            continue
+        if c != "G" or not MOVE_RE.match(line):
             continue
         words = dict(WORD_RE.findall(line.split(";", 1)[0]))
         nx = float(words["X"]) if "X" in words else x
@@ -119,14 +164,9 @@ def _runs(lines, a, b, tool_at, rel_at, typed):
             extruding = value > 0 if relative else e is not None and value > e
             e = e + value if relative and e is not None else value
         if extruding and drawn and None not in (x, y, nx, ny) and (nx, ny) != (x, y):
-            if points is None:
-                points = [(round(x, 1), round(y, 1))]
-                runs.append((tool, points))
-            points.append((round(nx, 1), round(ny, 1)))
-        else:
-            points = None
+            out.append((tool, width, x, y, nx, ny))
         x, y = nx, ny
-    return runs
+    return out
 
 
 def _last(marks, index, default):

@@ -869,7 +869,7 @@ def setup_job(lines, cfg, name, client):
     """The print shown at the top of the print setup, from the sliced G-code only: name, time, weight, layers,
     tool changes, plate preview and the top-down path preview."""
     return {**gcode.summary(lines, cfg), "name": name, "address": client.address, "thumbnail": gcode.thumbnail(lines),
-            "tool_changes": preview.tool_changes(lines), "preview": preview.paths(lines)}
+            "tool_changes": preview.tool_changes(lines), "preview": preview.top_view(lines)}
 
 
 def rfid_flags(view):

@@ -458,6 +458,14 @@ test('setup: the print, the printer, a card per filament with its head, spool an
   eq(getComputedStyle(c0.querySelector('.hp-strand')).stroke, 'rgb(108, 191, 90)', 'strand in the Spoolman colour');
   eq(getComputedStyle(q('.su-card[data-f="3"] .hp-strand')).stroke, 'rgb(245, 158, 11)', 'no spool: the printer colour');
   assert(byTest('preview') && byTest('preview').getAttribute('aria-label').includes('Top view'), 'preview drawn');
+  const pv = byTest('preview'), k = pv.width / 200, cellAt = (x, y) => {   // the fixture's 120-cell map in 188 px
+    const d = pv.getContext('2d').getImageData(Math.round((6 + (x + 0.5) * 188 / 120) * k), Math.round((6 + (119 - y + 0.5) * 188 / 120) * k), 1, 1).data;
+    return [d[0], d[1], d[2], d[3]];
+  };
+  const tray = cellAt(100, 60), inlay = cellAt(30, 88), outside = cellAt(1, 1);
+  assert(tray[3] === 255 && tray[1] > tray[0] && tray[1] > tray[2], 'tray in its head colour (green): ' + tray);
+  assert(inlay[2] > tray[2] + 40, 'the filament under the top shows through (blue): ' + inlay + ' vs ' + tray);
+  eq(outside[3], 0, 'nothing printed: transparent');
   assert(byTest('prefs') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
   assert(!alerts() && !byTest('send').disabled && text(byTest('send')) === 'Apply & continue', 'nothing to confirm');
   await click(byTest('send'));
