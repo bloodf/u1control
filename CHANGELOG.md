@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **A toolhead's preset match reads the sub-type from its Spoolman spool.** When the printer reports only the material (PETG, with no sub-type or just Basic), the toolhead card and Apply to project filaments now take words such as Matte or Silk from the name of the spool bound to that toolhead: a spool named "Filament Hub PETG Matte White" gets its Matte preset (with "matte" counted as a word of the spool) instead of a plain one. A sub-type the printer or tag reports still wins, and presets picked by hand are remembered under the same keys as before.
+
 ## [0.21.0] - 2026-11-24
 
 ### Added
