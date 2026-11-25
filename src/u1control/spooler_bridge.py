@@ -139,6 +139,17 @@ def _bare(name):
     return name[len(NAME_PREFIX):] if name.startswith(NAME_PREFIX) else name
 
 
+def shown_name(name):
+    """How the page shows a preset: Spooler's as "Spooler/<preset>", any other as it is."""
+    return "Spooler/" + _bare(name) if name.startswith(NAME_PREFIX) else name
+
+
+def shown_names(names):
+    """{name: shown} for presets listed together; one whose shown name is another's real name keeps its own."""
+    names = set(names)
+    return {n: n if shown_name(n) in names - {n} else shown_name(n) for n in names}
+
+
 def preset_for_spool(presets, spool, profiles=None, printer_label=""):
     """Name of the Spooler preset for a bound spool: Spooler's published profiles.json entry, else the
     nearest colour of the same vendor + material."""

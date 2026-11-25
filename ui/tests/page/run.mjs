@@ -2429,6 +2429,29 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and
   await click(auto());
   eq(last('preset_pick').name, null, 'Automatic forgets the pick');
 `);
+test('toolhead cards: a Spooler preset shows as Spooler/<name>, long names wrap, a pick sends the real name', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('preset_matches'), 'asked');
+  const real = '_local/spooler/Acme Extra Long Matte Silk Dual Colour PLA Plus @Snapmaker U1 0.4 nozzle';
+  const shown = 'Spooler/Acme Extra Long Matte Silk Dual Colour PLA Plus @Snapmaker U1 0.4 nozzle';
+  await reply(last('preset_matches'), {matches: [{head: 0, name: real, shown, source: 'spooler', score: 40, reasons: [], confident: true, remembered_key: '',
+    candidates: [{name: 'Generic PLA @U1', shown: 'Generic PLA @U1', score: 35, reasons: []}, {name: real, shown, score: 40, reasons: []}]}]});
+  await until(() => q('[data-match="0"]'), 'T1 line');
+  const line = q('.oui-match-name', q('[data-match="0"]'));
+  eq([text(line), line.title], [shown, shown], 'the line shows Spooler/');
+  await click(q('.oui-match-change', q('[data-match="0"]')));
+  await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'both candidates');
+  const row = qa('.oui-match-option', q('[data-match="0"]'))[1], name = q('.oui-truncate', row);
+  eq([text(name), name.title], [shown, shown], 'the list row shows Spooler/');
+  eq([row.getAttribute('aria-current'), qa('.oui-match-option', q('[data-match="0"]'))[0].hasAttribute('aria-current')], ['true', false],
+    'the selected row is still the current one');
+  assert(q('.oui-match-option-name svg', row), 'the selected row keeps its check mark');
+  assert(!text(q('[data-match="0"]')).includes('_local'), 'no _local on the card: ' + text(q('[data-match="0"]')));
+  eq(getComputedStyle(name).whiteSpace, 'normal', 'a long name wraps');
+  await click(row);
+  eq([last('preset_pick').head, last('preset_pick').name, last('preset_pick').ofd], [0, real, undefined], 'picked by its real name');
+`);
 
 // ------------------------------------------------------------------ foundation 4.2.0 on: toasts, dismissible notices, requirements
 test('toasts: bottom-left, each with a Close button, gone once closed', `
