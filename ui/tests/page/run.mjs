@@ -3011,6 +3011,34 @@ for (const size of [[1440, 1000], [1920, 1080]]) test(`toolheads at ${size.join(
   assert(body.scrollHeight <= body.clientHeight + 1, 'the widget still fits its content');
 `, { size });
 
+test('spool chooser with 2000 spools: opens at once, draws only the rows in view, keeps up with status refreshes and search', `
+  const N = 2000;
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: Array.from({length: N}, (_, k) => ({id: k + 1, name: 'Spool ' + (k + 1), vendor: 'Acme', material: k % 3 ? 'PLA' : 'PETG',
+    colour: '#336699', remaining: 500, initial: 1000})), bindings: {}, via: 'direct'});
+  await until(() => q('.hc-pick'), 'the chooser');
+  const long = []; new PerformanceObserver(l => l.getEntries().forEach(e => long.push(e.duration))).observe({entryTypes: ['longtask']});
+  const t0 = performance.now();
+  q('.hc-pick [role=combobox]').click();
+  await until(() => qa('.p-select-overlay [role=option]').length, 'the list opens');
+  const opened = performance.now() - t0;
+  const rows = qa('.p-select-overlay [role=option]').length;
+  assert(rows < 60, 'only the rows in view are drawn, not all ' + N + ': ' + rows);
+  assert(opened < 750, 'opens at once: ' + Math.round(opened) + ' ms');
+  for (let k = 0; k < 3; k++) await post({type: 'status', data: VIEW({bed: {temp: 21 + k, target: 0}})});
+  assert(q('.p-select-overlay'), 'status refreshes leave the list open');
+  const list = q('.p-select-overlay .p-virtualscroller');
+  list.scrollTop = list.scrollHeight; list.dispatchEvent(new Event('scroll')); await settle(); await settle();
+  assert(qa('.p-select-overlay [role=option]').some(o => text(o).startsWith('#1999 ')), 'the end of the list (the last PETG spool) scrolls into view: '
+    + qa('.p-select-overlay [role=option]').map(text).slice(-2).join(' | '));
+  await type(q('.p-select-overlay .p-select-filter'), '#1999'); await settle();
+  const hit = qa('.p-select-overlay [role=option]').map(text);
+  assert(hit.length === 1 && hit[0].includes('Spool 1999'), 'search finds one spool among ' + N + ': ' + hit);
+  assert(!long.some(d => d > 250), 'no long main-thread block: ' + long.map(Math.round));
+  await press('Escape'); await settle();
+`);
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');
