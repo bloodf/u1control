@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Spooler presets read as Spooler/<preset>.** The matched preset, the Change list and the **Apply to project filaments** message show a Spooler preset as `Spooler/<preset>` instead of its OrcaSlicer name `_local/spooler/<preset>`; picking or applying it still uses the real preset. Long names in the Change list now wrap instead of being cut off.
+
 ## [0.21.0] - 2026-11-24
 
 ### Added
