@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Dragging on the Printer screen scrolls the printer's screen.** The card only sent taps; a drag now scrolls lists on the touchscreen (it takes effect when you let go). Needs the Extended Firmware's Remote Screen.
+
 ## [0.20.0] - 2026-11-24
 
 ### Added
