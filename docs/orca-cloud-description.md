@@ -15,11 +15,11 @@ Full description: https://github.com/bloodf/u1control/blob/main/README.md
 
 ![The Dashboard in its default layout: the print, the toolheads, temperatures, controls, camera and printer screen](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-02-dashboard-en.png){align=center}
 
-**Dashboard.** Print, temperatures, fans, controls, camera, printer screen and console, in a layout you can rearrange. Bed, nozzle, fans and Home also work from OrcaSlicer's Device tab.
+**Dashboard.** Print, temperatures, fans, controls, camera, printer screen (tap or drag to scroll) and console, in a layout you can rearrange. Bed, nozzle, fans and Home also work from OrcaSlicer's Device tab.
 
 ![The toolheads T1 to T4 with filament, RFID tag, Spoolman spool and grams left](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-03-filament-en.png){align=center}
 
-**Toolheads and spools.** Filament, RFID tag, Spoolman spool, the preset each head gets (change it if you like) and pressure advance saved per spool. Open Filament Database presets are opt-in.
+**Toolheads and spools.** Filament, RFID tag, Spoolman spool, the preset each head gets (change it if you like) and pressure advance saved per spool. Load or unload several toolheads at once. Open Filament Database presets are opt-in.
 
 ![The Files page: folders, print files and the time-lapse list](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-04-files-en.png){align=center}
 
