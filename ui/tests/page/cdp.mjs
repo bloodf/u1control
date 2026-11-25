@@ -45,6 +45,7 @@ export async function launch() {
     async close() {
       proc.kill('SIGTERM');
       await new Promise(r => (proc.exitCode !== null ? r() : proc.once('exit', r)));
+      proc.stderr.destroy();   // a Chrome helper that outlives the browser keeps the pipe, and with it node, open
       await rm(profile, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     },
   };

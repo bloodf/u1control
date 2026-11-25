@@ -197,6 +197,12 @@ Para uma etiqueta RFID, no modo Especialista, `profile_overrides` escolhe um per
 </details>
 
 <details>
+<summary>Aplicar aos filamentos do projeto escolhe os perfis certos, mas não as cores. Como ter os dois?</summary>
+
+O OrcaSlicer 2.5 não deixa plugins mudarem a cor dos filamentos, então **Aplicar aos filamentos do projeto** muda só os perfis e avisa. A sincronização do próprio OrcaSlicer faz as duas coisas. Use o u1control como agente de impressora da U1 ([passos](docs/features.md#printer-agent)) e clique no botão de **sincronizar** ao lado dos filamentos do projeto, na barra lateral (ou **Sync filaments** na aba Device). Cada slot recebe a cor da cabeça e o perfil do que ela tem: o perfil do Spooler (ou o seu perfil independente) da bobina ligada à cabeça, o perfil da própria Snapmaker para uma bobina Snapmaker, ou então o Generic. [Detalhes](docs/features.md#filament-colours-in-the-project).
+</details>
+
+<details>
 <summary>O U1 Control é feito pela Snapmaker?</summary>
 
 Não. É um projeto independente, não feito nem suportado pela Snapmaker, feito a partir dos códigos públicos da Snapmaker e do U1 Extended Firmware. [Créditos](docs/credits.md).
@@ -214,7 +220,7 @@ Inglês, português do Brasil, espanhol, alemão, chinês simplificado, polonês
 | <img src="https://raw.githubusercontent.com/bloodf/embedder/main/assets/orca-cloud/embedder-tile.png" alt="Ícone do Embedder" width="40"> | 🧲 [Embedder](https://github.com/bloodf/embedder) | Bolsos para ímãs e NFC, com a pausa na camada certa. | [Instalar](https://cloud.orcaslicer.com/p/58222d4f9e52) |
 | <img src="https://raw.githubusercontent.com/bloodf/orca_print_calculator/main/assets/orca-cloud/orca_print_calculator-tile.png" alt="Ícone do Print Calculator" width="40"> | 💰 [Print Calculator](https://github.com/bloodf/orca_print_calculator) | Preço de cada mesa: filamento, energia, mão de obra, taxas e margem. | [Instalar](https://cloud.orcaslicer.com/p/521c07cf6de2) |
 | <img src="https://raw.githubusercontent.com/bloodf/spooler/main/assets/orca-cloud/spooler-tile.png" alt="Ícone do Spooler" width="40"> | 🧵 [Spooler](https://github.com/bloodf/spooler) | Seu estoque do Spoolman dentro do OrcaSlicer, com o que resta em cada bobina. | [Instalar](https://cloud.orcaslicer.com/p/50c35dcbd6f3) |
-| <img src="https://raw.githubusercontent.com/bloodf/kobracontrol/main/assets/orca-cloud/kobracontrol-tile.png" alt="Ícone do Kobra Control" width="40"> | 🟣 [Kobra Control](https://github.com/bloodf/kobracontrol) | Controle a Anycubic Kobra X pelo OrcaSlicer na sua rede. | [Instalar](https://cloud.orcaslicer.com/p/59c786285255) |
+| <img src="https://raw.githubusercontent.com/bloodf/kobracontrol/main/assets/orca-cloud/kobracontrol-tile.png" alt="Ícone do Kobra Control" width="40"> | 🟣 [Kobra Control](https://github.com/bloodf/kobracontrol) | Controle sua impressora Anycubic pelo OrcaSlicer, na rede local ou pela Anycubic Cloud. | [Instalar](https://cloud.orcaslicer.com/p/59c786285255) |
 | <img src="assets/orca-cloud/u1control-tile.png" alt="Ícone do U1 Control" width="40"> | 🔵 **U1 Control** · você está aqui | Controle a Snapmaker U1 pelo OrcaSlicer: cabeças, câmera, arquivos. | |
 
 Cada plugin funciona sozinho; instalados juntos, compartilham dados onde ajuda.

@@ -36,8 +36,13 @@ export function pluralKey(locale: Locale, base: string, n: number, dict?: Record
   return form === 'one' ? `${base}_one` : `${base}_other`;
 }
 
-/** Number, date and size formats of one language. Units are SI symbols; hours and minutes are words where the language writes them (texts). */
-export function formats(locale: Locale, texts: { hm: string; m: string }) {
+export type ClockPref = 'auto' | '24' | '12';
+export const isClock = (value: unknown): value is ClockPref => value === 'auto' || value === '24' || value === '12';
+
+/** Number, date and size formats of one language. Units are SI symbols; hours and minutes are words where the language writes them (texts).
+ *  `clock`: times of day on a 24-hour or 12-hour clock; 'auto' keeps the language's usual one. */
+export function formats(locale: Locale, texts: { hm: string; m: string }, clock: ClockPref = 'auto') {
+  const hour12 = clock === 'auto' ? {} : { hour12: clock === '12' };
   const nf = (x: number, max: number, min = 0) => new Intl.NumberFormat(locale, { maximumFractionDigits: max, minimumFractionDigits: min }).format(x);
   return {
     number: (v: number, digits = 0) => nf(v, digits, digits),
@@ -48,7 +53,7 @@ export function formats(locale: Locale, texts: { hm: string; m: string }) {
       const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
       return interpolate(h ? texts.hm : texts.m, { h, m });
     },
-    dateTime: (unix: number) => new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short' }).format(new Date(unix * 1000)),
-    time: (unix: number) => new Intl.DateTimeFormat(locale, { timeStyle: 'short' }).format(new Date(unix * 1000)),
+    dateTime: (unix: number) => new Intl.DateTimeFormat(locale, { dateStyle: 'short', timeStyle: 'short', ...hour12 }).format(new Date(unix * 1000)),
+    time: (unix: number) => new Intl.DateTimeFormat(locale, { timeStyle: 'short', ...hour12 }).format(new Date(unix * 1000)),
   };
 }

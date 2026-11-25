@@ -9,7 +9,7 @@ What it does
   * Marketing artwork (assets/marketing/source/*.png, the native originals): scales each image to its listing
     size, finds the empty screenshot square from the pixels, renders the matching screen at exactly that size
     and pastes it inside the square's frame with the same rounded corners. Nothing else in the image changes.
-  * README screenshots: the dashboard and the print setup window, light and dark, English and Portuguese.
+  * README screenshots: the dashboard and the print setup window, light and dark, in English.
   * Writes assets/marketing/asset-manifest.json: every export with its source, operation, size, bytes and date.
   * Inlines Spooler's full-colour icon (../spooler/assets/spooler-icon.svg) into the Spooler integration
     SVGs and re-exports their PNGs. The other SVG diagrams are never changed.
@@ -66,23 +66,18 @@ SCROLL_TO = ('document.querySelector("main").style.paddingBottom="600px";'   # t
              'scrollTo(0,Math.round(scrollY));')
 CAMERA_ON = ('document.querySelector(\'[data-test="camera"]\').click();'      # start the camera, answer with the mock picture
              'setTimeout(()=>emit({type:"frame",image:DATA.frame}),50);setTimeout(()=>{%s},150);')
-# The camera above the controls, which keep their temperatures only: the whole picture and the whole panel fit the square.
-CAMERA_FIRST = ('const ctl=document.querySelector("#bed-h").closest(".oui-panel");ctl.before(document.querySelector("#cam-h").closest(".oui-panel"));'
-                'ctl.querySelectorAll(".oui-controls-group:not(:first-child)").forEach(e=>e.remove());'
-                'document.querySelector("#scr-h").closest(".oui-panel").remove();')
+# Then down just far enough that the whole camera picture is in view: in the default layout it sits under the fold.
+CAMERA_IN_VIEW = ('const r=document.querySelector("img.oui-camera-picture")?.getBoundingClientRect();'
+                  'if(r&&r.bottom>innerHeight-12)scrollTo(0,Math.round(scrollY+r.bottom-innerHeight+12));')
 # Nothing after the toolheads: the panel that follows would show its title and little else.
 HEADS_LAST = ('const hp=document.querySelector("#heads-h").closest(".oui-panel");document.querySelectorAll("main .oui-panel").forEach(p=>{'
               'if(hp.compareDocumentPosition(p)&Node.DOCUMENT_POSITION_FOLLOWING&&!hp.contains(p))p.remove();});')
 # The toolhead cards without their heater row, feeder line and buttons: the spools are what they show here.
 COMPACT_HEADS = 'document.querySelectorAll(".hc .oui-slot-extra>[data-heater-row],.hc .oui-slot-extra>p.oui-meta,.hc .oui-slot-actions").forEach(e=>e.remove());'
-# The main and hero images: the print card without the printer photo or its buttons, the four toolheads and their spools right under it
-# (without their spool pickers too, so both rows fit).
-REELS_UNDER_JOB = ('const job=document.querySelector(\'[data-test="job-card"]\');job.querySelectorAll(".oui-job-thumb,.oui-job-actions").forEach(e=>e.remove());job.querySelector(".oui-job-block")?.removeAttribute("data-thumb");'
-                   'job.after(document.querySelector("#heads-h").closest(".oui-panel"));' + COMPACT_HEADS
-                   + 'document.querySelectorAll(".hc .hc-pick").forEach(e=>e.remove());')
 SCREENS = {
-    "dash": dict(page="app", section="dash", width=640, spools=True, js=REELS_UNDER_JOB),
-    "camera": dict(page="app", section="dash", width=640, js=CAMERA_ON % (CAMERA_FIRST + SCROLL_TO % "#cam-h")),
+    # the Dashboard in its default layout, as it comes (two columns from GRID_WIDTH, else one in reading order)
+    "dash": dict(page="app", section="dash", width=640, spools=True),
+    "camera": dict(page="app", section="dash", width=640, spools=True, js=CAMERA_ON % CAMERA_IN_VIEW),
     "heads": dict(page="app", section="dash", width=640, spools=True, js=HEADS_LAST + SCROLL_TO % "#heads-h" + COMPACT_HEADS),   # all four fit the square
     "files": dict(page="app", section="files", width=880),
     "setup": dict(page="setup", width=900),                  # the window's own width: four filaments in one row, options and buttons under them
@@ -94,6 +89,7 @@ LANDSCAPE = (1600, 900)
 # Layout width in CSS px of the app page inside a marketing image: wide enough for the whole header line
 # ("Snapmaker U1 · 192.168.1.50 · Extended firmware 2.0.0"), narrow enough to keep the two-row header.
 CSS_WIDTHS = {"en": 740, "pt-BR": 760}      # wide squares: room for the whole firmware line in the header
+GRID_WIDTH = 1040                           # the landscape images: wide enough for the Dashboard's two columns (from 1000)
 CSS_WIDTH_SOCIAL = 760                      # the small square: wide layout too, so the header line fits and no button wraps
 FILES_WIDTH_PT = 960                        # the Files tab in Portuguese: its longer tab names need a wider one-row app bar
 USES = {"tile": "store tile and plugin table icon", "square": "Orca Cloud square image", "social": "GitHub social preview",
@@ -163,7 +159,11 @@ def printer_status(fakes, u1, tags=False):
         for i, (cur, tgt) in enumerate(((171, 0), (218.4, 220), (154, 0), (166, 0))):
             s[u1.EXTRUDERS[i]] = {"temperature": cur, "target": tgt}
         s["heater_bed"] = {"temperature": 60.1, "target": 60}
-        s["purifier"] = {"power_detected": True, "mode": "weak"}
+        s["purifier"] = {"power_detected": True, "mode": "weak", "exhaust_fan": {"speed": 0.4}, "inner_fan": {"speed": 0.0}}
+        s["fan"], s["fan_generic cavity_fan"] = {"speed": 0.8}, {"speed": 0.3}
+        s["temperature_sensor cavity"] = {"temperature": 34.6}
+        for name, obj in u1.DRIVERS:   # TMC2240 (X, Y) read their own temperature
+            s[obj] = {"drv_status": {}, **({"temperature": 41.0 if name == "X" else 39.0} if "2240" in obj else {})}
         s["filament_feed left"] = {"extruder0": {"channel_state": "load_finish", "filament_detected": True},
                                    "extruder1": {"channel_state": "load_finish", "filament_detected": True}}
         s["filament_feed right"] = {"extruder2": {"channel_state": "load_finish", "filament_detected": True},
@@ -196,6 +196,8 @@ def app_data(fakes, mods, scenario):
     finally:
         fp.close()
     view["bindings"] = {"0": 9, "1": 11, "3": 7} if scenario.get("spools") else {}
+    view["estimated_time"] = 18720   # the slicer's estimate of desk-organizer.gcode (FILES), read by the plugin from its metadata
+    view["left"] = u1.time_left(view)
     cfg = {**st.CONNECTION, **st.automagic_values(), "mode": "automagic", "host": "192.168.1.50",
            "spoolman_url": "http://192.168.1.10:7912", "spooler_hint_dismissed": False,
            "rfid_auto_sync": True, "prefs": {}, "printed_before": True}
@@ -436,7 +438,9 @@ def css_width_for(rel, screen, lang):
         return FILES_WIDTH_PT          # the one-row app bar cuts "Ajustes" and "Imprimindo" short below this
     if screen not in ("dash", "camera"):   # the setup window, toolheads and files keep their own layout widths
         return None
-    return CSS_WIDTH_SOCIAL if rel.startswith("social/") else CSS_WIDTHS[lang]
+    if rel.startswith("social/"):
+        return CSS_WIDTH_SOCIAL
+    return CSS_WIDTHS[lang] if "square" in rel else GRID_WIDTH
 
 
 def export_artwork(env, src):
@@ -466,7 +470,7 @@ def write_manifest(entries):
     """One record per export; a partial run keeps the records of the files it did not redo."""
     path = OUT / "marketing" / "asset-manifest.json"
     old = json.loads(path.read_text(encoding="utf-8"))["exports"] if path.exists() else []
-    merged = {e["file"]: e for e in old}
+    merged = {e["file"]: e for e in old if (ROOT / e["file"]).exists()}   # a file since deleted loses its record
     merged.update((e["file"], e) for e in entries)
     sources = [{"file": "assets/marketing/source/" + p.name, "bytes": p.stat().st_size, "sha256": hashlib.sha256(p.read_bytes()).hexdigest()}
                for p in sorted(SOURCE.glob("*.png"))]
@@ -534,9 +538,10 @@ def main(argv):
         name = "integration/u1control-works-with-spooler-" + theme
         if want and pick(name):
             export_integration(name)
-    sources = [p for p in sorted(SOURCE.glob("*.png")) if pick(artwork(p)[0])]
-    plain = [(n, s, v, theme, lang) for n, s, v in PLAIN for theme in ("light", "dark") for lang in ("en", "pt-BR")
-             if pick("readme/u1control-screenshot-%s-%s-%s.png" % (n, theme, lang))]
+    # English only: the Portuguese images are no longer exported (README.pt-BR.md keeps the last ones made)
+    sources = [p for p in sorted(SOURCE.glob("*.png")) if not p.stem.endswith("pt-BR") and pick(artwork(p)[0])]
+    plain = [(n, s, v, theme, "en") for n, s, v in PLAIN for theme in ("light", "dark")
+             if pick("readme/u1control-screenshot-%s-%s-en.png" % (n, theme))]
     if not sources and not plain:
         return
     with tempfile.TemporaryDirectory() as tmp:

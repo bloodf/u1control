@@ -6,6 +6,31 @@
 
 - **Load or unload several toolheads at once**, as on the printer's screen. **Load several…** and **Unload several…** on the Toolheads card let you tick the heads (for loading, those with filament waiting at the inlet) and do them with one confirmation. U1 Control sends the screen's own sequence (`AUTO_FEEDING_BATCH`, read from klippy.log): the heads go one after another, the next one preheats with the current one, and the batch is always ended so no nozzle is left hot. Firmware without that macro gets the single loads or unloads in turn. From @xtronets.
 
+### Fixed
+
+- **Dragging on the Printer screen scrolls the printer's screen.** The card only sent taps; a drag now scrolls lists on the touchscreen (it takes effect when you let go). Needs the Extended Firmware's Remote Screen.
+
+## [0.20.0] - 2026-11-24
+
+### Added
+
+- **24-hour or 12-hour clock.** Settings > Language has a **Clock** choice: Automatic (the language's usual clock, as before), 24-hour or 12-hour. It sets how times of day read, such as **Finishes** on the Dashboard; English used to always show a 12-hour clock. Asked for by @BliXem.
+- **Hide the matched preset on the toolhead cards.** Settings > Connection has **Show the matched preset on the toolhead cards** (on by default). Turned off, the cards no longer show the OrcaSlicer preset each head gets with its score and Change; Apply to project filaments still uses the same match. From @xtronets (#118).
+
+### Changed
+
+- **The print setup's preview is a real top view.** Instead of a few sampled outer walls drawn as thin lines (a tangle on busy plates), the window shows the print as seen from above: every filament filled in the colour of the toolhead it is mapped to, shaded by height with darker edges so parts and steps read at a glance. A filament printed under another one, like text or an inlay in the first layers, shows through faintly with its outline. The prime tower, skirt and brim are left out so the parts fill the view. Long prints are sampled (all of the top layers, the rest spread over the height), so preparing it stays around a second. From @xtronets (#119).
+
+## [0.19.1] - 2026-11-23
+
+### Added
+
+- **Fuzzy search in the spool chooser.** Typing in a toolhead's spool list finds spools by brand or name with the letters in order ("prus", "creme", "cb" for Crème Brûlée); case and accents do not matter. Spools that fit the toolhead's material stay listed before the others, each group best match first. An ID finds only that spool (`12` or `#12`), never by its letters, and "No spool" is not offered while you search.
+
+### Fixed
+
+- **No more flashing notice and jumping page when you press a control on the Printer tab.** A command waiting for the printer used to open a banner above the content and remove it again, shifting everything down and back up. The wait is now announced to screen readers only, the pressed control shows its spinner, and the answer is still a toast.
+
 ## [0.19.0] - 2026-11-22
 
 ### Added

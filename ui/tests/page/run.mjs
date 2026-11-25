@@ -268,6 +268,43 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   }
 `);
 
+test('spool chooser search: brand, accents and abbreviations match fuzzily; an ID only matches exactly; nothing binds while searching', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [
+    {id: 7, name: 'Matte Black', vendor: 'Prusament', material: 'PLA', colour: '#111111', remaining: 500, initial: 1000},
+    {id: 12, name: 'Crème Brûlée', vendor: 'Polymaker', material: 'PLA', colour: '#eeddaa', remaining: 800, initial: 1000},
+    {id: 120, name: 'Grey', vendor: 'Acme', material: 'PLA', colour: '#888888', remaining: 900, initial: 1000},
+    {id: 5, name: 'Red', vendor: '3DJake', material: 'PLA', colour: '#cc0000', remaining: 700, initial: 1000}], bindings: {}, via: 'direct'});
+  await settle();
+  const pickRoot = q('.hc-pick');
+  pickRoot.querySelector('[role=combobox]').click();
+  await until(() => q('.p-select-overlay .p-select-filter'), 'the search box opens');
+  const opts = () => qa('.p-select-overlay [role=option]').map(o => text(o));
+  const search = async v => { await type(q('.p-select-overlay .p-select-filter'), v); await settle(); return opts(); };
+  assert(opts().some(o => o.includes('No spool')), 'without a search the list starts with No spool');
+  let r = await search('prus');
+  assert(r.length === 1 && r[0].includes('Matte Black'), 'brand: ' + r);
+  r = await search('creme');
+  assert(r.length === 1 && r[0].includes('Crème'), 'accents and case do not matter: ' + r);
+  r = await search('cb');
+  assert(r.length === 1 && r[0].includes('Crème'), 'name abbreviation (word starts): ' + r);
+  assert(!r.some(o => o.includes('No spool')), 'No spool is not offered while searching, so Enter cannot unlink');
+  r = await search('12');
+  assert(r.length === 1 && r[0].includes('Crème') && !r.some(o => o.includes('Grey')), 'a plain ID matches that spool only, not 120: ' + r);
+  r = await search('#120');
+  assert(r.length === 1 && r[0].includes('Grey'), '#ID matches that spool: ' + r);
+  r = await search('#1');
+  assert(r.length === 0, 'an ID is never matched by its letters: ' + r);
+  r = await search('3');
+  eq(r, [], 'a bare number is an ID only: "3" does not fuzzy-match the brand 3DJake');
+  r = await search('3d');
+  assert(r.length === 1 && r[0].includes('3DJake'), 'with a letter it is a brand search: ' + r);
+  eq(cmds('bind_spool').length + cmds('unbind_spool').length, 0, 'nothing is bound or unbound while searching');
+  await press('Escape'); await settle();
+`);
+
 test('the printer photo: spools in the Spoolman colour, else the printer colour, else empty; the active spool lit', `
   await connect();
   await post({type: 'status', data: VIEW({state: 'printing', filename: 'cube.gcode', progress: 0.5, extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1})),
@@ -463,6 +500,14 @@ test('setup: the print, the printer, a card per filament with its head, spool an
   eq(getComputedStyle(c0.querySelector('.hp-strand')).stroke, 'rgb(108, 191, 90)', 'strand in the Spoolman colour');
   eq(getComputedStyle(q('.su-card[data-f="3"] .hp-strand')).stroke, 'rgb(245, 158, 11)', 'no spool: the printer colour');
   assert(byTest('preview') && byTest('preview').getAttribute('aria-label').includes('Top view'), 'preview drawn');
+  const pv = byTest('preview'), k = pv.width / 200, cellAt = (x, y) => {   // the fixture's 120-cell map in 188 px
+    const d = pv.getContext('2d').getImageData(Math.round((6 + (x + 0.5) * 188 / 120) * k), Math.round((6 + (119 - y + 0.5) * 188 / 120) * k), 1, 1).data;
+    return [d[0], d[1], d[2], d[3]];
+  };
+  const tray = cellAt(100, 60), inlay = cellAt(30, 88), outside = cellAt(1, 1);
+  assert(tray[3] === 255 && tray[1] > tray[0] && tray[1] > tray[2], 'tray in its head colour (green): ' + tray);
+  assert(inlay[2] > tray[2] + 40, 'the filament under the top shows through (blue): ' + inlay + ' vs ' + tray);
+  eq(outside[3], 0, 'nothing printed: transparent');
   assert(byTest('prefs') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
   assert(!alerts() && !byTest('send').disabled && text(byTest('send')) === 'Apply & continue', 'nothing to confirm');
   await click(byTest('send'));
@@ -968,7 +1013,7 @@ test('B-04/B-05: one command per action, visible waiting, unknown after timeout,
   byTest('pause').click(); byTest('pause').click(); await settle();
   eq(cmds('pause').length, 1, 'double click sends once');
   assert(byTest('pause').disabled, 'pause disabled while waiting');
-  assert(text(q('.notices [role=status]')).includes('Pause: waiting for the printer'), 'waiting is visible');
+  assert(text(q('.notices [role=status]')).includes('Pause: waiting for the printer'), 'waiting is announced');
   assert(!byTest('estop').disabled, 'E-stop never waits behind another command');
   await click(byTest('estop')); await yes();
   eq(cmds('emergency_stop').length, 1, 'E-stop sent while pause is pending');
@@ -987,6 +1032,24 @@ test('B-04/B-05: one command per action, visible waiting, unknown after timeout,
   await click(dismiss);
   assert(!alerts().includes('Emergency stop failed'), 'dismissed by the user');
 `, { slow: true });
+
+test('a command waiting for the printer does not move the page: announced, no box in the flow, no flash', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
+  const layout = () => [byTest('job-card'), q('.u1-top'), q('.notices')].map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]; });
+  const before = layout(), seen = [];
+  const watch = new MutationObserver(() => { if (q('.notices .oui-banner')) seen.push('banner'); });
+  watch.observe(q('.notices'), {childList: true, subtree: true});
+  await click(byTest('pause')); await settle();
+  eq(cmds('pause').length, 1, 'sent');
+  assert(text(q('.notices [role=status]')).includes('Pause: waiting for the printer'), 'announced to assistive tech');
+  assert(!q('.notices .oui-banner') && q('.notices [role=status]').classList.contains('oui-sr'), 'no banner box in the page flow');
+  eq(layout(), before, 'layout unchanged while the command waits');
+  await reply(cmds('pause')[0], true); await settle();
+  eq(layout(), before, 'layout unchanged after the answer');
+  watch.disconnect();
+  eq(seen, [], 'a banner never flashed');
+`);
 
 test('B-01: focus and typed values survive 2 s status ticks; dialogs return focus after a tick', `
   await connect();
@@ -1092,6 +1155,17 @@ test('appearance: light or dark can be forced in Settings and is kept', `
   eq(last('ui_theme').value, 'light', 'light kept');
   await pick(byTest('theme'), 'Automatic');
   eq(last('ui_theme').value, 'auto', 'automatic again');
+`);
+
+test('clock: a 24-hour or 12-hour clock can be picked in Settings and is kept', `
+  await connect();
+  await tab('settings');
+  await pick(byTest('clock'), '24-hour (14:30)');
+  eq(last('ui_clock').value, '24', 'kept in the plugin settings');
+  await pick(byTest('clock'), '12-hour (2:30 PM)');
+  eq(last('ui_clock').value, '12', '12-hour kept');
+  await pick(byTest('clock'), 'Automatic');
+  eq(last('ui_clock').value, 'auto', 'automatic again');
 `);
 
 test('i18n: host language de_DE gives de, including safety dialogs and errors', `
@@ -1956,8 +2030,8 @@ test('time-lapses: one row per video with its cover; saving says where the file 
   eq(cmds('download').map(m => [m.args, m.gen]), [[{path: 'timelapse/benchy_20261116130921.mp4'}, 1]], 'one download, from the writable root');
   assert(btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'no delete while that video is being saved');
   assert(!btn('Delete the time-lapse vase_20261115080000.mp4').disabled && !btn('Save the time-lapse vase_20261115080000.mp4').disabled, 'the other rows stay usable');
-  await reply(last('cmd', 'download'), '/home/u/Downloads/u1control/benchy_20261116130921.mp4');
-  await until(() => toasts().includes('Saved to /home/u/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
+  await reply(last('cmd', 'download'), '/example/user/Downloads/u1control/benchy_20261116130921.mp4');
+  await until(() => toasts().includes('Saved to /example/user/Downloads/u1control/benchy_20261116130921.mp4'), 'says where it was saved');
   assert(!btn('Delete the time-lapse benchy_20261116130921.mp4').disabled, 'delete is back');
   await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
   assert(!btn('Save the time-lapse vase_20261115080000.mp4').disabled && !btn('Delete the time-lapse vase_20261115080000.mp4').disabled, 'saving and deleting stay on while printing');
@@ -2068,7 +2142,7 @@ test('camera: save the picture on screen', `
   await click(byTest('cam-save'));
   const cmd = last('cmd', 'snapshot');
   eq(cmd.args, {}, 'asks the plugin to save its last picture');
-  await reply(cmd, '/home/u/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
+  await reply(cmd, '/example/user/Downloads/u1control/Bench U1 2026-11-14 10-00-00.jpg');
   await until(() => toasts().includes('Saved to'), 'says where it was saved');
 `);
 
@@ -2177,6 +2251,95 @@ test('requirements: printer screen stays on stock firmware, off, with its reason
   assert(!byTest('screen-show').disabled, 'on the Extended Firmware it can be shown');
 `);
 
+const SCREEN_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAFACAIAAADrqjgsAAADa0lEQVR42u3UMQ0AAAzDsEIv9NLYJBtCjqQAnBQJAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwbAoAEMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgATBoAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBoAgwYwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBsCgAQwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABMGgAgwbAoAEMGgCDBjBoAAwaAIMGMGgADBrAoAEwaAAMGsCgATBoAIMGwKABDFoCAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgADBrAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGgCDBjBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwawKABMGgAgwbAoAEwaACDBsCgAQwaAIMGwKABDBoAgwYwaAAMGsCgATBoAAwa4KMBzpk0vRTU3HUAAAAASUVORK5CYII=';   // 480 x 320, as the U1 sends it
+test('printer screen: the whole 480 x 320 picture is shown, nothing cut off', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('screen-show'));
+  await post({type: 'screen', image: '${SCREEN_PNG}'});
+  await until(() => { const i = q('.u1-view-screen img'); return i && i.complete && i.naturalWidth; }, 'the picture loads');
+  const img = q('.u1-view-screen img');
+  await until(() => { const f = q('.u1-view-screen').getBoundingClientRect(); return Math.abs(f.width / f.height - 1.5) < 0.02; }, 'the frame takes the picture proportions (3:2)');
+  const f = q('.u1-view-screen').getBoundingClientRect(), r = img.getBoundingClientRect();
+  assert(r.height <= f.height + 1 && r.width <= f.width + 1, 'the picture fits its frame: ' + JSON.stringify([r.width, r.height, f.width, f.height]));
+`);
+
+test('screen: a tap on the picture waits without moving the page, can be repeated, and says nothing when answered', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('screen-show'));
+  const svg = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="600"><rect width="1024" height="600" fill="#123"/></svg>');
+  await post({type: 'screen', image: svg});
+  await until(() => q('.u1-view-screen img') && q('.u1-view-screen img').naturalWidth === 1024, 'the screen picture is shown');
+  q('.u1-view-screen img').scrollIntoView({block: 'center'}); await settle();   // the real click scrolls first: do it before measuring
+  const layout = () => [q('.u1-top'), q('.notices'), q('.u1-view-screen'), byTest('job-card')].map(e => { const r = e.getBoundingClientRect(); return [Math.round(r.top), Math.round(r.height)]; });
+  const before = layout(), banners = [];
+  const watch = new MutationObserver(() => { if (q('.notices .oui-banner')) banners.push('banner'); });
+  watch.observe(q('.notices'), {childList: true, subtree: true});
+  await mouse(q('.u1-view-screen img')); await settle();
+  eq(cmds('screen_touch').length, 1, 'the tap is sent');
+  eq(q('.u1-view-screen').getAttribute('aria-busy'), 'true', 'busy for assistive tech while the printer has not answered');
+  eq(getComputedStyle(q('.u1-view-screen img')).cursor, 'progress', 'the cursor says the tap is waiting');
+  assert(text(q('.notices [role=status]')).includes('waiting for the printer'), 'waiting is announced');
+  eq(layout(), before, 'layout unchanged while the tap waits');
+  await mouse(q('.u1-view-screen img')); await settle();
+  eq(cmds('screen_touch').length, 2, 'a second tap is sent while the first waits');
+  eq(layout(), before, 'layout unchanged after a repeat tap');
+  for (const m of cmds('screen_touch')) await reply(m, true);
+  await settle();
+  eq(q('.u1-view-screen').getAttribute('aria-busy'), 'false', 'not busy once answered');
+  eq(getComputedStyle(q('.u1-view-screen img')).cursor, 'pointer', 'the cursor is a pointer again');
+  eq(layout(), before, 'layout unchanged after the answers');
+  eq(qa('.oui-toast').length, 0, 'an answered tap says nothing');
+  watch.disconnect();
+  eq(banners, [], 'a banner never flashed');
+
+`);
+
+const SCREEN_JS = `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('screen-show'));
+  const cv = document.createElement('canvas'); cv.width = 200; cv.height = 100;
+  await post({type: 'screen', image: cv.toDataURL('image/png')});
+  await until(() => q('.u1-view-screen img') && q('.u1-view-screen img').naturalWidth === 200, 'the picture loads');
+  const img = q('.u1-view-screen img'); img.scrollIntoView({block: 'center'}); await settle();
+  const r = img.getBoundingClientRect(), k = Math.min(r.width / 200, r.height / 100), ox = (r.width - 200 * k) / 2, oy = (r.height - 100 * k) / 2;
+  const at = (px, py) => [r.left + ox + (px + 0.5) * k, r.top + oy + (py + 0.5) * k];
+  const mouseAt = (type, x, y) => cdp({op: 'mouse', type, x, y});
+`;
+test('printer screen: dragging on the picture sends one swipe with the screen\'s own pixels', SCREEN_JS + `
+  const [x0, y0] = at(20, 30), [x1, y1] = at(180, 70);
+  await mouseAt('mousePressed', x0, y0);
+  for (let i = 1; i <= 8; i++) await mouseAt('mouseMoved', x0 + (x1 - x0) * i / 8, y0 + (y1 - y0) * i / 8);
+  await mouseAt('mouseMoved', r.right + 300, r.top - 300);   // leaves the picture: the swipe ends where it left
+  await mouseAt('mouseReleased', r.right + 300, r.top - 300);
+  await until(() => cmds('screen_swipe').length, 'the swipe is sent');
+  await sleep(150);
+  eq(cmds('screen_swipe').length, 1, 'one command for the whole drag');
+  eq(cmds('screen_touch').length, 0, 'and no tap');
+  const pts = cmds('screen_swipe')[0].args.points;
+  assert(Math.abs(pts[0][0] - 20) <= 1 && Math.abs(pts[0][1] - 30) <= 1, 'starts where it went down (give or take a whole pixel): ' + JSON.stringify(pts[0]));
+  eq(pts[pts.length - 1], [199, 0], 'ends clamped to the picture corner');
+  assert(pts.length >= 5 && pts.length <= 12, 'points are thinned: ' + pts.length);
+  assert(pts.every(p => p[0] >= 0 && p[0] < 200 && p[1] >= 0 && p[1] < 100), 'all inside the picture');
+  eq(getComputedStyle(img).touchAction, 'none', 'the page does not scroll while dragging');
+  eq(getComputedStyle(img).userSelect, 'none', 'nor select');
+`);
+
+test('printer screen: a press without movement still sends exactly one tap', SCREEN_JS + `
+  const [x, y] = at(100, 50);
+  await mouseAt('mousePressed', x, y);
+  await mouseAt('mouseMoved', x + 2, y + 1);
+  await mouseAt('mouseReleased', x, y);
+  await until(() => cmds('screen_touch').length, 'the tap is sent');
+  await sleep(150);
+  eq(cmds('screen_touch').length, 1, 'one tap');
+  eq(cmds('screen_swipe').length, 0, 'no swipe');
+  const a = cmds('screen_touch')[0].args;
+  assert(Math.abs(a.x - 100) <= 1 && Math.abs(a.y - 50) <= 1, 'at the pixel pressed (give or take a whole pixel): ' + JSON.stringify(a));
+`);
+
 test('requirements: no Spoolman turns stock links off with the reason', `
   await connect();
   await post({type: 'status', data: VIEW()});
@@ -2206,6 +2369,21 @@ test('Apply to project filaments: busy until the plugin answers, then says what 
   await click(byTest('sync'));
   await reply(last('sync_project'), {text: 'Project filaments unchanged. Problems: filament 1: no preset', done: 0, problems: 1});
   await until(() => q('.oui-toast[role=alert]') && toasts().includes('no preset'), 'why not is shown, as an error: ' + toasts());
+`);
+
+test('toolhead cards: the matched preset can be hidden in Settings, and comes back', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('preset_matches'), 'the cards ask for the presets');
+  await reply(last('preset_matches'), {matches: [{head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: [], confident: true, candidates: [], remembered_key: ''}]});
+  await until(() => q('[data-match="0"]'), 'shown by default');
+  const cfg = show => post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'automagic', show_preset_match: show}});
+  await cfg(false);
+  await until(() => !q('[data-match="0"]'), 'hidden when switched off');
+  await cfg(true);
+  await until(() => q('[data-match="0"]'), 'back when switched on');
+  await tab('settings');
+  await until(() => byTest('match-show'), 'the switch in Settings');
 `);
 
 test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and reasons; Change remembers another', `
@@ -2706,6 +2884,46 @@ test('dashboard: 0.16.0\'s untouched default gets the arranged one; with multiAC
   eq(place('ace'), '1 / span 5 | 19 / span 6', 'filament units under the toolheads');
   eq(place(MOVER), MOVER_FROM, 'nothing else moved');
 `);
+const SCREEN_SHOWN = `
+  await click(byTest('screen-show'));
+  await post({type: 'screen', image: '${SCREEN_PNG}'});
+  await until(() => { const i = q('.u1-view-screen img'); return i && i.complete && i.naturalWidth; }, 'the picture loads');
+`;
+test('printer screen on the dashboard: bottom row beside the camera; a click on the picture is sent in its own pixels', DASH_JS + `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+` + SCREEN_SHOWN + `
+  const r = id => cell(id).getBoundingClientRect(), s = r('screen'), cam = r('camera'), c = r('console');
+  assert(Math.abs(s.top - cam.top) < 2 && s.left >= cam.right - 1, 'the screen sits beside the camera, in the bottom row: ' + JSON.stringify([s.top, cam.top, s.left, cam.right]));
+  assert(s.top >= r('controls').bottom - 1 && s.bottom <= c.top + 1, 'under the controls, above the console');
+  const f = q('.u1-view-screen').getBoundingClientRect(), i = q('.u1-view-screen img').getBoundingClientRect();
+  assert(f.bottom <= s.bottom + 1 && f.right <= s.right + 1 && i.height <= f.height + 1, 'the picture is not cut off by its widget');
+  await mouse(q('.u1-view-screen img'));   // the centre: 480 x 320 -> 240, 160
+  await until(() => cmds('screen_touch').length, 'a touch is sent');
+  const near = (a, x, y) => Math.abs(a.x - x) <= 1 && Math.abs(a.y - y) <= 1;   // the click lands on a CSS pixel
+  assert(near(cmds('screen_touch').at(-1).args, 240, 160), 'the centre of the picture: ' + JSON.stringify(cmds('screen_touch').at(-1).args));
+  await reply(last('cmd', 'screen_touch'), true);   // the first touch is done: the page takes the next
+  const j = q('.u1-view-screen img').getBoundingClientRect(), k = j.width / 480;   // after the first click scrolled it into view
+  await cdp({op: 'clickAt', x: j.left + 120 * k, y: j.top + 80 * k});   // a quarter in: 120, 80
+  await until(() => cmds('screen_touch').length === 2, 'the second touch is sent');
+  assert(near(cmds('screen_touch').at(-1).args, 120, 80), 'a point off the centre keeps its place: ' + JSON.stringify(cmds('screen_touch').at(-1).args));
+`, { size: [1280, 800] });
+
+test('printer screen in a narrow window: after the camera, before the console; a click is sent in the picture pixels', DASH_JS + `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+` + SCREEN_SHOWN + `
+  assert(q('.oui-dash-grid[data-narrow]'), 'one column');
+  const top = id => cell(id).getBoundingClientRect().top;
+  assert(top('camera') < top('screen') && top('screen') < top('console'), 'reading order: ' + [top('camera'), top('screen'), top('console')]);
+  const f = q('.u1-view-screen').getBoundingClientRect();
+  assert(Math.abs(f.width / f.height - 1.5) < 0.02, 'the frame keeps 3:2: ' + f.width + 'x' + f.height);
+  await mouse(q('.u1-view-screen img'));
+  await until(() => cmds('screen_touch').length, 'a touch is sent');
+  const a = cmds('screen_touch').at(-1).args;
+  assert(Math.abs(a.x - 240) <= 1 && Math.abs(a.y - 160) <= 1, 'the centre of the picture: ' + JSON.stringify(a));
+`, { size: [480, 900] });
+
 for (const size of [[1280, 800], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
   await READY();
   const bad = qa('.oui-dash-cell').map(c => [c.dataset.widget, q('.oui-panel-body', c)]).filter(([, b]) => b && (b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1))

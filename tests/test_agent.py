@@ -85,7 +85,20 @@ class PushTests(unittest.TestCase):
     def test_tray_ids_prefer_the_linked_spools_preset_then_generic_by_material(self):
         block = agent.push_status(view(), lambda h: {1: "SPL00000000AB"}.get(h["index"], ""))["print"]
         self.assertEqual([t["tray_info_idx"] for t in block["ams"]["ams"][0]["tray"]],
-                         ["OFDSrzZ8", "SPL00000000AB", "", "OFmY0l6t"])   # Generic PLA, Spooler's, empty, Generic PLA Matte
+                         ["OFhmxnYw", "SPL00000000AB", "", "OFmY0l6t"])   # Snapmaker PLA Basic, Spooler's, empty, Generic PLA Matte
+
+    def test_a_snapmaker_spool_gets_snapmakers_own_preset(self):
+        """A Snapmaker spool read from its tag loads Snapmaker's own U1 preset (PLA SnapSpeed), not Generic PLA High
+        Speed; another vendor, or a sub-type Snapmaker has no U1 preset for, keeps the Generic one."""
+        heads = [{"index": 0, "loaded": True, "vendor": "Snapmaker", "type": "PLA", "sub_type": "SnapSpeed", "colour": "#F4C032"},
+                 {"index": 1, "loaded": True, "vendor": "Sunlu", "type": "PLA", "sub_type": "SnapSpeed", "colour": "#000DFF"},
+                 {"index": 2, "loaded": True, "vendor": "snapmaker", "type": "PETG", "sub_type": "", "colour": "#FFFFFF"},
+                 {"index": 3, "loaded": True, "vendor": "Snapmaker", "type": "PLA", "sub_type": "Unheard", "colour": "#FFFFFF"}]
+        trays = agent.ams_block(heads, lambda h: "")["ams"]["ams"][0]["tray"]
+        self.assertEqual([t["tray_info_idx"] for t in trays],
+                         ["OFwhLMs4", agent.generic_filament_id("PLA HIGH SPEED"), "OF4WB37S", "OFDSrzZ8"])
+        trays = agent.ams_block(heads, lambda h: "SPL00000000AB")["ams"]["ams"][0]["tray"]
+        self.assertEqual({t["tray_info_idx"] for t in trays}, {"SPL00000000AB"})   # a linked preset still comes first
 
     def test_generic_id_by_the_real_material(self):
         self.assertEqual(agent.generic_filament_id("PETG"), "OFYPdQJh")
@@ -103,7 +116,7 @@ class PushTests(unittest.TestCase):
         self.assertEqual(unit["id"], "0")
         trays = unit["tray"]
         self.assertEqual([t["id"] for t in trays], ["0", "1", "2", "3"])
-        self.assertEqual((trays[0]["tray_type"], trays[0]["tray_color"], trays[0]["tray_info_idx"]), ("PLA", "FF0000FF", "OFDSrzZ8"))
+        self.assertEqual((trays[0]["tray_type"], trays[0]["tray_color"], trays[0]["tray_info_idx"]), ("PLA", "FF0000FF", "OFhmxnYw"))   # Snapmaker PLA Basic
         self.assertEqual(trays[1]["tray_type"], "PETG")
         self.assertEqual(trays[2]["tray_slot_placeholder"], "1")
         self.assertEqual(trays[3]["tray_type"], "PLA MATTE")
@@ -718,6 +731,26 @@ class PluginAgentTests(unittest.TestCase):
         self.assertEqual(list(self.agent._bound_spools()), [2])
         self.ns["_service"].target.host = "10.9.9.9"   # another U1 in the tab: the agent's own links
         self.assertEqual(list(self.agent._bound_spools()), [0])
+        self.agent.view = dict(self.agent.view or {}, spool_ids=[0, 0, 5, 0])   # Extended Firmware's own link wins
+        self.assertEqual(list(self.agent._bound_spools()), [2])
+        self.ns["_service"] = None   # no tab at all: the same
+        self.assertEqual(list(self.agent._bound_spools()), [2])
+        self.agent.view = dict(self.agent.view, spool_ids=[0, 0, 0, 0])   # none on the U1: Spoolman locations
+        self.assertEqual(list(self.agent._bound_spools()), [0])
+
+    def test_a_queued_refresh_never_brings_back_older_spooler_profiles(self):
+        """_preferred reads profiles.json on the poll thread and queues a UI-thread refresh; a refresh that runs after
+        a newer read must not put the older profiles back."""
+        queued, reads = [], [{"v": 1}, {"v": 2}]
+        self.ns["spooler_bridge"].read_json = lambda folder, name: reads.pop(0)
+        self.ns["filament_catalog"] = lambda: (["new presets"], "U1")
+        self.ns["user_presets"] = lambda: []
+        self.agent.set_queue_on_main_fn(queued.append)
+        self.agent._preferred()
+        self.agent._catalog_at = 0.0
+        self.agent._preferred()   # a newer read, before the first refresh ran
+        queued[0]()   # the first read's refresh runs late: it must not carry its older profiles back
+        self.assertEqual((self.agent._catalog, self.agent._profiles), ((["new presets"], "U1"), {"v": 2}))
 
     def test_toolhead_linked_to_a_standalone_user_preset_reports_its_id(self):
         """orca_filament_preset naming a standalone user preset: its filament_id (from its file), which OrcaSlicer's

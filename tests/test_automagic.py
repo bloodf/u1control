@@ -63,6 +63,17 @@ class SettingsTests(unittest.TestCase):
         write(os.path.join(d, "settings.json"), json.dumps({"ui_theme": "neon"}))
         self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["ui_theme"], "auto")  # hand-edited
 
+    def test_ui_clock(self):
+        """Settings > Language: the clock follows the language by default; only auto/24/12 are kept."""
+        st, d = self.store()
+        self.assertEqual(st.effective()["ui_clock"], "auto")
+        self.assertEqual(st.update({"ui_clock": "24"})["ui_clock"], "24")
+        for bad in ("13", 24, True, None):
+            self.assertEqual(st.update({"ui_clock": bad})["ui_clock"], "24", bad)
+        self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["ui_clock"], "24")  # persisted
+        write(os.path.join(d, "settings.json"), json.dumps({"ui_clock": "25"}))
+        self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["ui_clock"], "auto")  # hand-edited
+
     def test_callable_backend(self):
         box = {}
         st = settings.Store(load=lambda: box.get("t", "{}"), save=lambda t: box.update(t=t))

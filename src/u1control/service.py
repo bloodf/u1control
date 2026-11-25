@@ -42,7 +42,9 @@ FRAME_SAME_BEFORE_SLOWING = 2   # unchanged pictures in a row before asking half
 FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
 SNAPSHOT_MAX_AGE = 10.0     # s: Save picture keeps only a camera frame this fresh
 URGENT = ("emergency_stop", "pause", "cancel")   # never wait behind the command worker
-DEDICATED = URGENT + ("connect", "download", "screen_touch", "stock", "usage", "usage_ack", "snapshot")  # own short-lived thread
+SWIPE_MAX_POINTS = 24   # a drag is thinned to this many points
+SWIPE_MAX_IN = 5000     # longest path accepted at all
+DEDICATED = URGENT + ("connect", "download", "screen_touch", "screen_swipe", "stock", "usage", "usage_ack", "snapshot")  # own short-lived thread
 # ("stock" only reads files; "usage"/"usage_ack" only read or write the local ledger, never Spoolman;
 # "snapshot" only writes the last camera picture to a local file)
 THUMB_QUEUE = 8             # thumbnails waiting at most; the page asks for a few at a time
@@ -90,6 +92,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.log = log
         self.client_factory = client_factory
         self.lock = threading.RLock()
+        self._touch_lock = threading.Lock()   # one touchscreen gesture at a time
         self._op = threading.local()   # (generation, client, target, pinned) of the request this thread runs
         self.target = None
         self.client = None
@@ -823,9 +826,41 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         x, y = int(x), int(y)
         if not (0 <= x < 4096 and 0 <= y < 4096):
             raise ValueError(tr("touch outside the screen"))
-        self._client().raw("POST", "%s?a=tap&x=%d&y=%d" % (EXT_TOUCH, x, y), b"", timeout=4)
+        with self._touch_lock:
+            self._client().raw("POST", "%s?a=tap&x=%d&y=%d" % (EXT_TOUCH, x, y), b"", timeout=4)
         with self.lock:
             self.screen_at = 0.0   # show the result of the tap right away
+        return True
+
+    def cmd_screen_swipe(self, points):
+        """Replay a drag on the printer's touchscreen: press at the first of `points` ([x, y] pairs), move through
+        the rest, release. One command, so the firmware sees the calls in order."""
+        if not isinstance(points, (list, tuple)) or not 2 <= len(points) <= SWIPE_MAX_IN:
+            raise ValueError(tr("touch outside the screen"))
+        path = []
+        for pt in points:
+            if not (isinstance(pt, (list, tuple)) and len(pt) == 2
+                    and all(isinstance(v, int) and not isinstance(v, bool) and 0 <= v < 4096 for v in pt)):
+                raise ValueError(tr("touch outside the screen"))
+            path.append((pt[0], pt[1]))
+        if len(path) > SWIPE_MAX_POINTS:   # thin evenly, keeping the first and last
+            n = SWIPE_MAX_POINTS - 1
+            path = [path[i * (len(path) - 1) // n] for i in range(n + 1)]
+        client = self._client()
+
+        def send(query):
+            client.raw("POST", "%s?%s" % (EXT_TOUCH, query), b"", timeout=4)
+        with self._touch_lock:   # the firmware has one touch slot: one gesture at a time
+            try:
+                send("a=down&x=%d&y=%d" % path[0])
+                for pt in path[1:]:
+                    send("a=move&x=%d&y=%d" % pt)
+            finally:
+                try:
+                    send("a=up")   # never leave the touchscreen pressed
+                finally:
+                    with self.lock:
+                        self.screen_at = 0.0
         return True
 
     def cmd_print_file(self, path):
