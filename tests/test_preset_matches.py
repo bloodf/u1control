@@ -141,6 +141,43 @@ class PresetMatchTests(unittest.TestCase):
         self.assertEqual(bridge.shown_names([spooler, "Spooler/Acme PLA @Snapmaker U1"]),   # a clash: both real names
                          {spooler: spooler, "Spooler/Acme PLA @Snapmaker U1": "Spooler/Acme PLA @Snapmaker U1"})
 
+    def test_a_bound_spools_name_gives_the_sub_type_the_printer_does_not_report(self):
+        """The printer reports PETG and no sub-type, the bound spool is named "... PETG Matte White": its Spooler preset
+        scores "matte" as a word of the spool, not an extra word, and outranks a plain preset. The card and Apply to
+        project filaments pick the same, and the remembered keys still use what the printer reports."""
+        petg = dict(self.heads[self.pla], type="PETG", vendor="Generic", sub_type="")
+        matte, plain = "_local/spooler/Filament Hub PETG Matte White @Snapmaker U1", "Filament Hub PETG @Snapmaker U1"
+        names = [plain, matte]
+        ctx = lambda: {"names": names, "colours": {}, "mine": [], "printer": "", "preference": None, "stores": []}  # noqa: E731
+        spool = {"id": 7, "name": "Filament Hub PETG Matte White", "vendor": "Filament Hub"}
+        match = self.ns["head_match"](ctx(), petg, None, spool)
+        self.assertEqual((match["name"], match["source"]), (matte, "auto"))
+        self.assertIn(["word", "matte"], match["reasons"])
+        self.assertNotIn(["extra_word", "matte"], match["reasons"])
+        scores = {c["name"]: c["score"] for c in match["candidates"]}
+        self.assertGreater(scores[matte], scores[plain])
+        self.assertEqual(match["keys"], filmatch.toolhead_keys(petg, {}, 7))
+        self.assertIn("mat:generic|petg|", match["keys"])
+        # no spool bound: as before, "matte" is a word the head doesn't report
+        match = self.ns["head_match"](ctx(), petg, None, None)
+        self.assertEqual(match["name"], plain)
+        self.assertIn(["extra_word", "matte"], next(c["reasons"] for c in match["candidates"] if c["name"] == matte))
+        # the printer's (or tag's) own sub-type wins over the spool's name
+        match = self.ns["head_match"](ctx(), petg, {"sub_type": "Silk"}, spool)
+        self.assertIn(["extra_word", "matte"], next(c["reasons"] for c in match["candidates"] if c["name"] == matte))
+        self.assertEqual(match["keys"], filmatch.toolhead_keys(petg, {"sub_type": "Silk"}, 7))
+        # "Basic", the printer's default, is no sub-type: the spool's name still counts
+        match = self.ns["head_match"](ctx(), dict(petg, sub_type="Basic"), None, spool)
+        self.assertEqual(match["name"], matte)
+        self.assertIn(["word", "matte"], match["reasons"])
+        self.assertEqual(match["keys"], filmatch.toolhead_keys(dict(petg, sub_type="Basic"), {}, 7))
+        # Apply to project filaments applies the card's pick
+        self.orca.filament_calls.clear()
+        self.ns["_sync_reads"] = lambda with_printer=True: ([{"name": n, "colour": ""} for n in names], None, [])
+        heads = [petg if h["index"] == self.pla else dict(h, loaded=False) for h in self.heads]
+        self.ns["sync_project"](heads, [None] * 4, {}, bound=lambda i: spool if i == self.pla else None)
+        self.assertEqual({slot: name for slot, name, _ in self.orca.filament_calls}, {self.pla + 1: matte})
+
     def test_profile_overrides_move_once(self):
         head = self.heads[self.pla]
         store = self.ns["settings"].Store(path=os.path.join(self.storage, "settings.json"))
