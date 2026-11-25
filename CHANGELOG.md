@@ -2,9 +2,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Spooler presets read as Spooler/<preset>.** The matched preset, the Change list and the **Apply to project filaments** message show a Spooler preset as `Spooler/<preset>` instead of its OrcaSlicer name `_local/spooler/<preset>`; picking or applying it still uses the real preset. Long names in the Change list now wrap instead of being cut off.
+
 ### Fixed
 
 - **The spool chooser no longer holds the page with a large Spoolman inventory.** With thousands of spools, opening a toolhead's spool list drew every spool (about a second each time, far longer in OrcaSlicer), and every status refresh rebuilt all four lists even while closed. The list now draws only the spools in view and is rebuilt only when the spools, the search or the head's material change: 2000 spools open in about 30 ms instead of 1 s. Shared UI foundation 5.12.0.
+- **A toolhead's preset match reads the sub-type from its Spoolman spool.** When the printer reports only the material (PETG, with no sub-type or just Basic), the toolhead card and Apply to project filaments now take words such as Matte or Silk from the name of the spool bound to that toolhead: a spool named "Filament Hub PETG Matte White" gets its Matte preset (with "matte" counted as a word of the spool) instead of a plain one. A sub-type the printer or tag reports still wins, and presets picked by hand are remembered under the same keys as before.
 
 ## [0.21.0] - 2026-11-24
 

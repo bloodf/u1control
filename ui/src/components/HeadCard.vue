@@ -141,8 +141,11 @@ const showMatch = computed(() => config.value?.settings?.show_preset_match !== f
 const words = (reasons: unknown) => reasonTexts(reasons, (code, v) => t(`match.r.${code}` as MessageKey, { v }));
 const BADGES: Record<string, MessageKey> = { remembered: 'match.remembered', linked: 'match.linked', spooler: 'match.spooler' };
 const candidates = computed(() => (!match.value || match.value.source === 'linked' ? [] : [
-  ...match.value.candidates.map(c => ({ name: c.name, score: c.score, reasons: words(c.reasons) })),
+  ...match.value.candidates.map(c => ({ name: c.shown ?? c.name, score: c.score, reasons: words(c.reasons) })),
   ...(match.value.ofd ?? []).map(c => ({ name: c.name, score: c.score, reasons: words(c.reasons), badge: t('ofd.badge'), note: t('ofd.note') }))]));
+// The card shows Spooler's presets as Spooler/<preset> (shown); a pick goes back to the real name.
+const realName = (name: string | null) => name && (match.value?.candidates.find(c => (c.shown ?? c.name) === name)?.name ?? name);
+function pick(name: string | null) { const real = realName(name); pickPreset(i, real, match.value?.ofd?.find(c => c.name === real)?.id); }
 const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), score: t('match.score'), auto: t('match.auto'), autoHint: t('match.autoHint') }));
 // Pressure advance the head has now; Save keeps it on the linked spool (Spoolman only, keyed by the nozzle).
 const pa = computed(() => s.status?.extruders[i]?.pa ?? null);
@@ -193,10 +196,10 @@ async function savePa() {
     <HeaterControl :id="String(i)" card />
     <div v-if="!editing && match && has && showMatch" class="hc-match" :data-match="i">
       <p class="oui-label">{{ t('match.title') }}</p>
-      <OuiPresetMatch :name="match.name" :score="match.score" :confident="match.confident" :reasons="words(match.reasons)"
+      <OuiPresetMatch :name="match.shown ?? match.name" :score="match.score" :confident="match.confident" :reasons="words(match.reasons)"
                       :badge="BADGES[match.source] ? t(BADGES[match.source]) : undefined" :remembered="match.source === 'remembered' && !!match.remembered_key"
                       :candidates="candidates"
-                      :labels="matchLabels" :busy="s.matchBusy" @pick="name => pickPreset(i, name, match?.ofd?.find(c => c.name === name)?.id)" />
+                      :labels="matchLabels" :busy="s.matchBusy" @pick="pick" />
     </div>
     <template v-if="!editing">
       <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && !['preload_finish', 'load_finish'].includes(feed.state || '')"> · {{ t('heads.atInlet') }}</template></p>
@@ -251,6 +254,9 @@ async function savePa() {
 .hc-tag { margin-inline-start: var(--oui-s2); }
 .hc-match { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--oui-border); }
 .hc-match .oui-match-name { font-size: var(--oui-text-sm); }
+/* Change-list names wrap instead of being cut off. */
+.hc-match .oui-match-option-name { align-items: flex-start; }
+.hc-match .oui-match-option-name .oui-truncate { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 .hc-pick { width: 100%; min-width: 0; }
 .hc-opt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
 .hc-form-title { display: flex; align-items: center; gap: var(--oui-s1); }

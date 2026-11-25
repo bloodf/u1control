@@ -2205,6 +2205,22 @@ def _ofd_observation(head, tag, spool):
     return vendor, material, name
 
 
+def _sub_words(text):
+    return set(re.findall(r"[a-z0-9]+", str(text or "").lower()))
+
+
+def _scoring_tag(head, tag, spool):
+    """tag as the preset scoring reads it: when neither the printer nor the tag reports a sub-type, the sub-type words
+    (filmatch.SUB_TYPE_WORDS) of the bound spool's name, as _ofd_observation reads it. Only for scoring: the remembered
+    keys and pins keep the printer's own values. "Basic", which the scoring ignores, counts as no sub-type."""
+    tag = tag or {}
+    reported = _sub_words(tag.get("sub_type") or head.get("sub_type")) - {"basic"}
+    if reported or not spool:
+        return tag
+    words = [w for w in re.findall(r"[a-z0-9]+", str(spool.get("name") or "").lower()) if w in filmatch.SUB_TYPE_WORDS - {"basic"}]
+    return {**tag, "sub_type": " ".join(dict.fromkeys(words))} if words else tag
+
+
 def _fits(name, head, tag):
     """A preset of the toolhead's material (filmatch scores it at all)."""
     return bool(filmatch.rank_filament_presets([name], head, tag))
@@ -2230,7 +2246,7 @@ def head_match(ctx, head, tag, spool, overrides=None):
     preset of the bound spool), "auto" (the best score) or "none"."""
     tag = tag or {}
     names = ctx["names"]
-    ranked = filmatch.rank_filament_presets(names, head, tag, colours=ctx["colours"])
+    ranked = filmatch.rank_filament_presets(names, head, _scoring_tag(head, tag, spool), colours=ctx["colours"])
     keys = filmatch.toolhead_keys(head, tag, (spool or {}).get("id"))
     linked = linked_preset((spool or {}).get("orca_preset"), ctx["mine"])
     name, source, used = (linked["name"], "linked", "") if linked else ("", "", "")
@@ -2245,7 +2261,7 @@ def head_match(ctx, head, tag, spool, overrides=None):
     if not name:
         pinned = override_name(names, head, tag, overrides)
         chosen = ctx["preference"](names, head, tag) if ctx["preference"] and not pinned else None
-        name = pick_filament_preset(names, head, tag, overrides, preference=ctx["preference"], colours=ctx["colours"])
+        name = pinned or (chosen if chosen in names else "") or (ranked[0]["name"] if ranked else "")   # pick_filament_preset, scored as ranked
         source = "remembered" if pinned else "spooler" if chosen and chosen == name else "auto" if name else "none"
     row = next((r for r in ranked if r["name"] == name), {})
     return {"name": name, "source": source, "score": row.get("score"), "reasons": row.get("reasons") or [],
@@ -2275,8 +2291,17 @@ def preset_matches(view, bound, overrides=None, ofd=False):
     for head, tag in _loaded_heads(view["heads"], view["rfid"]):
         spool = bound(head["index"]) if bound else None
         match = {k: v for k, v in head_match(ctx, head, tag, spool, overrides).items() if k != "keys"}
-        out.append({"head": head["index"], **match, "ofd": ofd_proposals(profiles, head, tag, spool) if profiles else []})
+        ofd_rows = ofd_proposals(profiles, head, tag, spool) if profiles else []
+        out.append({"head": head["index"], **_with_shown(match, ofd_rows), "ofd": ofd_rows})
     return out
+
+
+def _with_shown(match, ofd_rows):
+    """match with "shown", the name the card shows, on it and on each candidate (Spooler's presets as Spooler/<preset>);
+    the page picks by the real name."""
+    shown = spooler_bridge.shown_names([match["name"]] + [c["name"] for c in match["candidates"] + ofd_rows])
+    return {**match, "shown": shown[match["name"]],
+            "candidates": [{**c, "shown": shown[c["name"]]} for c in match["candidates"]]}
 
 
 def pick_preset(view, bound, index, name, overrides=None):
@@ -2328,7 +2353,7 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
                 problems.append(tr("colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; "
                                    "set them by hand"))
                 _set_slot(slot, preset_name, "")
-            done.append("%d: %s" % (slot, preset_name or (tag or head).get("type") or "?"))
+            done.append("%d: %s" % (slot, spooler_bridge.shown_name(preset_name) or (tag or head).get("type") or "?"))
         except Exception as e:
             problems.append(tr("filament %d: %s") % (slot, e))
     return done, problems

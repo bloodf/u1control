@@ -613,6 +613,17 @@ class PluginTests(unittest.TestCase):
         self.assertEqual(len(orca.filament_calls), 3)
         self.assertEqual(ns["sync_project"](heads[:0], [], {}), ([], []))
 
+    def test_sync_project_message_shows_a_spooler_preset_as_spooler_slash_name(self):
+        spooler = "_local/spooler/Acme PLA @U1"
+        orca, ns = self.load(filament_names=["Generic PETG @U1", "Generic PLA @U1", spooler])
+        heads = u1.summarize(self.fake.status())["heads"]
+        tags = [{"vendor": "Acme", "type": "PLA", "sub_type": "", "sku": "S1", "colour": "#00FF00"}, None, None, None]
+        done, problems = ns["sync_project"](heads, tags, {"SKU:S1": spooler})
+        self.assertEqual(orca.filament_calls[0][:2], (1, spooler))   # the project gets the real preset
+        message = ns["sync_message"](done, problems)
+        self.assertIn("1: Spooler/Acme PLA @U1", message)   # the toast shows it as the card does
+        self.assertNotIn("_local/spooler/", message)
+
     def test_sync_project_keeps_the_project_filament_of_an_unnamed_head(self):
         # T3 has filament nobody has named (all NONE): as OrcaSlicer's own U1 sync, its project filament stays.
         orca, ns = self.load(filament_names=["Generic PETG @U1", "Generic PLA @U1"])
