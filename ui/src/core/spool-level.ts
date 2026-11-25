@@ -20,6 +20,22 @@ export function present<T extends { loaded?: boolean; unnamed?: boolean }>(head:
   return !!(head?.loaded || head?.unnamed);
 }
 
+/** Feeder states with the filament only at the inlet (e.g. after Unload): nothing in the head to unload. */
+export const AT_INLET = ['preload_finish', 'wait_insert', 'unload_finish'];
+
+/** A toolhead with filament in the head itself, that Unload can take out. */
+export function unloadable(head: { loaded?: boolean; unnamed?: boolean } | null | undefined, feedState?: string | null): boolean {
+  return present(head) && !AT_INLET.includes(feedState || '');
+}
+
+/** A toolhead with filament waiting at its inlet and not yet in the head, that Load can take in. Without a feeder state
+ *  (older firmware) a head the printer reports empty. */
+export function loadable(head: { loaded?: boolean; unnamed?: boolean } | null | undefined,
+  feed: { state?: string | null; detected?: boolean } | null | undefined): boolean {
+  if (feed?.state) return !!feed.detected && feed.state !== 'load_finish';
+  return !present(head);
+}
+
 /** Every colour of what a toolhead prints with, or null for one colour: its linked Spoolman spool's (when it has a colour),
  *  else the printer's own record of a multi-colour spool (filament_color_multi). */
 export function headColours(spool: { colour?: string | null; colours?: string[] } | null | undefined,

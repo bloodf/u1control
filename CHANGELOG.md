@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Load or unload several toolheads at once**, as on the printer's screen. **Load several…** and **Unload several…** on the Toolheads card let you tick the heads (for loading, those with filament waiting at the inlet) and do them with one confirmation. U1 Control sends the screen's own sequence (`AUTO_FEEDING_BATCH`, read from klippy.log): the heads go one after another, the next one preheats with the current one, and the batch is always ended so no nozzle is left hot. Firmware without that macro gets the single loads or unloads in turn. From @xtronets.
+
 ### Fixed
 
 - **Dragging on the Printer screen scrolls the printer's screen.** The card only sent taps; a drag now scrolls lists on the touchscreen (it takes effect when you let go). Needs the Extended Firmware's Remote Screen.
