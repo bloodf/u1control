@@ -28,7 +28,7 @@ import type { TopViewData } from './top-view';
 type Pref = boolean | string | number | number[];
 interface Spool { name: string; colour?: string | null; colours?: string[]; remaining?: number | null; initial?: number | null }
 interface Data { job: { name?: string; time?: string; weight?: number | string; layers?: number | string; tool_changes?: number; address?: string;
-    thumbnail?: string; preview?: TopViewData | null };
+    thumbnail?: string; preview?: TopViewData | null; preview_pending?: boolean };
   filaments: SetupFilament[]; heads: SetupHead[]; map: Record<string, number>; prefs: Record<string, Pref>;
   labels: Record<string, string>; levels?: Record<string, string[]>; features?: string[]; purifier: string; auto_purifier: string;
   printer?: { name: string; busy: boolean; address: string } | null; spools?: Record<string, Spool | string>; remember?: boolean; tags?: boolean[];
@@ -45,6 +45,9 @@ const prefs = reactive<Record<string, Pref>>({ ...D.prefs });
 const purifier = ref(D.purifier);
 const sent = ref(false);
 const busy = ref(!!D.printer?.busy);
+// The top view may come after the window opens (the plugin draws it meanwhile): a placeholder holds its place.
+const topView = ref<TopViewData | null>(D.job.preview || null);
+const topPending = ref(!D.job.preview && !!D.job.preview_pending);
 const remember = ref(D.remember !== false);
 const has = (k: string) => k in D.prefs;
 
@@ -156,6 +159,7 @@ let timer = 0;
 onMounted(() => {
   bridge.attach();
   bridge.onMessage(m => {   // live toolheads: a spool changed on the touchscreen or in Heads settings shows up here
+    if (m && 'preview' in m) { topView.value = m.preview && typeof m.preview === 'object' ? m.preview : null; topPending.value = false; }
     if (!m || !Array.isArray(m.heads)) return;
     heads.value = m.heads;
     if (typeof m.busy === 'boolean') busy.value = m.busy;
@@ -219,7 +223,8 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
             </button>
           </li>
         </ul>
-        <TopView v-if="D.job.preview" :view="D.job.preview" :colours="toolColours" :label="t('setup.preview')" data-test="preview" />
+        <TopView v-if="topView" :view="topView" :colours="toolColours" :label="t('setup.preview')" data-test="preview" />
+        <div v-else-if="topPending" class="tv tv-wait" role="status" :aria-label="t('setup.preview')" aria-busy="true" data-test="preview-wait" />
       </div>
       <div class="su-tools">
         <Button size="small" severity="secondary" :label="t('setup.refresh')" data-test="refresh" :disabled="sent" @click="refresh"><template #icon><OuiIcon :icon="refreshIcon" :size="14" /></template></Button>
@@ -383,6 +388,9 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
   .su-printer { grid-column: 1 / -1; justify-items: start; text-align: start; }
   .su-body { flex-direction: column; align-items: stretch; }
   .su-body > .tv { align-self: center; }
+  .tv-wait { background: linear-gradient(100deg, var(--oui-inset) 30%, var(--oui-border) 50%, var(--oui-inset) 70%) 0 0 / 300% 100%; animation: tv-wait 1.4s linear infinite; }
+  @keyframes tv-wait { from { background-position: 100% 0; } to { background-position: -50% 0; } }
+  @media (prefers-reduced-motion: reduce) { .tv-wait { animation: none; } }
   .su-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
 </style>

@@ -516,6 +516,22 @@ test('setup: the print, the printer, a card per filament with its head, spool an
   eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan, s0.remember], ['medium', 60, true], 'prefs as offered');
 `, { mode: 'setup', data: SETUP_FULL });
 
+test('setup: the top view drawn after the window opened takes the placeholder\'s place', `
+  assert(byTest('preview-wait') && !byTest('preview'), 'a placeholder while the plugin draws the top view');
+  const box = byTest('preview-wait').getBoundingClientRect();
+  await post({preview: ${JSON.stringify(SETUP_FULL.job.preview)}});
+  await until(() => byTest('preview'), 'the top view arrives');
+  assert(!byTest('preview-wait'), 'the placeholder is gone');
+  const r = byTest('preview').getBoundingClientRect();
+  eq([r.width, r.height], [box.width, box.height], 'same size: nothing moves');
+`, { mode: 'setup', data: { ...SETUP_FULL, job: { ...SETUP_FULL.job, preview: null, preview_pending: true } } });
+
+test('setup: no top view at all leaves no placeholder', `
+  await post({preview: null});
+  await settle();
+  assert(!byTest('preview-wait') && !byTest('preview'), 'nothing shown');
+`, { mode: 'setup', data: { ...SETUP_FULL, job: { ...SETUP_FULL.job, preview: null, preview_pending: true } } });
+
 test('setup: a control the printer lacks is not shown', `
   await until(() => sent().some(m => m.ready), 'ready posted');
   assert(!byTest('prefs') && !byTest('flow-more') && !q('#su-p-flow_calibrate') && !q('#su-p-time_lapse_camera') && !byTest('preview'), 'only what was offered');

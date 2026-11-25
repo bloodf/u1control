@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import tempfile
+import threading
 import time
 import unittest
 
@@ -178,20 +179,35 @@ class WindowTests(unittest.TestCase):   # noqa: D101
         self.assertEqual(titles, ["U1 Control — print setup"])
         self.assertEqual(posted, [{"type": "show_tab", "tab": "settings"}])
 
-    def test_preview_left_out_when_the_page_would_be_too_big(self):
-        real = self.ns["preview"]
-        big = {"w": 1, "h": 1, "bounds": [0, 0, 1, 1], "runs": "A" * 1000000}   # ~1 MB of JSON
-        self.ns["preview"] = type("P", (), {"top_view": staticmethod(lambda lines: big),
-                                            "tool_changes": staticmethod(real.tool_changes)})
-        self.addCleanup(self.ns.__setitem__, "preview", real)
+    def test_top_view_comes_after_the_window(self):
+        # The window opens without the top view (a placeholder holds its place); it is posted once the page listens
         windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
-        self.assertIsNone(boot(windows[0])["job"]["preview"])   # over the default limit
-        self.ns["SETUP_PAGE_LIMIT"], limit = 10 ** 9, self.ns["SETUP_PAGE_LIMIT"]
-        self.addCleanup(self.ns.__setitem__, "SETUP_PAGE_LIMIT", limit)
-        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
-        self.assertEqual(boot(windows[1])["job"]["preview"], big)   # kept when the page fits
-        self.assertEqual(boot(windows[0])["job"]["tool_changes"], 1)   # the other job facts stay
+        job = boot(windows[0])["job"]
+        self.assertIsNone(job["preview"])
+        self.assertTrue(job["preview_pending"])
+        self.assertEqual(job["tool_changes"], 1)   # the other job facts are there at once
+
+    def test_top_view_posted_once_the_page_is_ready(self):
+        later = self.ns["Later"](lambda: {"w": 1})
+        window = type("W", (), {"posted": [], "post": lambda self, m: self.posted.append(m)})()
+        ready, stop = threading.Event(), threading.Event()
+        t = threading.Thread(target=self.ns["_post_top_view"], args=(window, later, ready, stop))
+        t.start()
+        time.sleep(0.3)
+        self.assertEqual(window.posted, [])   # not before the page listens
+        ready.set()
+        t.join(2)
+        self.assertEqual(window.posted, [{"preview": {"w": 1}}])
+        failed = self.ns["Later"](lambda: 1 / 0)
+        window.posted.clear()
+        self.ns["_post_top_view"](window, failed, ready, stop)
+        self.assertEqual(window.posted, [{"preview": None}])   # the placeholder goes away
+        stop.set()
+        ready.clear()
+        window.posted.clear()
+        self.ns["_post_top_view"](window, later, ready, stop)
+        self.assertEqual(window.posted, [])   # the window was answered meanwhile
 
     def test_thumbnail_left_out_when_the_page_would_still_be_too_big(self):
         # A 614,400-character thumbnail (the first 8000 lines are its only bound) is too big even without the preview
@@ -207,19 +223,6 @@ class WindowTests(unittest.TestCase):   # noqa: D101
         self.addCleanup(self.ns.__setitem__, "WEBVIEW_PAGE_LIMIT", limit)
         self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
         self.assertEqual(len(boot(windows[1])["job"]["thumbnail"]), 614400)   # kept when the page fits
-
-    def test_long_plate_page_stays_under_the_limit_with_its_preview(self):
-        # A long plate (300 layers of 1000 moves, two heads): the sampled preview keeps the page small enough for
-        # OrcaSlicer's WebView2 on Windows, so the preview is kept, not dropped by the safety net.
-        with open(self.path, "a", newline="") as f:   # "\n" as written, also on Windows
-            f.write("\nM83\n")   # SAMPLE has no final newline
-            for layer in range(300):
-                f.write(";LAYER_CHANGE\nT%d\n" % (layer % 2))
-                f.writelines("G1 X%.3f Y%.3f E0.04\n" % (i % 250 + 0.123, layer % 250 + 0.456) for i in range(1000))
-        windows = self.answer({"map": {}, "prefs": {}, "purifier": "auto"})
-        self.assertEqual(self.agent.start_local_print(self.params(), self.update, None), 0)
-        self.assertIsNotNone(boot(windows[0])["job"]["preview"])
-        self.assertLess(len(windows[0].html.encode("utf-8")), self.ns["SETUP_PAGE_LIMIT"])
 
     def _slow_window(self, show, ready_after):
         """A window OrcaSlicer creates at once (show) or never; its page says "ready" ready_after s later."""
@@ -276,7 +279,7 @@ class WindowTests(unittest.TestCase):   # noqa: D101
             return w
 
         def stop():   # polled by the waiting job thread once the window exists
-            if windows and not windows[0].posted and not getattr(windows[0], "asked", False):
+            if windows and not getattr(windows[0], "asked", False):
                 windows[0].asked = True
                 windows[0].on_message({"type": "cmd", "id": 1, "cmd": "set_filament", "args": {"head": 0}})
                 windows[0].on_message({"type": "cmd", "id": 2, "cmd": "gcode", "args": {"script": "M112"}})

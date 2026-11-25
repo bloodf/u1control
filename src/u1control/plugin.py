@@ -263,6 +263,30 @@ def run_off_thread(fn, timeout=20):
     return box.get("value")
 
 
+class Later:
+    """fn() started now on a plugin worker thread; result() waits for it and returns its value or raises its
+    error. Lets the print setup ask the U1 several things at once while it reads the G-code."""
+
+    def __init__(self, fn, name="u1control-io"):
+        self._box, self._done = {}, threading.Event()
+
+        def run():
+            try:
+                self._box["value"] = fn()
+            except BaseException as e:   # handed back to whoever waits
+                self._box["error"] = e
+            finally:
+                self._done.set()
+        threading.Thread(target=run, name=name, daemon=True).start()
+
+    def result(self, timeout=20):
+        if not self._done.wait(timeout):
+            raise PrinterError(tr("the U1 did not answer in %d s") % timeout)
+        if "error" in self._box:
+            raise self._box["error"]
+        return self._box.get("value")
+
+
 def json_for_html(data):
     """JSON safe inside a <script> block: no literal <, > or & can end it or open a tag."""
     return json.dumps(data).replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026")
@@ -755,25 +779,28 @@ class U1PrintSetup(orca.slicing.SlicingPipelineCapabilityBase):
             return orca.ExecutionResult.failure(orca.PluginResult.FatalError, tr("U1 print setup: %s") % e)
 
     def _postprocess(self, ctx):
+        started = time.monotonic()
+        sending = clean(ctx.host) not in ("", "File")
+        host = clean(ctx.config_value("print_host")) if sending else ""
+        key = clean(ctx.config_value("printhost_apikey")) if host else ""
+        client = Moonraker(host, key, timeout=5) if host else None
+        asking = Later(lambda: client.query(u1.STATUS_OBJECTS)) if client else None   # while the G-code is read
         lines, newline = gcode.read(ctx.gcode_path)
         cfg = gcode.settings(lines)
         if not gcode.is_u1(cfg):
             return tr("not a Snapmaker U1 print; skipped")
         store = self._settings()
         options = store.effective()
-        sending = clean(ctx.host) not in ("", "File")
         if not sending:
             lines, mode = gcode.process(lines, cfg, options, version=VERSION)
             gcode.write(ctx.gcode_path, lines, newline)
             return tr("U1 G-code prepared (top cover: %s)") % _cover_text(mode)
 
-        host = clean(ctx.config_value("print_host"))
         if not host:
             raise PrinterError(tr("no U1 address set: click the Wi-Fi icon next to the printer and enter its IP"))
-        key = clean(ctx.config_value("printhost_apikey"))
-        client = Moonraker(host, key, timeout=5)
-        status = run_off_thread(lambda: client.query(u1.STATUS_OBJECTS))
+        status = asking.result()
         view = u1.summarize(status)
+        log("print setup: G-code read and U1 status in %.2f s" % (time.monotonic() - started))
         if u1.machine_busy(view):
             raise PrinterError(tr("the U1 is busy (%s); wait for it to finish first")
                                % (view["machine_state"] or view["state"]).lower())
@@ -844,10 +871,26 @@ def cover_fans(prefs):
     return {k: prefs[k] for k in u1.COVER_FANS if k in prefs}
 
 
-def printer_commands(client):
-    """The printer's command list (GET /printer/gcode/help), read once per print setup; empty when unreadable,
-    which offers only the original options."""
+def known_commands(host):
+    """The command list the U1 Control tab read when it connected to this printer (no network); None when the tab
+    isn't running, follows another printer or has no list yet."""
+    with _service_lock:
+        svc = _service
     try:
+        if svc is not None and svc.target is not None and svc.target.ident == usage.printer_ident(host) \
+                and svc.gcode_cmds:
+            return frozenset(svc.gcode_cmds)
+    except Exception as e:
+        log("command list of the tab not read: %r" % e)
+    return None
+
+
+def printer_commands(client, pending=None):
+    """The printer's command list (GET /printer/gcode/help), read once per print setup; empty when unreadable,
+    which offers only the original options. pending: a Later already asking for it."""
+    try:
+        if pending is not None:
+            return pending.result(timeout=10)
         return run_off_thread(client.gcode_commands, timeout=10)   # never on the slicing or UI thread
     except Exception as e:
         log("command list not read (%s); only the basic print options are offered" % e)
@@ -868,11 +911,13 @@ def setup_pa(heads, spools, client):
     return u1.stored_pa(heads, diameters, spools)
 
 
-def setup_job(lines, cfg, name, client):
+def setup_job(lines, cfg, name, client, top_view=True):
     """The print shown at the top of the print setup, from the sliced G-code only: name, time, weight, layers,
-    tool changes, plate preview and the top-down path preview."""
+    tool changes, plate preview and the top-down path preview. top_view=False: the top view comes later (the window
+    shows a placeholder until open_setup posts it)."""
     return {**gcode.summary(lines, cfg), "name": name, "address": client.address, "thumbnail": gcode.thumbnail(lines),
-            "tool_changes": preview.tool_changes(lines), "preview": preview.top_view(lines)}
+            "tool_changes": preview.tool_changes(lines),
+            "preview": preview.top_view(lines) if top_view else None, "preview_pending": not top_view}
 
 
 def rfid_flags(view):
@@ -905,18 +950,34 @@ def open_setup(store, options, view, host, client, lines, cfg, filaments, mappin
     the extra ones are offered only when the printer has their command. Returns ask_setup's answer plus
     "commands". keep_map: the slots came from OrcaSlicer's Print dialog, so a refresh of the toolheads keeps them.
     The caller remembers the options (remember_choice) only after the send went through."""
-    commands = printer_commands(client)
+    # The window comes first: the U1's answers are asked for at once, side by side, and the top view (the slowest
+    # part on a long print) is drawn after the window shows.
+    started = time.monotonic()
+    known = known_commands(host)
+    asking = None if known is not None else Later(client.gcode_commands)
+    spools = setup_spools(host)
+    multiace = u1.multiace(view)
+    pa_later = None if multiace else Later(lambda: setup_pa(view["heads"], spools, client))
+    top = Later(lambda: preview.top_view(lines), name="u1control-preview")
+    job = setup_job(lines, cfg, name, client, top_view=False)
+    commands = known if known is not None else printer_commands(client, asking)
     saved = options["prefs"] if options["remember_print_options"] else {}
     offered = {**prefs, **u1.offered_extras(saved, view, commands)}
     extras = {"printer": {"name": settings.printer_label(clean(options.get("printer_name"))),
                           "busy": u1.machine_busy(view), "address": host},
-              "spools": setup_spools(host), "remember": bool(options["remember_print_options"]),
+              "spools": spools, "remember": bool(options["remember_print_options"]),
               "features": u1.features(commands), "tags": rfid_flags(view), "keep_map": keep_map,
-              "multiace": u1.multiace(view), "stored_pa": bool(options.get("stored_pa")),
-              "ui_theme": options["ui_theme"]}
-    if not extras["multiace"]:
-        extras["pa"] = setup_pa(view["heads"], extras["spools"], client)
-    choice = ask_setup(setup_job(lines, cfg, name, client), cancelled, filaments, view["heads"], mapping, offered,
+              "multiace": multiace, "stored_pa": bool(options.get("stored_pa")),
+              "ui_theme": options["ui_theme"], "top_view": top}
+    if pa_later is not None:
+        try:
+            extras["pa"] = pa_later.result(timeout=15)
+        except Exception as e:
+            log("stored pressure advance not offered (%s)" % e)
+            extras["pa"] = {}
+    log("print setup: window data ready in %.2f s (commands %s)"
+        % (time.monotonic() - started, "from the tab" if known is not None else "asked"))
+    choice = ask_setup(job, cancelled, filaments, view["heads"], mapping, offered,
                        options["purifier"], client, extras, options["ui_language"], host)
     return {**choice, "commands": commands}   # remembered by the caller once the print was accepted
 
@@ -1029,7 +1090,7 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
         data["job"] = {**data["job"], "thumbnail": None}
         html = page_html("setup", data, language=language, theme=extras.get("ui_theme", "auto"))
     html = html.replace("<head>", "<head>" + SHOWN_PING, 1)
-    done, alive, wanted, stop = (threading.Event() for _ in range(4))
+    done, alive, wanted, stop, page_ready = (threading.Event() for _ in range(5))
     result = {}
     window_box = []
     shown = [heads]   # the toolheads the window shows now; the choice is checked against them
@@ -1054,6 +1115,8 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
             return
         if msg.get("shown") or msg.get("ready"):
             alive.set()
+        if msg.get("ready"):
+            page_ready.set()
         if msg.get("refresh") and window_box:
             wanted.set()
         if msg.get("type") == "cmd" and window_box:
@@ -1076,6 +1139,9 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
                               on_message=on_message, on_close=done.set, on_submit=on_submit, style=ui.WINDOW_MODAL)
     window_box.append(window)
     threading.Thread(target=refresher, name="u1control-refresh", daemon=True).start()
+    if extras.get("top_view") is not None:
+        threading.Thread(target=_post_top_view, args=(window, extras["top_view"], page_ready, stop),
+                         name="u1control-preview-post", daemon=True).start()
     started = time.monotonic()
     try:
         while not done.wait(0.25):  # never wait forever on a window the UI thread never shows
@@ -1098,6 +1164,26 @@ def ask_setup(job, cancelled, filaments, heads, mapping, prefs, purifier, client
     use_pa = isinstance(result.get("data"), dict) and result["data"].get("stored_pa") is True
     stored = {int(t): v for t, v in data["pa"].items()} if use_pa else {}
     return {**answer, "stored_pa": use_pa, "pa": {t: stored[t] for t in set(answer["map"].values()) if t in stored}}
+
+
+def _post_top_view(window, later, page_ready, stop):
+    """The top view, computed while the window opened, into the page once it listens ({"preview": view | None})."""
+    started = time.monotonic()
+    try:
+        view = later.result(timeout=120)
+    except Exception as e:
+        log("print setup: top view not drawn (%r)" % e)
+        view = None
+    while not page_ready.wait(0.25):
+        if stop.is_set():
+            return
+    if stop.is_set():
+        return
+    try:
+        window.post({"preview": view})
+        log("print setup: top view shown %.2f s after the window was asked for" % (time.monotonic() - started))
+    except Exception as e:   # the window closed meanwhile
+        log("print setup: top view not shown: %r" % e)
 
 
 HEAD_FACTS = ("loaded", "type", "colour", "vendor", "official")
