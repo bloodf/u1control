@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The spool chooser no longer holds the page with a large Spoolman inventory.** With thousands of spools, opening a toolhead's spool list drew every spool (about a second each time, far longer in OrcaSlicer), and every status refresh rebuilt all four lists even while closed. The list now draws only the spools in view and is rebuilt only when the spools, the search or the head's material change: 2000 spools open in about 30 ms instead of 1 s. Shared UI foundation 5.12.0.
+
 ## [0.21.0] - 2026-11-24
 
 ### Added
