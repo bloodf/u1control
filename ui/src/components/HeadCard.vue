@@ -6,6 +6,7 @@ import Select from 'primevue/select';
 import { fuzzyFilter, OuiHint, OuiIcon, OuiLevel, OuiPresetMatch, OuiSlot, OuiSpool, OuiStatus } from '@orca-plugins/ui-foundation/src/components';
 import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload } from '@orca-plugins/ui-foundation/src/icons';
 import HeaterControl from './HeaterControl.vue';
+import { config } from '../app/settings';
 import { s, run, tracker, busy, controlsOff, loadSpools, guidedWhy, pickPreset } from '../app/store';
 import { reasonTexts } from '../core/match';
 import type { MessageKey } from '../core/messages';
@@ -132,6 +133,8 @@ async function choose(id: number | null) {
 const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 // The OrcaSlicer preset Apply to project filaments gives this head, why, and Change (remembered by the plugin).
 const match = computed(() => s.matches[String(i)] ?? null);
+// Settings > Connection "Show the matched preset": off hides the block; Apply to project filaments still uses the match.
+const showMatch = computed(() => config.value?.settings?.show_preset_match !== false);
 const words = (reasons: unknown) => reasonTexts(reasons, (code, v) => t(`match.r.${code}` as MessageKey, { v }));
 const BADGES: Record<string, MessageKey> = { remembered: 'match.remembered', linked: 'match.linked', spooler: 'match.spooler' };
 const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), score: t('match.score'), auto: t('match.auto'), autoHint: t('match.autoHint') }));
@@ -182,7 +185,7 @@ async function savePa() {
       </Select>
     </template>
     <HeaterControl :id="String(i)" card />
-    <div v-if="!editing && match && has" class="hc-match" :data-match="i">
+    <div v-if="!editing && match && has && showMatch" class="hc-match" :data-match="i">
       <p class="oui-label">{{ t('match.title') }}</p>
       <OuiPresetMatch :name="match.name" :score="match.score" :confident="match.confident" :reasons="words(match.reasons)"
                       :badge="BADGES[match.source] ? t(BADGES[match.source]) : undefined" :remembered="match.source === 'remembered' && !!match.remembered_key"

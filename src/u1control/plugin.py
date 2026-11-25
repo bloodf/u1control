@@ -108,12 +108,13 @@ def use_language(cap=None):
     i18n.use(i18n.resolve(choice, _host_language()))
 
 
-def page_html(mode, data=None, language="auto", theme="auto"):
+def page_html(mode, data=None, language="auto", theme="auto", clock="auto"):
     """The one compiled Vue page (ui/ -> src/u1control/ui/app.html) with its boot payload: the tab ("app") or the
     U1 print setup window ("setup", with the job data). `language`/`theme`: the user's explicit choice, "auto" otherwise."""
     boot = {"mode": mode, "version": VERSION, "lang": _host_language(),
             "pref": language if language in settings.UI_LANGUAGES else "auto",
-            "theme": theme if theme in settings.UI_THEMES else "auto"}
+            "theme": theme if theme in settings.UI_THEMES else "auto",
+            "clock": clock if clock in settings.UI_CLOCKS else "auto"}
     if data is not None:
         boot["data"] = data
     return _asset("app.html").replace("__BOOT__", json_for_html(boot), 1)
@@ -304,7 +305,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
     def get_ui(self):
         use_language(self)
         cfg = self._config()
-        return page_html("app", language=cfg["ui_language"], theme=cfg["ui_theme"])
+        return page_html("app", language=cfg["ui_language"], theme=cfg["ui_theme"], clock=cfg["ui_clock"])
 
     def _settings(self):
         return get_store(self)
@@ -420,6 +421,8 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                 use_language(self)
             elif kind == "ui_theme":      # the page's light/dark choice; nothing else is touched
                 self._settings().update({"ui_theme": data.get("value")})
+            elif kind == "ui_clock":      # the page's 24-hour or 12-hour clock; nothing else is touched
+                self._settings().update({"ui_clock": data.get("value")})
             elif kind == "camera_fps":    # the camera card's frame rate; an invalid value keeps the stored one
                 svc.set_camera_fps(self._settings().update({"camera_fps": data.get("value")})["camera_fps"])
             elif kind == "dashboard":   # the Dashboard's layouts, saved by the page; an invalid value keeps the stored one
@@ -869,7 +872,7 @@ def setup_job(lines, cfg, name, client):
     """The print shown at the top of the print setup, from the sliced G-code only: name, time, weight, layers,
     tool changes, plate preview and the top-down path preview."""
     return {**gcode.summary(lines, cfg), "name": name, "address": client.address, "thumbnail": gcode.thumbnail(lines),
-            "tool_changes": preview.tool_changes(lines), "preview": preview.paths(lines)}
+            "tool_changes": preview.tool_changes(lines), "preview": preview.top_view(lines)}
 
 
 def rfid_flags(view):
