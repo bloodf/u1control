@@ -2275,8 +2275,17 @@ def preset_matches(view, bound, overrides=None, ofd=False):
     for head, tag in _loaded_heads(view["heads"], view["rfid"]):
         spool = bound(head["index"]) if bound else None
         match = {k: v for k, v in head_match(ctx, head, tag, spool, overrides).items() if k != "keys"}
-        out.append({"head": head["index"], **match, "ofd": ofd_proposals(profiles, head, tag, spool) if profiles else []})
+        ofd_rows = ofd_proposals(profiles, head, tag, spool) if profiles else []
+        out.append({"head": head["index"], **_with_shown(match, ofd_rows), "ofd": ofd_rows})
     return out
+
+
+def _with_shown(match, ofd_rows):
+    """match with "shown", the name the card shows, on it and on each candidate (Spooler's presets as Spooler/<preset>);
+    the page picks by the real name."""
+    shown = spooler_bridge.shown_names([match["name"]] + [c["name"] for c in match["candidates"] + ofd_rows])
+    return {**match, "shown": shown[match["name"]],
+            "candidates": [{**c, "shown": shown[c["name"]]} for c in match["candidates"]]}
 
 
 def pick_preset(view, bound, index, name, overrides=None):
@@ -2328,7 +2337,7 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
                 problems.append(tr("colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; "
                                    "set them by hand"))
                 _set_slot(slot, preset_name, "")
-            done.append("%d: %s" % (slot, preset_name or (tag or head).get("type") or "?"))
+            done.append("%d: %s" % (slot, spooler_bridge.shown_name(preset_name) or (tag or head).get("type") or "?"))
         except Exception as e:
             problems.append(tr("filament %d: %s") % (slot, e))
     return done, problems

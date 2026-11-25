@@ -122,6 +122,25 @@ class PresetMatchTests(unittest.TestCase):
         match = self.ns["head_match"](ctx, head, {"uid": "AB12"}, {"id": 7, "orca_preset": "my pla"})
         self.assertEqual((match["name"], match["source"]), ("My PLA", "linked"))
 
+    def test_spooler_presets_shown_as_spooler_slash_name(self):
+        """The card shows Spooler's presets as Spooler/<preset> (line and candidates); every other name, and the real
+        name the card picks and remembers, stay as they are."""
+        spooler, ofd, other = ("_local/spooler/Acme PLA @Snapmaker U1", "_local/u1control_ofd/Acme PLA @U1",
+                               "_local/other/Acme PLA @U1")
+        self.orca = fakes.install_orca(filament_names=NAMES + [spooler, ofd, other], storage=self.storage)
+        self.ns = fakes.load_wheel(self.artifact)
+        self.ns["pick_preset"](self.view, None, self.pla, spooler)
+        row = next(m for m in self.ns["preset_matches"](self.view, None) if m["head"] == self.pla)
+        self.assertEqual((row["name"], row["shown"]), (spooler, "Spooler/Acme PLA @Snapmaker U1"))
+        shown = {c["name"]: c["shown"] for c in row["candidates"]}
+        self.assertEqual(shown[spooler], "Spooler/Acme PLA @Snapmaker U1")
+        for name in (ofd, other, "Generic PLA @U1"):
+            self.assertEqual(shown[name], name)
+        self.assertIn(spooler, json.dumps(filmatch.load_matches(os.path.join(self.storage, filmatch.MATCHES_FILE))))
+        bridge = self.ns["spooler_bridge"]
+        self.assertEqual(bridge.shown_names([spooler, "Spooler/Acme PLA @Snapmaker U1"]),   # a clash: both real names
+                         {spooler: spooler, "Spooler/Acme PLA @Snapmaker U1": "Spooler/Acme PLA @Snapmaker U1"})
+
     def test_profile_overrides_move_once(self):
         head = self.heads[self.pla]
         store = self.ns["settings"].Store(path=os.path.join(self.storage, "settings.json"))
