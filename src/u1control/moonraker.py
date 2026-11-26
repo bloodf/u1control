@@ -120,7 +120,9 @@ class Moonraker:
         direct = parts.scheme == "http" and not parts.port and not parts.path
         self.candidates = [base, "http://%s:%d" % (name, MOONRAKER_PORT)] if direct else [base]
         self.hostname = parts.hostname
-        self.api_key = (api_key or "").strip()
+        # A key is one token: whitespace or control characters (a pasted line break) would end the header early and
+        # write the rest as headers of its own into the hand-made websocket handshake (ws_call).
+        self.api_key = "".join(c for c in (api_key or "") if c.isprintable() and not c.isspace())
         self.timeout = timeout
         self.base = None
         self._open = (opener or _NO_PROXY).open

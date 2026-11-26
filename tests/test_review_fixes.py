@@ -335,6 +335,28 @@ class DownloadTests(unittest.TestCase):
         self.assertEqual(os.listdir(os.path.join(home, "Downloads", "u1control")), [])
 
 
+class ApiKeyTests(unittest.TestCase):
+    def test_line_breaks_in_the_key_never_reach_a_header(self):
+        client = Moonraker("192.168.1.5", api_key=" abc123\r\nX-Injected: 1\t\x00 ")
+        self.assertEqual(client.api_key, "abc123X-Injected:1")
+        self.assertEqual(client._headers()["X-Api-Key"], "abc123X-Injected:1")
+
+    def test_websocket_handshake_has_one_key_header(self):
+        a, b = socket.socketpair()
+        self.addCleanup(a.close)
+        self.addCleanup(b.close)
+        client = Moonraker("192.168.1.5", api_key="abc\r\nX-Injected: 1")
+        threading.Thread(target=lambda: (time.sleep(0.2), b.shutdown(socket.SHUT_WR)), daemon=True).start()
+        with mock.patch.object(moonraker, "ask_host_wide"), \
+                mock.patch.object(moonraker.socket, "create_connection", return_value=a), \
+                self.assertRaises(PrinterError):   # the peer closes before answering: the handshake fails
+            client.ws_call("server.info", timeout=2)
+        b.settimeout(2)
+        sent = b.recv(65536).decode()
+        self.assertIn("X-Api-Key: abcX-Injected:1\r\n", sent)
+        self.assertNotIn("\r\nX-Injected", sent)
+
+
 class WebsocketTests(unittest.TestCase):
     @staticmethod
     def frame(opcode, payload, fin=True):
