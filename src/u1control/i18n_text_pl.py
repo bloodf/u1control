@@ -111,6 +111,7 @@ PL = {
     "no printer address configured": "nie skonfigurowano adresu drukarki",
     "can't read printer address %r": "nie można odczytać adresu drukarki %r",
     "printer response too large": "odpowiedź drukarki jest zbyt duża",
+    "%s is larger than %s; nothing was saved": "%s jest większy niż %s; nic nie zostało zapisane",
     "the printer sent a broken answer (%s)": "drukarka wysłała uszkodzoną odpowiedź (%s)",
     "download incomplete: %d of %s bytes": "pobieranie niepełne: %d z %s bajtów",
     "download failed (%s)": "pobieranie nie powiodło się (%s)",

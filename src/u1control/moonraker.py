@@ -163,11 +163,13 @@ class Moonraker:
         req = urllib.request.Request((self.base or self.candidates[0]) + "/server/files/" + urllib.parse.quote(path),
                                      headers=self._headers())
         total = 0
+        too_large = DownloadTooLarge(tr("%s is larger than %s; nothing was saved")
+                                     % (path.rsplit("/", 1)[-1], _size_text(limit)))
         try:
             with self._open(req, timeout=timeout) as resp:
                 length = resp.headers.get("Content-Length")
                 if length and length.isdigit() and int(length) > limit:
-                    raise DownloadTooLarge(tr("printer response too large"))
+                    raise too_large
                 with open_out() as out:
                     while True:
                         chunk = resp.read(256 * 1024)
@@ -178,7 +180,7 @@ class Moonraker:
                             return total
                         total += len(chunk)
                         if total > limit:
-                            raise DownloadTooLarge(tr("printer response too large"))
+                            raise too_large
                         out.write(chunk)
         except urllib.error.HTTPError as e:
             raise _http_error(e)
@@ -383,6 +385,14 @@ class Moonraker:
                         raise PrinterError(tr("printer said: %s") % (err.get("message", err) if isinstance(err, dict) else err))
                     return msg.get("result")
             raise PrinterError(tr("printer didn't answer %s") % method)
+
+
+def _size_text(size):
+    """A byte count as people read it: '4 GB', '512 MB', else '1000 B' (whole units only, as the limits are)."""
+    for unit, scale in (("GB", 1024 ** 3), ("MB", 1024 ** 2), ("kB", 1024)):
+        if size >= scale and size % scale == 0:
+            return "%d %s" % (size // scale, unit)
+    return "%d B" % size
 
 
 def _http_error(e):

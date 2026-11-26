@@ -367,8 +367,17 @@ class DownloadTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"HOME": home, "USERPROFILE": home}), \
                 mock.patch.object(Moonraker.download_to, "__defaults__", (30, 1024)):
             svc, pub = make_service(self, fake)
-            self.assertIn("error", call(self, svc, pub, "download", path="camera/big.mp4"))
+            reply = call(self, svc, pub, "download", path="camera/big.mp4")
+        self.assertEqual(reply.get("error"), "big.mp4 is larger than 1 kB; nothing was saved")
         self.assertEqual(os.listdir(os.path.join(home, "Downloads", "u1control")), [])
+
+    def test_download_limit_message_names_the_file_and_the_limit(self):
+        client = self.streaming([b"x"], length=str(5 * 1024 ** 3))
+        with self.assertRaises(moonraker.DownloadTooLarge) as e:
+            client.download_to("timelapse/sub/print_20261126120000.mp4", lambda: None)
+        self.assertEqual(str(e.exception), "print_20261126120000.mp4 is larger than 4 GB; nothing was saved")
+        self.assertEqual([moonraker._size_text(n) for n in (4 * 1024 ** 3, 512 * 1024 ** 2, 1024, 1000)],
+                         ["4 GB", "512 MB", "1 kB", "1000 B"])
 
     def test_download_past_the_limit_removes_its_part_file(self):
         folder = tempfile.mkdtemp()

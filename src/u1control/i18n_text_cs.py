@@ -112,6 +112,7 @@ CS = {
     "no printer address configured": "adresa tiskárny není nastavená",
     "can't read printer address %r": "adresu tiskárny nelze přečíst %r",
     "printer response too large": "odpověď tiskárny je příliš velká",
+    "%s is larger than %s; nothing was saved": "%s je větší než %s; nic se neuložilo",
     "the printer sent a broken answer (%s)": "tiskárna poslala poškozenou odpověď (%s)",
     "download incomplete: %d of %s bytes": "stahování neúplné: %d z %s bajtů",
     "download failed (%s)": "stahování selhalo (%s)",
