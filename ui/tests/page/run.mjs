@@ -305,6 +305,32 @@ test('spool chooser search: brand, accents and abbreviations match fuzzily; an I
   await press('Escape'); await settle();
 `);
 
+test('spool chooser: the saved list shows before Spoolman answers; a pick shows at once and comes back when refused', `
+  await until(() => last('hello'), 'hello sent');
+  const SPOOL = {id: 7, name: 'Matte Black', vendor: 'Prusament', material: 'PLA', colour: '#111111', colours: [], remaining: 500, initial: 1000};
+  await post({type: 'spools_cached', spools: [SPOOL], bindings: {}, stale: true});
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => q('.hc-pick'), 'the chooser is there from the saved list, before any Spoolman read answered');
+  assert(text(q('.u1-heads')).includes('saved list'), 'and says it is the saved list: ' + text(q('.u1-heads')).slice(0, 200));
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [SPOOL], bindings: {}, via: 'direct'});
+  await settle();
+  assert(!text(q('.u1-heads')).includes('saved list'), 'Spoolman answered: no longer the saved list');
+  q('.hc-pick [role=combobox]').click();
+  await until(() => qa('.p-select-overlay [role=option]').length > 1, 'the list opens');
+  await mouse(qa('.p-select-overlay [role=option]').find(o => text(o).includes('Matte Black')));
+  await until(() => !q('.p-select-overlay'), 'closed');
+  await yes();
+  eq(cmds('bind_spool').length, 1, 'bind asked');
+  assert(q('.hc .oui-slot-amount'), 'the pick shows at once (the spool weight), before the plugin replied');
+  await post({type: 'status', data: VIEW()});   // a status with the old links in between must not undo it
+  assert(q('.hc .oui-slot-amount'), 'a status refresh keeps it');
+  await fail(last('cmd', 'bind_spool'), 'printer said no');
+  await settle();
+  assert(!q('.hc .oui-slot-amount'), 'refused: the old link is back');
+`);
+
 test('the printer photo: spools in the Spoolman colour, else the printer colour, else empty; the active spool lit', `
   await connect();
   await post({type: 'status', data: VIEW({state: 'printing', filename: 'cube.gcode', progress: 0.5, extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 1})),

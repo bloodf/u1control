@@ -19,6 +19,9 @@ def _assign_args(head, spool_id, key):
     return head, spool_id, key
 
 
+SPOOL_CACHE_VERSION = 1
+
+
 class StockMixin:
     """For service.Service: needs lock, firmware, spoolman, bindings, _snapshot, _ctx, cmd_spools, cmd_bind_spool.
     `peers` is a peers.SpoolerLink, set by the plugin (None outside OrcaSlicer: no Spooler to find)."""
@@ -28,6 +31,55 @@ class StockMixin:
     def links_changed(self):
         if self.peers is not None:
             self.peers.links_changed()
+
+    # The last Spoolman list (self.spools + bindings) is kept in memory for the printer's generation and saved to
+    # spool_cache_path: a fresh tab or a restart shows it at once; the next read replaces it (self.spools_fresh).
+
+    @staticmethod
+    def _cache_key(target):
+        return [target.ident, target.spoolman_url]
+
+    def load_spool_cache(self, target):
+        """Fill self.spools / self.bindings from the saved list when it is for this printer and Spoolman."""
+        doc, _ = peers.read_json(self.spool_cache_path)
+        if not doc or doc.get("version") != SPOOL_CACHE_VERSION or doc.get("key") != self._cache_key(target):
+            return
+        spools, bindings = doc.get("spools"), doc.get("bindings")
+        if not isinstance(spools, list) or not isinstance(bindings, dict):
+            return
+        try:
+            bindings = {int(k): int(v) for k, v in bindings.items()}
+        except (TypeError, ValueError):
+            return
+        with self.lock:
+            if self.target is target and not self.spools_fresh and not self.spools:
+                self.spools, self.bindings = [x for x in spools if isinstance(x, dict) and "id" in x], bindings
+
+    def save_spool_cache(self):
+        if not self.spool_cache_path:
+            return
+        with self.lock:
+            target, spools, bindings = self.target, list(self.spools), {str(k): v for k, v in self.bindings.items()}
+        if target is None:
+            return
+        doc = {"version": SPOOL_CACHE_VERSION, "key": self._cache_key(target), "spools": spools, "bindings": bindings}
+        if doc == self._cache_saved:
+            return
+        try:
+            peers.write_json(self.spool_cache_path, doc)
+            self._cache_saved = doc
+        except OSError as e:
+            self.log("u1control: can't save the spool list (%s)" % e)
+
+    def cached_spools(self):
+        """What the page shows before Spoolman answers (no I/O): {"spools", "bindings", "stale"}."""
+        with self.lock:
+            return {"spools": list(self.spools), "bindings": {str(k): v for k, v in self.bindings.items()},
+                    "stale": not self.spools_fresh}
+
+    def cached_spool(self, spool_id):
+        with self.lock:
+            return next((s for s in self.spools if s["id"] == spool_id), None)
 
     def want_stock(self, refresh=False):
         if self.peers is not None:
@@ -148,9 +200,10 @@ class StockMixin:
             raise ValueError(tr("U1 Control's Spoolman (%s) isn't the one Spooler uses (%s); nothing was written. "
                              "Set the same Spoolman address in both.") % (peers.normalize_origin(target.spoolman_url),
                                                                          spooler["origin"]))
-        self.cmd_spools()   # U1 Control's own, fresh read of the spool it will write
-        with self.lock:
-            mine = next((s for s in self.spools if s["id"] == spool_id), None)
+        mine = self.cached_spool(spool_id)
+        if mine is None or (row["filament_id"] is not None and mine.get("filament_id") != row["filament_id"]):
+            self.cmd_spools()   # not in the list we hold, or another filament there: U1 Control's own fresh read
+            mine = self.cached_spool(spool_id)
         if mine is None:
             raise ValueError(tr("Spool #%d isn't in the Spoolman U1 Control reaches; nothing was written. "
                              "Do both plugins use the same Spoolman?") % spool_id)

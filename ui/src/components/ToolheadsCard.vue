@@ -13,8 +13,9 @@ import { loadable, unloadable } from '../core/spool-level';
 const source = computed(() => {
   if (s.spoolsRetrying) return t('sm.retrying');
   if (s.spoolsError) return t('heads.source.error', { error: s.spoolsError });
-  if (!s.spoolsLoaded) return '';
   const n = s.spools.length;
+  if (s.spoolsStale && n) return t('heads.source.cached', { n });
+  if (!s.spoolsLoaded) return '';
   if (s.stock?.spooler.state === 'active' && s.stock.same_spoolman === true) return t('heads.source.same', { n });
   return s.spoolsVia === 'moonraker' ? t('heads.source.printer', { n }) : t('heads.source.direct', { n });
 });

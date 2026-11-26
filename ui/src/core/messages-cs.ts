@@ -228,6 +228,7 @@ export const cs: Record<CzechKey, string> = {
   'heads.source.printer': 'Spoolman: {n} cívek (přes tiskárnu)',
   'heads.source.same': 'Cívky: stejný Spoolman jako sklad Spooleru ({n})',
   'heads.source.error': 'Spoolman: {error}',
+  'heads.source.cached': 'Spoolman: {n} cívek (uložený seznam, aktualizace)',
   'heads.noStatus': 'Tiskové hlavy se zobrazí, jakmile tiskárna pošle svůj stav.',
   'confirm.load.text': 'Zavést T{n}? Nejprve zasuň filament do vstupu a udržuj pracovní prostor volný.',
   'confirm.load.yes': 'Zavést T{n}',
