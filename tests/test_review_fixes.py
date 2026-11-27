@@ -325,6 +325,70 @@ class DownloadTests(unittest.TestCase):
             client.download_to("camera/t.mp4", lambda: open(os.devnull, "wb"))
         self.assertIn("5 of 10", str(e.exception))
 
+    @staticmethod
+    def streaming(parts, length=None):
+        class Stream:
+            headers = {"Content-Length": length} if length else {}
+            def read(self, n):
+                return parts.pop(0) if parts else b""
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+        return Moonraker("192.168.1.5", opener=types.SimpleNamespace(open=lambda req, timeout=None: Stream()))
+
+    def test_download_announced_over_the_limit_creates_nothing(self):
+        opened = []
+        client = self.streaming([b"x" * 10], length="11")
+        with self.assertRaises(moonraker.DownloadTooLarge):
+            client.download_to("camera/t.mp4", lambda: opened.append(1), limit=10)
+        self.assertEqual(opened, [])
+
+    def test_download_streaming_past_the_limit_stops(self):
+        written = []
+
+        class Out:
+            def write(self, data):
+                written.append(data)
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+        client = self.streaming([b"x" * 6, b"x" * 6, b"x" * 6])   # no length: only the stream tells
+        with self.assertRaises(moonraker.DownloadTooLarge):
+            client.download_to("camera/t.mp4", Out, limit=10)
+        self.assertEqual(sum(map(len, written)), 6)
+
+    def test_download_over_the_limit_leaves_no_file(self):
+        fake = fakes.FakePrinter()
+        self.addCleanup(fake.close)
+        fake.files["camera/big.mp4"] = b"x" * 2048
+        home = tempfile.mkdtemp()
+        with mock.patch.dict(os.environ, {"HOME": home, "USERPROFILE": home}), \
+                mock.patch.object(Moonraker.download_to, "__defaults__", (30, 1024)):
+            svc, pub = make_service(self, fake)
+            reply = call(self, svc, pub, "download", path="camera/big.mp4")
+        self.assertEqual(reply.get("error"), "big.mp4 is larger than 1 kB; nothing was saved")
+        self.assertEqual(os.listdir(os.path.join(home, "Downloads", "u1control")), [])
+
+    def test_download_limit_message_names_the_file_and_the_limit(self):
+        client = self.streaming([b"x"], length=str(5 * 1024 ** 3))
+        with self.assertRaises(moonraker.DownloadTooLarge) as e:
+            client.download_to("timelapse/sub/print_20261126120000.mp4", lambda: None)
+        self.assertEqual(str(e.exception), "print_20261126120000.mp4 is larger than 4 GB; nothing was saved")
+        self.assertEqual([moonraker._size_text(n) for n in (4 * 1024 ** 3, 512 * 1024 ** 2, 1024, 1000)],
+                         ["4 GB", "512 MB", "1 kB", "1000 B"])
+
+    def test_download_past_the_limit_removes_its_part_file(self):
+        folder = tempfile.mkdtemp()
+        svc = types.SimpleNamespace(_client=lambda: self.streaming([b"x" * 6, b"x" * 6]))
+        import files
+        with mock.patch.object(files, "download_folder", return_value=folder), \
+                mock.patch.object(Moonraker.download_to, "__defaults__", (30, 10)):
+            with self.assertRaises(moonraker.DownloadTooLarge):
+                files.FilesMixin.cmd_download(svc, "camera/t.mp4")
+        self.assertEqual(os.listdir(folder), [])
+
     def test_failed_download_leaves_nothing(self):
         fake = fakes.FakePrinter()
         self.addCleanup(fake.close)

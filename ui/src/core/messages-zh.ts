@@ -237,6 +237,7 @@ export const zhCN: Record<MessageKey, string> = {
   'heads.source.printer': 'Spoolman：{n} 个料盘（通过打印机）',
   'heads.source.same': '料盘：与 Spooler 库存使用同一个 Spoolman（{n}）',
   'heads.source.error': 'Spoolman：{error}',
+  'heads.source.cached': 'Spoolman：{n} 个料盘（已保存的列表，更新中）',
   'heads.noStatus': '打印机发来状态后，工具头会显示在这里。',
   'confirm.load.text': 'T{n} 进料？请先把耗材丝插入其入口，并保持工作区域无遮挡。',
   'confirm.load.yes': 'T{n} 进料',

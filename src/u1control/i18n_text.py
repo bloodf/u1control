@@ -392,6 +392,8 @@ MESSAGES = {
                                         "die Druckeradresse %r ist nicht lesbar", "无法识别打印机地址 %r"),
     "printer response too large": _m("resposta da impressora grande demais", "respuesta de la impresora demasiado grande",
                                      "Antwort des Druckers zu groß", "打印机的应答过大"),
+    "%s is larger than %s; nothing was saved": _m("%s é maior que %s; nada foi salvo", "%s supera los %s; no se guardó nada",
+                                                  "%s ist größer als %s; nichts wurde gespeichert", "%s 大于 %s；未保存任何内容"),
     "the printer sent a broken answer (%s)": _m(
         "a impressora enviou uma resposta corrompida (%s)", "la impresora envió una respuesta dañada (%s)",
         "der Drucker hat eine fehlerhafte Antwort gesendet (%s)", "打印机发来的应答已损坏（%s）"),

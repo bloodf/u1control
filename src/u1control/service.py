@@ -87,8 +87,10 @@ class Target:
 
 
 class Service(FilesMixin, usage.UsageMixin, StockMixin):
-    def __init__(self, publish, log=print, client_factory=Moonraker, ledger_path=None):
+    def __init__(self, publish, log=print, client_factory=Moonraker, ledger_path=None, spool_cache_path=None):
         self.publish = publish
+        self._cache_saved = None
+        self.spool_cache_path = spool_cache_path   # the last Spoolman list, so a fresh tab or restart shows it at once
         self.log = log
         self.client_factory = client_factory
         self.lock = threading.RLock()
@@ -134,6 +136,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         self.spoolman_link = ""
         self.follow_wait, self.follow_retry_at = 0.0, 0.0   # spool follow back-off after a failed Spoolman read
         self.spools, self.bindings, self.written = [], {}, {}
+        self.spools_fresh = False   # a Spoolman read this generation made self.spools; else it is the saved list
         self.last_heads, self.last_view, self.last_rfid = None, None, None
         self.job_estimate = (None, None)   # (file name, its slicer estimated_time): read once per file
         self.last_frame_at = 0.0
@@ -164,6 +167,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 self.client = client
                 self._reset_printer_state()
             self.target = target
+        if changed:
+            self.load_spool_cache(target)
         self.ledger.fill_api_key(target.ident, target.api_key)   # jobs restored from disk keep no key
         if not target.spoolman_report_usage or not target.spoolman_url:
             self.ledger.forget_pending()   # reporting off or no Spoolman: stop waiting (and retrying) silently
@@ -630,6 +635,7 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
                 self.bindings = {h: s for h, s in self.bindings.items() if s != spool_id and h != head}
                 self.bindings[head] = spool_id
         self.links_changed()
+        self.save_spool_cache()
 
     def _reconcile(self):
         try:
@@ -940,10 +946,11 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         with self.lock:
             if gen != self.generation:
                 raise PrinterError(tr(STALE))
-            self.spools = spools
+            self.spools, self.spools_fresh = spools, True
             if self.firmware["kind"] != "extended":
                 self.bindings = sm.bindings_from_locations(spools, target.name)
             bindings = {str(k): v for k, v in self.bindings.items()}
+        self.save_spool_cache()
         return {"spools": spools, "bindings": bindings, "via": "moonraker" if smc.via_moonraker else "direct"}
 
     def spool_names(self, host):
@@ -963,10 +970,11 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
     def cmd_bind_spool(self, head, spool_id, force=False):
         """force=True sends FORCE=1 (overrides an official/RFID head); only the page's confirmed manual bind sets it."""
         head = _head(head)
-        if not self.spools:
+        spool = self.cached_spool(int(spool_id))
+        if spool is None:   # not in the list we hold (new in Spoolman, or no list yet): one read
             self.cmd_spools()
+            spool = self.cached_spool(int(spool_id))
         with self.lock:
-            spool = next((s for s in self.spools if s["id"] == int(spool_id)), None)
             stock = self.firmware["kind"] != "extended"
         if spool is None:
             raise ValueError(tr("spool #%s not found") % spool_id)
@@ -990,6 +998,8 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
         with self.lock:
             if gen == self.generation and self.bindings.get(head) == sid:
                 self.bindings.pop(head, None)
+        self.save_spool_cache()
+        with self.lock:
             return {"bindings": {str(k): v for k, v in self.bindings.items()}}
 
     # extended firmware -----------------------------------------------------

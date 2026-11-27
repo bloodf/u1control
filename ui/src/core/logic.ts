@@ -100,3 +100,10 @@ export function boundHeads(live: Record<string, number>, fromStock: Record<strin
 export function overEnglish<T extends { aria?: object }>(english: T, own: Partial<T> | undefined): T {
   return { ...english, ...own, aria: { ...english.aria, ...own?.aria } };
 }
+
+/** The links as they will be once `spool` is on `head` (null: unlinked); a spool is on one head only. Shown at once, before
+ *  the printer and Spoolman have answered. */
+export function withLink(bindings: Record<string, number>, head: number, spool: number | null): Record<string, number> {
+  const next = Object.fromEntries(Object.entries(bindings).filter(([h, id]) => h !== String(head) && id !== spool));
+  return spool ? { ...next, [String(head)]: spool } : next;
+}

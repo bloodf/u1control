@@ -3,6 +3,7 @@ import * as bridge from '../core/bridge';
 import { Tracker, message, type RunOptions } from '../core/tracker';
 import { t } from '../core/i18n';
 import { ask, cancelDialog } from '../core/dialog';
+import { withLink } from '../core/logic';
 import { autoRefresh, cleanEvery, userBusy, REFRESH_DEFAULT_S } from '../core/autorefresh';
 import type { Config, Heater, Info, PresetMatch, Requirement, Spool, Status, StockView, UsageView } from './types';
 
@@ -33,6 +34,10 @@ export const s = reactive({
   spoolsVia: '',
   spoolsError: '',
   spoolsLoaded: false,
+  /** The list shown is the saved one (the plugin's last Spoolman read), until Spoolman answers. */
+  spoolsStale: false,
+  /** Links being changed (the page shows the new ones before the plugin confirms): status and re-reads leave them alone. */
+  binding: 0,
   /** Seconds between Spoolman re-reads (settings spoolman_refresh_s; 0 = off), and whether the last ones failed. */
   refreshS: REFRESH_DEFAULT_S,
   spoolsRetrying: false,
@@ -125,7 +130,7 @@ export const guidedWhy = computed(() => controlsOff.value || (busy.value ? t('re
 function reset(): void {
   s.epoch++;
   Object.assign(s, { info: null, error: '', offline: '', status: null, statusAt: 0, history: {}, historyAt: 0, spools: [], bindings: {}, spoolsVia: '',
-    spoolsError: '', spoolsLoaded: false, frame: '', camError: '', screen: '', screenError: '', usageError: '' });
+    spoolsError: '', spoolsLoaded: false, spoolsStale: false, binding: 0, frame: '', camError: '', screen: '', screenError: '', usageError: '' });
   if (s.stock) s.stock = { ...s.stock, bindings: {}, same_spoolman: null, usage: 'unknown' };
   cancelDialog();
 }
@@ -194,15 +199,31 @@ export async function hello(): Promise<void> {
   }
 }
 
+/** Link (or, with null, unlink) a spool: the page shows it at once, `go` asks the plugin; on a refusal the old links come
+ *  back and Spoolman is read again. */
+let bindSeq = 0;
+export async function relink(head: number, spool: number | null, go: () => Promise<{ ok: boolean; result?: any }>): Promise<void> {
+  const before = s.bindings;
+  bindSeq++; s.binding++;
+  s.bindings = withLink(before, head, spool);
+  try {
+    const r = await go();
+    if (r.ok) { s.bindings = r.result.bindings; void loadMatches(); }   // the preset matches follow the link
+    else { s.bindings = before; void loadSpools(true); }
+  } finally { s.binding--; }
+}
+
 /** Spools and toolhead links from Spoolman; false when the read failed. */
 export async function loadSpools(quiet: boolean): Promise<boolean> {
   if (!targetKnown.value) return true;
   const epoch = s.epoch;
+  const links = bindSeq;
   const r = await run({ key: 'spools', label: t('act.spools'), cmd: 'spools', quiet: true });
   if (epoch !== s.epoch) return true;
   if (r.ok) {
     s.spools = r.result.spools ?? [];
-    s.bindings = r.result.bindings ?? {};
+    if (links === bindSeq && !s.binding) s.bindings = r.result.bindings ?? {};   // not what it read before our own change
+    s.spoolsStale = false;
     s.spoolsVia = r.result.via ?? '';
     s.spoolsError = '';
     s.spoolsLoaded = true;
@@ -263,11 +284,16 @@ function onMessage(m: any): void {
     case 'status':
       s.status = m.data; s.statusAt = Date.now(); s.offline = '';
       if (m.data) remember(m.data);
-      if (m.data?.bindings) s.bindings = m.data.bindings;
+      if (m.data?.bindings && !s.binding) s.bindings = m.data.bindings;
       // The plugin checks the firmware again when its first answer was unclear (or after the printer was away).
       if (s.info && m.data?.firmware?.kind && (m.data.firmware.kind !== s.info.firmware.kind
         || (m.data.firmware.version ?? '') !== (s.info.firmware.version ?? ''))) { s.info = { ...s.info, firmware: m.data.firmware }; loadRequirements(); }
       if (s.phase === 'unreachable' && !helloInFlight) void hello();   // it answers again: fetch its generation
+      break;
+    case 'spools_cached':   // the plugin's last Spoolman read, sent with hello: shown until the read below answers
+      if (!s.spoolsLoaded && !s.spools.length && Array.isArray(m.spools) && m.spools.length) {
+        s.spools = m.spools; s.bindings = m.bindings ?? {}; s.spoolsStale = m.stale !== false;
+      }
       break;
     case 'offline': s.offline = String(m.error ?? ''); break;
     case 'frame': s.frame = m.image; s.camError = ''; break;
@@ -311,7 +337,7 @@ export function start(): () => void {
   const offCfg = onConfig(m => { const v = cleanEvery(m.settings?.spoolman_refresh_s); if (v !== s.refreshS) { s.refreshS = v; auto.restart(); } });
   // Spooler says right away when it linked or unlinked a spool (its presence's "links"): re-read without waiting.
   const offLinks = watch(() => s.stock?.spooler?.links, (now, was) => { if (was !== undefined && now !== was) void loadSpools(true); });
-  const offHolds = watch(holds, (now, was) => { if (now !== was && s.status) void loadMatches(); });
+  const offHolds = watch(holds, (now, was) => { if (now !== was && s.status && !s.binding) void loadMatches(); });
   void hello();
   return () => { off(); offCfg(); offLinks(); offHolds(); auto.stop(); document.removeEventListener('visibilitychange', onVis); timers.forEach(clearInterval); };
 }

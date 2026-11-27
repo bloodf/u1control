@@ -237,6 +237,7 @@ export const es: Record<MessageKey, string> = {
   'heads.source.printer': 'Spoolman: {n} bobinas (a través de la impresora)',
   'heads.source.same': 'Bobinas: el mismo Spoolman que el inventario de Spooler ({n})',
   'heads.source.error': 'Spoolman: {error}',
+  'heads.source.cached': 'Spoolman: {n} bobinas (lista guardada, actualizando)',
   'heads.noStatus': 'Los cabezales aparecen cuando la impresora envía su estado.',
   'confirm.load.text': '¿Cargar T{n}? Introduzca antes el filamento en su entrada y mantenga despejada la zona de trabajo.',
   'confirm.load.yes': 'Cargar T{n}',
