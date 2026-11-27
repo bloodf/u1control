@@ -7,7 +7,7 @@ import { fuzzyFilter, longList, OuiHint, OuiIcon, OuiLevel, OuiPresetMatch, OuiS
 import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload } from '@orca-plugins/ui-foundation/src/icons';
 import HeaterControl from './HeaterControl.vue';
 import { config } from '../app/settings';
-import { s, run, tracker, busy, controlsOff, loadSpools, guidedWhy, pickPreset } from '../app/store';
+import { s, run, tracker, busy, controlsOff, loadSpools, relink, guidedWhy, pickPreset } from '../app/store';
 import { reasonTexts } from '../core/match';
 import type { MessageKey } from '../core/messages';
 import { ask } from '../core/dialog';
@@ -123,15 +123,13 @@ async function choose(id: number | null) {
     const was = bound.value;
     if (was == null) return;
     if (!await ask({ title: t('act.unbind', { n }), text: t('confirm.unbind.text', { id: was, n }), yes: t('confirm.unbind.yes'), no: t('common.goBack') })) return;
-    const r = await run({ key: `bind:${i}`, label: t('act.unbind', { n }), cmd: 'unbind_spool', args: { head: i }, okText: t('ok.unbind', { n }) });
-    if (r.ok) s.bindings = r.result.bindings; else void loadSpools(true);
+    await relink(i, null, () => run({ key: `bind:${i}`, label: t('act.unbind', { n }), cmd: 'unbind_spool', args: { head: i }, okText: t('ok.unbind', { n }) }));
     return;
   }
   const force = tagged.value;
   if (!await ask({ title: t('act.bind', { n }), text: force ? t('confirm.bind.force', { n, id }) : t('confirm.bind.text', { n, id }),
     yes: t('confirm.bind.yes', { n }), no: t('common.goBack'), danger: force })) return;
-  const r = await run({ key: `bind:${i}`, label: t('act.bind', { n }), cmd: 'bind_spool', args: { head: i, spool_id: id, force }, okText: t('ok.bind', { n, id }), timeoutMs: 60000 });
-  if (r.ok) s.bindings = r.result.bindings; else void loadSpools(true);
+  await relink(i, id, () => run({ key: `bind:${i}`, label: t('act.bind', { n }), cmd: 'bind_spool', args: { head: i, spool_id: id, force }, okText: t('ok.bind', { n, id }), timeoutMs: 60000 }));
 }
 const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
 // The OrcaSlicer preset Apply to project filaments gives this head, why, and Change (remembered by the plugin).

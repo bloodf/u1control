@@ -38,6 +38,7 @@ _service = None
 _service_lock = threading.Lock()
 _link = None             # peers.SpoolerLink while the plugin is loaded (U1ControlPage.on_load .. on_unload)
 LEDGER_FILE = "usage_ledger.json"
+SPOOL_CACHE_FILE = "spool_cache.json"
 MAX_ORIGINS = 16   # printers and Spoolman addresses remembered for the load-time network permission
 _store = None
 _store_lock = threading.Lock()
@@ -164,7 +165,8 @@ def service(publish=None):
         if _service is None:
             folder = _storage()
             _service = Service(publish or (lambda m: None), log,
-                               ledger_path=os.path.join(folder, LEDGER_FILE) if folder else None)
+                               ledger_path=os.path.join(folder, LEDGER_FILE) if folder else None,
+                               spool_cache_path=os.path.join(folder, SPOOL_CACHE_FILE) if folder else None)
             if not folder:
                 log("the print ledger stays in memory: pending prints won't survive a restart")
         elif publish is not None:
@@ -367,6 +369,7 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                     self.post_message(self._config_message())
                     self.post_message({"type": "reply", "id": data.get("id"), "error": str(e), "no_target": True})
                     return
+                self.post_message({"type": "spools_cached", **svc.cached_spools()})   # before the printer answers
                 svc.touch(camera=False)
                 svc.set_camera_fps(self._config()["camera_fps"])
                 svc.submit(data.get("id"), "connect", {})

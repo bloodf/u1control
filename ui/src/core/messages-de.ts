@@ -238,6 +238,7 @@ export const de: Record<MessageKey, string> = {
   'heads.source.printer': 'Spoolman: {n} Spulen (über den Drucker)',
   'heads.source.same': 'Spulen: dasselbe Spoolman wie der Spooler-Bestand ({n})',
   'heads.source.error': 'Spoolman: {error}',
+  'heads.source.cached': 'Spoolman: {n} Spulen (gespeicherte Liste, wird aktualisiert)',
   'heads.noStatus': 'Die Werkzeugköpfe erscheinen, sobald der Drucker seinen Status sendet.',
   'confirm.load.text': 'T{n} laden? Führen Sie zuerst Filament in den Einlass ein und halten Sie den Arbeitsbereich frei.',
   'confirm.load.yes': 'T{n} laden',

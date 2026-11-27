@@ -1,7 +1,7 @@
 // Pure rules of the page (node --test runs this TypeScript directly).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseTarget, parseSpeed, heaterPhase, setupWarnings, warningKey, moveTargets, folderTree, fileKind, rootOf, boundHeads, family, overEnglish, colourFar } from '../../src/core/logic.ts';
+import { parseTarget, parseSpeed, heaterPhase, setupWarnings, warningKey, moveTargets, folderTree, fileKind, rootOf, boundHeads, withLink, family, overEnglish, colourFar } from '../../src/core/logic.ts';
 import { normalizeLocale, resolveLocale, interpolate } from '../../src/core/i18n-core.ts';
 
 test('a blank target is never 0; 0 typed is Off; out of range refused (U02/B-09)', () => {
@@ -108,4 +108,12 @@ test('a file\'s kind is G-code for a print file, else its extension in capitals'
   assert.equal(fileKind('a.b.MP4'), 'MP4');
   assert.equal(fileKind('README'), undefined);
   assert.equal(fileKind('odd.name with spaces'), undefined);
+});
+
+test('a chosen spool shows on its head at once and leaves the head it was on; unlinking drops the head', () => {
+  const was = { '0': 3, '1': 7 };
+  assert.deepEqual(withLink(was, 2, 7), { '0': 3, '2': 7 });
+  assert.deepEqual(withLink(was, 0, 9), { '0': 9, '1': 7 });
+  assert.deepEqual(withLink(was, 1, null), { '0': 3 });
+  assert.deepEqual(was, { '0': 3, '1': 7 });   // the old links are kept, for the rollback
 });

@@ -228,6 +228,7 @@ export const pl: Record<PolishKey, string> = {
   'heads.source.printer': 'Spoolman (przez drukarkę), szpule: {n}',
   'heads.source.same': 'Szpule: ten sam Spoolman co magazyn Spoolera ({n})',
   'heads.source.error': 'Spoolman: {error}',
+  'heads.source.cached': 'Spoolman: {n} szpul (zapisana lista, aktualizacja)',
   'heads.noStatus': 'Głowice pojawią się, gdy drukarka wyśle swój stan.',
   'confirm.load.text': 'Załadować T{n}? Najpierw włóż filament do wlotu i zostaw wolny obszar roboczy.',
   'confirm.load.yes': 'Załaduj T{n}',
