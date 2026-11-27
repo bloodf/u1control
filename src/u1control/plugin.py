@@ -2428,7 +2428,9 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
         if notice:
             problems.append(notice)
         preset_name = head_match(ctx, head, tag, spool, overrides)["name"]
-        colour = (tag or {}).get("colour") or head["colour"]
+        # the bound spool's colour first: it is the one the preset was picked for (a Spooler preset is per spool),
+        # while a head whose colour was never set on the printer reports a default white
+        colour = (spool or {}).get("colour") or (tag or {}).get("colour") or head["colour"]
         try:
             if slot_colour:
                 _set_slot(slot, preset_name, "")
