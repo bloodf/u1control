@@ -2419,6 +2419,7 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
     lists of strings."""
     ctx = _match_context(bound, preset_preference)
     done, problems = [], []
+    slot_colour = _slot_colour_api()   # OrcaSlicer with set_slot_color (OrcaSlicer#17114) sets project colours
     colour_ok = True   # OrcaSlicer 2.5 refuses filament_colour here: a project setting, not a filament preset one
     for head, tag in _loaded_heads(heads, tags):
         slot = head["index"] + 1
@@ -2429,16 +2430,24 @@ def sync_project(heads, tags, overrides=None, preset_preference=None, bound=None
         preset_name = head_match(ctx, head, tag, spool, overrides)["name"]
         colour = (tag or {}).get("colour") or head["colour"]
         try:
-            try:
-                _set_slot(slot, preset_name, colour if colour_ok else "")
-            except Exception as e:
-                if not (colour and colour_ok and "filament_colour" in str(e)):
-                    raise
-                colour_ok = False   # the preset still counts; colours stay as they are for every slot
-                log("project sync: this OrcaSlicer doesn't take filament_colour from a plugin (%s); colours left as they are" % e)
-                problems.append(tr("colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; "
-                                   "set them by hand"))
+            if slot_colour:
                 _set_slot(slot, preset_name, "")
+                try:
+                    _set_slot_colour(slot_colour, slot, colour)
+                except Exception as e:   # the preset is in; only the colour is missing
+                    log("project sync: set_slot_color(%d, %r) failed: %s" % (slot, colour, e))
+                    problems.append(tr("filament %d: %s") % (slot, e))
+            else:
+                try:
+                    _set_slot(slot, preset_name, colour if colour_ok else "")
+                except Exception as e:
+                    if not (colour and colour_ok and "filament_colour" in str(e)):
+                        raise
+                    colour_ok = False   # the preset still counts; colours stay as they are for every slot
+                    log("project sync: this OrcaSlicer doesn't take filament_colour from a plugin (%s); colours left as they are" % e)
+                    problems.append(tr("colours weren't changed: this OrcaSlicer doesn't let plugins set filament colours; "
+                                       "set them by hand"))
+                    _set_slot(slot, preset_name, "")
             done.append("%d: %s" % (slot, spooler_bridge.shown_name(preset_name) or (tag or head).get("type") or "?"))
         except Exception as e:
             problems.append(tr("filament %d: %s") % (slot, e))
@@ -2451,6 +2460,19 @@ def _set_slot(slot, preset_name, colour):
     if colour:
         tx.set("filament_colour", colour)
     tx.commit()
+
+
+def _slot_colour_api():
+    """orca.host.preset.filament.set_slot_color when this OrcaSlicer has it (OrcaSlicer#17114), else None."""
+    return getattr(getattr(getattr(orca.host, "preset", None), "filament", None), "set_slot_color", None)
+
+
+def _set_slot_colour(api, slot, colour):
+    """Project slot `slot`'s colour through set_slot_color, which takes #RRGGBB (no alpha). Nothing to set is a no-op."""
+    rgb = str(colour or "").strip().upper()
+    if not re.fullmatch(r"#[0-9A-F]{6}([0-9A-F]{2})?", rgb):
+        return
+    api(slot, [rgb[:7]])
 
 
 def sync_message(done, problems):

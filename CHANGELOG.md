@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Apply to project filaments sets the slot colours on an OrcaSlicer that allows it.** OrcaSlicer 2.5 doesn't let a plugin change a filament slot's colour, so the colours were left as they were. When OrcaSlicer has `orca.host.preset.filament.set_slot_color` (proposed in OrcaSlicer/OrcaSlicer#17114), each slot now gets its preset first and then the toolhead's colour, the way picking a colour in the sidebar does. Without it nothing changes: presets are applied and the message still says to set the colours by hand.
+
 ## [0.21.1] - 2026-11-25
 
 ### Changed
