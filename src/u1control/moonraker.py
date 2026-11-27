@@ -26,6 +26,7 @@ from i18n import tr
 
 MOONRAKER_PORT = 7125
 MAX_BODY = 64 * 1024 * 1024
+MAX_DOWNLOAD = 4 * 1024 ** 3   # bytes: a saved printer file (time-lapses are tens of MB); more is not a U1 file
 
 
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
@@ -35,6 +36,10 @@ FALLBACK_STATUSES = (404, 502, 503)   # "not Moonraker here": try the next candi
 class PrinterError(RuntimeError):
     """A printer request failed; the message is safe to show the user."""
     status = None   # HTTP status when the printer answered with one
+
+
+class DownloadTooLarge(PrinterError):
+    """A download went over its limit: what was written is not worth keeping."""
 
 
 class UploadCancelled(Exception):
@@ -152,24 +157,33 @@ class Moonraker:
         except http.client.HTTPException as e:   # not an OSError: a broken answer must not escape as one
             raise PrinterError(tr("the printer sent a broken answer (%s)") % (type(e).__name__,)) from e
 
-    def download_to(self, path, open_out, timeout=30):
+    def download_to(self, path, open_out, timeout=30, limit=MAX_DOWNLOAD):
         """Stream /server/files/<path> into the binary file returned by open_out(), which is only
-        called once the printer has answered, so a missing file creates nothing. Returns the byte count."""
+        called once the printer has answered, so a missing file creates nothing. Returns the byte count.
+        More than `limit` bytes raises DownloadTooLarge: before open_out() when the announced length says so,
+        else as soon as the stream passes it, so a printer can't fill the disk."""
         req = urllib.request.Request((self.base or self.candidates[0]) + "/server/files/" + urllib.parse.quote(path),
                                      headers=self._headers())
         total = 0
+        too_large = DownloadTooLarge(tr("%s is larger than %s; nothing was saved")
+                                     % (path.rsplit("/", 1)[-1], _size_text(limit)))
         try:
-            with self._open(req, timeout=timeout) as resp, open_out() as out:
+            with self._open(req, timeout=timeout) as resp:
                 length = resp.headers.get("Content-Length")
-                while True:
-                    chunk = resp.read(256 * 1024)
-                    if not chunk:
-                        # http.client ends a body cut short without an error: the length says it is incomplete
-                        if length and length.isdigit() and total != int(length):
-                            raise PrinterError(tr("download incomplete: %d of %s bytes") % (total, length))
-                        return total
-                    out.write(chunk)
-                    total += len(chunk)
+                if length and length.isdigit() and int(length) > limit:
+                    raise too_large
+                with open_out() as out:
+                    while True:
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            # http.client ends a body cut short without an error: the length says it is incomplete
+                            if length and length.isdigit() and total != int(length):
+                                raise PrinterError(tr("download incomplete: %d of %s bytes") % (total, length))
+                            return total
+                        total += len(chunk)
+                        if total > limit:
+                            raise too_large
+                        out.write(chunk)
         except urllib.error.HTTPError as e:
             raise _http_error(e)
         except (OSError, http.client.HTTPException) as e:
@@ -373,6 +387,14 @@ class Moonraker:
                         raise PrinterError(tr("printer said: %s") % (err.get("message", err) if isinstance(err, dict) else err))
                     return msg.get("result")
             raise PrinterError(tr("printer didn't answer %s") % method)
+
+
+def _size_text(size):
+    """A byte count as people read it: '4 GB', '512 MB', else '1000 B' (whole units only, as the limits are)."""
+    for unit, scale in (("GB", 1024 ** 3), ("MB", 1024 ** 2), ("kB", 1024)):
+        if size >= scale and size % scale == 0:
+            return "%d %s" % (size // scale, unit)
+    return "%d B" % size
 
 
 def _http_error(e):

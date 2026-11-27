@@ -7,7 +7,7 @@ import os
 import posixpath
 import re
 
-from moonraker import PrinterError
+from moonraker import DownloadTooLarge, PrinterError
 from i18n import tr
 
 GCODE_ROOT = "gcodes"
@@ -197,6 +197,10 @@ class FilesMixin:
 
         try:
             self._client().download_to(path, open_out)
+        except DownloadTooLarge:
+            for target in part:   # a file past the limit is no partial download to resume: don't leave it
+                _remove_quietly(target)
+            raise
         except BaseException as e:
             if part:
                 raise PrinterError(tr("download interrupted, partial file kept at %s (%s)") % (part[0], e))
@@ -298,6 +302,13 @@ def _link_new(src, dst):
         os.replace(src, dst)
         return
     os.unlink(src)
+
+
+def _remove_quietly(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
 
 
 def _new_file(folder, name):
