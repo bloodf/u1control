@@ -382,7 +382,6 @@ export const zhCN: Record<MessageKey, string> = {
   'confirm.ack.yes': '标记为已核对',
 
   'files.root.gcodes': '打印文件',
-  'files.root.camera': '延时摄影和摄像头',
   'files.newFolder': '新建文件夹',
   'files.free': '可用 {size}',
   'files.col.name': '名称',

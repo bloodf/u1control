@@ -159,7 +159,7 @@ async function powerDiscard() {
   </OuiPanel>
   <template v-else>
     <SpoolerHint />
-    <OuiDashboard v-model="layout" :widgets="widgets" :defaults="defaults" :labels="labels" :narrow-at="1000" />
+    <OuiDashboard v-model="layout" :widgets="widgets" :defaults="defaults" :labels="labels" :narrow-at="820" />
   </template>
 </template>
 <style>

@@ -1689,7 +1689,7 @@ test('files: a tree of the printer\'s folders, several files selected, moved by 
   ${FILES_OPEN}
   eq(cmds('folders').map(m => [m.args.root, m.gen]).sort(), [['camera', 1], ['gcodes', 1]], 'one walk a root, for the selected printer');
   eq(qa('[data-folder]').map(f => [f.dataset.folder, text(f.querySelector('.oui-files-foldername')), f.getAttribute('aria-level')]),
-    [['gcodes', 'Print files', '1'], ['gcodes/sub', 'sub', '2'], ['camera', 'Time-lapses & camera', '1']], 'roots named and open, print files first; a folder inside a closed one is not shown');
+    [['gcodes', 'Print files', '1'], ['gcodes/sub', 'sub', '2'], ['camera', 'Time-lapses', '1']], 'roots named and open, print files first; a folder inside a closed one is not shown');
   eq(folderEl('gcodes').getAttribute('aria-selected'), 'true', 'the open folder is marked');
   eq(text(q('[aria-labelledby="oui-tab-files"] .oui-pagehead-meta')), '2 GB free', 'free space in the page header');
   assert(text(bar()).includes('3 files'), 'the bar counts the files: ' + text(bar()));
@@ -3273,7 +3273,7 @@ test('printer screen in a narrow window: after the camera, before the console; a
   assert(Math.abs(a.x - 240) <= 1 && Math.abs(a.y - 160) <= 1, 'the centre of the picture: ' + JSON.stringify(a));
 `, { size: [480, 900] });
 
-for (const size of [[1280, 800], [1400, 900], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
+for (const size of [[900, 800], [1280, 800], [1400, 900], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
   await READY();
   const bad = qa('.oui-dash-cell').map(c => [c.dataset.widget, q('.oui-panel-body', c)]).filter(([, b]) => b && (b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1))
     .map(([id, b]) => id + ' ' + b.scrollHeight + '/' + b.clientHeight);

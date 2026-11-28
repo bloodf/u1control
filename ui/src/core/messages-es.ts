@@ -382,7 +382,6 @@ export const es: Record<MessageKey, string> = {
   'confirm.ack.yes': 'Marcar como comprobado',
 
   'files.root.gcodes': 'Archivos de impresión',
-  'files.root.camera': 'Timelapses y cámara',
   'files.newFolder': 'Nueva carpeta',
   'files.free': '{size} libres',
   'files.col.name': 'Nombre',

@@ -20,7 +20,7 @@ import { fileKind, folderTree, rootOf } from '../core/logic';
 interface Listed extends OuiFile { time?: number; weight?: number | null; rel?: string }
 // The U1 serves its camera folder read only (Moonraker answers 405 to a delete there): its files can only be saved.
 const READ_ONLY = ['camera'];
-const rootLabel = (r: string) => (r === 'gcodes' ? t('files.root.gcodes') : t('files.root.camera'));
+const rootLabel = (r: string) => (r === 'gcodes' ? t('files.root.gcodes') : t('tl.title'));
 const nameOf = (id: string) => id.slice(id.lastIndexOf('/') + 1);
 const command = (cmd: string, args: Record<string, unknown>) => bridge.command(cmd, args, s.info?.generation);
 const disk = ref('');

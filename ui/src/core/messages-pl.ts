@@ -376,7 +376,6 @@ export const pl: Record<PolishKey, string> = {
   'confirm.ack.text': 'Oznaczyć zużycie {grams} g na T{n} ({file}) jako sprawdzone? To tylko zapisuje tutaj, że zostało sprawdzone; nic nie jest wysyłane do Spoolmana.',
   'confirm.ack.yes': 'Oznacz jako sprawdzone',
   'files.root.gcodes': 'Pliki do druku',
-  'files.root.camera': 'Timelapse i kamera',
   'files.newFolder': 'Nowy folder',
   'files.free': 'Wolne: {size}',
   'files.col.name': 'Nazwa',

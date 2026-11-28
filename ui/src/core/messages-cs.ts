@@ -373,7 +373,6 @@ export const cs: Record<CzechKey, string> = {
   'confirm.ack.text': 'Označit spotřebu {grams} g na T{n} ({file}) jako zkontrolovanou? Zaznamená se to pouze zde; do Spoolmanu se nic neposílá.',
   'confirm.ack.yes': 'Označit jako zkontrolované',
   'files.root.gcodes': 'Tiskové soubory',
-  'files.root.camera': 'Časosběry a kamera',
   'files.newFolder': 'Nová složka',
   'files.free': '{size} volných',
   'files.col.name': 'Název',

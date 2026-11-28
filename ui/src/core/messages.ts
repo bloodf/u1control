@@ -381,7 +381,6 @@ export const en = {
   'confirm.ack.yes': 'Mark as checked',
 
   'files.root.gcodes': 'Print files',
-  'files.root.camera': 'Time-lapses & camera',
   'files.newFolder': 'New folder',
   'files.free': '{size} free',
   'files.col.name': 'Name',
@@ -1267,7 +1266,6 @@ export const ptBR: Record<MessageKey, string> = {
   'confirm.ack.yes': 'Marcar como conferido',
 
   'files.root.gcodes': 'Arquivos de impressão',
-  'files.root.camera': 'Timelapses e câmera',
   'files.newFolder': 'Nova pasta',
   'files.free': '{size} livres',
   'files.col.name': 'Nome',

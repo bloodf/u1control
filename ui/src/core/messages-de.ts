@@ -383,7 +383,6 @@ export const de: Record<MessageKey, string> = {
   'confirm.ack.yes': 'Als geprüft markieren',
 
   'files.root.gcodes': 'Druckdateien',
-  'files.root.camera': 'Zeitraffer & Kamera',
   'files.newFolder': 'Neuer Ordner',
   'files.free': '{size} frei',
   'files.col.name': 'Name',

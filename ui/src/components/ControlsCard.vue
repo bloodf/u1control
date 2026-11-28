@@ -88,6 +88,9 @@ async function setLight(on: boolean) {
 <style>
 /* Dense rows on the dashboard. */
 [data-test="controls"] .oui-control-row { min-height: 36px; }
+/* A narrow widget (4 of 12 columns in a 900 px window) sets a row's field on the line under its name. */
+@container oui-widget (max-width: 340px) { [data-test="controls"] .oui-control-row { grid-template-columns: minmax(0, 1fr) auto; }
+  [data-test="controls"] .oui-control-row-control { grid-column: 1 / -1; justify-content: flex-start; min-width: 0; flex-wrap: wrap; } }
 [data-test="controls"] .oui-controls { gap: var(--oui-s2) var(--oui-s6); }
 
 /* A value the row refused (a speed outside 10 to 300 %) is said in the row, in the error colour. */
