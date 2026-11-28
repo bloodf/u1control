@@ -44,9 +44,8 @@ CONNECTION = {"host": "", "api_key": "", "printer_name": "Snapmaker U1", "spoolm
 EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, "stored_pa": False, "ui_language": "auto", "ui_theme": "auto", "ui_clock": "auto", "camera_fps": 5,
          "network_origins": [],   # scheme://host of printers and Spoolman used: the network grants asked for at load
          "spoolman_refresh_s": 30,
-         "overrides_migrated": False,
+         "overrides_migrated": False,   # profile_overrides copied into matches.json once (filmatch); then read no more
          "show_preset_match": True,   # the toolhead cards show the preset each head gets (off: hidden, still used)
-         "ofd_enabled": False,   # Open Filament Database proposals on the toolhead cards; off: never contacted   # profile_overrides copied into matches.json once (filmatch); then read no more
          "dashboard": {}}   # the Dashboard's layouts (clean_dashboard); {} = the page's default   # the page re-reads Spoolman this often while it shows (0 = off; 10-300)
 UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl", "cs")   # "auto": OrcaSlicer's language, then the system's
 UI_THEMES = ("auto", "light", "dark")   # "auto": OrcaSlicer's background, then the system's light/dark mode

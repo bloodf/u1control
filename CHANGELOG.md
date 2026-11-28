@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **Toolhead cards show the preset by its plain name.** The OrcaSlicer preset block shows only its name, without `Spooler/`, `_local/spooler/` or the `@printer` suffix, and **Change**. The score chip and the reasons line are gone; an automatic pick that was a close call gets one warning icon that says so in words. **Picked by hand** and **Automatic** work as before.
+- **The part cooling and auxiliary fans sit side by side.** In **Temperatures & fans** the two fan setters are in two columns, with the top cover fan readings in two columns under them; a narrow widget still puts them in one column.
+- **Spools are picked by colour first.** A toolhead's spool chooser is the shared colour picker: one swatch per colour, material chips that start at the head's material, a search, and **No spool** to unlink. A colour with several spools opens a short list of them, fullest first. Shared UI foundation 5.13.3.
+
+### Removed
+
+- **Open Filament Database.** U1 Control no longer offers Open Filament Database presets on the toolhead cards and no longer asks for access to it; the setting is gone from Settings > Connection. Spooler's **Add spool** is where Open Filament Database lives now. A settings file that still has the old option loads as before, and a preset picked earlier, including one U1 Control installed from the Open Filament Database, keeps resolving offline.
+
 ## [0.22.1] - 2026-11-28
 
 - Shared UI 5.13.3 with PrimeVue 5.0.6.

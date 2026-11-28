@@ -19,7 +19,7 @@ Full description: https://github.com/bloodf/u1control/blob/main/README.md
 
 ![The toolheads T1 to T4 with filament, RFID tag, Spoolman spool and grams left](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-03-filament-en.png){align=center}
 
-**Toolheads and spools.** Filament, RFID tag, Spoolman spool, the preset each head gets (change it if you like) and pressure advance saved per spool. Load or unload several toolheads at once. Open Filament Database presets are opt-in.
+**Toolheads and spools.** Filament, RFID tag, Spoolman spool, the preset each head gets (change it if you like) and pressure advance saved per spool. Load or unload several toolheads at once. Pick a spool by its colour.
 
 ![The Files page: folders, print files and the time-lapse list](https://raw.githubusercontent.com/bloodf/u1control/main/assets/orca-cloud/u1control-feature-04-files-en.png){align=center}
 
@@ -37,7 +37,7 @@ Needs OrcaSlicer 2.5.0 or newer. Spoolman is optional.
 
 ## Privacy
 
-Talks only to your printer and your Spoolman server, on your local network; the Open Filament Database only if you turn it on. No cloud, no telemetry. Deleting, filament moves, calibration and emergency stop ask first.
+Talks only to your printer and your Spoolman server, on your local network. No cloud, no telemetry. Deleting, filament moves, calibration and emergency stop ask first.
 
 Independent project, not made or supported by Snapmaker. English, Português, Español, Deutsch, 简体中文, Polski, Čeština.
 

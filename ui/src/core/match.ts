@@ -1,10 +1,5 @@
-// Preset match reasons: filmatch.py scores a preset and says why as [code, value] pairs; the page words them.
-export const REASON_CODES = ['material', 'variant', 'vendor', 'generic', 'other_vendor', 'word', 'extra_word', 'printer', 'other_printer', 'nozzle'] as const;
-export type ReasonCode = typeof REASON_CODES[number];
-
-/** The reasons a page can word, in order; anything of another shape or code is left out. */
-export function reasonTexts(reasons: unknown, word: (code: ReasonCode, value: string) => string): string[] {
-  if (!Array.isArray(reasons)) return [];
-  return reasons.filter((r): r is [ReasonCode, unknown] => Array.isArray(r) && (REASON_CODES as readonly string[]).includes(r[0]))
-    .map(r => word(r[0], String(r[1] ?? '')));
+// The name a toolhead card shows for an OrcaSlicer preset: without the plugin bundle folder ("_local/spooler/"), the
+// "Spooler/" the plugin marks its presets with, and the "@Printer" suffix. The real name is what is picked and applied.
+export function presetLabel(name: string): string {
+  return name.replace(/^_local\/[^/]+\//, '').replace(/^Spooler\//, '').replace(/\s*@[^@]*$/, '').trim() || name;
 }

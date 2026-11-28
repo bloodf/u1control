@@ -232,6 +232,9 @@ test('temperatures & fans: chamber, drivers and fan readings; part and aux fan s
      ['38 °C', '45 °C', '—', 'Hot (warning)', 'OK', 'Overheated'], 'temperatures and driver states');
   eq([kv('Top cover exhaust fan'), kv('Top cover recirculation fan')], ['60 %', '0 %'], 'top-cover fan readings');
   assert(text(card).includes('50 %') && text(card).includes('25 %'), 'part and aux fan readings');
+  const fanGrid = q('.tf-fans', card), fanRows = qa('.oui-control-row', fanGrid);
+  eq(fanRows.length, 2, 'part and aux fans in one two-column grid');
+  if (fanGrid.clientWidth >= 460) eq(fanRows[0].getBoundingClientRect().top, fanRows[1].getBoundingClientRect().top, 'side by side where there is room');
   const set = id => q('[data-focus-key="tf-' + id + '"]');
   assert(set('part').disabled, 'Set waits for a value');
   await type(q('#tf-part'), '40');
@@ -262,47 +265,41 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   if (!q('.hc-pick')) { await until(() => last('cmd', 'spools'), 'spools asked'); await reply(last('cmd', 'spools'), {spools: [{id: 7, name: 'Black', vendor: 'G', material: 'PLA', colour: '#111', remaining: 500, initial: 1000}], bindings: {}, via: 'direct'}); }
   await post({type: 'offline', error: 'timed out'});
   assert(text(byTest('heads-why')).includes('doesn'), 'offline: the shared reason says so: ' + text(byTest('heads-why')));
-  for (const sel of ['[data-rfid="1"]', '.hc:nth-child(3) .hc-pick [role=combobox]']) {
+  for (const sel of ['[data-rfid="1"]', '.hc:nth-child(3) .hc-pick-btn']) {
     assert(q(sel) && (q(sel).disabled || q(sel).getAttribute('aria-disabled') === 'true'), sel + ' off while offline');
     eq(q(sel).getAttribute('aria-describedby'), 'heads-why', sel + ' points at the reason');
   }
 `);
 
-test('spool chooser search: brand, accents and abbreviations match fuzzily; an ID only matches exactly; nothing binds while searching', `
+test('spool chooser: colour first; search is fuzzy over brand and name; an ID only matches exactly; nothing binds while searching', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('cmd', 'spools'), 'spools asked');
-  await reply(last('cmd', 'spools'), {spools: [
+  const SP = [
     {id: 7, name: 'Matte Black', vendor: 'Prusament', material: 'PLA', colour: '#111111', remaining: 500, initial: 1000},
     {id: 12, name: 'Crème Brûlée', vendor: 'Polymaker', material: 'PLA', colour: '#eeddaa', remaining: 800, initial: 1000},
     {id: 120, name: 'Grey', vendor: 'Acme', material: 'PLA', colour: '#888888', remaining: 900, initial: 1000},
-    {id: 5, name: 'Red', vendor: '3DJake', material: 'PLA', colour: '#cc0000', remaining: 700, initial: 1000}], bindings: {}, via: 'direct'});
+    {id: 5, name: 'Red', vendor: '3DJake', material: 'PLA', colour: '#cc0000', remaining: 700, initial: 1000}];
+  await reply(last('cmd', 'spools'), {spools: SP, bindings: {}, via: 'direct'});
   await settle();
-  const pickRoot = q('.hc-pick');
-  pickRoot.querySelector('[role=combobox]').click();
-  await until(() => q('.p-select-overlay .p-select-filter'), 'the search box opens');
-  const opts = () => qa('.p-select-overlay [role=option]').map(o => text(o));
-  const search = async v => { await type(q('.p-select-overlay .p-select-filter'), v); await settle(); return opts(); };
-  assert(opts().some(o => o.includes('No spool')), 'without a search the list starts with No spool');
-  let r = await search('prus');
-  assert(r.length === 1 && r[0].includes('Matte Black'), 'brand: ' + r);
-  r = await search('creme');
-  assert(r.length === 1 && r[0].includes('Crème'), 'accents and case do not matter: ' + r);
-  r = await search('cb');
-  assert(r.length === 1 && r[0].includes('Crème'), 'name abbreviation (word starts): ' + r);
-  assert(!r.some(o => o.includes('No spool')), 'No spool is not offered while searching, so Enter cannot unlink');
-  r = await search('12');
-  assert(r.length === 1 && r[0].includes('Crème') && !r.some(o => o.includes('Grey')), 'a plain ID matches that spool only, not 120: ' + r);
-  r = await search('#120');
-  assert(r.length === 1 && r[0].includes('Grey'), '#ID matches that spool: ' + r);
-  r = await search('#1');
-  assert(r.length === 0, 'an ID is never matched by its letters: ' + r);
-  r = await search('3');
-  eq(r, [], 'a bare number is an ID only: "3" does not fuzzy-match the brand 3DJake');
-  r = await search('3d');
-  assert(r.length === 1 && r[0].includes('3DJake'), 'with a letter it is a brand search: ' + r);
+  eq(qa('[data-pick-panel], .oui-spick').length, 0, 'no picker is drawn until one is opened');
+  await click(q('[data-pick="0"]'));
+  const panel = () => q('[data-pick-panel="0"]');
+  await until(() => panel() && q('.oui-spick-q', panel()), 'the picker opens with its search');
+  assert(document.activeElement && panel().contains(document.activeElement), 'focus moves into the picker');
+  assert(q('[data-spick="none"]', panel()), 'No spool is offered');
+  const byColour = Object.fromEntries(SP.map(sp => [sp.colour, String(sp.id)]));
+  const ids = () => qa('[data-colour]', panel()).map(e => byColour[e.dataset.colour]).join(',');
+  const found = async v => { await type(q('.oui-spick-q', panel()), v); await settle(); return ids(); };
+  eq(await found('prus'), '7', 'brand');
+  eq(await found('creme'), '12', 'accents and case do not matter');
+  eq(await found('12'), '12', 'a plain ID matches that spool only, not 120');
+  eq(await found('#120'), '120', '#ID matches that spool');
+  eq(await found('3'), '', 'a bare number is an ID only: "3" does not fuzzy-match the brand 3DJake');
+  eq(await found('3d'), '5', 'with a letter it is a brand search');
   eq(cmds('bind_spool').length + cmds('unbind_spool').length, 0, 'nothing is bound or unbound while searching');
   await press('Escape'); await settle();
+  assert(!panel(), 'Escape closes the picker');
 `);
 
 test('spool chooser: the saved list shows before Spoolman answers; a pick shows at once and comes back when refused', `
@@ -317,10 +314,10 @@ test('spool chooser: the saved list shows before Spoolman answers; a pick shows 
   await reply(last('cmd', 'spools'), {spools: [SPOOL], bindings: {}, via: 'direct'});
   await settle();
   assert(!text(q('.u1-heads')).includes('saved list'), 'Spoolman answered: no longer the saved list');
-  q('.hc-pick [role=combobox]').click();
-  await until(() => qa('.p-select-overlay [role=option]').length > 1, 'the list opens');
-  await mouse(qa('.p-select-overlay [role=option]').find(o => text(o).includes('Matte Black')));
-  await until(() => !q('.p-select-overlay'), 'closed');
+  await click(q('[data-pick="0"]'));
+  await until(() => q('[data-pick-panel="0"] [data-colour="#111111"]'), 'the picker opens');
+  await click(q('[data-pick-panel="0"] [data-colour="#111111"]'));   // one black spool: picked at once
+  await until(() => !q('[data-pick-panel="0"]'), 'closed');
   await yes();
   eq(cmds('bind_spool').length, 1, 'bind asked');
   assert(q('.hc .oui-slot-amount'), 'the pick shows at once (the spool weight), before the plugin replied');
@@ -424,47 +421,6 @@ test('extended settings render the release format and an unfinished log is not A
   assert(alerts().includes('Result unknown'), 'an unfinished log is not Applied: ' + alerts());
 `, { needsGroups: true });
 
-test('settings: Open Filament Database is off by default; on and saved, its list line and Read again', `
-  await connect();
-  const config = {type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: true}, automations: [],
-    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: '', ofd_enabled: false}};
-  await post(config);
-  await tab('settings');
-  await until(() => q('.oui-settings-link[data-section="connection"]'), 'settings shown');
-  await click(q('.oui-settings-link[data-section="connection"]'));
-  await until(() => q('#ofd-on'), 'the OFD row');
-  assert(!q('#ofd-on').checked && !byTest('ofd-state'), 'off by default, nothing more shown');
-  await click(q('#ofd-on'));
-  await until(() => byTest('ofd-state'), 'turned on');
-  assert(text(byTest('ofd-state')).includes('Save to turn it on') && text(byTest('ofd-state')).includes('MIT'), 'saved first; the licence is named: ' + text(byTest('ofd-state')));
-  assert(!last('ofd'), 'nothing asked before the save');
-  await click(byTest('save'));
-  eq(last('save_settings').settings.ofd_enabled, true, 'saved on');
-  await reply(last('save_settings'), {saved: true});
-  await post({...config, settings: {...config.settings, ofd_enabled: true}});
-  await until(() => last('ofd'), 'once saved on, the line asks for the kept list');
-  await reply(last('ofd'), {on: true, fetched: 1795371399, version: '2026.11.22', count: 2133, stale: false, error: ''});
-  await until(() => text(byTest('ofd-state')).includes('2133'), 'the list line: ' + text(byTest('ofd-state')));
-  await click(byTest('ofd-refresh'));
-  eq(last('ofd').refresh, true, 'Read again asks OFD now');
-`);
-test('toolhead cards: an Open Filament Database proposal is marked untuned; picking it installs it by its id', `
-  await connect();
-  await post({type: 'status', data: VIEW()});
-  await until(() => last('preset_matches'), 'asked');
-  await reply(last('preset_matches'), {matches: [{head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: [['material', 'PLA']], confident: true, remembered_key: '',
-    candidates: [{name: 'Generic PLA @U1', score: 35, reasons: [['material', 'PLA']]}],
-    ofd: [{id: 'f667', name: 'Polymaker Panchroma Matte PLA (OFD)', score: 58, reasons: [['material', 'PLA'], ['vendor', 'Polymaker']]}]}]});
-  await until(() => q('[data-match="0"]'), 'T1 line');
-  await click(q('.oui-match-change', q('[data-match="0"]')));
-  await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'the candidate and the proposal');
-  const ofdRow = qa('.oui-match-option', q('[data-match="0"]'))[1];
-  assert(text(ofdRow).includes('OFD, untuned') && !ofdRow.disabled, 'marked and pickable: ' + text(ofdRow));
-  await click(ofdRow);
-  eq([last('preset_pick').head, last('preset_pick').ofd], [0, 'f667'], 'installed by its OFD id');
-  await reply(last('preset_pick'), {matches: [], note: 'Spooler puts it into its preset of spool #7 on its next sync'});
-  await until(() => toasts().includes('spool #7'), 'the note is shown: ' + toasts());
-`);
 
 test('settings draft survives mode switch; Saved needs the plugin answer', `
   await connect();
@@ -2428,7 +2384,7 @@ test('toolhead cards: the matched preset can be hidden in Settings, and comes ba
   await until(() => byTest('match-show'), 'the switch in Settings');
 `);
 
-test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and reasons; Change remembers another', `
+test('toolhead cards: the OrcaSlicer preset Apply gives each head, without score or reasons; Change remembers another', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('preset_matches'), 'the cards ask for the presets once the heads are known');
@@ -2439,8 +2395,8 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and
   await reply(ask, {matches: [row]});
   await until(() => q('[data-match="0"]'), 'T1 shows its preset');
   const card = q('[data-match="0"]');
-  assert(text(card).includes('Generic PLA @U1') && text(card).includes('material PLA') && text(card).includes('Score 35'), 'name, reasons, score: ' + text(card));
-  assert(q('.oui-status[data-state="warn"]', card), 'a close call is marked');
+  assert(text(card).includes('Generic PLA') && !text(card).includes('@U1') && !text(card).includes('material PLA') && !text(card).includes('35'), 'only the clean name: ' + text(card));
+  assert(!q('.oui-status', card) && q('[data-unsure="0"] svg', card) && q('[data-unsure="0"]', card).title.includes('Not sure'), 'a close call: one warning icon, said in words');
   assert(!q('[data-match="1"]'), 'no line for a head the plugin gave no preset');
   await click(q('.oui-match-change', card));
   await until(() => qa('.oui-match-option', card).length === 2, 'the candidates, no Automatic while nothing was picked by hand');
@@ -2449,13 +2405,14 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and
   eq([pick.head, pick.name], [0, 'Generic PLA Silk @U1'], 'remembered for T1');
   await reply(pick, {matches: [{...row, name: 'Generic PLA Silk @U1', source: 'remembered', score: 29, reasons: choices[1].reasons, confident: true, remembered_key: 'mat:g|pla|'}]});
   await until(() => text(q('[data-match="0"]')).includes('Picked by hand'), 'the new pick, marked as picked by hand');
+  assert(!q('[data-unsure="0"]'), 'a pick by hand is not doubted');
   await click(q('.oui-match-change', q('[data-match="0"]')));
   const auto = () => qa('.oui-match-option', q('[data-match="0"]')).find(b => text(b).includes('Automatic'));
   await until(auto, 'Automatic offered');
   await click(auto());
   eq(last('preset_pick').name, null, 'Automatic forgets the pick');
 `);
-test('toolhead cards: a Spooler preset shows as Spooler/<name>, long names wrap, a pick sends the real name', `
+test('toolhead cards: a Spooler preset shows without Spooler/ and @printer, long names wrap, a pick sends the real name', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('preset_matches'), 'asked');
@@ -2464,19 +2421,21 @@ test('toolhead cards: a Spooler preset shows as Spooler/<name>, long names wrap,
   await reply(last('preset_matches'), {matches: [{head: 0, name: real, shown, source: 'spooler', score: 40, reasons: [], confident: true, remembered_key: '',
     candidates: [{name: 'Generic PLA @U1', shown: 'Generic PLA @U1', score: 35, reasons: []}, {name: real, shown, score: 40, reasons: []}]}]});
   await until(() => q('[data-match="0"]'), 'T1 line');
+  const clean = 'Acme Extra Long Matte Silk Dual Colour PLA Plus';
   const line = q('.oui-match-name', q('[data-match="0"]'));
-  eq([text(line), line.title], [shown, shown], 'the line shows Spooler/');
+  eq([text(line), line.title], [clean, clean], 'the line shows the clean name');
+  assert(!text(q('[data-match="0"]')).includes('Spooler') && !q('[data-unsure="0"]'), 'no internal prefix, no doubt: ' + text(q('[data-match="0"]')));
   await click(q('.oui-match-change', q('[data-match="0"]')));
   await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'both candidates');
   const row = qa('.oui-match-option', q('[data-match="0"]'))[1], name = q('.oui-truncate', row);
-  eq([text(name), name.title], [shown, shown], 'the list row shows Spooler/');
+  eq([text(name), name.title], [clean, clean], 'the list row shows the clean name');
   eq([row.getAttribute('aria-current'), qa('.oui-match-option', q('[data-match="0"]'))[0].hasAttribute('aria-current')], ['true', false],
     'the selected row is still the current one');
   assert(q('.oui-match-option-name svg', row), 'the selected row keeps its check mark');
   assert(!text(q('[data-match="0"]')).includes('_local'), 'no _local on the card: ' + text(q('[data-match="0"]')));
   eq(getComputedStyle(name).whiteSpace, 'normal', 'a long name wraps');
   await click(row);
-  eq([last('preset_pick').head, last('preset_pick').name, last('preset_pick').ofd], [0, real, undefined], 'picked by its real name');
+  eq([last('preset_pick').head, last('preset_pick').name], [0, real], 'picked by its real name');
 `);
 
 // ------------------------------------------------------------------ foundation 4.2.0 on: toasts, dismissible notices, requirements
@@ -2989,11 +2948,13 @@ test('printer screen in a narrow window: after the camera, before the console; a
   assert(Math.abs(a.x - 240) <= 1 && Math.abs(a.y - 160) <= 1, 'the centre of the picture: ' + JSON.stringify(a));
 `, { size: [480, 900] });
 
-for (const size of [[1280, 800], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
+for (const size of [[1280, 800], [1400, 900], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
   await READY();
   const bad = qa('.oui-dash-cell').map(c => [c.dataset.widget, q('.oui-panel-body', c)]).filter(([, b]) => b && (b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1))
     .map(([id, b]) => id + ' ' + b.scrollHeight + '/' + b.clientHeight);
   eq(bad, [], 'every widget fits');
+  const out = ['temps', 'heads'].flatMap(id => { const c = cell(id), r = c.getBoundingClientRect(); return qa('.tf-fans > *, .tf-cover > div, button', c).filter(e => e.getBoundingClientRect().width && e.getBoundingClientRect().right > r.right + 1).map(e => id + ' ' + e.className); });
+  eq(out, [], 'fan setters, cover readouts and Change buttons stay inside their widget');
 `, { size });
 
 
@@ -3037,31 +2998,62 @@ for (const size of [[1440, 1000], [1920, 1080]]) test(`toolheads at ${size.join(
   assert(body.scrollHeight <= body.clientHeight + 1, 'the widget still fits its content');
 `, { size });
 
-test('spool chooser with 2000 spools: opens at once, draws only the rows in view, keeps up with status refreshes and search', `
-  const N = 2000;
+test('spool chooser: a colour with several spools opens a dialog fullest first; material chips start at the head’s; unlink', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  const row = (id, colour, material, remaining) => ({id, name: 'Spool ' + id, vendor: 'Acme', material, colour, remaining, initial: 1000});
+  await reply(last('cmd', 'spools'), {spools: [row(21, '#E5484D', 'PLA', 100), row(22, '#e5484d', 'PLA+', 800), row(23, '#e5484d', 'PLA', null),
+    row(24, '#3e63dd', 'PETG', 500), row(25, '#111111', 'ABS', 900)], bindings: {}, via: 'direct'});
+  await click(q('[data-pick="1"]'));   // T2 holds PLA
+  const panel = () => q('[data-pick-panel="1"]');
+  await until(panel, 'picker open');
+  eq(text(q('.oui-spick-mat[aria-pressed="true"]', panel())), 'PLA', 'the material chip starts at the head’s family (PLA+ counts as PLA)');
+  eq(qa('[data-colour]', panel()).map(e => e.dataset.colour), ['#e5484d'], 'one swatch per colour of that material, not one row per spool');
+  await click(q('.oui-spick-mat:not([data-material])', panel()));
+  eq(qa('[data-colour]', panel()).length, 3, 'All: every colour');
+  await click(q('.oui-spick-mat[data-material="PLA"]', panel()));
+  await click(q('[data-colour="#e5484d"]', panel()));
+  await until(() => qa('[data-spick="dialog"] [data-spool]').length === 3, 'the dialog of red');
+  eq(qa('[data-spick="dialog"] [data-spool]').map(e => e.dataset.spool), ['22', '21', '23'], 'fullest first, an unknown weight last');
+  eq(cmds('bind_spool').length, 0, 'nothing is linked before a spool is chosen');
+  await click(q('[data-spick="dialog"] [data-spool="21"]'));
+  await until(() => !q('[data-spick="dialog"]') && !panel(), 'dialog and picker closed');
+  assert(dialogOpen() && dialogText().includes('21'), 'bind asks: ' + dialogText()); await yes();
+  eq(cmds('bind_spool').map(m => [m.args.head, m.args.spool_id]), [[1, 21]], 'the spool chosen in the dialog is linked');
+  await reply(last('cmd', 'bind_spool'), true);
+  await post({type: 'status', data: VIEW({bindings: {'1': 21}})});
+  await until(() => text(q('[data-pick="1"]')).includes('#21'), 'the card shows it: ' + text(q('[data-pick="1"]')));
+  await click(q('[data-pick="1"]')); await until(panel, 'opened again');
+  eq(q('[data-colour][aria-current="true"]', panel())?.dataset.colour, '#e5484d', 'the linked colour is marked');
+  document.body.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); await settle();
+  assert(!panel(), 'a press outside closes it');
+  await click(q('[data-pick="1"]')); await until(panel, 'opened again');
+  await click(q('[data-spick="none"]', panel()));
+  assert(dialogOpen() && dialogText().includes('21'), 'unlink asks: ' + dialogText()); await yes();
+  eq(cmds('unbind_spool').map(m => m.args.head), [1], 'No spool unlinks');
+`);
+
+test('spool chooser with 2000 spools: opens at once with one swatch per colour; search finds one by id', `
+  const N = 2000, COLOURS = ['#e5484d', '#3e63dd', '#30a46c', '#ffc53d', '#8e4ec6', '#f76b15', '#12a594', '#d6409f', '#111111', '#fafafa', '#8d8d8d', '#a18072', '#0090ff', '#bdee63', '#ff977d'];
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('cmd', 'spools'), 'spools asked');
   await reply(last('cmd', 'spools'), {spools: Array.from({length: N}, (_, k) => ({id: k + 1, name: 'Spool ' + (k + 1), vendor: 'Acme', material: k % 3 ? 'PLA' : 'PETG',
-    colour: '#336699', remaining: 500, initial: 1000})), bindings: {}, via: 'direct'});
-  await until(() => q('.hc-pick'), 'the chooser');
+    colour: COLOURS[k % COLOURS.length], remaining: 500, initial: 1000})), bindings: {}, via: 'direct'});
+  await until(() => q('[data-pick="0"]'), 'the chooser');
   const long = []; new PerformanceObserver(l => l.getEntries().forEach(e => long.push(e.duration))).observe({entryTypes: ['longtask']});
   const t0 = performance.now();
-  q('.hc-pick [role=combobox]').click();
-  await until(() => qa('.p-select-overlay [role=option]').length, 'the list opens');
+  q('[data-pick="0"]').click();
+  await until(() => qa('[data-pick-panel="0"] [data-colour]').length, 'the picker opens');
   const opened = performance.now() - t0;
-  const rows = qa('.p-select-overlay [role=option]').length;
-  assert(rows < 60, 'only the rows in view are drawn, not all ' + N + ': ' + rows);
+  await click(q('[data-pick-panel="0"] .oui-spick-mat:not([data-material])'));
+  eq(qa('[data-pick-panel="0"] [data-colour]').length, COLOURS.length, 'one swatch per colour, not ' + N + ' rows');
   assert(opened < 750, 'opens at once: ' + Math.round(opened) + ' ms');
   for (let k = 0; k < 3; k++) await post({type: 'status', data: VIEW({bed: {temp: 21 + k, target: 0}})});
-  assert(q('.p-select-overlay'), 'status refreshes leave the list open');
-  const list = q('.p-select-overlay .p-virtualscroller');
-  list.scrollTop = list.scrollHeight; list.dispatchEvent(new Event('scroll')); await settle(); await settle();
-  assert(qa('.p-select-overlay [role=option]').some(o => text(o).startsWith('#1999 ')), 'the end of the list (the last PETG spool) scrolls into view: '
-    + qa('.p-select-overlay [role=option]').map(text).slice(-2).join(' | '));
-  await type(q('.p-select-overlay .p-select-filter'), '#1999'); await settle();
-  const hit = qa('.p-select-overlay [role=option]').map(text);
-  assert(hit.length === 1 && hit[0].includes('Spool 1999'), 'search finds one spool among ' + N + ': ' + hit);
+  assert(q('[data-pick-panel="0"]'), 'status refreshes leave the picker open');
+  await type(q('[data-pick-panel="0"] .oui-spick-q'), '#1999'); await settle();
+  eq(qa('[data-pick-panel="0"] [data-colour]').map(e => e.dataset.colour), [COLOURS[1998 % COLOURS.length]], 'search finds one spool among ' + N);
   assert(!long.some(d => d > 250), 'no long main-thread block: ' + long.map(Math.round));
   await press('Escape'); await settle();
 `);
