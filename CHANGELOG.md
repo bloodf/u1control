@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+## [0.22.1] - 2026-11-28
+
+- Shared UI 5.13.3 with PrimeVue 5.0.6.
+
 ## [0.22.0] - 2026-11-28
 
 ### Added
