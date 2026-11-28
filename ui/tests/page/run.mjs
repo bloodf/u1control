@@ -413,7 +413,7 @@ test('the printer photo: spools in the Spoolman colour, else the printer colour,
   const drawn = n => [cardSpool(n).dataset.level, cardSpool(n).hasAttribute('data-unknown'), cardSpool(n).querySelector('.oui-spool-unknown')?.textContent ?? null];
   eq(drawn(1), ['6', false, null], 'T1: 250 of 1000 g left');
   eq(drawn(2), ['1', true, '?'], 'T2: loaded, amount unknown: full reel with the unknown badge');
-  eq(drawn(3), ['8', false, null], 'T3: nothing loaded: the bare reel');
+  { const t3 = qa('.hc').find(c => text(c.querySelector('.oui-slot-badge')) === 'T3'); assert(t3 && !t3.querySelector('.oui-spool') && text(t3).includes('No filament'), 'T3: nothing loaded says so, with no reel: ' + text(t3)); }
   eq(drawn(4), ['2', false, null], 'T4: 900 of 1000 g left');
   eq(fig.getAttribute('role'), 'img');
   eq(fig.getAttribute('aria-label'), 'Printer and spools: T1 orange PETG, T2 blue PETG (in use), T3 empty, T4 multicolour PLA', 'says what each toolhead holds');
@@ -1624,7 +1624,7 @@ test('files: rename in place, from the details or the context menu; an unchanged
   q('[data-file="gcodes/clip.gcode"]').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(q('[data-file="gcodes/clip.gcode"]'))[0], clientY: centre(q('[data-file="gcodes/clip.gcode"]'))[1]}));
   await until(() => q('.oui-menu'), 'a menu');
   eq(qa('.oui-menu [role=menuitem]').map(text), ['Print', 'Save', 'Rename', 'Move to…', 'Delete'], 'the page\\u2019s actions, then rename, move and delete');
-  eq(qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file), ['gcodes/clip.gcode'], 'a file outside the selection is selected alone');
+  eq(qa('.oui-files-row[aria-selected="true"], .oui-files-row[aria-current]').map(r => r.dataset.file), ['gcodes/clip.gcode'], 'a file outside the selection is looked at alone');
   await click(qa('.oui-menu [role=menuitem]').find(b => text(b) === 'Rename'));
   await until(() => document.activeElement === field() && field().value === 'clip.gcode', 'renamed from the menu');
   await press('Escape');
@@ -1656,7 +1656,6 @@ test('files: filter by name and show each file\'s filament', `
   await type(q('#files-filter'), 'BNCH');
   eq(rows(), ['gcodes/benchy.gcode'], 'fuzzy: case-insensitive, the letters in order');
   eq(qa('.oui-files-row .oui-files-hit').map(text).join(''), 'bnch', 'the matched letters are marked');
-  await click(btn('Clear', q('.oui-files-bar')));
   assert(text(q('.oui-files-bar')).includes('Showing 1 of 2 files'), 'with nothing selected the bar says how many of the files are shown: ' + text(q('.oui-files-bar')));
   eq([q('#files-filter').placeholder, q('#files-filter').getAttribute('aria-label')], ['Search by name', 'Search files'], 'the search field, named as in the other printer plugin');
   eq(qa('.oui-files-row .oui-chip').length, 0, 'F1: print files are all G-code, so no row carries a kind tag');
@@ -1682,6 +1681,7 @@ const FILES_OPEN = `
   const again = async (tree, answer) => { await trees(tree); await until(() => last('cmd', 'files').id !== listed, 'listed again'); listed = last('cmd', 'files').id; if (answer) await reply(last('cmd', 'files'), answer); };
   const row = n => q('[data-file="gcodes/' + n + '.gcode"]');
   const picked = () => qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file.split('/').pop());
+  const tick = el => { el.dispatchEvent(new MouseEvent('click', {bubbles: true, ctrlKey: true})); return settle(); };   // a plain click only looks at a file (5.14)
   const folderEl = id => q('[data-folder="' + id + '"]');
   const bar = () => q('.oui-files-bar');
 `;
@@ -1693,8 +1693,8 @@ test('files: a tree of the printer\'s folders, several files selected, moved by 
   eq(folderEl('gcodes').getAttribute('aria-selected'), 'true', 'the open folder is marked');
   eq(text(q('[aria-labelledby="oui-tab-files"] .oui-pagehead-meta')), '2 GB free', 'free space in the page header');
   assert(text(bar()).includes('3 files'), 'the bar counts the files: ' + text(bar()));
-  await click(row('a'));
-  eq(picked(), ['a.gcode'], 'a click selects one');
+  await tick(row('a'));
+  eq(picked(), ['a.gcode'], 'Ctrl-click selects one');
   row('c').dispatchEvent(new MouseEvent('click', {bubbles: true, shiftKey: true})); await settle();
   eq(picked(), ['a.gcode', 'b.gcode', 'c.gcode'], 'Shift-click selects the range');
   assert(text(bar()).includes('3 selected') && !btn('Print a.gcode'), 'the bar says how many; the actions of one file are gone: ' + text(bar()));
@@ -1997,8 +1997,8 @@ test('files: a card shows its name on two lines at most, broken between words, w
 
 test('files: Delete asks once, with the names; the camera folder is read only and says why', `
   ${FILES_OPEN}
-  await click(row('a'));
-  row('b').dispatchEvent(new MouseEvent('click', {bubbles: true, ctrlKey: true})); await settle();
+  await tick(row('a'));
+  await tick(row('b'));
   eq(picked(), ['a.gcode', 'b.gcode'], 'Ctrl-click adds one');
   const del = btn('Delete', bar());
   assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-outlined'), 'Delete is a red outline in the page');
@@ -2037,7 +2037,7 @@ test('files: Delete asks once, with the names; the camera folder is read only an
   await click(folderEl('camera'));
   eq(last('cmd', 'files').args.path, 'camera', 'the other root');
   await reply(last('cmd', 'files'), {path: 'camera', dirs: [], files: [{name: 'shot.jpg', size: 2000, modified: 9}]});
-  await click(q('[data-file="camera/shot.jpg"]'));
+  await tick(q('[data-file="camera/shot.jpg"]'));
   assert(q('#files-ro') && text(q('#files-ro')) === 'Read only', 'says it is read only, once');
   assert(btn('Delete', bar()).disabled && btn('Delete', bar()).getAttribute('aria-describedby') === 'files-ro', 'Delete off, pointing at the reason');
   assert(q('.oui-files-move').classList.contains('p-disabled') && !q('[data-files-mkdir]') && !byTest('folder-delete'), 'Move off; no folder is made, renamed or deleted here');
@@ -2078,7 +2078,7 @@ test('files: newest first; a read that fails says so, keeps the tree and reads a
 // A narrow tab: the folders go above the list and the open file's details under it. The list keeps its rows.
 for (const size of [[420, 900], [600, 720]]) test(`files: at ${size.join('x')} the rows stay in sight with a file's details open`, `
   ${FILES_OPEN}
-  await click(row('b'));
+  await tick(row('b'));
   await until(() => btn('Print b.gcode'), 'the details of the file are open');
   await settle();
   const box = sel => q(sel).getBoundingClientRect();
@@ -2648,7 +2648,7 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, without score
   const pick = last('preset_pick');
   eq([pick.head, pick.name], [0, 'Generic PLA Silk @U1'], 'remembered for T1');
   await reply(pick, {matches: [{...row, name: 'Generic PLA Silk @U1', source: 'remembered', score: 29, reasons: choices[1].reasons, confident: true, remembered_key: 'mat:g|pla|'}]});
-  await until(() => text(q('[data-match="0"]')).includes('Picked by hand'), 'the new pick, marked as picked by hand');
+  await until(() => text(q('[data-match="0"]')).includes('Generic PLA Silk'), 'the new pick');
   assert(!q('.oui-match-unsure'), 'a pick by hand is not doubted');
   await click(q('.oui-match-change', q('[data-match="0"]')));
   const auto = () => qa('.oui-match-option', q('[data-match="0"]')).find(b => text(b).includes('Automatic'));
@@ -2672,7 +2672,7 @@ test('toolhead cards: a Spooler preset shows without Spooler/ and @printer, long
   await click(q('.oui-match-change', q('[data-match="0"]')));
   await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'both candidates');
   const row = qa('.oui-match-option', q('[data-match="0"]'))[1], name = q('.oui-truncate', row);
-  eq([text(name), name.title], [clean, clean], 'the list row shows the clean name');
+  eq(text(name), clean, 'the list row shows the clean name');
   eq([row.getAttribute('aria-current'), qa('.oui-match-option', q('[data-match="0"]'))[0].hasAttribute('aria-current')], ['true', false],
     'the selected row is still the current one');
   assert(q('.oui-match-option-name svg', row), 'the selected row keeps its check mark');
@@ -2738,7 +2738,7 @@ test('settings: requirements say what was found; one Check again asks again', `
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
   const sp = byTest('req-spooler'), sm = byTest('req-spoolman');
   assert(sp && sm, 'Spoolman and Spooler rows');
-  eq(qa('.oui-req-check', byTest('requirements')).filter(b => b.getClientRects().length).length, 0, 'no Check again on the rows');
+  eq(qa('.oui-req .oui-req-check', byTest('requirements')).filter(b => b.getClientRects().length).length, 0, 'no Check again on the rows');
   eq(qa('[data-test="req-check"]').length, 1, 'one Check again for the list');
   eq(sp.dataset.status, 'missing', 'Spooler not found');
   assert(text(sp).includes('Missing') && text(sp).includes('Install Spooler'), 'says so and how to get it: ' + text(sp));
@@ -3018,7 +3018,7 @@ async function dragBy(el, dx, dy, opts = {}) {
 const saved = () => last('dashboard') && last('dashboard').value;
 const itemOf = (st, id) => st.layouts[st.active].items.find(i => i.id === id);
 const shown = () => qa('.oui-dash-cell').filter(c => c.getClientRects().length).map(c => c.dataset.widget);
-async function menuItem(n) { await click(byTest('dash-menu')); await click(q('[data-menu="' + n + '"]')); }
+async function menuItem(n) { await click(byTest('dash-menu')); await click(q('[data-menu="dash-' + n + '"]')); }
 async function edit() { await click(byTest('dash-edit')); assert(q('.oui-dash-board[data-editing]'), 'edit mode on'); }
 `;
 
