@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Apply to project filaments sets the slot colours on an OrcaSlicer that allows it.** OrcaSlicer 2.5 doesn't let a plugin change a filament slot's colour, so the colours were left as they were. When OrcaSlicer has `orca.host.preset.filament.set_slot_color` (proposed in OrcaSlicer/OrcaSlicer#17114), each slot now gets its preset first and then the toolhead's colour, the way picking a colour in the sidebar does. Without it nothing changes: presets are applied and the message still says to set the colours by hand.
+- **A slot's colour comes from its Spoolman spool first.** Apply to project filaments takes the colour of the spool bound to the toolhead, then the RFID tag's, then the one the printer reports, so a head whose colour was never set on the printer (reported as white) still gets its spool's colour, the same spool its Spooler preset was picked for.
+
 ### Fixed
 
 - **Filament sync reports PLA finishes as PLA.** SnapSpeed/High Speed, Matte, Silk and Wood keep the base material for OrcaSlicer's compatibility checks, following OrcaSlicer #16300. The original sub-type still chooses the Snapmaker or Generic preset, and a linked Spooler preset keeps its id. CF/GF remain distinct materials, including fibre loadings such as CF10, without repeating a suffix already in the material name.
