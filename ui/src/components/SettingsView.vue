@@ -30,25 +30,6 @@ const autoLabel = (a: Automation) => tMaybe(`auto.${a.key}`, a.label);
 const choiceLabel = (v: unknown) => (typeof v === 'boolean' ? t(v ? 'mode.on' : 'mode.off') : tMaybe(`choice.${v}`, String(v)));
 const setDraft = (k: string, v: unknown) => { form.draft = { ...form.draft, [k]: v }; };
 const showKey = ref(false);
-// Open Filament Database (off by default): read only once it is on and saved; the line says which index is kept.
-type OfdState = { on: boolean; fetched?: number; version?: string; count?: number; stale?: boolean; error?: string };
-const ofdSaved = computed(() => !!config.value?.settings?.ofd_enabled);
-const ofdState = ref<OfdState | null>(null);
-const ofdBusy = ref(false);
-async function askOfd(refresh: boolean): Promise<void> {
-  ofdBusy.value = refresh;
-  try { ofdState.value = await bridge.request({ type: 'ofd', refresh }); } catch (e) { ofdState.value = { on: true, error: String((e as Error)?.message ?? e) }; }
-  finally { ofdBusy.value = false; }
-}
-const ofdLine = computed(() => {
-  const st = ofdState.value;
-  if (!st?.on) return '';
-  if (!st.count) return st.error ? t('ofd.failed', { error: st.error }) : t('ofd.none');
-  const line = t('ofd.status', { date: fmt.dateTime(st.fetched ?? 0), n: st.count });
-  return st.error ? `${line} · ${t('ofd.kept', { error: st.error })}` : line;
-});
-watch(ofdSaved, on => { if (on) void askOfd(false); else ofdState.value = null; }, { immediate: true });
-
 const smInfo = computed(() => s.spoolsError || (s.spoolsLoaded
   ? (s.spoolsVia === 'moonraker' ? t('heads.source.printer', { n: s.spools.length }) : t('heads.source.direct', { n: s.spools.length })) : t('sm.notLoaded')));
 
@@ -208,14 +189,6 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
         <OuiFormRow :label="t('match.show')" for="match-show" :hint="t('match.showHelp')">
           <ToggleSwitch input-id="match-show" :model-value="valueOf('show_preset_match') !== false" data-test="match-show"
                         @update:model-value="setDraft('show_preset_match', $event)" /></OuiFormRow>
-        <OuiFormRow :label="t('ofd.title')" for="ofd-on" :hint="t('ofd.help')">
-          <ToggleSwitch input-id="ofd-on" :model-value="!!valueOf('ofd_enabled')" data-test="ofd-on" @update:model-value="setDraft('ofd_enabled', $event)" /></OuiFormRow>
-        <div v-if="valueOf('ofd_enabled')" class="oui-row u1-ofd" data-test="ofd-state">
-          <OuiStatus v-if="!ofdSaved" state="idle" variant="plain">{{ t('ofd.saveFirst') }}</OuiStatus>
-          <OuiStatus v-else-if="ofdLine" :state="ofdState?.error || ofdState?.stale ? 'warn' : ofdState?.count ? 'ok' : 'idle'" variant="plain">{{ ofdLine }}</OuiStatus>
-          <Button v-if="ofdSaved" severity="secondary" size="small" :label="t('ofd.refresh')" :loading="ofdBusy" data-test="ofd-refresh" @click="askOfd(true)" />
-          <p class="oui-meta">{{ t('ofd.credit') }}</p>
-        </div>
         <OuiFormRow :label="t('sm.refresh')" :hint="t('sm.refreshHelp')">
           <Select :model-value="s.refreshS" :options="REFRESH" option-label="label" option-value="value" :aria-label="t('sm.refresh')" data-test="sm-refresh"
                   @update:model-value="setRefresh($event as number)" />
@@ -265,5 +238,4 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
 /* The install steps are one line each (per step, per OS). */
 .u1-reqs .oui-req-install > span { flex-basis: 100%; white-space: pre-line; }
 .u1-reqs .oui-req + .oui-req { border-top: 1px solid var(--oui-border); }
-.u1-ofd { padding: 0 var(--oui-s4) var(--oui-s3); }
 </style>
