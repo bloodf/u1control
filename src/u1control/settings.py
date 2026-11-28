@@ -50,7 +50,7 @@ EXTRA = {"spooler_hint_dismissed": False, "prefs": {}, "printed_before": False, 
 UI_LANGUAGES = ("auto", "en", "pt-BR", "es", "de", "zh-CN", "pl", "cs")   # "auto": OrcaSlicer's language, then the system's
 UI_THEMES = ("auto", "light", "dark")   # "auto": OrcaSlicer's background, then the system's light/dark mode
 UI_CLOCKS = ("auto", "24", "12")   # times of day: "auto" = the page language's usual clock
-CAMERA_FPS = (5, 10, 15, 30)   # live camera: most pictures a second U1 Control asks the printer for
+CAMERA_FPS = (2, 5, 10, 15)   # live camera: most pictures a second U1 Control asks the printer for
 REFRESH_RANGE = (10, 300)      # spoolman_refresh_s: 0 (off) or seconds in this range
 
 
@@ -152,6 +152,8 @@ class Store:
                 out["ui_theme"] = EXTRA["ui_theme"]
             if out["ui_clock"] not in UI_CLOCKS:
                 out["ui_clock"] = EXTRA["ui_clock"]
+            if out["camera_fps"] == 30:   # offered until 0.22: the fastest rate now
+                out["camera_fps"] = CAMERA_FPS[-1]
             if out["camera_fps"] not in CAMERA_FPS:
                 out["camera_fps"] = EXTRA["camera_fps"]
             if not valid_refresh(out["spoolman_refresh_s"]):

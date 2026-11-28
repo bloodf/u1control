@@ -1,7 +1,7 @@
 <script setup lang="ts">
 // A U1 toolhead, drawn for U1 Control (an original illustration, not a photo): the dark head with its tube on top,
-// the front plate with the head number, and the filament strand coming out of the nozzle in the mapped spool's colour.
-defineProps<{ n: number; strand?: string | null }>();
+// the front plate (the head number is in the text under it), and the filament strand coming out of the nozzle in the mapped spool's colour.
+defineProps<{ strand?: string | null }>();
 </script>
 
 <template>
@@ -13,7 +13,6 @@ defineProps<{ n: number; strand?: string | null }>();
     <circle class="hp-fan" cx="40" cy="43" r="9" />
     <circle class="hp-hub" cx="40" cy="43" r="2.5" />
     <rect class="hp-band" x="16" y="62" width="48" height="10" />
-    <text class="hp-num" x="40" y="70" text-anchor="middle">{{ n }}</text>
     <path class="hp-nozzle" d="M33 78h14l-4 9h-6z" />
     <path class="hp-strand" :data-empty="strand ? undefined : true" :style="strand ? { stroke: strand } : undefined" d="M40 88v28" />
   </svg>
@@ -28,7 +27,6 @@ defineProps<{ n: number; strand?: string | null }>();
 .hp-fan { fill: none; stroke: #6b6b75; stroke-width: 2; }
 .hp-hub { fill: #6b6b75; }
 .hp-band { fill: #f2c94c; }
-.hp-num { font: 700 8px var(--oui-font); fill: #24242a; }
 .hp-nozzle { fill: #b9bbc3; }
 .hp-strand { stroke-width: 3; stroke-linecap: round; fill: none; }
 .hp-strand[data-empty] { stroke: var(--oui-border); stroke-dasharray: 2 4; }

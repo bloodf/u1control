@@ -26,6 +26,8 @@ const max = computed(() => (isBed ? s.limits.bed : s.limits.hotend));
 const key = 'temp:' + props.id;
 
 // InputNumber commits its model on blur; the typed value is tracked on every input so the buttons react at once.
+// The field has no min or max of its own: InputNumber would turn 999 into the limit when the field is left, and
+// arm it. What was typed stays as typed, and parseTarget refuses it.
 const draft = ref<number | null>(null);
 const asNumber = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 const parsed = computed(() => parseTarget(draft.value, max.value));
@@ -69,7 +71,7 @@ async function setTemp() {
       <OuiSpark v-if="(s.history[id]?.length ?? 0) >= 2" class="u1-heat-spark" :values="s.history[id] ?? []" :tone="tone" :target="reading.target || null" :width="card ? 64 : 88" :height="card ? 22 : 28"
                 :label="t('temps.history', { heater: name })" />
       <div class="u1-heat-set">
-        <InputNumber v-bind="dot" :locale="locale" :max-fraction-digits="1" :model-value="draft" :input-id="'temp-' + id" :min="0" :max="max" :use-grouping="false" :allow-empty="true" size="small"
+        <InputNumber v-bind="dot" :locale="locale" :max-fraction-digits="1" :model-value="draft" :input-id="'temp-' + id" :use-grouping="false" :allow-empty="true" size="small"
                      :input-style="{ width: '72px' }" :placeholder="`0–${max}`" :aria-label="t('temps.target', { heater: name })"
                      :pt="{ pcInputText: { root: { 'aria-describedby': controlsOff ? 'heads-why' : 'temp-why-' + id } } }" :invalid="invalid" :disabled="!!controlsOff"
                      @input="e => (draft = asNumber(e.value))" @update:model-value="v => (draft = v)" @keydown.enter="setTemp" />
@@ -87,7 +89,7 @@ async function setTemp() {
 <style>
 /* OuiSetpoint's row: label, reading, chart, control; the chart leaves first, then the control drops under. */
 .u1-heat { container: u1-heat / inline-size; }
-.u1-heat-row { display: grid; grid-template-columns: minmax(84px, 1fr) minmax(96px, auto) minmax(0, 1fr) auto; align-items: center; gap: var(--oui-s2) var(--oui-s3); min-height: 44px; }
+.u1-heat-row { display: grid; grid-template-columns: minmax(84px, 1fr) minmax(120px, auto) minmax(0, 1fr) auto; align-items: center; gap: var(--oui-s2) var(--oui-s3); min-height: 44px; }
 .u1-heat-label { display: flex; align-items: center; gap: var(--oui-s2); min-width: 0; }
 .u1-heat-read { display: flex; align-items: center; gap: var(--oui-s2); min-width: 0; }
 .u1-heat-temp { display: grid; min-width: 0; line-height: 1.25; }
@@ -99,7 +101,7 @@ async function setTemp() {
 .u1-heat-set { display: flex; align-items: center; justify-content: flex-end; gap: var(--oui-s1); grid-column: -2 / -1; }
 .u1-heat-why { font-size: var(--oui-text-sm); color: var(--oui-danger); text-align: end; }
 .u1-heat-why:empty { display: none; }
-@container u1-heat (max-width: 520px) { .u1-heat:not([data-card]) .u1-heat-spark { display: none; } .u1-heat:not([data-card]) .u1-heat-row { grid-template-columns: minmax(84px, 1fr) minmax(96px, 1fr) auto; } }
+@container u1-heat (max-width: 520px) { .u1-heat:not([data-card]) .u1-heat-spark { display: none; } .u1-heat:not([data-card]) .u1-heat-row { grid-template-columns: auto minmax(120px, 1fr) auto; } }
 @container u1-heat (max-width: 400px) { .u1-heat:not([data-card]) .u1-heat-row { grid-template-columns: minmax(0, 1fr) auto; } .u1-heat:not([data-card]) .u1-heat-set { grid-column: 1 / -1; } }
 /* In a toolhead card: reading and chart on one line, the field under it. */
 .u1-heat[data-card] { padding-top: var(--oui-s2); border-top: 1px solid var(--oui-border); }

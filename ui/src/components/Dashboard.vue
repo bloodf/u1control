@@ -18,7 +18,9 @@ import AceCard from './AceCard.vue';
 import UsageCard from './UsageCard.vue';
 import SpoolerHint from './SpoolerHint.vue';
 import { s, openSettings, run, hello, controlsOff, printerName, fwText, stale, syncProject, lease } from '../app/store';
+import { exceptionParts, reprintParts } from '../core/logic';
 import { config } from '../app/settings';
+import { CAMERA_FPS } from '../app/camera';
 import * as bridge from '../core/bridge';
 import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
@@ -27,31 +29,41 @@ import firstRunArt from '../assets/u1-toolheads.webp';
 // The modules are widgets the user arranges (OuiDashboard): sizes in columns of 12 and 32 px rows. The default is the
 // family's dashboard order: the status across the top, what you work on (toolheads, controls) beside what you watch.
 const n = (v: number) => ({ value: v, label: String(v) });
+/** Rows on the default, in five columns: what a running print takes in the status block, and the four toolhead cards. */
+const JOB_H = 4, HEADS_H = 21;
 // A widget that is not `fill` is at least as tall as its content: its rows grow to fit it at any window width, so its
 // least height only keeps it from being dragged to nothing. The camera, the screen and the console fill what they get.
 const widgets = computed<OuiWidget[]>(() => [
-  { id: 'job', title: t('status.title'), icon: printer, component: markRaw(JobCard), w: 6, h: 2, minW: 4, minH: 2 },
-  { id: 'heads', title: t('heads.title'), icon: toolhead, component: markRaw(ToolheadsCard), w: 6, h: 14, minW: 5, minH: 4 },
-  { id: 'temps', title: t('tf.title'), icon: fan, component: markRaw(TempsFansCard), w: 3, h: 8, minW: 3, minH: 3,
+  { id: 'job', narrowOrder: 1, title: t('status.title'), icon: printer, component: markRaw(JobCard), w: 5, h: JOB_H, minW: 4, minH: 2 },
+  { id: 'heads', narrowOrder: 2, title: t('heads.title'), icon: toolhead, component: markRaw(ToolheadsCard), w: 5, h: HEADS_H, minW: 5, minH: 4 },
+  { id: 'temps', narrowOrder: 4, title: t('tf.title'), icon: fan, component: markRaw(TempsFansCard), w: 3, h: 8, minW: 3, minH: 3,
     settings: [{ key: 'chamber', label: t('tf.chamber'), default: true }, { key: 'drivers', label: t('widget.drivers'), default: true }, { key: 'fans', label: t('tf.fans'), default: true }] },
-  { id: 'controls', title: t('controls.title'), icon: thermometer, component: markRaw(ControlsCard), w: 6, h: 4, minW: 4, minH: 3 },
-  { id: 'camera', title: t('cam.title'), icon: camera, component: markRaw(CameraCard), w: 3, h: 8, minW: 3, minH: 4, fill: true,
-    settings: [{ key: 'aspect', label: t('widget.aspect'), default: '16/9', options: [{ value: '16/9', label: '16:9' }, { value: '4/3', label: '4:3' }, { value: '1/1', label: '1:1' }] }] },
-  { id: 'console', title: t('console.title'), icon: terminal, component: markRaw(ConsoleCard), w: 12, h: 6, minW: 3, minH: 5, fill: true,
+  { id: 'controls', narrowOrder: 3, title: t('controls.title'), icon: thermometer, component: markRaw(ControlsCard), w: 4, h: 8, minW: 4, minH: 3 },
+  { id: 'camera', narrowOrder: 5, title: t('cam.title'), icon: camera, component: markRaw(CameraCard), w: 4, h: 7, minW: 3, minH: 4,
+    settings: [{ key: 'aspect', label: t('widget.aspect'), default: '16/9', options: [{ value: '16/9', label: '16:9' }, { value: '4/3', label: '4:3' }, { value: '1/1', label: '1:1' }] },
+      { key: 'fps', label: t('cam.fps'), default: config.value?.settings.camera_fps ?? 5, options: CAMERA_FPS.map(v => ({ value: v, label: t('cam.fpsOption', { n: v }) })) }] },
+  { id: 'console', narrowOrder: 7, title: t('console.title'), icon: terminal, component: markRaw(ConsoleCard), w: 7, h: 10, minW: 3, minH: 5, fill: true,
     settings: [{ key: 'lines', label: t('widget.lines'), default: 400, options: [100, 400, 1000].map(n) }] },
-  { id: 'screen', title: t('scr.title'), icon: hand, component: markRaw(ScreenCard), w: 6, h: 4, minW: 3, minH: 4, fill: true },
+  { id: 'screen', narrowOrder: 6, title: t('scr.title'), icon: hand, component: markRaw(ScreenCard), w: 3, h: 7, minW: 3, minH: 4, fill: true },
   { id: 'files', title: t('nav.files'), icon: files, component: markRaw(FilesCard), w: 4, h: 3, minW: 3, minH: 3 },
   { id: 'ace', title: t('ace.title'), icon: ace, component: markRaw(AceCard), w: 6, h: 4, minW: 3, minH: 3 },
 ]);
-// As the owner arranged it by hand: the print over the toolheads on the left; temperatures and controls, then the camera
-// and the printer screen, then the console on the right. Files is in the catalogue; the filament units (multiACE) join
-// under the toolheads only when multiACE runs, so a Default never arranged gets them and nothing else moves.
+// The default gives every widget the rows its content takes, so none stretches its neighbours: the print over the
+// toolheads on the left; temperatures and controls, then the camera (16:9, the wider cell) and the printer screen
+// (3:2) on the right. The G-code console is an expert's tool: it is on the default only in Expert mode (it stays in
+// the catalogue), and its rows go to the camera and the screen otherwise. The filament units (multiACE) join under
+// the toolheads only when multiACE runs, so a Default never arranged gets them and nothing else moves.
+const expert = computed(() => config.value?.mode === 'expert');
 const defaults = computed(() => ({ name: t('layout.default'), items: [
-  { id: 'job', x: 0, y: 0, w: 5, h: 4 }, { id: 'heads', x: 0, y: 4, w: 5, h: 14 },
-  { id: 'temps', x: 5, y: 0, w: 3, h: 7 }, { id: 'controls', x: 8, y: 0, w: 4, h: 7 }, { id: 'camera', x: 5, y: 7, w: 3, h: 8 }, { id: 'screen', x: 8, y: 7, w: 4, h: 8 },
-  { id: 'console', x: 5, y: 15, w: 7, h: 6 }, ...(s.status?.ace ? [{ id: 'ace', x: 0, y: 18, w: 5, h: 6 }] : [])] }));
+  { id: 'job', x: 0, y: 0, w: 5, h: JOB_H }, { id: 'heads', x: 0, y: JOB_H, w: 5, h: HEADS_H },
+  { id: 'temps', x: 5, y: 0, w: 3, h: 8 }, { id: 'controls', x: 8, y: 0, w: 4, h: 8 },
+  ...(expert.value ? [{ id: 'camera', x: 5, y: 8, w: 4, h: 7 }, { id: 'screen', x: 9, y: 8, w: 3, h: 7 }, { id: 'console', x: 5, y: 15, w: 7, h: 10 }]
+    : [{ id: 'camera', x: 5, y: 8, w: 7, h: 10 }, { id: 'screen', x: 5, y: 18, w: 4, h: 7 }]),
+  ...(s.status?.ace ? [{ id: 'ace', x: 0, y: JOB_H + HEADS_H, w: 5, h: 6 }] : [])] }));
 // Earlier defaults: a layout still exactly as one of them is given today's.
-const RETIRED = [[{ id: 'job', x: 0, y: 0, w: 6, h: 2 }, { id: 'heads', x: 0, y: 2, w: 6, h: 14 }, { id: 'controls', x: 6, y: 0, w: 6, h: 4 },
+const RETIRED = [[{ id: 'job', x: 0, y: 0, w: 5, h: 4 }, { id: 'heads', x: 0, y: 4, w: 5, h: 14 }, { id: 'temps', x: 5, y: 0, w: 3, h: 7 }, { id: 'controls', x: 8, y: 0, w: 4, h: 7 },
+  { id: 'camera', x: 5, y: 7, w: 3, h: 8 }, { id: 'screen', x: 8, y: 7, w: 4, h: 8 }, { id: 'console', x: 5, y: 15, w: 7, h: 6 }],
+[{ id: 'job', x: 0, y: 0, w: 6, h: 2 }, { id: 'heads', x: 0, y: 2, w: 6, h: 14 }, { id: 'controls', x: 6, y: 0, w: 6, h: 4 },
   { id: 'temps', x: 6, y: 4, w: 3, h: 8 }, { id: 'camera', x: 9, y: 4, w: 3, h: 8 }, { id: 'screen', x: 6, y: 12, w: 6, h: 4 }, { id: 'console', x: 0, y: 16, w: 12, h: 6 }],[{ id: 'job', x: 0, y: 0, w: 12, h: 3 }, { id: 'heads', x: 0, y: 3, w: 12, h: 10 }, { id: 'controls', x: 0, y: 13, w: 8, h: 6 },
   { id: 'camera', x: 8, y: 13, w: 4, h: 6 }, { id: 'temps', x: 0, y: 19, w: 8, h: 7 }, { id: 'screen', x: 8, y: 19, w: 4, h: 7 }, { id: 'console', x: 0, y: 26, w: 12, h: 7 }],
 [{ id: 'job', x: 0, y: 0, w: 12, h: 3 }, { id: 'heads', x: 0, y: 3, w: 12, h: 10 }, { id: 'temps', x: 0, y: 13, w: 8, h: 7 }, { id: 'camera', x: 8, y: 13, w: 4, h: 7 },
@@ -62,7 +74,7 @@ const labels = computed<OuiDashboardLabels>(() => ({
   reset: t('layout.reset'), create: t('layout.create'), apply: t('layout.apply'), keep: t('layout.keep'), removeAsk: name => t('layout.removeAsk', { name }),
   nameEmpty: t('layout.nameEmpty'), nameTaken: t('layout.nameTaken'), settings: widget => t('layout.settings', { widget }), removeWidget: widget => t('layout.removeWidget', { widget }),
   widget: widget => t('layout.widget', { widget }), place: (widget, x, y, w, h) => t('layout.place', { widget, x, y, w, h }), removed: widget => t('layout.removed', { widget }),
-  hint: t('layout.hint'), narrow: t('layout.narrow'), empty: t('layout.empty'), maximize: t('layout.maximize'), restore: t('layout.restore'),
+  hint: t('layout.hint'), narrow: t('layout.narrow'), empty: t('layout.empty'), maximize: t('layout.maximize'), restore: t('layout.restore'), layoutMenu: t('layout.menu'),
 }));
 // Stored with the plugin's settings (settings "dashboard"); what the user saved here wins over a config that is older.
 const saved = ref<unknown>(undefined);
@@ -75,7 +87,17 @@ watch(() => { const st = validateLayout(layout.value, widgets.value, defaults.va
   ids => { s.widgets = ids.split(','); lease(); }, { immediate: true });
 
 const st = computed(() => s.status);
-const exceptions = computed(() => (st.value?.exceptions ?? []).map(x => JSON.stringify(x)).join('\n'));
+// What the printer reports is said in words: its own short text and code, never the record it sent.
+const exceptions = computed(() => [...new Set((st.value?.exceptions ?? []).map(x => {
+  const { name, code } = exceptionParts(x);
+  return name && code ? t('exceptions.named', { text: name, code }) : name || (code ? t('exceptions.code', { code }) : t('exceptions.unnamed'));
+}))]);
+const interrupted = computed(() => {
+  const { file, layer } = reprintParts(st.value?.reprint);
+  return file && layer != null ? t('power.at', { file, layer }) : file ? t('power.file', { file }) : layer != null ? t('power.layer', { layer }) : '';
+});
+/** A printer that never answered has nothing to show: one panel says so, in place of a dashboard of empty cards. */
+const unreachable = computed(() => s.phase === 'unreachable' && !s.status);
 async function powerResume() {
   if (!await ask({ title: t('act.powerResume'), text: t('confirm.powerResume.text'), yes: t('confirm.powerResume.yes'), no: t('common.goBack') })) return;
   await run({ key: 'power', label: t('act.powerResume'), cmd: 'power_loss', args: { action: 'resume' }, okText: t('ok.powerResume'), timeoutMs: 60000 });
@@ -101,10 +123,11 @@ async function powerDiscard() {
   <!-- Always in the page, whatever is shown around it: the page's banners are moved here (App.vue). -->
   <div id="u1-banner-dash" />
   </div>
-  <OuiBanner :show="!!exceptions" tone="error" :title="t('exceptions.title')" dismissible :dismiss-key="`exceptions:${exceptions}`" :close-label="t('common.close')"><span class="oui-error-detail">{{ exceptions }}</span></OuiBanner>
+  <OuiBanner :show="!!exceptions.length" tone="error" :title="t('exceptions.title')" dismissible :dismiss-key="`exceptions:${exceptions.join('|')}`" :close-label="t('common.close')" data-test="exceptions">
+    <ul class="u1-plain-list"><li v-for="e in exceptions" :key="e">{{ e }}</li></ul></OuiBanner>
   <!-- Not dismissible: it holds the only Resume and Discard controls. -->
   <OuiBanner v-if="st?.power_loss" role="note" tone="warn" :icon="zap" :title="t('power.title')" data-test="power-loss">
-    <template v-if="st.reprint">{{ t('power.options', { options: JSON.stringify(st.reprint) }) }}</template>
+    <template v-if="interrupted">{{ interrupted }}</template>
     <template #actions>
       <Button size="small" severity="secondary" :label="t('power.resume')" :disabled="!!controlsOff" :aria-describedby="controlsOff ? 'heads-why' : undefined" data-focus-key="pl-resume" @click="powerResume">
         <template #icon><OuiIcon :icon="play" :size="14" /></template></Button>
@@ -122,19 +145,28 @@ async function powerDiscard() {
           <Button severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
         </template>
       </OuiEmpty>
-      <template #footer><p class="oui-meta">{{ t('target.detail', { error: s.error }) }}</p></template>
     </OuiPanel>
     <SpoolerHint />
   </template>
+  <!-- A printer that never answered: the same single panel, with what to do. The reason the controls point at. -->
+  <OuiPanel v-else-if="unreachable" :id="s.tab === 'dash' ? 'heads-why' : undefined" class="u1-first" flush role="alert" data-test="unreachable">
+    <OuiEmpty state="offline" :title="t('target.offline.title')" :text="t('target.offline.body', { printer: printerName, error: s.error })">
+      <template #actions>
+        <Button :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
+        <Button severity="secondary" :label="t('common.openSettings')" @click="openSettings('connection')"><template #icon><OuiIcon :icon="settings" :size="14" /></template></Button>
+      </template>
+    </OuiEmpty>
+  </OuiPanel>
   <template v-else>
     <SpoolerHint />
-    <OuiDashboard v-model="layout" :widgets="widgets" :defaults="defaults" :labels="labels" :narrow-at="1000" />
+    <OuiDashboard v-model="layout" :widgets="widgets" :defaults="defaults" :labels="labels" :narrow-at="820" />
   </template>
 </template>
 <style>
 .u1-first { justify-self: center; width: min(100%, 560px); margin-top: var(--oui-s8); }
 .u1-first .oui-empty { padding-block: var(--oui-s8); }
 .u1-first .oui-empty-image { width: 176px; height: 176px; }
+.u1-plain-list { margin: 0; padding: 0; list-style: none; }
 .u1-head-skel { display: inline-block; width: 220px; vertical-align: middle; }
 /* Last known address and firmware of a printer the page no longer hears from. */
 .u1-stale { opacity: .75; }
