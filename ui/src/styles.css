@@ -45,12 +45,8 @@
    other one they would vanish. Ours follow the page's theme. */
 .orca-ui :is(h1,h2,h3,h4,h5,h6){color:inherit}.orca-ui th{color:var(--oui-muted)}
 
-/* The busy state's pulse (foundation's oui-halo) animates box-shadow, which WebKit repaints every frame: about 20% GPU
-   while the page shows a print. The same pulse as a ring that grows and fades (transform + opacity) is composited on
-   the GPU without repainting. */
-.oui-status[data-state=busy] .oui-status-dot.oui-status-dot { animation: none; position: relative; }   /* doubled class: outranks the foundation rule, which loads later */
-.oui-status[data-state=busy] .oui-status-dot.oui-status-dot::after {
-  content: ''; position: absolute; inset: 0; border-radius: 50%; background: currentColor; opacity: 0; pointer-events: none;
-  animation: u1-pulse 2s var(--oui-ease) infinite;
-}
-@keyframes u1-pulse { 0% { transform: scale(1); opacity: .5; } 70%, 100% { transform: scale(2.25); opacity: 0; } }
+/* The busy state's dot stays still. The foundation pulses it for ever (oui-halo, an animated box-shadow), and on macOS any
+   never-ending animation makes WindowServer redraw OrcaSlicer's window every frame, even while another tab is showing
+   (OrcaSlicer doesn't tell the page it's hidden): about 30% of WindowServer's CPU. "Printing" and the progress already
+   say it is live. The class is doubled to outrank the foundation rule, which loads later. */
+.oui-status[data-state=busy] .oui-status-dot.oui-status-dot { animation: none; }

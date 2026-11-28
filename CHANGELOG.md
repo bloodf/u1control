@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- **The page no longer loads the GPU during a print.** The pulsing dot on a busy status (Printing) animated a shadow that WebKit repaints every frame: on a Mac, with the U1 Control tab open during a print, about 20% GPU and 30% graphics CPU. The pulse is now a ring that grows and fades, drawn by the compositor: about 0.4% GPU, the same as with Reduce Motion on. It looks the same.
+- **U1 Control no longer keeps macOS busy during a print.** The dot on the Printing status pulsed for ever, and on macOS a never-ending animation makes WindowServer redraw OrcaSlicer's window every frame, even while another OrcaSlicer tab is showing: about 30% of WindowServer's CPU and most of the Mac's GPU, plus about 20% GPU in OrcaSlicer's own graphics process. The dot now stays still while printing; "Printing" and the progress show the print is live.
 
 ## [0.22.1] - 2026-11-28
 
