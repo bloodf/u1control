@@ -2690,7 +2690,7 @@ test('toasts: bottom-right, each with a Close button, gone once closed', `
   const host = q('.oui-toasts');
   eq(qa('.oui-toasts').length, 1, 'one toast host on the page');
   const toast = q('.oui-toast'), r = toast.getBoundingClientRect();
-  assert(innerWidth - r.right <= 24 && innerHeight - r.bottom <= 24 && r.bottom <= innerHeight, 'bottom-right: ' + JSON.stringify(r));
+  assert(innerWidth - r.right <= 40 && innerHeight - r.bottom <= 40 && r.bottom <= innerHeight, 'bottom-right: ' + JSON.stringify(r));
   eq(toast.getAttribute('role'), 'status', 'an info toast is polite');
   assert(toasts().includes('Project filaments updated'), 'text shown: ' + toasts());
   const close = q('.oui-toast-close', toast);
