@@ -12,8 +12,8 @@ import Select from 'primevue/select';
 import SelectButton from 'primevue/selectbutton';
 import Slider from 'primevue/slider';
 import ToggleSwitch from 'primevue/toggleswitch';
-import { OuiBanner, OuiIcon, OuiSpool, OuiStatus, OuiSwatch, OuiThumb } from '@orca-plugins/ui-foundation/src/components';
-import { more, printer, refresh as refreshIcon, settings as settingsIcon, target, warning, wrench } from '@orca-plugins/ui-foundation/src/icons';
+import { OuiBanner, OuiIcon, OuiMenu, OuiSpool, OuiStatus, OuiSwatch, OuiThumb, type OuiMenuItem } from '@orca-plugins/ui-foundation/src/components';
+import { chevronDown, more, printer, refresh as refreshIcon, settings as settingsIcon, target, warning, wrench } from '@orca-plugins/ui-foundation/src/icons';
 import * as bridge from '../core/bridge';
 import { boot } from '../core/boot';
 import { t, tn, tMaybe } from '../core/i18n';
@@ -81,7 +81,9 @@ const warnText = (w: (typeof warnings.value)[number]) => (w.kind === 'material'
 const storedPa = ref(!!D.stored_pa);
 const paText = computed(() => Object.entries(D.pa ?? {}).map(([h, v]) => `T${+h + 1} ${v}`).join(', '));
 const canSend = computed(() => !sent.value && !busy.value && (!warnings.value.length || acked.value));
-const why = computed(() => sent.value ? '' : busy.value ? t('setup.busyShort') : !canSend.value ? t('setup.needAck') : '');
+// Busy is said once, by the banner; Apply points at it.
+const why = computed(() => sent.value || busy.value ? '' : !canSend.value ? t('setup.needAck') : '');
+const sendWhy = computed(() => busy.value && !sent.value ? 'su-busy' : why.value ? 'su-why' : undefined);
 
 // ---------------------------------------------------------------- head picker (one popover, for the card that opened it)
 const picker = ref<InstanceType<typeof Popover> | null>(null);
@@ -151,6 +153,11 @@ function send() {
 }
 const cancel = () => { if (!sent.value) bridge.submit({ cancelled: true }); };
 const openSettings = () => bridge.post({ open_settings: true });
+// One overflow by the printer name: the print preferences dialog and the plugin's own settings (on the tab).
+const menu = ref<InstanceType<typeof OuiMenu> | null>(null);
+const menuItems = (): OuiMenuItem[] => [
+  ...(dialogPrefs.value.length ? [{ label: t('setup.prefsButton'), icon: settingsIcon, id: 'prefs', disabled: busy.value || sent.value, run: () => { prefsOpen.value = true; } }] : []),
+  { label: t('setup.pluginSettings'), icon: wrench, id: 'plugin-settings', run: openSettings }];
 
 function onKey(e: KeyboardEvent) {
   if (e.key === 'Escape' && !document.querySelector('.p-select-overlay, .p-popover, .p-dialog, .p-dialog-mask')) cancel();
@@ -184,16 +191,16 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
         <p class="su-meta oui-num" data-test="job-meta">{{ meta1 }}</p>
         <p class="oui-meta oui-num" data-test="job-meta2">{{ meta2 }}</p>
       </div>
-      <div v-if="D.printer" class="su-printer" data-test="printer">
-        <p class="su-printer-name">{{ D.printer.name }}</p>
-        <p class="oui-meta oui-num su-printer-line">{{ D.printer.address }}
+      <div class="su-printer" data-test="printer">
+        <p class="su-printer-name"><span v-if="D.printer">{{ D.printer.name }}</span>
+          <Button size="small" text severity="secondary" :aria-label="t('setup.menu')" :title="t('setup.menu')" aria-haspopup="menu" data-test="menu"
+                  @click="menu?.open($event, menuItems())"><template #icon><OuiIcon :icon="more" :size="16" /></template></Button></p>
+        <p v-if="D.printer" class="oui-meta oui-num su-printer-line">{{ D.printer.address }}
           <OuiStatus :state="busy ? 'busy' : 'ok'" variant="plain" role="status">{{ busy ? t('bar.busy') : t('setup.ready') }}</OuiStatus></p>
-        <Button v-if="dialogPrefs.length" size="small" severity="secondary" :label="t('setup.prefsButton')" data-test="prefs" :disabled="busy || sent" @click="prefsOpen = true">
-          <template #icon><OuiIcon :icon="settingsIcon" :size="14" /></template></Button>
       </div>
     </header>
 
-    <OuiBanner v-if="busy" tone="warn" :title="t('setup.busyTitle')" data-test="busy">{{ t('setup.busyText') }}</OuiBanner>
+    <OuiBanner v-if="busy" id="su-busy" tone="warn" :title="t('setup.busyTitle')" data-test="busy">{{ t('setup.busyText') }}</OuiBanner>
 
     <OuiBanner v-if="D.multiace" tone="info" :title="t('setup.aceTitle')" data-test="multiace">{{ t('setup.aceText') }}</OuiBanner>
     <section v-else class="su-map" aria-labelledby="su-map-h">
@@ -203,23 +210,31 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
           <li v-for="f in D.filaments" :key="f.index">
             <button type="button" class="su-card" :data-f="f.index" :data-t="map[String(f.index)]" :disabled="busy || sent" aria-haspopup="dialog"
                     :aria-label="t('setup.cardLabel', { f: f.index + 1, type: f.type, n: map[String(f.index)] + 1,
-                                   loaded: headOf(f)?.loaded ? headOf(f)!.type : headName(headOf(f)) || t('setup.empty') }) + (warnFor(f) ? '. ' + warnText(warnFor(f)!) : '')"
+                                   loaded: headOf(f)?.loaded ? headOf(f)!.type : headName(headOf(f)) || t('setup.empty') }) + (warnFor(f) ? '. ' + warnText(warnFor(f)!) : '')
+                                   + (colourHint(f) ? '. ' + t('setup.colourDiffers', { f: f.index + 1, n: map[String(f.index)] + 1 }) : '')"
                     @click="openPicker($event, f)">
               <!-- The project filament's colour is a 4 px strip, as on every slot card; the card itself is neutral. -->
               <span class="oui-slot-strip su-card-strip" :data-unknown="!f.colour || undefined" :style="f.colour ? { background: f.colour } : undefined" aria-hidden="true" />
               <span class="su-card-top">
-                <span class="oui-num">[{{ f.index + 1 }}]</span> <strong>{{ f.type }}</strong>
+                <strong class="su-card-title">{{ t('setup.cardTitle', { f: f.index + 1, type: f.type }) }}</strong>
                 <span v-if="f.weight" class="su-card-g oui-num">{{ t('setup.grams', { g: f.weight }) }}</span></span>
-              <HeadPicture :n="map[String(f.index)] + 1" :strand="headColour(map[String(f.index)])" />
+              <HeadPicture :strand="headColour(map[String(f.index)])" />
               <span class="su-card-foot">
                 <OuiSpool :color="headColour(map[String(f.index)])" :colors="headMulti(map[String(f.index)])" :fraction="headFill(map[String(f.index)])" :size="32" />
                 <span class="su-card-id"><span class="oui-strong">{{ t('setup.head', { n: map[String(f.index)] + 1 }) }}
+                  <OuiIcon :icon="chevronDown" :size="14" class="su-card-chev" />
                   <OuiIcon v-if="warnFor(f)" :icon="warning" :size="14" class="su-warn-ico" data-test="card-warn" /></span>
                   <span class="oui-meta"><em v-if="!present(headOf(f))" class="su-empty">{{ t('setup.empty') }}</em>
                     <template v-else>{{ headName(headOf(f)) }}</template></span>
                   <span v-if="spoolOf(map[String(f.index)])" class="oui-meta su-spool" data-test="spool">{{ spoolOf(map[String(f.index)])!.name }}</span></span>
               </span>
-              <span v-if="colourHint(f)" class="su-hint" data-test="colour-hint">{{ t('setup.colourDiffers', { f: f.index + 1, n: map[String(f.index)] + 1 }) }}</span>
+              <!-- The colour the project asked for next to the one in the head, each named, so it never rests on colour alone. -->
+              <span v-if="colourHint(f)" class="su-mismatch" data-tone="warn" data-test="colour-hint">
+                <span class="su-mismatch-title"><OuiIcon :icon="warning" :size="14" />{{ t('setup.colourMismatch') }}</span>
+                <span class="su-mismatch-pair"><span class="su-mismatch-side" data-test="hint-project"><OuiSwatch :color="f.colour" :size="14" />{{ t('setup.colourProject') }}</span>
+                  <span aria-hidden="true">→</span>
+                  <span class="su-mismatch-side" data-test="hint-loaded"><OuiSwatch :color="headColour(map[String(f.index)])" :colors="headMulti(map[String(f.index)])" :size="14" />{{ t('setup.colourLoaded') }}</span></span>
+              </span>
             </button>
           </li>
         </ul>
@@ -246,15 +261,15 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
       <label v-if="has('bed_level')" class="su-check" for="su-p-bed_level"><Checkbox v-model="prefs.bed_level" input-id="su-p-bed_level" binary :disabled="busy || sent" />{{ prefLabel('bed_level') }}</label>
       <span v-if="has('flow_calibrate')" class="su-check">
         <label class="su-check" for="su-p-flow_calibrate"><Checkbox v-model="prefs.flow_calibrate" input-id="su-p-flow_calibrate" binary :disabled="busy || sent" />{{ t('setup.flow') }}</label>
-        <Button v-if="has('flow_calibrate_heads')" size="small" text severity="secondary" :aria-label="t('setup.flowMore')" :title="t('setup.flowMore')" data-test="flow-more"
-                :disabled="busy || sent || !prefs.flow_calibrate" aria-haspopup="dialog" @click="flowPop?.toggle($event)"><template #icon><OuiIcon :icon="more" :size="14" /></template></Button>
+        <Button v-if="has('flow_calibrate_heads')" size="small" text severity="secondary" :aria-label="t('setup.flowMore')" data-test="flow-more" class="su-value"
+                :disabled="busy || sent || !prefs.flow_calibrate" aria-haspopup="dialog" @click="flowPop?.toggle($event)">{{ t('setup.flowHeads') }}<OuiIcon :icon="chevronDown" :size="14" /></Button>
       </span>
       <label v-if="has('time_lapse_camera')" class="su-check" for="su-p-time_lapse_camera"><Checkbox v-model="prefs.time_lapse_camera" input-id="su-p-time_lapse_camera" binary :disabled="busy || sent" />{{ prefLabel('time_lapse_camera') }}</label>
       <label v-if="paText" class="su-check" for="su-pa"><Checkbox v-model="storedPa" input-id="su-pa" binary :disabled="busy || sent" data-test="stored-pa" />{{ t('setup.storedPa', { list: paText }) }}</label>
       <span class="oui-spacer" />
-      <span class="su-check">{{ t('setup.cover') }} <span class="oui-meta">{{ t(`purifier.${purifier}` as any) }}</span>
-        <Button size="small" text severity="secondary" :aria-label="t('setup.coverMore')" :title="t('setup.coverMore')" data-test="cover-more" :disabled="busy || sent"
-                aria-haspopup="dialog" @click="coverPop?.toggle($event)"><template #icon><OuiIcon :icon="more" :size="14" /></template></Button></span>
+      <span class="su-check">{{ t('setup.cover') }}
+        <Button size="small" text severity="secondary" :aria-label="t('setup.coverMore', { mode: t(`purifier.${purifier}` as any) })" class="su-value"
+                data-test="cover-more" :disabled="busy || sent" aria-haspopup="dialog" @click="coverPop?.toggle($event)">{{ t(`purifier.${purifier}` as any) }}<OuiIcon :icon="chevronDown" :size="14" /></Button></span>
     </section>
 
     <div class="su-send">
@@ -264,13 +279,11 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
       <OuiStatus v-if="sent" state="busy" role="status">{{ t('setup.sending') }}</OuiStatus>
       <div class="su-actions">
         <Button severity="secondary" :label="t('setup.dontSend')" data-test="cancel" :disabled="sent" @click="cancel" />
-        <Button size="large" class="su-apply" :severity="warnings.length ? 'warn' : undefined" :disabled="!canSend" :aria-describedby="why ? 'su-why' : undefined" data-test="send"
+        <Button size="large" class="su-apply" :severity="warnings.length ? 'warn' : undefined" :disabled="!canSend" :aria-describedby="sendWhy" data-test="send"
                 :label="warnings.length ? tn('setup.sendWarn', warnings.length) : t('setup.apply')" @click="send" />
       </div>
-      <Button text size="small" severity="secondary" :label="t('setup.pluginSettings')" data-test="plugin-settings" aria-describedby="su-ps-hint" @click="openSettings">
-        <template #icon><OuiIcon :icon="settingsIcon" :size="14" /></template></Button>
-      <p id="su-ps-hint" class="oui-meta">{{ t('setup.pluginSettingsHint') }}</p>
     </div>
+    <OuiMenu ref="menu" />
   </main>
 
   <Popover ref="picker" @show="onPickerShown">
@@ -342,7 +355,7 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
 .su-job-name { font-size: var(--oui-text-xl); line-height: 1.2; font-weight: 700; overflow-wrap: anywhere; }
 .su-meta { font-size: var(--oui-text-md, 1rem); }
 .su-printer { display: grid; justify-items: end; gap: 4px; text-align: end; }
-.su-printer-name { font-weight: 700; font-size: var(--oui-text-lg); }
+.su-printer-name { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; font-size: var(--oui-text-lg); }
 .su-printer-line { display: inline-flex; align-items: center; gap: var(--oui-s2); }
 .su-section { font-size: var(--oui-text-sm); font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--oui-muted); text-align: center; margin-bottom: var(--oui-s3); }
 .su-body { display: flex; gap: var(--oui-s4); align-items: flex-start; }
@@ -351,18 +364,27 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
 .su-card { all: unset; box-sizing: border-box; display: grid; justify-items: center; align-content: start; gap: var(--oui-s2); width: 100%; height: 100%; padding: var(--oui-s2) var(--oui-s2) var(--oui-s3); cursor: pointer;
   border-radius: var(--oui-radius-lg); background: var(--oui-surface); box-shadow: inset 0 0 0 1px var(--oui-border), var(--oui-shadow-panel); }
 .su-card:hover:not(:disabled) { box-shadow: inset 0 0 0 2px var(--oui-primary-mark), var(--oui-shadow-panel); }
+.su-card-chev { color: var(--oui-muted); vertical-align: -2px; }
+.su-card:hover:not(:disabled) .su-card-chev, .su-card:focus-visible .su-card-chev { color: var(--oui-primary-mark); }
 .su-card:focus-visible { outline: 2px solid var(--oui-primary-mark); outline-offset: 2px; }
 .su-card:disabled { cursor: default; opacity: .75; }
 .su-card-strip { justify-self: stretch; margin: 0; }
-.su-card-top { display: flex; align-items: baseline; gap: 6px; width: 100%; box-sizing: border-box; padding: 0 var(--oui-s2); font-size: var(--oui-text-lg); }
+.su-card-top { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; width: 100%; box-sizing: border-box; padding: 0 var(--oui-s2); font-size: var(--oui-text-lg); }
 .su-card-g { color: var(--oui-muted); }
-.su-card-g { margin-inline-start: auto; font-size: var(--oui-text-sm); }
+.su-card-g { margin-inline-start: auto; font-size: var(--oui-text-sm); white-space: nowrap; }
 .su-card-foot { display: flex; align-items: center; gap: var(--oui-s2); width: 100%; padding-inline: var(--oui-s2); box-sizing: border-box; }
 .su-card-id { display: grid; min-width: 0; }
 .su-card-id > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .su-warn-ico { color: var(--oui-warning); vertical-align: -2px; }
 .su-empty { font-style: normal; text-decoration: underline dotted; }
-.su-hint { font-size: var(--oui-text-sm); color: var(--oui-muted); text-align: center; padding-inline: var(--oui-s2); }
+.su-card-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.su-card-id > .oui-strong { display: inline-flex; align-items: center; gap: 4px; }
+.su-value.p-button { gap: 4px; }
+.su-mismatch { display: grid; justify-items: center; gap: 4px; width: 100%; box-sizing: border-box; padding: 6px var(--oui-s2); border-radius: var(--oui-radius); font-size: var(--oui-text-sm);
+  background: var(--oui-tone-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--oui-tone) 45%, transparent); }
+.su-mismatch-title { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--oui-tone); }
+.su-mismatch-pair { display: inline-flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px 6px; }
+.su-mismatch-side { display: inline-flex; align-items: center; gap: 4px; }
 .su-tools { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--oui-s2); margin-top: var(--oui-s3); }
 #su-heads-edit:not(:empty) { margin-top: var(--oui-s3); }
 .su-opts { display: flex; flex-wrap: wrap; align-items: center; gap: var(--oui-s2) var(--oui-s4); padding-top: var(--oui-s3); border-top: 1px solid var(--oui-border); }
@@ -393,4 +415,6 @@ onBeforeUnmount(() => { clearInterval(timer); document.removeEventListener('keyd
   @media (prefers-reduced-motion: reduce) { .tv-wait { animation: none; } }
   .su-cards { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
 }
+/* 600 to 1000 px: two by two, never three and an orphan (after the narrow rule so it wins down to 600). */
+@media (min-width: 600px) and (max-width: 1000px) { .su-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>
