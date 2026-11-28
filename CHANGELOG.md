@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **The page no longer loads the GPU during a print.** The pulsing dot on a busy status (Printing) animated a shadow that WebKit repaints every frame: on a Mac, with the U1 Control tab open during a print, about 20% GPU and 30% graphics CPU. The pulse is now a ring that grows and fades, drawn by the compositor: about 0.4% GPU, the same as with Reduce Motion on. It looks the same.
+
 ## [0.22.1] - 2026-11-28
 
 - Shared UI 5.13.3 with PrimeVue 5.0.6.

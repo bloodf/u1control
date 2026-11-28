@@ -911,6 +911,20 @@ test('status block: Pause only while printing, Resume only while paused, Cancel 
   eq(byTest('cancel').getAttribute('aria-describedby'), 'heads-why', 'and pointing at the reason');
 `);
 
+test('a busy status pulses with a composited ring (transform, opacity), never the repainting box-shadow halo', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, filename: 'a.gcode', progress: 0.2})});
+  const dots = qa('.oui-status[data-state="busy"] .oui-status-dot');
+  assert(dots.length, 'a busy status dot is shown');
+  const running = document.getAnimations().filter(a => a.playState === 'running').map(a => a.animationName);
+  assert(!running.includes('oui-halo'), 'no box-shadow halo runs: ' + running);
+  for (const dot of dots) {
+    eq(getComputedStyle(dot).animationName, 'none', 'the dot itself does not animate');
+    eq(getComputedStyle(dot, '::after').animationName, 'u1-pulse', 'its ring pulses');
+  }
+  const frames = document.getAnimations().find(a => a.animationName === 'u1-pulse').effect.getKeyframes();
+  assert(frames.every(f => Object.keys(f).every(k => ['offset', 'computedOffset', 'easing', 'composite', 'transform', 'opacity'].includes(k))), 'only transform and opacity: ' + JSON.stringify(frames));
+`);
 test('U02: Off while printing confirms; declining keeps heating', `
   await connect();
   await post({type: 'status', data: VIEW({state: 'printing', busy: true})});
