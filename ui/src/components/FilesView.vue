@@ -11,6 +11,9 @@ import { s } from '../app/store';
 import { t } from '../core/i18n';
 
 const browser = ref<InstanceType<typeof FilesBrowser> | null>(null);
+const timelapses = ref<InstanceType<typeof TimelapsesCard> | null>(null);
+// One Refresh for the page: the files and the time-lapses under them.
+function reload() { void browser.value?.reload(); void timelapses.value?.reload(); }
 // Nothing is read from the printer before the tab is looked at; coming back to it reads again.
 const seen = ref(s.tab === 'files');
 watch(() => s.epoch, () => { seen.value = s.tab === 'files'; });
@@ -20,7 +23,7 @@ watch(() => s.tab, tab => { if (tab !== 'files') return; if (seen.value) void br
   <div class="u1-head">
     <OuiPageHeader :title="t('nav.files')" :meta="browser?.disk">
       <template #actions>
-        <Button severity="secondary" :label="t('common.refresh')" :loading="!!browser?.loading" :disabled="!browser" data-test="files-refresh" @click="browser?.reload()">
+        <Button severity="secondary" :label="t('common.refresh')" :loading="!!browser?.loading || !!timelapses?.loading" :disabled="!browser" data-test="files-refresh" @click="reload">
           <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
       </template>
     </OuiPageHeader>
@@ -28,5 +31,5 @@ watch(() => s.tab, tab => { if (tab !== 'files') return; if (seen.value) void br
   </div>
   <FilesBrowser v-if="s.info && seen" ref="browser" :key="s.epoch" />
   <OuiPanel v-else-if="!s.info" flush><OuiEmpty compact state="offline" :title="t('files.noTarget')" /></OuiPanel>
-  <TimelapsesCard />
+  <TimelapsesCard ref="timelapses" />
 </template>

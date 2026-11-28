@@ -154,10 +154,57 @@ test('feeder: a spool unloaded from the head but still in the feeder says so', `
   await post({type: 'status', data: VIEW({feed: [{state: 'preload_finish', detected: true}, {state: 'load_finish', detected: true}, {state: 'wait_insert'}, {}]})});
   await until(() => q('[data-not-in-head="0"]'), 'T1 says it is not in the head');
   eq(qa('[data-not-in-head]').map(e => e.dataset.notInHead), ['0', '2'], 'T1 and T3, not T2');
-  const meta = qa('.hc').map(c => qa('.oui-meta', c).map(text).find(x => x.startsWith('Feeder')));
-  eq(meta[0], 'Feeder: at the inlet, not in the head', 'feeder line in words, no repeated inlet note');
-  eq(meta[1], 'Feeder: in the head', 'no raw state and no inlet note once the filament is in the head');
-  eq(meta[2], 'Feeder: waiting for filament', 'T3 waits for filament');
+  // H3: the feeder line only for what is not the usual state of the head, in plain words.
+  eq(qa('.hc').map(c => q('[data-feed]', c) ? text(q('[data-feed]', c)) : null),
+    ['Filament at the inlet, not loaded', null, 'Waiting for filament at the inlet', null], 'only the anomalies have a feeder line; a head loaded as usual has none');
+  assert(!qa('.hc .oui-meta').some(e => /Feeder|load_finish|wait_insert/.test(text(e))), 'no "Feeder:" label and no firmware state names');
+`);
+
+test('toolhead card: weight said once, pressure advance spelled out, Edit and Read tag labelled, an empty head offers Load only', `
+  await connect();
+  await post({type: 'status', data: VIEW({heads: [head('PLA', {index: 0, nozzle: 'standard'}), head('PLA', {index: 1}), head('PLA', {index: 2}), head('', {index: 3})],
+    extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 0, pa: i === 0 ? 0.02 : null})), feed: [{state: 'load_finish', detected: true}]})});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [{id: 7, vendor: 'Generic', name: 'Matte Black', material: 'PLA', colour: '#111111', remaining: 396, initial: 1000}], bindings: {'0': 7}, via: 'moonraker'});
+  await until(() => text(q('[data-pick="0"]')).includes('Matte Black'), 'T1 shows its spool');
+  const card = q('.hc');
+  eq(text(q('[data-pick="0"]')), '#7 Generic Matte Black · PLA', 'H1: the chooser names the spool; the grams are on the bar above only');
+  assert(text(q('.oui-slot-amount', card)).includes('396'), 'the weight is on the bar');
+  assert(text(q('[data-pa="0"]')).startsWith('Pressure advance 0.02 · Standard nozzle') && q('[data-save-pa="0"]') && text(q('[data-save-pa="0"]')) === 'Save to spool', 'H3: spelled out, Save to spool kept: ' + text(q('[data-pa="0"]')));
+  assert(!q('[data-feed]', card) && !text(card).includes('Feeder'), 'H3: a head loaded as usual has no feeder line');
+  assert(!byTest('spool-source') && !text(q('.u1-heads .oui-panel-head') || q('.u1-heads')).includes('spools ('), 'H2: no Spoolman diagnostics in the header while the list is fine');
+  eq([text(q('[data-edit="0"]')), text(q('[data-rfid="0"]'))], ['Edit', 'Read tag'], 'H4: labelled buttons');
+  eq([q('[data-edit="0"]').getAttribute('aria-label'), q('[data-rfid="0"]').getAttribute('aria-label')], ['Edit T1 filament', 'Read the T1 RFID tag again'], 'their names still say which head');
+  assert(qa('.hc .oui-slot-actions button').every(b => text(b)), 'H4: no icon-only button on the cards');
+  const empty = qa('.hc')[3];
+  assert(empty.hasAttribute('data-empty') && text(q('.oui-slot-name', empty)) === 'No filament', 'T4 is empty');
+  assert(q('[data-load="3"]') && !q('[data-unload="3"]'), 'H5: an empty head offers Load, not Unload');
+  assert(!q('[data-load="3"]').classList.contains('p-button-secondary') && q('[data-load="0"]').classList.contains('p-button-secondary'), 'H5: Load is the main action of the empty head only');
+  eq(getComputedStyle(q('.oui-slot-main', empty)).justifyContent, 'center', 'H5: "No filament" in the middle');
+  await click(q('[data-edit="0"]'));
+  const sw = q('.hc-form [data-swatch="#111111"]');
+  assert(sw && sw.getAttribute('aria-label') === 'Generic Matte Black' && q('.hc-form input[type=color]').getAttribute('aria-label') === 'Other colour', 'G2: a swatch per spool colour, named, then any other colour');
+  await click(sw);
+  eq([sw.getAttribute('aria-pressed'), q('[data-hex="0"]').value], ['true', '#111111'], 'a swatch picks its colour and shows its code');
+  await type(q('[data-hex="0"]'), '#ABCDEF'); await settle();
+  eq([q('#e0-c').value, sw.getAttribute('aria-pressed')], ['#abcdef', 'false'], 'a typed code is the colour');
+  await type(q('[data-hex="0"]'), '#12'); await settle();
+  eq(q('#e0-c').value, '#abcdef', 'half a code changes nothing');
+  await click(btn('Save', q('.hc-form')));
+  eq(cmds('set_filament')[0].args.colour, '#abcdef', 'saved as #rrggbb, as before');
+`);
+
+test('unload several: Cancel shows the close icon, not the unload icon', `
+  await connect();
+  await post({type: 'status', data: VIEW({feed: [{state: 'load_finish'}, {state: 'load_finish'}, {state: 'load_finish'}, {state: 'load_finish'}]})});
+  await until(() => byTest('unload-many'), 'Unload several');
+  const icon = () => q('[data-test="unload-many"] svg').innerHTML;
+  const unloadIcon = icon();
+  await click(byTest('unload-many'));
+  eq(text(byTest('unload-many')), 'Cancel', 'the button now cancels');
+  assert(icon() !== unloadIcon, 'H6: Cancel has its own (x) icon');
+  await click(byTest('unload-many'));
+  eq(icon(), unloadIcon, 'back to the unload icon');
 `);
 
 test('unload several: tick the loaded heads, one confirmation, the batch command', `
@@ -717,7 +764,8 @@ test('stock: without Spooler\'s list the tab lists U1 Control\'s own Spoolman an
   eq(text(q('[data-tab="stock"] .oui-appbar-count')), '2', 'the Stock tab counts the spools');
   await tab('stock');
   eq(stockRows().length, 2, 'the spools are listed, not a wait for Spooler');
-  assert(text(byTest('stock-own')).includes('straight from Spoolman'), 'says where the list comes from');
+  assert(!byTest('stock-own') && !q('.sc-notes .oui-banner'), 'ST1: the list works, so no banner about Spooler');
+  assert(text(byTest('stock-meta')).startsWith('2 spools'), 'the header counts the spools: ' + text(byTest('stock-meta')));
   assert(!text(byTest('stock-about')).includes('through the printer'), 'not read through the printer');
   await click(q('[data-stock="7"]'));
   await yes();
@@ -747,7 +795,8 @@ test('stock lists, filters and links with the list key and printer generation', 
   await tab('stock');
   const page = q('[aria-labelledby="oui-tab-stock"]');
   assert(byTest('stock-card').checkVisibility(), 'list shown while Spooler runs');
-  assert(text(q('.oui-pagehead-title', page)).includes('Stock (Spooler)'), 'named as stock of Spooler (X02)');
+  eq(text(q('.oui-pagehead-title', page)), 'Spools', 'ST1: named for what it lists, not the plugin that shares it');
+  assert(/^2 spools · updated /.test(text(byTest('stock-meta'))) && !text(q('.oui-pagehead', page)).includes('Spooler 0'), 'ST1: count and age, no plugin version: ' + text(byTest('stock-meta')));
   eq(stockRows().length, 2, 'both spools listed');
   assert(text(byTest('stock-about')).includes('recorded in Spoolman by U1 Control'), 'says who records filament use, behind the (i)');
   assert(!qa('p', page).some(e => text(e).includes('recorded in Spoolman')), 'no helper paragraph under the list');
@@ -826,7 +875,7 @@ test('stock: other Spoolman, stale and stopped states, each with its own severit
   eq(last('cmd', 'stock').args, {refresh: true}, 'Refresh asks Spooler for a new list');
   await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, state: 'stale', ts: Date.now() / 1000 - 600}}));
   const stale = byTest('stock-stale');
-  assert(stale && stale.dataset.state === 'stale' && stale.closest('.oui-pagehead') && text(stale).includes('read') && stockRows().length === 2, 'stale list stays; the page header says its age as a stale state');
+  assert(stale && stale.dataset.state === 'stale' && stale.closest('.oui-pagehead') && text(stale).includes('updated') && stockRows().length === 2, 'stale list stays; the page header says its age as a stale state');
   assert(text(byTest('stock-about')).includes('out of date'), 'what stale means is behind the (i)');
   assert(!q('[data-test="stock-card"] [data-tone="danger"], [data-test="stock-card"] [data-state="error"]'), 'stale is not shown as an error (U09)');
   await click(btn('Refresh stock'));
@@ -852,6 +901,93 @@ test('stock: busy printer disables links with a visible reason; refresh keeps fo
   btn('Refresh stock').click();
   await reply(last('cmd', 'stock'), STOCK());
   eq(document.activeElement.dataset.stock, '11', 'keyboard focus survives a refresh');
+`);
+
+test('stock: Link to on hover and focus, the row links too; empty spools last and in red; Use first after the name', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  const gone = {...ROWS[0], id: 12, name: 'Used Up', remaining: 0, low: true, use_first: false};
+  await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, rows: [gone, ...ROWS]}}));
+  await tab('stock');
+  eq(qa('.sc-row').map(r => r.dataset.row), ['7', '11', '12'], 'ST3: the empty spool sorts last');
+  const g = q('[data-gone="12"]');
+  eq(text(g), 'Empty', 'ST3: 0 g says empty');
+  const probe = document.createElement('span'); probe.style.color = 'var(--oui-danger)'; g.parentElement.append(probe);
+  eq(getComputedStyle(g).color, getComputedStyle(probe).color, 'ST3: in the danger colour'); probe.remove();
+  assert(!g.closest('.u1-low'), 'not the low colour');
+  const first = q('[data-test="use-first"]');
+  eq(text(first), 'Use first', 'ST6: capitalised');
+  assert(first.closest('.sc-id') && first.previousElementSibling && text(first.closest('p')).startsWith('White'), 'ST6: after the name');
+  const b = q('[data-stock="11"]');
+  eq(getComputedStyle(b).opacity, '0', 'ST2: the link button waits for hover or focus');
+  b.focus(); await settle();
+  eq(getComputedStyle(b).opacity, '1', 'ST2: Tab reaches it and shows it');
+  b.blur(); await settle();
+  await click(q('[data-row="11"] .sc-id'));
+  assert(dialogOpen() && dialogText().includes('#11'), 'ST2: the row itself links, asking first: ' + dialogText());
+  await yes();
+  eq(cmds('stock_assign').map(m => m.args.spool_id), [11], 'linked from the row');
+  await reply(last('cmd', 'stock_assign'), {bindings: {'0': 11}});
+  await until(() => q('[data-linked="11"]'), 'Linked');
+  eq(getComputedStyle(q('[data-linked="11"]')).opacity, '1', 'ST2: the Linked chip always shows');
+  await click(q('[data-row="11"] .sc-id'));
+  assert(!dialogOpen(), 'a linked row does nothing');
+`);
+
+test('stock: no spools and a failed read are centred states, with ways out and no Link-to panel', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, rows: []}}));
+  await tab('stock');
+  const card = byTest('stock-card');
+  assert(q('.oui-empty', card) && text(q('.oui-empty .oui-strong', card)) === 'Spoolman has no spools in stock.', 'ST4: the empty state: ' + text(card));
+  assert(!byTest('stock-head') && !q('.sc-table'), 'ST4: no Link-to panel and no table without rows');
+  await click(btn('Refresh stock'));
+  await fail(last('cmd', 'stock'), 'HTTP 502 from http://box:7912/api/v1/spool');
+  const err = q('.oui-empty[data-state="error"]', byTest('stock-card'));
+  assert(err, 'ST4: an error state');
+  eq(text(q('.oui-strong', err)), 'Couldn’t read your spools.', 'ST4: a plain sentence as the title');
+  assert(text(q('.oui-meta', err)).includes('HTTP 502'), 'the detail at most under it');
+  const asked = cmds('stock').length;
+  await click(byTest('stock-retry'));
+  eq(cmds('stock').length, asked + 1, 'ST4: Try again reads again');
+  await fail(last('cmd', 'stock'), 'boom');
+  await click(byTest('stock-settings'));
+  await until(() => q('[aria-labelledby="oui-tab-settings"]')?.checkVisibility(), 'ST4: Open Settings goes to Settings');
+`);
+
+test('stock at 900 px: the four Link to targets are one row', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), STOCK());
+  await tab('stock');
+  const tops = qa('[data-stock-target]').map(e => Math.round(e.getBoundingClientRect().top));
+  eq(new Set(tops).size, 1, 'ST5: one row of four: ' + tops);
+`, { size: [900, 900] });
+
+test('stock with 2000 spools: only the rows in view are drawn; a short list stays a plain table', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  const N = 2000;
+  await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, rows: Array.from({length: N}, (_, k) => ({...ROWS[k % 2], id: 1000 + k, name: 'Spool ' + k, remaining: 100 + k, use_first: false}))}}));
+  const t0 = performance.now();
+  await tab('stock');
+  await until(() => qa('.sc-row').length, 'rows');
+  const took = performance.now() - t0;
+  assert(qa('.sc-row').length < 60, 'P3: only the rows in view: ' + qa('.sc-row').length);
+  assert(took < 1500, 'opens at once: ' + Math.round(took) + ' ms');
+  eq([...new Set(qa('.sc-row').map(r => Math.round(r.getBoundingClientRect().height)))], [56], 'every row is exactly the row size');
+  const sc = q('.sc-wrap .p-virtualscroller');
+  for (let k = 0; k < 3; k++) { sc.scrollTop = sc.scrollHeight; sc.dispatchEvent(new Event('scroll')); await settle(); await settle(); }
+  assert(qa('.sc-row').some(r => r.dataset.row === String(1000 + N - 1)), 'the last spool scrolls into view');
+  const last1 = q('[data-row="' + (1000 + N - 1) + '"]').getBoundingClientRect(), box = sc.getBoundingClientRect();
+  assert(last1.bottom <= box.bottom + 1, 'and is not cut off: ' + last1.bottom + ' > ' + box.bottom);
+  await type(q('input[type=search]', q('[aria-labelledby="oui-tab-stock"]')), 'Spool 19'); await settle();
+  assert(!q('.sc-wrap .p-virtualscroller') && qa('.sc-row').length === 111, 'P3: a short result is a plain table again: ' + qa('.sc-row').length);
 `);
 
 test('stock: many spools scroll inside the table; the reel never sets the row height; plain note is not a box', `
@@ -1475,6 +1611,15 @@ test('files: rename in place, from the details or the context menu; an unchanged
   eq(cmds('rename').length, 2, 'Escape sends nothing');
 `);
 
+test('files: the kind tag only in a folder with more than one kind', `
+  await connect();
+  await tab('files');
+  await trees();
+  await until(() => last('cmd', 'files'));
+  await reply(last('cmd', 'files'), {...${JSON.stringify(FILES)}, files: [{name: 'benchy.gcode', size: 10, modified: 5}, {name: 'part.3mf', size: 5, modified: 4}]});
+  eq(qa('.oui-files-row .oui-chip').map(text), ['G-code', '3MF'], 'F1: mixed folder: each row says its kind');
+`);
+
 test('files: filter by name and show each file\'s filament', `
   await connect();
   await tab('files');
@@ -1490,7 +1635,7 @@ test('files: filter by name and show each file\'s filament', `
   await click(btn('Clear', q('.oui-files-bar')));
   assert(text(q('.oui-files-bar')).includes('Showing 1 of 2 files'), 'with nothing selected the bar says how many of the files are shown: ' + text(q('.oui-files-bar')));
   eq([q('#files-filter').placeholder, q('#files-filter').getAttribute('aria-label')], ['Search by name', 'Search files'], 'the search field, named as in the other printer plugin');
-  eq(text(q('.oui-files-row .oui-chip')), 'G-code', 'a print file is tagged G-code');
+  eq(qa('.oui-files-row .oui-chip').length, 0, 'F1: print files are all G-code, so no row carries a kind tag');
   assert(q('[data-folder="gcodes/sub"]'), 'the folder tree is not filtered');
   await type(q('#files-filter'), 'zzz');
   assert(text(byTest('files')).includes('No file matches'), 'says nothing matches');
@@ -1520,7 +1665,7 @@ test('files: a tree of the printer\'s folders, several files selected, moved by 
   ${FILES_OPEN}
   eq(cmds('folders').map(m => [m.args.root, m.gen]).sort(), [['camera', 1], ['gcodes', 1]], 'one walk a root, for the selected printer');
   eq(qa('[data-folder]').map(f => [f.dataset.folder, text(f.querySelector('.oui-files-foldername')), f.getAttribute('aria-level')]),
-    [['gcodes', 'Print files', '1'], ['gcodes/sub', 'sub', '2'], ['camera', 'Timelapses & camera', '1']], 'roots named and open, print files first; a folder inside a closed one is not shown');
+    [['gcodes', 'Print files', '1'], ['gcodes/sub', 'sub', '2'], ['camera', 'Time-lapses & camera', '1']], 'roots named and open, print files first; a folder inside a closed one is not shown');
   eq(folderEl('gcodes').getAttribute('aria-selected'), 'true', 'the open folder is marked');
   eq(text(q('[aria-labelledby="oui-tab-files"] .oui-pagehead-meta')), '2 GB free', 'free space in the page header');
   assert(text(bar()).includes('3 files'), 'the bar counts the files: ' + text(bar()));
@@ -2058,7 +2203,8 @@ test('time-lapses: one row per video with its cover; saving says where the file 
   assert(text(panel).includes('Listing time-lapses'), 'loading is said');
   await reply(last('cmd', 'timelapses'), ${JSON.stringify(TL)});
   eq(qa('.tl-name', panel).map(text), ['benchy', 'vase', 'no cover'], 'print names, in the order the plugin gave');
-  assert(text(row('benchy_20261116130921.mp4')).includes('benchy_20261116130921.mp4') && text(row('benchy_20261116130921.mp4')).includes('376 kB'), 'file name and size: ' + text(row('benchy_20261116130921.mp4')));
+  assert(!text(row('benchy_20261116130921.mp4')).includes('benchy_20261116130921.mp4') && text(row('benchy_20261116130921.mp4')).includes('376 kB'), 'F4: print name and size, no raw file name on screen: ' + text(row('benchy_20261116130921.mp4')));
+  eq(q('[title]', row('benchy_20261116130921.mp4')).title, 'benchy_20261116130921.mp4', 'F4: the file name stays as the row’s title');
   assert(text(panel).includes('3 videos'), 'count in the header');
   eq(text(q('#timelapses-h')), 'Time-lapses', 'its own titled section');
   eq(panel.getAttribute('aria-labelledby'), 'timelapses-h', 'labelled by its title');
@@ -2110,7 +2256,7 @@ test('time-lapses: delete asks first, names both answers, takes the video and ke
   await reply(last('cmd', 'timelapses'), ${JSON.stringify({ ...TL, videos: TL.videos.slice(1) })});
   eq(qa('[data-timelapse]', panel).map(r => r.dataset.timelapse), ['timelapse/vase_20261115080000.mp4', 'timelapse/no cover.mp4'], 'the row is gone');
   assert(text(panel).includes('2 videos'), 'count follows');
-  await until(() => document.activeElement === byTest('tl-refresh'), 'focus goes to Refresh, not to the top of the page');
+  await until(() => document.activeElement === q('[data-timelapse="timelapse/vase_20261115080000.mp4"] .tl-del', panel), 'focus goes to the next video’s Delete, not to the top of the page');
   assert(toasts().includes('Deleted'), 'success is said');
   btn('Delete the time-lapse no cover.mp4').focus();
   await click(btn('Delete the time-lapse no cover.mp4'));
@@ -2129,21 +2275,21 @@ test('time-lapses: no printer, empty, error with a way out, firmware without the
   await tab('files');
   const panel = byTest('timelapses');
   assert(text(panel).includes('Connect to a U1 to see its time-lapses.'), 'no printer yet: ' + text(panel));
-  assert(byTest('tl-refresh').disabled, 'nothing to refresh without a printer');
+  assert(!byTest('tl-refresh') && byTest('files-refresh').disabled, 'F3: one Refresh for the page, and nothing to refresh without a printer');
   eq(cmds('timelapses'), [], 'nothing asked without a printer');
   await connect();
   await until(() => last('cmd', 'timelapses'), 'asked once connected');
   await reply(last('cmd', 'timelapses'), {supported: true, videos: []});
   assert(text(panel).includes('No time-lapses yet.') && !q('table', panel), 'empty state: ' + text(panel));
-  await click(byTest('tl-refresh'));
-  eq(cmds('timelapses').length, 2, 'Refresh asks again');
+  await click(byTest('files-refresh'));
+  eq(cmds('timelapses').length, 2, 'the page Refresh asks for the time-lapses again too');
   assert(q('[aria-busy="true"]', panel) || q('.p-button-loading', panel), 'busy while it waits');
   await fail(last('cmd', 'timelapses'), 'printer said: boom');
   eq(text(q('[role=alert]', panel)).includes('Couldn’t list the time-lapses: printer said: boom'), true, 'the error is announced in the section: ' + text(panel));
   await click(btn('Try again', panel));
   await reply(last('cmd', 'timelapses'), {supported: false, videos: []});
   assert(text(panel).includes('This printer shares no time-lapse folder.') && !q('[role=alert]', panel), 'a firmware without the folder is said, not shown as an error');
-  await click(byTest('tl-refresh'));
+  await click(byTest('files-refresh'));
   await reply(last('cmd', 'timelapses'), ${JSON.stringify(TL)});
   eq(qa('[data-timelapse]', panel).length, 3, 'listed');
   const before = cmds('timelapses').length;

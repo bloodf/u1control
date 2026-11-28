@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { nextTick, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import { OuiEmpty, OuiIcon, OuiMenu, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
 import { download as downloadIcon, refresh, trash, video } from '@orca-plugins/ui-foundation/src/icons';
@@ -58,12 +58,15 @@ async function del(v: Video) {
   await load();   // also after a failure: some of its pictures may be gone
   await nextTick();
   // Delete was off while it ran, so the focus fell to the page: it goes back to the row's Delete when the video is
-  // still there (a failure), else to Refresh, never to the top of the page.
+  // still there (a failure), else to the next video's Delete, else to the page's Refresh, never to the top of the page.
   if (document.activeElement !== document.body) return;
-  (document.querySelector<HTMLElement>(`[data-timelapse="${CSS.escape(v.path)}"] .tl-del`) ?? document.querySelector<HTMLElement>('[data-focus-key="timelapses"]'))?.focus();
+  (document.querySelector<HTMLElement>(`[data-timelapse="${CSS.escape(v.path)}"] .tl-del`) ?? document.querySelector<HTMLElement>('[data-timelapse] .tl-del')
+    ?? document.querySelector<HTMLElement>('[data-test="files-refresh"]'))?.focus();
 }
 // A time-lapse's context menu: what its row's buttons do.
 const menu = ref<InstanceType<typeof OuiMenu>>();
+// The page's Refresh reads the time-lapses again too (FilesView).
+defineExpose({ reload: load, loading: computed(() => state.value === 'loading') });
 const rowMenu = (event: MouseEvent, v: Video) => menu.value?.open(event, [
   { label: t('files.save'), icon: downloadIcon, id: 'save', disabled: tracker.isBusy(saveKey(v)) || tracker.isBusy(delKey(v)), run: () => void save(v) },
   { label: t('files.delete'), icon: trash, id: 'delete', danger: true, disabled: tracker.isBusy(saveKey(v)) || tracker.isBusy(delKey(v)), run: () => void del(v) }]);
@@ -72,10 +75,6 @@ const rowMenu = (event: MouseEvent, v: Video) => menu.value?.open(event, [
   <OuiPanel :icon="video" tone="sky" flush aria-labelledby="timelapses-h" data-test="timelapses">
     <template #title><span id="timelapses-h">{{ t('tl.title') }}</span></template>
     <template #meta>{{ state !== 'error' && videos.length ? tn('tl.count', videos.length) : '' }}</template>
-    <template #actions>
-      <Button severity="secondary" size="small" :label="t('common.refresh')" :loading="state === 'loading'" :disabled="!targetKnown" data-focus-key="timelapses" data-test="tl-refresh" @click="load">
-        <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
-    </template>
     <OuiEmpty v-if="!targetKnown" compact state="offline" :title="t('tl.noTarget')" />
     <OuiEmpty v-else-if="state === 'error'" compact state="error" :title="t('tl.error', { error })">
       <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="load"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
@@ -88,7 +87,7 @@ const rowMenu = (event: MouseEvent, v: Video) => menu.value?.open(event, [
         <tbody>
           <tr v-for="v in videos" :key="`${v.path}|${v.cover ?? ''}`" :data-timelapse="v.path" @contextmenu="rowMenu($event, v)">
             <td class="tl-cover-col"><TimelapseCover :gen="coverGen" :path="v.cover" /></td>
-            <td><div class="tl-name oui-strong">{{ v.name }}</div><div class="tl-file oui-meta oui-mono">{{ v.file }}</div>
+            <td :title="v.file"><div class="tl-name oui-strong">{{ v.name }}</div>
               <div class="tl-narrow oui-meta">{{ [when(v), fmt.bytes(v.size)].filter(Boolean).join(' · ') }}</div></td>
             <td class="tl-wide tl-date">{{ when(v) }}</td>
             <td class="tl-wide oui-num">{{ fmt.bytes(v.size) }}</td>
@@ -110,7 +109,7 @@ const rowMenu = (event: MouseEvent, v: Video) => menu.value?.open(event, [
 </template>
 <style>
 .tl-cover-col { width: 120px; }
-.tl-name, .tl-file { overflow-wrap: anywhere; }
+.tl-name { overflow-wrap: anywhere; }
 .tl-date { white-space: nowrap; }
 /* Delete is the destructive one: a red outline, last and a gap away from Save. It always asks first. */
 .tl-acts { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--oui-s1); white-space: nowrap; }
