@@ -4,12 +4,11 @@ import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
 import { fuzzyFilter, longList, OuiHint, OuiIcon, OuiLevel, OuiPresetMatch, OuiSlot, OuiSpool, OuiStatus } from '@orca-plugins/ui-foundation/src/components';
-import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload } from '@orca-plugins/ui-foundation/src/icons';
+import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload, warning } from '@orca-plugins/ui-foundation/src/icons';
 import HeaterControl from './HeaterControl.vue';
 import { config } from '../app/settings';
 import { s, run, tracker, busy, controlsOff, loadSpools, relink, guidedWhy, pickPreset } from '../app/store';
-import { reasonTexts } from '../core/match';
-import type { MessageKey } from '../core/messages';
+import { presetLabel } from '../core/match';
 import { ask } from '../core/dialog';
 import { t, fmt, tMaybe } from '../core/i18n';
 import { family } from '../core/logic';
@@ -132,19 +131,17 @@ async function choose(id: number | null) {
   await relink(i, id, () => run({ key: `bind:${i}`, label: t('act.bind', { n }), cmd: 'bind_spool', args: { head: i, spool_id: id, force }, okText: t('ok.bind', { n, id }), timeoutMs: 60000 }));
 }
 const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
-// The OrcaSlicer preset Apply to project filaments gives this head, why, and Change (remembered by the plugin).
+// The OrcaSlicer preset Apply to project filaments gives this head, and Change (remembered by the plugin). The card shows
+// only a clean name (presetLabel); scores and reasons stay with the plugin, a doubtful automatic pick gets a warning icon.
 const match = computed(() => s.matches[String(i)] ?? null);
 // Settings > Connection "Show the matched preset": off hides the block; Apply to project filaments still uses the match.
 const showMatch = computed(() => config.value?.settings?.show_preset_match !== false);
-const words = (reasons: unknown) => reasonTexts(reasons, (code, v) => t(`match.r.${code}` as MessageKey, { v }));
-const BADGES: Record<string, MessageKey> = { remembered: 'match.remembered', linked: 'match.linked', spooler: 'match.spooler' };
-const candidates = computed(() => (!match.value || match.value.source === 'linked' ? [] : [
-  ...match.value.candidates.map(c => ({ name: c.shown ?? c.name, score: c.score, reasons: words(c.reasons) })),
-  ...(match.value.ofd ?? []).map(c => ({ name: c.name, score: c.score, reasons: words(c.reasons), badge: t('ofd.badge'), note: t('ofd.note') }))]));
-// The card shows Spooler's presets as Spooler/<preset> (shown); a pick goes back to the real name.
-const realName = (name: string | null) => name && (match.value?.candidates.find(c => (c.shown ?? c.name) === name)?.name ?? name);
-function pick(name: string | null) { const real = realName(name); pickPreset(i, real, match.value?.ofd?.find(c => c.name === real)?.id); }
-const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), score: t('match.score'), auto: t('match.auto'), autoHint: t('match.autoHint') }));
+// Change's list by shown name, first (best) of each; a pick goes back to the real name.
+const candidates = computed(() => (!match.value || match.value.source === 'linked' ? []
+  : [...new Set(match.value.candidates.map(c => presetLabel(c.name)))].map(name => ({ name }))));
+const realName = (name: string | null) => name && (match.value?.candidates.find(c => presetLabel(c.name) === name)?.name ?? name);
+const pick = (name: string | null) => pickPreset(i, realName(name));
+const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), score: '', auto: t('match.auto'), autoHint: t('match.autoHint') }));
 // Pressure advance the head has now; Save keeps it on the linked spool (Spoolman only, keyed by the nozzle).
 const pa = computed(() => s.status?.extruders[i]?.pa ?? null);
 async function savePa() {
@@ -193,9 +190,9 @@ async function savePa() {
     </template>
     <HeaterControl :id="String(i)" card />
     <div v-if="!editing && match && has && showMatch" class="hc-match" :data-match="i">
-      <p class="oui-label">{{ t('match.title') }}</p>
-      <OuiPresetMatch :name="match.shown ?? match.name" :score="match.score" :confident="match.confident" :reasons="words(match.reasons)"
-                      :badge="BADGES[match.source] ? t(BADGES[match.source]) : undefined" :remembered="match.source === 'remembered' && !!match.remembered_key"
+      <p class="oui-label hc-match-title">{{ t('match.title') }}<span v-if="match.name && !match.confident" class="hc-unsure" role="img" :title="t('match.unsure')"
+        :aria-label="t('match.unsure')" :data-unsure="i"><OuiIcon :icon="warning" :size="14" tone="warn" /></span></p>
+      <OuiPresetMatch :name="match.name ? presetLabel(match.name) : null" :badge="match.source === 'remembered' ? t('match.remembered') : undefined" :remembered="match.source === 'remembered' && !!match.remembered_key"
                       :candidates="candidates"
                       :labels="matchLabels" :busy="s.matchBusy" @pick="pick" />
     </div>
@@ -252,6 +249,8 @@ async function savePa() {
 .hc-tag { margin-inline-start: var(--oui-s2); }
 .hc-match { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--oui-border); }
 .hc-match .oui-match-name { font-size: var(--oui-text-sm); }
+.hc-match-title { display: flex; align-items: center; gap: var(--oui-s1); }
+.hc-unsure { display: inline-flex; cursor: help; }
 /* Change-list names wrap instead of being cut off. */
 .hc-match .oui-match-option-name { align-items: flex-start; }
 .hc-match .oui-match-option-name .oui-truncate { white-space: normal; overflow: visible; overflow-wrap: anywhere; }

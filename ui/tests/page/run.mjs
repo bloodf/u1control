@@ -2428,7 +2428,7 @@ test('toolhead cards: the matched preset can be hidden in Settings, and comes ba
   await until(() => byTest('match-show'), 'the switch in Settings');
 `);
 
-test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and reasons; Change remembers another', `
+test('toolhead cards: the OrcaSlicer preset Apply gives each head, without score or reasons; Change remembers another', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('preset_matches'), 'the cards ask for the presets once the heads are known');
@@ -2439,8 +2439,8 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and
   await reply(ask, {matches: [row]});
   await until(() => q('[data-match="0"]'), 'T1 shows its preset');
   const card = q('[data-match="0"]');
-  assert(text(card).includes('Generic PLA @U1') && text(card).includes('material PLA') && text(card).includes('Score 35'), 'name, reasons, score: ' + text(card));
-  assert(q('.oui-status[data-state="warn"]', card), 'a close call is marked');
+  assert(text(card).includes('Generic PLA') && !text(card).includes('@U1') && !text(card).includes('material PLA') && !text(card).includes('35'), 'only the clean name: ' + text(card));
+  assert(!q('.oui-status', card) && q('[data-unsure="0"] svg', card) && q('[data-unsure="0"]', card).title.includes('Not sure'), 'a close call: one warning icon, said in words');
   assert(!q('[data-match="1"]'), 'no line for a head the plugin gave no preset');
   await click(q('.oui-match-change', card));
   await until(() => qa('.oui-match-option', card).length === 2, 'the candidates, no Automatic while nothing was picked by hand');
@@ -2449,13 +2449,14 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and
   eq([pick.head, pick.name], [0, 'Generic PLA Silk @U1'], 'remembered for T1');
   await reply(pick, {matches: [{...row, name: 'Generic PLA Silk @U1', source: 'remembered', score: 29, reasons: choices[1].reasons, confident: true, remembered_key: 'mat:g|pla|'}]});
   await until(() => text(q('[data-match="0"]')).includes('Picked by hand'), 'the new pick, marked as picked by hand');
+  assert(!q('[data-unsure="0"]'), 'a pick by hand is not doubted');
   await click(q('.oui-match-change', q('[data-match="0"]')));
   const auto = () => qa('.oui-match-option', q('[data-match="0"]')).find(b => text(b).includes('Automatic'));
   await until(auto, 'Automatic offered');
   await click(auto());
   eq(last('preset_pick').name, null, 'Automatic forgets the pick');
 `);
-test('toolhead cards: a Spooler preset shows as Spooler/<name>, long names wrap, a pick sends the real name', `
+test('toolhead cards: a Spooler preset shows without Spooler/ and @printer, long names wrap, a pick sends the real name', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('preset_matches'), 'asked');
@@ -2464,12 +2465,14 @@ test('toolhead cards: a Spooler preset shows as Spooler/<name>, long names wrap,
   await reply(last('preset_matches'), {matches: [{head: 0, name: real, shown, source: 'spooler', score: 40, reasons: [], confident: true, remembered_key: '',
     candidates: [{name: 'Generic PLA @U1', shown: 'Generic PLA @U1', score: 35, reasons: []}, {name: real, shown, score: 40, reasons: []}]}]});
   await until(() => q('[data-match="0"]'), 'T1 line');
+  const clean = 'Acme Extra Long Matte Silk Dual Colour PLA Plus';
   const line = q('.oui-match-name', q('[data-match="0"]'));
-  eq([text(line), line.title], [shown, shown], 'the line shows Spooler/');
+  eq([text(line), line.title], [clean, clean], 'the line shows the clean name');
+  assert(!text(q('[data-match="0"]')).includes('Spooler') && !q('[data-unsure="0"]'), 'no internal prefix, no doubt: ' + text(q('[data-match="0"]')));
   await click(q('.oui-match-change', q('[data-match="0"]')));
   await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'both candidates');
   const row = qa('.oui-match-option', q('[data-match="0"]'))[1], name = q('.oui-truncate', row);
-  eq([text(name), name.title], [shown, shown], 'the list row shows Spooler/');
+  eq([text(name), name.title], [clean, clean], 'the list row shows the clean name');
   eq([row.getAttribute('aria-current'), qa('.oui-match-option', q('[data-match="0"]'))[0].hasAttribute('aria-current')], ['true', false],
     'the selected row is still the current one');
   assert(q('.oui-match-option-name svg', row), 'the selected row keeps its check mark');
