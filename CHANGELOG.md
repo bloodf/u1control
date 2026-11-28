@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-11-28
+
 ### Changed
 
 - **Shared UI foundation 5.14.0.** Toasts appear bottom-right, a plain click on a file only looks at it (tick it, or Ctrl/Cmd-click, to select), the preset line shows a warning mark for an unsure pick instead of a score, and Requirements has one **Check again**.
