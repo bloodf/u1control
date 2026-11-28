@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **Filament sync reports PLA finishes as PLA.** SnapSpeed/High Speed, Matte, Silk and Wood keep the base material for OrcaSlicer's compatibility checks, following OrcaSlicer #16300. The original sub-type still chooses the Snapmaker or Generic preset, and a linked Spooler preset keeps its id. CF/GF remain distinct materials, including fibre loadings such as CF10, without repeating a suffix already in the material name.
+
 ### Changed
 
 - **Choosing a spool for a toolhead is instant.** The spool list is kept (in memory and in the plugin's storage, `spool_cache.json`): a new tab or a restart shows the last list at once, marked "saved list, updating" until Spoolman answers, then the usual re-read replaces it. Linking a spool no longer reads the whole Spoolman list first when the spool is already in it (a restart used to make the first link wait for that read: 1.0 s became 0.4 s with a simulated slow Spoolman), and the page shows the new link at once, putting the old one back if the printer or Spoolman refuses. Spooler's **Assign** from the Stock tab skips its extra Spoolman read the same way.
