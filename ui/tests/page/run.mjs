@@ -935,6 +935,7 @@ test('stock: Link to on hover and focus, the row links too; empty spools last an
   eq(text(first), 'Use first', 'ST6: capitalised');
   assert(first.closest('.sc-id') && first.previousElementSibling && text(first.closest('p')).startsWith('White'), 'ST6: after the name');
   const b = q('[data-stock="11"]');
+  await cdp({op: 'mouse', type: 'mouseMoved', x: 2, y: 2}); await sleep(300);   // the pointer may rest on a row from the last test
   eq(getComputedStyle(b).opacity, '0', 'ST2: the link button waits for hover or focus');
   b.focus(); await settle();
   eq(getComputedStyle(b).opacity, '1', 'ST2: Tab reaches it and shows it');
