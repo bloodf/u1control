@@ -12,6 +12,10 @@
 
 - **Open Filament Database.** U1 Control no longer offers Open Filament Database presets on the toolhead cards and no longer asks for access to it; the setting is gone from Settings > Connection. Spooler's **Add spool** is where Open Filament Database lives now. A settings file that still has the old option loads as before, and a preset picked earlier, including one U1 Control installed from the Open Filament Database, keeps resolving offline.
 
+## [0.22.1] - 2026-11-28
+
+- Shared UI 5.13.3 with PrimeVue 5.0.6.
+
 ## [0.22.0] - 2026-11-28
 
 ### Added
