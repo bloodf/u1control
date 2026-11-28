@@ -2,11 +2,10 @@
 
 ## [Unreleased]
 
-<<<<<<< HEAD
 ### Fixed
 
 - **U1 Control no longer keeps macOS busy during a print.** The dot on the Printing status pulsed for ever, and on macOS a never-ending animation makes WindowServer redraw OrcaSlicer's window every frame, even while another OrcaSlicer tab is showing: about 30% of WindowServer's CPU and most of the Mac's GPU, plus about 20% GPU in OrcaSlicer's own graphics process. The dot now stays still while printing; "Printing" and the progress show the print is live.
-=======
+
 ## [0.23.0] - 2026-11-28
 
 ### Changed
@@ -28,7 +27,6 @@
 ### Removed
 
 - **Open Filament Database.** U1 Control no longer offers Open Filament Database presets on the toolhead cards and no longer asks for access to it; the setting is gone from Settings > Connection. Spooler's **Add spool** is where Open Filament Database lives now. A settings file that still has the old option loads as before, and a preset picked earlier, including one U1 Control installed from the Open Filament Database, keeps resolving offline.
->>>>>>> origin/main
 
 ## [0.22.1] - 2026-11-28
 
