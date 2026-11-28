@@ -52,7 +52,8 @@ async function setFan(id: string) {
       </div>
       <div v-if="show('fans')" class="oui-controls-group">
         <p class="oui-label">{{ t('tf.fans') }}</p>
-        <OuiControlRow v-for="f in fans" :key="f.id" :label="t(f.label)" :icon="fanIcon" tone="sky" :for="`tf-${f.id}`" :value="pct(st[f.speed]) ?? '—'">
+        <div class="tf-fans">
+          <OuiControlRow v-for="f in fans" :key="f.id" :label="t(f.label)" :icon="fanIcon" tone="sky" :for="`tf-${f.id}`" :value="pct(st[f.speed]) ?? '—'">
           <InputNumber :model-value="draft[f.id]" :input-id="`tf-${f.id}`" :min="0" :max="100" :step="5" suffix=" %" placeholder="%" :use-grouping="false" size="small"
                        :input-style="{ width: '72px' }" :disabled="!!guidedWhy" :pt="{ pcInputText: { root: { 'aria-describedby': why } } }"
                        @input="e => (draft = { ...draft, [f.id]: typeof e.value === 'number' ? e.value : null })"
@@ -60,7 +61,8 @@ async function setFan(id: string) {
           <Button severity="secondary" size="small" :label="t('temps.set')" :aria-label="t('fan.set', { fan: t(f.label) })" :disabled="!!guidedWhy || draft[f.id] == null"
                   :aria-describedby="why" :loading="tracker.isBusy(`tf:${f.id}`)" :data-focus-key="`tf-${f.id}`" @click="setFan(f.id)" />
         </OuiControlRow>
-        <OuiKeyValue :items="coverFans" />
+        </div>
+        <OuiKeyValue class="tf-cover" :items="coverFans" />
       </div>
     </div>
     <OuiEmpty v-else-if="s.phase === 'unreachable'" compact state="offline" :title="t('status.noStatus')" />
@@ -71,6 +73,9 @@ async function setFan(id: string) {
 /* Dense: the readings two pairs a row where there is room, and shorter rows. */
 @container oui-widget (min-width: 300px) { [data-test="temps-fans"] .tf-temps { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); gap: 4px var(--oui-s3); } }
 [data-test="temps-fans"] .oui-control-row { min-height: 36px; }
+/* Part cooling and auxiliary side by side, the top-cover readouts side by side under them; one column when narrow. */
+[data-test="temps-fans"] .tf-fans { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: var(--oui-s2) var(--oui-s4); }
+@container oui-widget (min-width: 300px) { [data-test="temps-fans"] .tf-cover { grid-template-columns: max-content minmax(0, 1fr) max-content minmax(0, 1fr); gap: 4px var(--oui-s3); } }
 /* A narrow widget sets a fan on the line under it. */
 @container oui-widget (max-width: 520px) { [data-test="temps-fans"] .oui-control-row { grid-template-columns: minmax(0, 1fr) auto; }
   [data-test="temps-fans"] .oui-control-row-control { grid-column: 1 / -1; justify-content: flex-start; } }

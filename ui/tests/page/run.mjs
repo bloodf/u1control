@@ -232,6 +232,9 @@ test('temperatures & fans: chamber, drivers and fan readings; part and aux fan s
      ['38 °C', '45 °C', '—', 'Hot (warning)', 'OK', 'Overheated'], 'temperatures and driver states');
   eq([kv('Top cover exhaust fan'), kv('Top cover recirculation fan')], ['60 %', '0 %'], 'top-cover fan readings');
   assert(text(card).includes('50 %') && text(card).includes('25 %'), 'part and aux fan readings');
+  const fanGrid = q('.tf-fans', card), fanRows = qa('.oui-control-row', fanGrid);
+  eq(fanRows.length, 2, 'part and aux fans in one two-column grid');
+  if (fanGrid.clientWidth >= 460) eq(fanRows[0].getBoundingClientRect().top, fanRows[1].getBoundingClientRect().top, 'side by side where there is room');
   const set = id => q('[data-focus-key="tf-' + id + '"]');
   assert(set('part').disabled, 'Set waits for a value');
   await type(q('#tf-part'), '40');
