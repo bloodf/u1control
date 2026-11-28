@@ -1072,6 +1072,18 @@ test('status block: Pause only while printing, Resume only while paused, Cancel 
   eq(byTest('cancel').getAttribute('aria-describedby'), 'heads-why', 'and pointing at the reason');
 `);
 
+test('a busy status dot stays still: no never-ending animation while printing', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, filename: 'a.gcode', progress: 0.2})});
+  const dots = qa('.oui-status[data-state="busy"] .oui-status-dot');
+  assert(dots.length, 'a busy status dot is shown');
+  for (const dot of dots) {
+    eq(getComputedStyle(dot).animationName, 'none', 'the dot does not animate');
+    eq(getComputedStyle(dot, '::after').animationName, 'none', 'nor anything drawn on it');
+  }
+  const running = document.getAnimations().filter(a => a.playState === 'running' && a.effect?.getTiming().iterations === Infinity);
+  eq(running.map(a => a.animationName), [], 'no never-ending animation runs while printing');
+`);
 test('U02: Off while printing confirms; declining keeps heating', `
   await connect();
   await post({type: 'status', data: VIEW({state: 'printing', busy: true})});

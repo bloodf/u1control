@@ -35,3 +35,9 @@
 /* OrcaSlicer's injected defaults colour h1-h6 and th with its own theme (--orca-fg/-muted); with Theme forced to the
    other one they would vanish. Ours follow the page's theme. */
 .orca-ui :is(h1,h2,h3,h4,h5,h6){color:inherit}.orca-ui th{color:var(--oui-muted)}
+
+/* The busy state's dot stays still. The foundation pulses it for ever (oui-halo on the dot's ::after), and on macOS any
+   never-ending animation makes WindowServer redraw OrcaSlicer's window every frame, even while another tab is showing
+   (OrcaSlicer doesn't tell the page it's hidden): about 30% of WindowServer's CPU. "Printing" and the progress already
+   say it is live. The class is doubled to outrank the foundation rule, which loads later. */
+.oui-status[data-state=busy] .oui-status-dot.oui-status-dot, .oui-status[data-state=busy] .oui-status-dot.oui-status-dot::after { animation: none; }
