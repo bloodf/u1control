@@ -247,7 +247,7 @@ test('temperatures & fans: chamber, drivers and fan readings; part and aux fan s
   eq(cmds('fan').length, 1, 'nothing more sent');
 `);
 
-test('busy machine disables guided commands; unload-when-done is read-only; E-stop stays', `
+test('busy machine disables guided commands; unload-when-done has no row; E-stop stays', `
   await connect();
   await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING', options: {bed_level: true, unload_when_done: true}})});
   for (const sel of ['[data-load="0"]', '[data-unload="0"]', '[data-edit="0"]']) assert(q(sel).disabled, sel + ' disabled while calibrating');
@@ -259,8 +259,7 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   assert(!q('[data-test="estop"]').disabled, 'E-stop stays available');
   await tab('settings');
   assert(q('[data-cal="bed_mesh"]').disabled && document.body.textContent.includes('Calibration runs when it is idle'), 'calibration blocked, says why');
-  assert(q('#pref-unload_when_done').disabled, 'unload_when_done is not sent from this page');
-  assert(text(q('#pref-unload_when_done').closest('.oui-formrow')).includes('print setup pop-up'), 'says where to set it');
+  assert(q('#pref-bed_level') && !q('#pref-unload_when_done'), 'unload_when_done has no row here (chosen in the print setup pop-up)');
   await tab('dash');
   if (!q('.hc-pick')) { await until(() => last('cmd', 'spools'), 'spools asked'); await reply(last('cmd', 'spools'), {spools: [{id: 7, name: 'Black', vendor: 'G', material: 'PLA', colour: '#111', remaining: 500, initial: 1000}], bindings: {}, via: 'direct'}); }
   await post({type: 'offline', error: 'timed out'});
@@ -2175,8 +2174,13 @@ test('settings: says whether the process preset runs the toolhead choice and whe
   assert(text(byTest('ps-agent')).includes('Printer Agent to u1control'), 'says how to pick U1 Control as the printer agent: ' + text(byTest('ps-agent')));
   assert(text(byTest('ps-agent')).includes('start ticked'), 'says the dialog boxes start ticked and the settings decide');
   assert(text(byTest('ps-agent')).includes('OrcaSlicer remembers the box'), 'says OrcaSlicer keeps an unticked box');
+  eq(qa('details', byTest('print-setup')).map(d => [text(q('summary', d)), d.open]), [['When it runs', false], ['With printer agents', false]], 'the long texts sit behind two closed disclosures');
+  assert(!byTest('ps-rule').checkVisibility() && !byTest('ps-agent').checkVisibility(), 'closed: not on screen');
   await cfg({preset: '0.20 Standard @U1', on: true}, 'always');
-  assert(!byTest('ps-off') && text(byTest('ps-on')).includes('runs for the process preset'), 'running: a plain line');
+  assert(!byTest('ps-off') && text(byTest('ps-on')).includes('runs for the process preset'), 'running: a status line');
+  eq(text(q('.oui-status', byTest('ps-on'))), 'On', 'with an On chip');
+  await click(q('summary', byTest('ps-when')));
+  assert(byTest('ps-rule').checkVisibility(), 'opens on a click');
   assert(text(byTest('ps-rule')).includes('every print'), 'always rule');
   await cfg(null, 'never');
   assert(!byTest('ps-off') && !byTest('ps-on'), 'no U1 preset: nothing claimed about it');
@@ -2214,25 +2218,29 @@ test('requirements: one section; each row says status, why and how; Check again 
   await post({type: 'requirements', items: REQS('unknown', 'missing', 'missing', 'missing')});
   eq(qa('[data-test="requirements"]').length, 1, 'one Requirements section');
   eq(qa('[data-test="requirements"] .oui-req').map(r => r.dataset.test), ['req-agents', 'req-ext', 'req-spoolman', 'req-spooler'], 'four rows');
-  eq(reqStatus('agents'), 'Not detected', 'agents: not detected');
+  eq(reqStatus('agents'), 'Missing', 'agents: not detected');
+  assert(text(reqRow('agents')).includes('Not detected'), 'the detail says not detected');
   eq(q('.oui-status', reqRow('agents')).dataset.state, 'warn', 'a warning, not an error');
   assert(reqSteps('agents').some(x => x.includes('Developer tab > Experimental Features') && x.includes('Use printer agents instead of print hosts')), 'names the exact preference: ' + reqSteps('agents'));
   assert(reqSteps('agents').some(x => x.includes('Restart OrcaSlicer')), 'says to restart');
-  eq(reqStatus('ext'), 'Official firmware', 'stock firmware');
+  eq(reqStatus('ext'), 'Missing', 'stock firmware');
+  assert(text(reqRow('ext')).includes('Official firmware'), 'the detail says it is the official firmware');
   assert(reqSteps('ext').some(x => x.includes('firmware_config: true')), 'how to install the Extended Firmware');
   assert(q('a[href*="SnapmakerU1-Extended-Firmware"]', reqRow('ext')), 'links the project');
-  eq(reqStatus('spoolman'), 'Not set', 'no Spoolman');
+  eq(reqStatus('spoolman'), 'Missing', 'no Spoolman');
+  assert(text(reqRow('spoolman')).includes('Not set'), 'the detail says none is set');
   assert(reqSteps('spoolman').some(x => x.startsWith('macOS')) && reqSteps('spoolman').some(x => x.startsWith('Linux')), 'one line per OS: ' + reqSteps('spoolman'));
   assert(q('a[href="https://github.com/Donkie/Spoolman"]', reqRow('spoolman')), 'official Spoolman link');
   eq(reqRow('spooler').dataset.status, 'missing', 'Spooler from the plugin check');
   eq(q('.oui-req-link', reqRow('spooler')).getAttribute('href'), 'https://example.invalid/spooler', 'Spooler install link');
   await post({type: 'requirements', items: REQS('ok', 'ok', 'ok')});
-  eq(reqStatus('agents'), 'On', 'agents on');
-  eq(reqStatus('spoolman'), 'Set', 'Spoolman set');
+  eq(reqStatus('agents'), 'Ready', 'agents on');
+  eq(reqStatus('spoolman'), 'Ready', 'Spoolman set');
+  eq(['agents', 'ext', 'spoolman', 'spooler'].map(reqStatus), ['Ready', 'Ready', 'Ready', 'Ready'], 'one chip word for every row');
   assert(text(reqRow('spoolman')).includes('http://box:7912'), 'shows the address');
   eq(qa('[data-test="requirements"] .oui-req-install').length, 0, 'nothing to install: no steps');
   const before = cmds('spools').length;
-  await click(q('.oui-req-check', reqRow('agents')));
+  await click(byTest('req-check'));
   assert(sent().some(m => m.type === 'requirements' && m.recheck === true), 'Check again rechecks');
   assert(cmds('spools').length > before, 'and asks the printer for its Spoolman link again');
 `);
@@ -2487,34 +2495,35 @@ test('notices: a closed banner stays closed while its condition holds and comes 
   assert(!byTest('usage-banner'), 'same entries: stays closed across a poll');
 `);
 
-test('settings: requirements say what was found; Check again asks again', `
+test('settings: requirements say what was found; one Check again asks again', `
   await connect();
   await tab('settings');
-  await click(q('.oui-settings-link[data-section="requirements"]'));
+  await click(q('.oui-settings-link[data-section="about"]'));
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
   const sp = byTest('req-spooler'), sm = byTest('req-spoolman');
   assert(sp && sm, 'Spoolman and Spooler rows');
+  eq(qa('.oui-req-check', byTest('requirements')).filter(b => b.getClientRects().length).length, 0, 'no Check again on the rows');
+  eq(qa('[data-test="req-check"]').length, 1, 'one Check again for the list');
   eq(sp.dataset.status, 'missing', 'Spooler not found');
-  assert(text(sp).includes('Not found') && text(sp).includes('Install Spooler'), 'says so and how to get it: ' + text(sp));
-  await click(q('.oui-req-check', sp));
+  assert(text(sp).includes('Missing') && text(sp).includes('Install Spooler'), 'says so and how to get it: ' + text(sp));
+  eq(reqStatus('ext'), 'Not checked', 'not checked yet');
+  assert(getComputedStyle(q('.oui-req-detail', byTest('req-ext'))).fontFamily === getComputedStyle(q('.oui-req-name', byTest('req-ext'))).fontFamily, 'details in the normal font');
+  assert(text(sp).includes('Stock tab') && !text(sp).includes('Dashboard'), 'the stock is its own tab: ' + text(sp));
+  await click(byTest('req-check'));
   const ask = [...sent()].reverse().find(m => m.type === 'requirements' && m.recheck === true);
   assert(ask, 'Check again asks the plugin to look again');
   eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
+  assert(byTest('req-check').disabled, 'Check again off while it looks');
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'ok')});
   eq(byTest('req-spooler').dataset.status, 'found', 'found after installing');
-  assert(text(byTest('req-spooler')).includes('Found') && !q('.oui-req-link', byTest('req-spooler')), 'no install link once found');
+  assert(text(byTest('req-spooler')).includes('Ready') && !q('.oui-req-link', byTest('req-spooler')), 'no install link once found');
   await reply(last('cmd', 'spools'), {spools: ROWS, bindings: {}, via: 'direct'});
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'ok', 'ok')});
   eq(byTest('req-spoolman').dataset.status, 'found', 'Spoolman reached');
-  assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'Spoolman Check again off while the printer has sent no status');
-  await post({type: 'status', data: VIEW()});
-  assert(!q('.oui-req-check', byTest('req-spoolman')).disabled, 'on once the printer answers');
-  await post({type: 'offline', error: 'timed out'});
-  assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'off again while the printer is offline');
   await post({type: 'status', data: VIEW()});
   const before = cmds('spools').length;
-  await click(q('.oui-req-check', byTest('req-spoolman')));
-  eq(cmds('spools').length, before + 1, 'Check again loads the spools again');
+  await click(byTest('req-check'));
+  eq(cmds('spools').length, before + 1, 'Check again also loads the spools again');
   await fail(last('cmd', 'spools'), 'connection refused');
   eq(byTest('req-spoolman').dataset.status, 'missing', 'Spoolman not reached');
   assert(text(byTest('req-spoolman')).includes('connection refused'), 'says why');
@@ -2523,9 +2532,9 @@ test('settings: requirements say what was found; Check again asks again', `
 test('settings: requirements Check again stops after 10 s without an answer and says so', `
   await connect();
   await tab('settings');
-  await click(q('.oui-settings-link[data-section="requirements"]'));
+  await click(q('.oui-settings-link[data-section="about"]'));
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
-  await click(q('.oui-req-check', byTest('req-spooler')));
+  await click(byTest('req-check'));
   eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
   await sleep(10500);
   eq(byTest('req-spooler').dataset.status, 'missing', 'Checking ends after 10 s');
@@ -2578,7 +2587,7 @@ test('notices: dismissals are keyed on the condition, survive a remount and are 
 `);
 
 // ------------------------------------------------------------------ settings pages (one page per section)
-const PAGES = ['mode', 'print-setup', 'options', 'calibration', 'connection', 'firmware', 'requirements', 'language', 'about'];
+const PAGES = ['general', 'printing', 'connection', 'printer', 'about'];
 const PAGES_JS = `
 const PAGES = ${JSON.stringify(PAGES)};
 const link = id => q('.oui-settings-link[data-section="' + id + '"]');
@@ -2592,15 +2601,16 @@ test('settings pages: list beside one page; a page opens with focus on its headi
   await connect(); await CFG();
   await tab('settings');
   eq(qa('.oui-settings-link').map(e => e.dataset.section), PAGES, 'one page per section');
-  eq(shown(), ['mode'], 'only the first page');
+  eq(shown(), ['general'], 'only the first page');
   assert(listShown() && pageShown() && !byTest('settings-back').getClientRects().length, 'wide: list and page side by side, no Back');
-  await click(link('calibration'));
-  eq(shown(), ['calibration'], 'only Calibration');
-  assert(onHeading('calibration'), 'focus on the page heading');
-  assert(Object.entries(localStorage).some(([k, v]) => k.startsWith('oui-settings:') && v === 'calibration'), 'last page stored');
-  link('calibration').focus(); await press('ArrowDown'); await settle();
-  eq([shown(), document.activeElement.dataset.section], [['connection'], 'connection'], 'arrow keys move along the list');
-  assert(byTest('save'), 'one save bar');
+  await click(link('printer'));
+  eq(shown(), ['printer'], 'only Printer');
+  assert(onHeading('printer'), 'focus on the page heading');
+  assert(Object.entries(localStorage).some(([k, v]) => k.startsWith('oui-settings:') && v === 'printer'), 'last page stored');
+  link('printer').focus(); await press('ArrowDown'); await settle();
+  eq([shown(), document.activeElement.dataset.section], [['about'], 'about'], 'arrow keys move along the list');
+  await click(link('general'));
+  eq(qa('[data-test="save"]').length, 1, 'one save bar');
 `);
 test('settings pages: narrow shows the list, then one page with Back', PAGES_JS + `
   await connect(); await CFG();
@@ -2618,14 +2628,14 @@ test('settings pages: narrow shows the list, then one page with Back', PAGES_JS 
 test('settings pages: the last page opens again; Plugin settings opens Print setup, also before the config came', PAGES_JS + `
   await connect();
   await tab('settings');
-  eq(shown(), ['language'], 'remembered page');
+  eq(shown(), ['about'], 'remembered page');
   await tab('dash');
   await post({type: 'show_tab', tab: 'settings'});
-  eq(shown(), ['language'], 'Print setup is not there yet: the page stays');
+  eq(shown(), ['about'], 'Print setup is not there yet: the page stays');
   await CFG();
-  await until(() => shown()[0] === 'print-setup', 'Print setup opened once it exists');
-  assert(onHeading('print-setup'), 'heading focused');
-`, { lastPage: 'language' });
+  await until(() => shown()[0] === 'printing', 'Printing (with Print setup) opened once it exists');
+  assert(onHeading('print-setup'), 'Print setup heading focused');
+`, { lastPage: 'about' });
 test('settings pages: with no printer the address entered in Connection is saved and connects', PAGES_JS + `
   await until(() => last('hello'));
   const first = last('hello');
@@ -2649,6 +2659,76 @@ test('settings pages: Open Settings with no printer opens Connection', PAGES_JS 
   eq(shown(), ['connection'], 'Connection page');
   assert(onHeading('connection'), 'heading focused');
 `, { lastPage: 'about' });
+const SAVE_CFG = `post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [{key: 'purifier', label: 'Top cover', help: 'h', automagic: 'auto', choices: ['auto', 'keep-warm', 'off']}],
+  settings: {mode: 'automagic', host: 'u1.saved', api_key: '', printer_name: 'Bench U1', spoolman_url: '', purifier: 'auto'}})`;
+test('settings pages: Save is off until something changed; the bar shows only where there is something to save, or a change waits', PAGES_JS + `
+  await connect(); await ${SAVE_CFG};
+  await tab('settings');
+  await click(link('connection'));
+  assert(byTest('save').disabled && byTest('discard').disabled, 'clean: Save and Discard off');
+  eq(byTest('save').getAttribute('aria-describedby'), 'set-clean', 'Save says why it is off');
+  assert(text(q('#set-clean')).includes('No changes to save'), 'nothing to save, said');
+  q('#c-host').focus(); await press('Enter');
+  eq(last('save_settings'), undefined, 'Enter saves nothing while nothing changed');
+  for (const id of ['printing', 'printer', 'about']) { await click(link(id)); assert(!byTest('save'), id + ': no save bar (changes there apply at once)'); }
+  await click(link('general'));
+  assert(byTest('save'), 'General has the bar');
+  await click(link('connection'));
+  await type(q('#c-host'), 'u1.typed');
+  assert(!byTest('save').disabled && !byTest('save').hasAttribute('aria-describedby'), 'Save on after an edit');
+  await click(link('about'));
+  assert(byTest('save') && text(q('.oui-settings-foot')).includes('Unsaved changes'), 'a waiting change keeps the bar on every page');
+  await click(link('connection'));
+  q('#c-host').focus(); await press('Enter');
+  eq(last('save_settings')?.settings.host, 'u1.typed', 'Enter saves once something changed');
+`);
+test('settings pages: the older page ids open the page that now holds them, at that group', PAGES_JS + `
+  await connect(); await CFG();
+  await tab('settings');
+  const HOMES = {mode: 'general', language: 'general', 'print-setup': 'printing', options: 'printing', connection: 'connection',
+    calibration: 'printer', firmware: 'printer', requirements: 'about', about: 'about'};
+  for (const [old, page] of Object.entries(HOMES)) {
+    await click(link(page === 'general' ? 'about' : 'general'));
+    location.hash = '#' + old; await sleep(50); await settle();
+    eq(shown(), [page], '#' + old + ' opens ' + page);
+    if (old !== page) assert(onHeading(old), '#' + old + ': focus on its group heading');
+  }
+  location.hash = '';
+  await click(link('about'));
+  await post({type: 'show_tab', tab: 'settings'});
+  await until(() => shown()[0] === 'printing', 'openSettings("print-setup") opens Printing');
+`);
+test('settings: mode is one SelectButton; choices are words, not values', `
+  await connect();
+  await ${SAVE_CFG};
+  await tab('settings');
+  const group = byTest('mode');
+  assert(group.classList.contains('p-selectbutton'), 'a SelectButton');
+  const pressed = () => qa('button', group).filter(b => b.getAttribute('aria-pressed') === 'true').map(text);
+  eq(pressed(), ['Automagic'], 'Automagic chosen');
+  assert(text(q('#mode')).includes('Top cover') && text(q('#mode')).includes('Auto') && !q('[data-auto]'), 'automagic: values read out, no fields');
+  await click(q('[data-mode="expert"]'));
+  eq(pressed(), ['Expert'], 'Expert chosen');
+  assert(q('[data-auto="purifier"]') && text(q('[data-auto="purifier"]')).includes('Auto'), 'the choice shown as a word: ' + text(q('[data-auto="purifier"]')));
+  assert(!byTest('save').disabled, 'a mode change waits for Save');
+  await click(q('[data-mode="expert"]'));
+  eq(pressed(), ['Expert'], 'pressing the chosen one keeps it');
+  await click(q('[data-mode="automagic"]'));
+  eq(pressed(), ['Automagic'], 'back to Automagic');
+  assert(byTest('save').disabled, 'nothing changed any more');
+`);
+test('settings: About links the changes, the documentation, issues and licences; calibrations say what they do', `
+  await connect(); await ${SAVE_CFG};
+  await post({type: 'status', data: VIEW()});
+  await tab('settings');
+  const links = qa('a', byTest('about-links'));
+  eq(links.map(a => text(a)), ['What’s new', 'Documentation', 'Report a problem', 'Licences'], 'four links');
+  assert(links.every(a => a.href.startsWith('https://github.com/bloodf/u1control') && a.target === '_blank'), 'the project pages');
+  const cal = ['bed_mesh', 'input_shaper', 'flow'].map(k => q('[data-cal="' + k + '"]'));
+  eq(new Set(cal.map(b => q('svg', b).innerHTML)).size, 3, 'a different icon each');
+  assert(cal.every(b => text(q('.oui-formrow-label .oui-meta', b.closest('.oui-formrow'))).length > 20), 'one line each on what it does');
+  eq(cal[0].getAttribute('aria-label'), 'Run the Bed mesh calibration', 'named for its calibration');
+`);
 // U1: what the shared dashboard scenarios need to know about this page.
 const DASH_PLUGIN = `
 const STORE = dash => post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'automagic', dashboard: dash}});
