@@ -477,7 +477,10 @@ test('setup: the print, the printer, a card per filament with its head, spool an
   assert(line.includes('Snapmaker U1') && line.includes('192.168.1.40') && line.includes('Ready'), 'printer: ' + line);
   eq(qa('.su-card').length, 4, 'one card per filament');
   const c0 = q('.su-card[data-f="0"]');
-  assert(text(c0).includes('[1]') && text(c0).includes('PETG') && text(c0).includes('Head 1') && text(c0).includes('Generic Leaf Green'), 'card 1: ' + text(c0));
+  eq(text(c0.querySelector('.su-card-title')), 'Filament 1 · PETG', 'card title in words, no bracket');
+  assert(text(c0).includes('Head 1') && text(c0).includes('Generic Leaf Green'), 'card 1: ' + text(c0));
+  assert(!c0.querySelector('.hp text'), 'no head number inside the drawing: the text under it says it');
+  assert(c0.getAttribute('aria-haspopup') === 'dialog' && c0.querySelector('.su-card-chev'), 'a real button with a visible change sign');
   eq(getComputedStyle(c0.querySelector('.hp-strand')).stroke, 'rgb(108, 191, 90)', 'strand in the Spoolman colour');
   eq(getComputedStyle(q('.su-card[data-f="3"] .hp-strand')).stroke, 'rgb(245, 158, 11)', 'no spool: the printer colour');
   assert(byTest('preview') && byTest('preview').getAttribute('aria-label').includes('Top view'), 'preview drawn');
@@ -489,13 +492,43 @@ test('setup: the print, the printer, a card per filament with its head, spool an
   assert(tray[3] === 255 && tray[1] > tray[0] && tray[1] > tray[2], 'tray in its head colour (green): ' + tray);
   assert(inlay[2] > tray[2] + 40, 'the filament under the top shows through (blue): ' + inlay + ' vs ' + tray);
   eq(outside[3], 0, 'nothing printed: transparent');
-  assert(byTest('prefs') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
+  assert(byTest('menu') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
+  eq(byTest('flow-more').getAttribute('aria-label'), 'Flow calibration heads', 'flow options say what opens');
+  eq(byTest('cover-more').getAttribute('aria-label'), 'Top cover options: Auto', 'cover options say what opens, with the value');
+  assert(!text(byTest('flow-more')).includes('…') && !text(byTest('cover-more')).includes('…'), 'no bare ellipsis buttons');
   assert(!alerts() && !byTest('send').disabled && text(byTest('send')) === 'Apply & continue', 'nothing to confirm');
   await click(byTest('send'));
   const s0 = __t.submits[0];
   eq(s0.map, {0: 0, 1: 2, 2: 1, 3: 3}, 'map');
   eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan, s0.remember], ['medium', 60, true], 'prefs as offered');
 `, { mode: 'setup', data: SETUP_FULL });
+
+test('setup: a colour mismatch is a warning with both colours, each named', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  const c0 = q('.su-card[data-f="0"]'), hint = c0.querySelector('[data-test="colour-hint"]');
+  assert(hint, 'filament 1 (blue) on T1 (green): flagged');
+  eq(hint.dataset.tone, 'warn', 'warning tone');
+  const probe = document.createElement('span'); probe.style.color = 'var(--oui-warning)'; hint.append(probe);
+  eq(getComputedStyle(hint.querySelector('.su-mismatch-title')).color, getComputedStyle(probe).color, 'in the warning colour, not grey');
+  probe.remove();
+  assert(hint.querySelector('.oui-icon, svg'), 'warning icon');
+  assert(text(hint).includes('Colour differs'), 'says it in words: ' + text(hint));
+  const proj = hint.querySelector('[data-test="hint-project"]'), load = hint.querySelector('[data-test="hint-loaded"]');
+  eq([text(proj), text(load)], ['Project', 'Loaded'], 'each colour labelled');
+  eq(getComputedStyle(proj.querySelector('.oui-swatch')).backgroundColor, 'rgb(59, 130, 246)', 'project swatch: the filament colour');
+  eq(getComputedStyle(load.querySelector('.oui-swatch')).backgroundColor, 'rgb(108, 191, 90)', 'loaded swatch: the head colour');
+  assert(proj.compareDocumentPosition(load) & Node.DOCUMENT_POSITION_FOLLOWING, 'project then loaded');
+  assert(c0.getAttribute('aria-label').includes('T1 holds another colour'), 'in the card name too: ' + c0.getAttribute('aria-label'));
+  assert(!q('.su-card[data-f="3"] [data-test="colour-hint"]'), 'filament 4 (yellow) on T4 (amber): no flag');
+`, { mode: 'setup', data: SETUP_FULL });
+
+test('setup: at 900 px the four cards are two by two', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  const r = qa('.su-card').map(c => c.getBoundingClientRect());
+  eq(r.length, 4, 'four cards');
+  assert(Math.abs(r[0].top - r[1].top) < 1 && Math.abs(r[2].top - r[3].top) < 1 && r[2].top > r[0].bottom, 'two rows of two: ' + r.map(x => Math.round(x.left) + ',' + Math.round(x.top)));
+  assert(Math.abs(r[0].left - r[2].left) < 1 && Math.abs(r[1].left - r[3].left) < 1 && Math.abs(r[0].width - r[3].width) < 1, 'two equal columns, no orphan');
+`, { mode: 'setup', data: SETUP_FULL, size: [900, 900] });
 
 test('setup: the top view drawn after the window opened takes the placeholder\'s place', `
   assert(byTest('preview-wait') && !byTest('preview'), 'a placeholder while the plugin draws the top view');
@@ -515,8 +548,11 @@ test('setup: no top view at all leaves no placeholder', `
 
 test('setup: a control the printer lacks is not shown', `
   await until(() => sent().some(m => m.ready), 'ready posted');
-  assert(!byTest('prefs') && !byTest('flow-more') && !q('#su-p-flow_calibrate') && !q('#su-p-time_lapse_camera') && !byTest('preview'), 'only what was offered');
+  assert(!byTest('flow-more') && !q('#su-p-flow_calibrate') && !q('#su-p-time_lapse_camera') && !byTest('preview'), 'only what was offered');
   assert(q('#su-p-bed_level'), 'bed leveling offered');
+  await click(byTest('menu')); await until(() => q('.oui-menu'), 'menu');
+  eq(qa('.oui-menu [data-menu]').map(b => b.dataset.menu), ['plugin-settings'], 'no print preferences to offer: only plugin settings');
+  await press('Escape'); await until(() => !q('.oui-menu'), 'menu closed');
   await click(byTest('cover-more'));
   await until(() => byTest('cover-pop'), 'cover popover');
   assert(!byTest('exhaust-mode') && !byTest('inner-mode'), 'no fan control without the command');
@@ -562,8 +598,14 @@ test('setup: the Print dialog\'s slots survive a toolhead refresh; Auto map stil
 test('setup: a busy printer locks the settings and Apply', `
   await until(() => sent().some(m => m.ready), 'ready posted');
   assert(text(byTest('busy')).includes('can’t change during a print'), 'busy notice: ' + text(byTest('busy')));
-  assert(byTest('send').disabled && q('.su-card').disabled && byTest('prefs').disabled && q('#su-p-bed_level').disabled, 'locked');
-  assert(text(q('#su-why')).includes('busy'), 'why');
+  assert(byTest('send').disabled && q('.su-card').disabled && q('#su-p-bed_level').disabled, 'locked');
+  assert(!q('#su-why'), 'busy is not said again above the buttons');
+  eq(document.body.textContent.split('change during a print').length - 1, 1, 'busy said once');
+  eq(byTest('send').getAttribute('aria-describedby'), 'su-busy', 'Apply points at the banner for why');
+  eq(byTest('busy').id, 'su-busy', 'the banner is that reason');
+  await click(byTest('menu')); await until(() => q('.oui-menu'), 'menu');
+  assert(q('.oui-menu [data-menu="prefs"]').disabled && !q('.oui-menu [data-menu="plugin-settings"]').disabled, 'preferences locked, plugin settings still open');
+  await press('Escape'); await until(() => !q('.oui-menu'), 'menu closed');
   await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {}});
   assert(!byTest('busy') && !byTest('send').disabled && !q('.su-card').disabled, 'unlocked when ready');
 `, { mode: 'setup', data: SETUP_BUSY });
@@ -576,9 +618,21 @@ test('setup: auto mapping, plugin settings, print preferences and the top-cover 
   assert(sent().some(m => m.refresh), 'asks the plugin to match again');
   await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {0: 0, 1: 2, 2: 1, 3: 3}});
   eq(q('.su-card[data-f="0"]').dataset.t, '0', 'auto mapping replaces a hand choice');
-  await click(byTest('plugin-settings'));
-  assert(sent().some(m => m.open_settings), 'asks the tab to open Settings');
-  await click(byTest('prefs'));
+  assert(!byTest('plugin-settings') && !byTest('prefs'), 'no separate settings buttons: one overflow');
+  assert(!document.body.textContent.includes('once this window is closed'), 'no sentence explaining where it opens');
+  byTest('menu').focus();
+  await press('Enter');
+  await until(() => q('.oui-menu'), 'the overflow opens from the keyboard');
+  eq(byTest('menu').getAttribute('aria-haspopup'), 'menu', 'announced as a menu');
+  eq(qa('.oui-menu [role=menuitem]').map(b => text(b)), ['Print preferences', 'Plugin settings'], 'both destinations in one menu');
+  await until(() => document.activeElement && document.activeElement.dataset.menu === 'prefs', 'focus on the first item');
+  await press('ArrowDown');
+  eq(document.activeElement.dataset.menu, 'plugin-settings', 'arrows move');
+  await press('Enter');
+  await until(() => sent().some(m => m.open_settings), 'asks the tab to open Settings');
+  assert(document.activeElement === byTest('menu'), 'focus back on the menu button');
+  await press('Enter'); await until(() => q('.oui-menu [data-menu="prefs"]'));
+  await press('Enter');
   await until(() => byTest('prefs-dialog'), 'preferences dialog');
   assert(text(byTest('prefs-dialog')).includes('Air printing'), 'tangle detection named as air printing');
   eq(qa('[data-level="spaghetti_level"] [role=radio], [data-level="spaghetti_level"] button').length, 2, 'spaghetti: low/high only');
