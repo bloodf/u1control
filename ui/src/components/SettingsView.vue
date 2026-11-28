@@ -6,7 +6,7 @@ import Select from 'primevue/select';
 import SelectButton from 'primevue/selectbutton';
 import Checkbox from 'primevue/checkbox';
 import ToggleSwitch from 'primevue/toggleswitch';
-import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiRequirement, OuiStatus, type OuiSettingsSection } from '@orca-plugins/ui-foundation/src/components';
+import { OuiBanner, OuiEmpty, OuiFormRow, OuiFormSection, OuiIcon, OuiRequirement, OuiRequirementList, OuiStatus, type OuiSettingsSection } from '@orca-plugins/ui-foundation/src/components';
 import { chart, circleCheck, clipboard, drop, external, grid, info, languages, plug, printer, refresh, save as saveIcon, settings as settingsIcon, target, wrench, zap } from '@orca-plugins/ui-foundation/src/icons';
 import { themePref, setThemePref, type ThemePref } from '../core/theme';
 import FirmwareCard from './FirmwareCard.vue';
@@ -238,14 +238,10 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
         </div>
       </OuiFormSection>
       <OuiFormSection id="requirements" :icon="circleCheck" tone="neutral" :title="t('req.title')" :aria-label="t('req.title')" :description="t('req.help')">
-        <template #actions>
-          <Button size="small" severity="secondary" :label="t('req.check')" :loading="reqBusy" :disabled="reqBusy" data-test="req-check" @click="checkRequirements">
-            <template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
-        </template>
-        <div role="status" class="u1-reqs" data-test="requirements">
+        <OuiRequirementList :check-label="t('req.check')" :checking="reqBusy" role="status" class="u1-reqs" data-test="requirements" @check="checkRequirements">
           <OuiRequirement v-for="r in reqs" :key="r.key" :name="r.name" :why="r.why" :status="r.status" :status-label="r.label" :detail="r.detail || undefined"
-                          :install-text="r.install" :install-url="r.url" :install-label="r.urlLabel" :check-label="t('req.check')" :data-test="r.test" />
-        </div>
+                          :install-text="r.install" :install-url="r.url" :install-label="r.urlLabel" :data-test="r.test" />
+        </OuiRequirementList>
       </OuiFormSection>
     </div>
 
@@ -268,8 +264,4 @@ function onEnter(e: KeyboardEvent) { if (e.target instanceof HTMLInputElement &&
 /* The install steps are one line each (per step, per OS). */
 .u1-reqs .oui-req-install > span { flex-basis: 100%; white-space: pre-line; }
 .u1-reqs .oui-req + .oui-req { border-top: 1px solid var(--oui-border); }
-/* ponytail: OuiRequirement 5.13 always draws its own Check again and sets details in mono; the section has the one
-   Check again. Drop both overrides once the foundation makes them optional (5.14.0). */
-.u1-reqs .oui-req-check { display: none; }
-.u1-reqs .oui-req-detail { font-family: inherit; font-size: var(--oui-text-sm); }
 </style>

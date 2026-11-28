@@ -34,17 +34,17 @@ const JOB_H = 4, HEADS_H = 21;
 // A widget that is not `fill` is at least as tall as its content: its rows grow to fit it at any window width, so its
 // least height only keeps it from being dragged to nothing. The camera, the screen and the console fill what they get.
 const widgets = computed<OuiWidget[]>(() => [
-  { id: 'job', title: t('status.title'), icon: printer, component: markRaw(JobCard), w: 5, h: JOB_H, minW: 4, minH: 2 },
-  { id: 'heads', title: t('heads.title'), icon: toolhead, component: markRaw(ToolheadsCard), w: 5, h: HEADS_H, minW: 5, minH: 4 },
-  { id: 'temps', title: t('tf.title'), icon: fan, component: markRaw(TempsFansCard), w: 3, h: 8, minW: 3, minH: 3,
+  { id: 'job', narrowOrder: 1, title: t('status.title'), icon: printer, component: markRaw(JobCard), w: 5, h: JOB_H, minW: 4, minH: 2 },
+  { id: 'heads', narrowOrder: 2, title: t('heads.title'), icon: toolhead, component: markRaw(ToolheadsCard), w: 5, h: HEADS_H, minW: 5, minH: 4 },
+  { id: 'temps', narrowOrder: 4, title: t('tf.title'), icon: fan, component: markRaw(TempsFansCard), w: 3, h: 8, minW: 3, minH: 3,
     settings: [{ key: 'chamber', label: t('tf.chamber'), default: true }, { key: 'drivers', label: t('widget.drivers'), default: true }, { key: 'fans', label: t('tf.fans'), default: true }] },
-  { id: 'controls', title: t('controls.title'), icon: thermometer, component: markRaw(ControlsCard), w: 4, h: 8, minW: 4, minH: 3 },
-  { id: 'camera', title: t('cam.title'), icon: camera, component: markRaw(CameraCard), w: 4, h: 7, minW: 3, minH: 4, fill: true,
+  { id: 'controls', narrowOrder: 3, title: t('controls.title'), icon: thermometer, component: markRaw(ControlsCard), w: 4, h: 8, minW: 4, minH: 3 },
+  { id: 'camera', narrowOrder: 5, title: t('cam.title'), icon: camera, component: markRaw(CameraCard), w: 4, h: 7, minW: 3, minH: 4,
     settings: [{ key: 'aspect', label: t('widget.aspect'), default: '16/9', options: [{ value: '16/9', label: '16:9' }, { value: '4/3', label: '4:3' }, { value: '1/1', label: '1:1' }] },
       { key: 'fps', label: t('cam.fps'), default: config.value?.settings.camera_fps ?? 5, options: CAMERA_FPS.map(v => ({ value: v, label: t('cam.fpsOption', { n: v }) })) }] },
-  { id: 'console', title: t('console.title'), icon: terminal, component: markRaw(ConsoleCard), w: 7, h: 10, minW: 3, minH: 5, fill: true,
+  { id: 'console', narrowOrder: 7, title: t('console.title'), icon: terminal, component: markRaw(ConsoleCard), w: 7, h: 10, minW: 3, minH: 5, fill: true,
     settings: [{ key: 'lines', label: t('widget.lines'), default: 400, options: [100, 400, 1000].map(n) }] },
-  { id: 'screen', title: t('scr.title'), icon: hand, component: markRaw(ScreenCard), w: 3, h: 7, minW: 3, minH: 4, fill: true },
+  { id: 'screen', narrowOrder: 6, title: t('scr.title'), icon: hand, component: markRaw(ScreenCard), w: 3, h: 7, minW: 3, minH: 4, fill: true },
   { id: 'files', title: t('nav.files'), icon: files, component: markRaw(FilesCard), w: 4, h: 3, minW: 3, minH: 3 },
   { id: 'ace', title: t('ace.title'), icon: ace, component: markRaw(AceCard), w: 6, h: 4, minW: 3, minH: 3 },
 ]);

@@ -2640,7 +2640,7 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, without score
   await until(() => q('[data-match="0"]'), 'T1 shows its preset');
   const card = q('[data-match="0"]');
   assert(text(card).includes('Generic PLA') && !text(card).includes('@U1') && !text(card).includes('material PLA') && !text(card).includes('35'), 'only the clean name: ' + text(card));
-  assert(!q('.oui-status', card) && q('[data-unsure="0"] svg', card) && q('[data-unsure="0"]', card).title.includes('Not sure'), 'a close call: one warning icon, said in words');
+  assert(!q('.oui-status', card) && q('.oui-match-unsure svg', card) && q('.oui-match-unsure', card).title.includes('Not sure'), 'a close call: one warning icon, said in words');
   assert(!q('[data-match="1"]'), 'no line for a head the plugin gave no preset');
   await click(q('.oui-match-change', card));
   await until(() => qa('.oui-match-option', card).length === 2, 'the candidates, no Automatic while nothing was picked by hand');
@@ -2649,7 +2649,7 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, without score
   eq([pick.head, pick.name], [0, 'Generic PLA Silk @U1'], 'remembered for T1');
   await reply(pick, {matches: [{...row, name: 'Generic PLA Silk @U1', source: 'remembered', score: 29, reasons: choices[1].reasons, confident: true, remembered_key: 'mat:g|pla|'}]});
   await until(() => text(q('[data-match="0"]')).includes('Picked by hand'), 'the new pick, marked as picked by hand');
-  assert(!q('[data-unsure="0"]'), 'a pick by hand is not doubted');
+  assert(!q('.oui-match-unsure'), 'a pick by hand is not doubted');
   await click(q('.oui-match-change', q('[data-match="0"]')));
   const auto = () => qa('.oui-match-option', q('[data-match="0"]')).find(b => text(b).includes('Automatic'));
   await until(auto, 'Automatic offered');
@@ -2668,7 +2668,7 @@ test('toolhead cards: a Spooler preset shows without Spooler/ and @printer, long
   const clean = 'Acme Extra Long Matte Silk Dual Colour PLA Plus';
   const line = q('.oui-match-name', q('[data-match="0"]'));
   eq([text(line), line.title], [clean, clean], 'the line shows the clean name');
-  assert(!text(q('[data-match="0"]')).includes('Spooler') && !q('[data-unsure="0"]'), 'no internal prefix, no doubt: ' + text(q('[data-match="0"]')));
+  assert(!text(q('[data-match="0"]')).includes('Spooler') && !q('.oui-match-unsure'), 'no internal prefix, no doubt: ' + text(q('[data-match="0"]')));
   await click(q('.oui-match-change', q('[data-match="0"]')));
   await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'both candidates');
   const row = qa('.oui-match-option', q('[data-match="0"]'))[1], name = q('.oui-truncate', row);
@@ -2683,14 +2683,14 @@ test('toolhead cards: a Spooler preset shows without Spooler/ and @printer, long
 `);
 
 // ------------------------------------------------------------------ foundation 4.2.0 on: toasts, dismissible notices, requirements
-test('toasts: bottom-left, each with a Close button, gone once closed', `
+test('toasts: bottom-right, each with a Close button, gone once closed', `
   await connect();
   await post({type: 'notice', text: 'Project filaments updated'});
   await until(() => q('.oui-toast'), 'toast shown');
   const host = q('.oui-toasts');
   eq(qa('.oui-toasts').length, 1, 'one toast host on the page');
   const toast = q('.oui-toast'), r = toast.getBoundingClientRect();
-  assert(r.left <= 20 && innerHeight - r.bottom <= 20 && r.bottom <= innerHeight, 'bottom-left: ' + JSON.stringify(r));
+  assert(innerWidth - r.right <= 24 && innerHeight - r.bottom <= 24 && r.bottom <= innerHeight, 'bottom-right: ' + JSON.stringify(r));
   eq(toast.getAttribute('role'), 'status', 'an info toast is polite');
   assert(toasts().includes('Project filaments updated'), 'text shown: ' + toasts());
   const close = q('.oui-toast-close', toast);
@@ -2971,7 +2971,7 @@ const DASH_PLUGIN = `
 const STORE = dash => EXPERT(dash);
 async function READY(dash) { await connect(); await STORE(dash); await post({type: 'status', data: VIEW()}); }
 const DEFAULT_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'screen', 'console'];
-const DEFAULT_ORDER = ['job', 'temps', 'controls', 'heads', 'camera', 'screen', 'console'];
+const DEFAULT_ORDER = ['job', 'heads', 'controls', 'temps', 'camera', 'screen', 'console'];
 const ALL_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'console', 'screen', 'files', 'ace'];
 const MOVER = 'camera', MOVER_FROM = '6 / span 4 | 9 / span 7', MOVE_COLS = -3, MOVER_TO = '9 / span 4 | 9 / span 7';
 const CAM_W = 4, CAM_H = 7, TEMPS = 'temps', CONSOLE_LEAST = 'span 3 | span 5';
@@ -3002,6 +3002,9 @@ const cell = id => q('.oui-dash-cell[data-widget="' + id + '"]');
 const frame = id => q('[data-frame="' + id + '"]');
 const handle = (id, h) => q('[data-frame="' + id + '"] [data-handle="' + h + '"]');
 const place = id => { const c = cell(id); return c ? c.style.gridColumn + ' | ' + c.style.gridRow : null; };
+// Outside edit mode a cell sits at row 1 and is as tall as its content (foundation 5.14): there only its column is its place.
+const col = id => { const p = place(id); return p && p.split(' | ')[0]; };
+const colOf = p => p.split(' | ')[0];
 const step = () => (q('.oui-dash-grid').getBoundingClientRect().width + 12) / 12;
 const ROW = 44;
 const mouseAt = (type, x, y) => cdp({op: 'mouse', type, x, y});
@@ -3015,6 +3018,7 @@ async function dragBy(el, dx, dy, opts = {}) {
 const saved = () => last('dashboard') && last('dashboard').value;
 const itemOf = (st, id) => st.layouts[st.active].items.find(i => i.id === id);
 const shown = () => qa('.oui-dash-cell').filter(c => c.getClientRects().length).map(c => c.dataset.widget);
+async function menuItem(n) { await click(byTest('dash-menu')); await click(q('[data-menu="' + n + '"]')); }
 async function edit() { await click(byTest('dash-edit')); assert(q('.oui-dash-board[data-editing]'), 'edit mode on'); }
 `;
 
@@ -3030,7 +3034,7 @@ test('dashboard: drag a widget with the pointer; the others make room; Escape pu
   await READY();
   await edit();
   eq(place(MOVER), MOVER_FROM, 'starts at its default place');
-  const before = JSON.stringify(qa('.oui-dash-cell').map(c => [c.dataset.widget, c.style.gridColumn, c.style.gridRow]));
+  const before = JSON.stringify(qa('.oui-dash-cell').map(c => [c.dataset.widget, c.style.gridColumn]));
   await dragBy(frame(MOVER), -MOVE_COLS * step(), 0, { during: async () => { await settle();
     assert(q('.oui-dash-slot'), 'the place it would land is marked');
     assert(cell(MOVER).dataset.dragged !== undefined && cell(MOVER).style.transform.includes('translate'), 'the widget follows the pointer'); } });
@@ -3048,7 +3052,7 @@ test('dashboard: drag a widget with the pointer; the others make room; Escape pu
   eq(place(MOVER), now, 'Escape cancels the drag');
   eq(last('dashboard'), undefined, 'nothing stored before Save');
   await click(byTest('dash-cancel'));
-  eq(JSON.stringify(qa('.oui-dash-cell').map(c => [c.dataset.widget, c.style.gridColumn, c.style.gridRow])), before, 'Cancel drops the edit');
+  eq(JSON.stringify(qa('.oui-dash-cell').map(c => [c.dataset.widget, c.style.gridColumn])), before, 'Cancel drops the edit');
 `);
 
 test('dashboard: resize from a corner and from an edge snaps to the grid, keeps a least size and is saved', DASH_JS + `
@@ -3066,7 +3070,7 @@ test('dashboard: resize from a corner and from an edge snaps to the grid, keeps 
   const cam = itemOf(saved(), 'camera');
   eq([cam.w, cam.h], [3, 4], 'the size is saved');
   assert(!q('.oui-dash-board[data-editing]'), 'Save ends edit mode');
-  eq(place('camera').replace(/\\d+ \\/ /g, ''), 'span 3 | span 4', 'and stays after it');
+  eq(col('camera').replace(/\\d+ \\/ /g, ''), 'span 3', 'and stays after it');
 `);
 
 test('dashboard: widget content follows its size: the camera keeps its shape, the console shows more lines, temperatures go compact', DASH_JS + `
@@ -3130,7 +3134,7 @@ test('dashboard: keyboard moves, resizes and removes; the catalogue adds; settin
 test('dashboard: named layouts are created, switched, renamed, reset and deleted, and come back after a reload', DASH_JS + `
   await READY();
   await edit();
-  await click(byTest('dash-new'));
+  await menuItem('new');
   await type(q('#oui-dash-name'), 'default');
   await click(byTest('dash-name-ok'));
   assert(text(byTest('dash-strip')).includes('Another layout has this name'), 'a name in use is refused');
@@ -3147,7 +3151,7 @@ test('dashboard: named layouts are created, switched, renamed, reset and deleted
   assert(cell('console'), 'Default still has its console');
   await pick(byTest('dash-layout'), 'Watch');
   await edit();
-  await click(byTest('dash-rename'));
+  await menuItem('rename');
   await type(q('#oui-dash-name'), 'Camera view');
   await press('Enter');
   eq(saved().layouts.map(l => l.name), ['Default', 'Camera view'], 'renamed');
@@ -3156,14 +3160,14 @@ test('dashboard: named layouts are created, switched, renamed, reset and deleted
   await click(byTest('dash-cancel'));
   eq(shown().includes('console'), false, 'a reset is kept only by Save');
   await edit();
-  await click(byTest('dash-delete'));
+  await menuItem('delete');
   await click(byTest('dash-delete-ok'));
   eq(saved().layouts.map(l => l.name), ['Default'], 'deleted');
   assert(!byTest('dash-delete') || byTest('dash-delete').disabled, 'the last layout cannot be deleted');
   await click(byTest('dash-cancel'));
   // a second layout to bring back after the reload
   await edit();
-  await click(byTest('dash-new'));
+  await menuItem('new');
   await type(q('#oui-dash-name'), 'Night');
   await press('Enter');
   await click(q('[data-remove="camera"]'));
@@ -3180,8 +3184,10 @@ test('dashboard: named layouts are created, switched, renamed, reset and deleted
 test('dashboard: a stored layout is checked: unknown widgets dropped, sizes brought within limits, broken data gives the default', DASH_JS + `
   await READY({v: 1, active: 0, layouts: [{name: 'Mine', items: [{id: 'ghost', x: 0, y: 0, w: 4, h: 4}, {id: 'camera', x: 9, y: 3, w: 99, h: 1}, {id: 'console', x: 0, y: 0, w: 2, h: 2, cfg: {lines: 7}}]}]});
   eq(shown().sort(), ['camera', 'console'], 'the unknown widget is dropped');
+  await edit();
   eq(place('camera').replace(/\\d+ \\/ /g, ''), 'span 12 | span 4', 'too wide and too short: brought within limits');
   eq(place('console').replace(/\\d+ \\/ /g, ''), CONSOLE_LEAST, 'the least size of the console');
+  await click(byTest('dash-cancel'));
   await STORE('not a dashboard');
   eq(shown(), DEFAULT_IDS, 'broken data: the default layout');
 `);
@@ -3207,23 +3213,23 @@ test('dashboard: a narrow window shows one column in reading order and is not ed
 test('dashboard: a layout still as the first default gets the new one; an arranged one stays; Reset gives the new one', DASH_JS + `
   await READY({v: 1, active: 0, layouts: [{name: 'Default', items: OLD_DEFAULT}, {name: 'Mine', items: OLD_DEFAULT.map(i => i.id === 'camera' ? {...i, h: i.h + 2} : i)}]});
   eq(shown(), DEFAULT_IDS, 'the untouched default shows the new default');
-  eq(place(MOVER), MOVER_FROM, 'at its new place');
+  eq(col(MOVER), colOf(MOVER_FROM), 'at its new place');
   await pick(byTest('dash-layout'), 'Mine');
-  eq(place('camera'), MINE_CAMERA, 'the arranged layout is as it was saved');
+  eq(col('camera'), colOf(MINE_CAMERA), 'the arranged layout is as it was saved');
   await edit();
   await click(byTest('dash-reset'));
   await click(byTest('dash-save'));
   eq(saved().layouts[1].items.map(i => i.id), DEFAULT_IDS, 'Reset to default gives the new default');
-  eq(place(MOVER), MOVER_FROM, 'with its places');
+  eq(col(MOVER), colOf(MOVER_FROM), 'with its places');
 `);
 test('dashboard: 0.16.0\'s untouched default gets the arranged one; with multiACE the filament units join under the toolheads', DASH_JS + `
   await READY({v: 1, active: 0, layouts: [{name: 'Default', items: DEFAULT_016}]});
   eq(shown(), DEFAULT_IDS, 'the new default');
-  eq(place(MOVER), MOVER_FROM, 'camera at its new place');
+  eq(col(MOVER), colOf(MOVER_FROM), 'camera at its new place');
   await post({type: 'status', data: {...VIEW(), ace: {mode: 'multi', swapping: false, heads: {'0': [0, 1]}, units: []}}});
   await settle();
-  eq(place('ace'), '1 / span 5 | 26 / span 6', 'filament units under the toolheads');
-  eq(place(MOVER), MOVER_FROM, 'nothing else moved');
+  eq(col('ace'), '1 / span 5', 'filament units under the toolheads');
+  eq(col(MOVER), colOf(MOVER_FROM), 'nothing else moved');
 `);
 const SCREEN_SHOWN = `
   await click(byTest('screen-show'));
@@ -3236,7 +3242,7 @@ test('printer screen on the dashboard: bottom row beside the camera; a click on 
   await post({type: 'status', data: VIEW()});
 ` + SCREEN_SHOWN + `
   const r = id => cell(id).getBoundingClientRect(), s = r('screen'), cam = r('camera'), c = r('console');
-  assert(Math.abs(s.top - cam.top) < 2 && s.left >= cam.right - 1, 'the screen sits beside the camera, in the bottom row: ' + JSON.stringify([s.top, cam.top, s.left, cam.right]));
+  assert(Math.abs(s.top - cam.top) < 120 && s.left >= cam.right - 1, 'the screen sits beside the camera, in the bottom row: ' + JSON.stringify([s.top, cam.top, s.left, cam.right]));
   assert(s.top >= r('controls').bottom - 1 && s.bottom <= c.top + 1, 'under the controls, above the console');
   const f = q('.u1-view-screen').getBoundingClientRect(), i = q('.u1-view-screen img').getBoundingClientRect();
   assert(f.bottom <= s.bottom + 1 && f.right <= s.right + 1 && i.height <= f.height + 1, 'the picture is not cut off by its widget');
@@ -3267,11 +3273,13 @@ test('printer screen in a narrow window: after the camera, before the console; a
   assert(Math.abs(a.x - 240) <= 1 && Math.abs(a.y - 160) <= 1, 'the centre of the picture: ' + JSON.stringify(a));
 `, { size: [480, 900] });
 
-for (const size of [[1280, 800], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
+for (const size of [[1280, 800], [1400, 900], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
   await READY();
   const bad = qa('.oui-dash-cell').map(c => [c.dataset.widget, q('.oui-panel-body', c)]).filter(([, b]) => b && (b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1))
     .map(([id, b]) => id + ' ' + b.scrollHeight + '/' + b.clientHeight);
   eq(bad, [], 'every widget fits');
+  const out = ['temps', 'heads'].flatMap(id => { const c = cell(id), r = c.getBoundingClientRect(); return qa('.tf-fans > *, .tf-cover > div, button', c).filter(e => e.getBoundingClientRect().width && e.getBoundingClientRect().right > r.right + 1).map(e => id + ' ' + e.className); });
+  eq(out, [], 'fan setters, cover readouts and Change buttons stay inside their widget');
 `, { size });
 
 
@@ -3279,6 +3287,7 @@ test('dashboard: a stored size too small for its content shows all of it and is 
   await READY({v: 1, active: 0, layouts: [{name: 'Tiny', items: [{id: 'job', x: 0, y: 0, w: 6, h: 2}, {id: 'console', x: 0, y: 2, w: 12, h: 6}]}]});
   const body = q('.oui-panel-body', cell('job'));
   assert(body.scrollHeight <= body.clientHeight + 1 && cell('job').getBoundingClientRect().height > 76, 'its rows grew to the content: ' + cell('job').getBoundingClientRect().height);
+  await edit();
   eq(place('job'), '1 / span 6 | 1 / span 2', 'its stored size is not changed');
   eq(last('dashboard'), undefined, 'nothing is saved');
 `);
@@ -3430,26 +3439,26 @@ test('camera and printer screen are not streamed to while their card is scrolled
 
 test('default layout: every card is as tall as its rows; the console only in Expert mode; the old default moves to it', `
   const cell = id => q('.oui-dash-cell[data-widget="' + id + '"]');
-  const place = id => cell(id).style.gridColumn + ' | ' + cell(id).style.gridRow;
+  const place = id => cell(id).style.gridColumn;
   const ids = () => qa('.oui-dash-cell').map(c => c.dataset.widget);
   const cfg = (mode, dash) => post({type: 'config', mode, stored: {}, version: 't', spooler: {}, automations: [], settings: {mode, ...(dash ? {dashboard: dash} : {})}});
   await connect('extended');
   await post({type: 'status', data: VIEW()});
   await cfg('automagic');
   eq(ids(), ['job', 'heads', 'temps', 'controls', 'camera', 'screen'], 'Automagic: no G-code console on the default');
-  eq([place('camera'), place('screen')], ['6 / span 7 | 9 / span 10', '6 / span 4 | 19 / span 7'], 'its rows go to the camera and the screen');
+  eq([place('camera'), place('screen')], ['6 / span 7', '6 / span 4'], 'its rows go to the camera and the screen');
   await cfg('expert');
   eq(ids(), ['job', 'heads', 'temps', 'controls', 'camera', 'screen', 'console'], 'Expert: the console is on the default');
   eq([place('job'), place('heads'), place('temps'), place('controls'), place('camera'), place('screen'), place('console')],
-     ['1 / span 5 | 1 / span 4', '1 / span 5 | 5 / span 21', '6 / span 3 | 1 / span 8', '9 / span 4 | 1 / span 8', '6 / span 4 | 9 / span 7', '10 / span 3 | 9 / span 7', '6 / span 7 | 16 / span 10'], 'the default places');
+     ['1 / span 5', '1 / span 5', '6 / span 3', '9 / span 4', '6 / span 4', '10 / span 3', '6 / span 7'], 'the default places');
   // rows are 32 px with 12 px between them: a card of n rows is 44 n - 12 px high unless its content stretched it
   const high = id => Math.round(cell(id).getBoundingClientRect().height);
-  eq([high('job'), high('temps'), high('controls'), high('camera'), high('screen')], [164, 340, 340, 296, 296], 'no card stretches the row of its neighbours');
+  assert(high('job') <= 164 && high('temps') <= 340 && high('controls') <= 340 && high('camera') <= 296 && high('screen') <= 296, 'no card is taller than its rows: ' + [high('job'), high('temps'), high('controls'), high('camera'), high('screen')]);
   const cam = q('.oui-camera', cell('camera')).getBoundingClientRect();
   assert(cam.width >= cell('camera').getBoundingClientRect().width - 2, 'the 16:9 camera box fills its cell: ' + Math.round(cam.width) + ' x ' + Math.round(cam.height));
   await cfg('expert', {v: 1, active: 0, layouts: [{name: 'Default', items: [{id: 'job', x: 0, y: 0, w: 5, h: 4}, {id: 'heads', x: 0, y: 4, w: 5, h: 14}, {id: 'temps', x: 5, y: 0, w: 3, h: 7},
     {id: 'controls', x: 8, y: 0, w: 4, h: 7}, {id: 'camera', x: 5, y: 7, w: 3, h: 8}, {id: 'screen', x: 8, y: 7, w: 4, h: 8}, {id: 'console', x: 5, y: 15, w: 7, h: 6}]}]});
-  eq([place('heads'), place('camera')], ['1 / span 5 | 5 / span 21', '6 / span 4 | 9 / span 7'], 'a layout still as the last default gets the new one');
+  eq([place('heads'), place('camera')], ['1 / span 5', '6 / span 4'], 'a layout still as the last default gets the new one');
 `, { size: [1400, 900] });
 
 test('status block: a print that ended says what it took and offers Print again; a failure says why; an idle printer leads to the files', `

@@ -167,7 +167,7 @@ const candidates = computed(() => (!match.value || match.value.source === 'linke
   : [...new Set(match.value.candidates.map(c => presetLabel(c.name)))].map(name => ({ name }))));
 const realName = (name: string | null) => name && (match.value?.candidates.find(c => presetLabel(c.name) === name)?.name ?? name);
 const pick = (name: string | null) => pickPreset(i, realName(name));
-const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), score: '', auto: t('match.auto'), autoHint: t('match.autoHint') }));
+const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), review: t('match.unsure'), auto: t('match.auto'), autoHint: t('match.autoHint') }));
 // Pressure advance the head has now; Save keeps it on the linked spool (Spoolman only, keyed by the nozzle).
 const pa = computed(() => s.status?.extruders[i]?.pa ?? null);
 async function savePa() {
@@ -213,10 +213,9 @@ async function savePa() {
     </template>
     <HeaterControl :id="String(i)" card />
     <div v-if="!editing && match && has && showMatch" class="hc-match" :data-match="i">
-      <p class="oui-label hc-match-title">{{ t('match.title') }}<span v-if="match.name && !match.confident" class="hc-unsure" role="img" :title="t('match.unsure')"
-        :aria-label="t('match.unsure')" :data-unsure="i"><OuiIcon :icon="warning" :size="14" tone="warn" /></span></p>
-      <OuiPresetMatch :name="match.name ? presetLabel(match.name) : null" :badge="match.source === 'remembered' ? t('match.remembered') : undefined" :remembered="match.source === 'remembered' && !!match.remembered_key"
-                      :candidates="candidates"
+      <p class="oui-label hc-match-title">{{ t('match.title') }}</p>
+      <OuiPresetMatch :name="match.name ? presetLabel(match.name) : null" :remembered="match.source === 'remembered' && !!match.remembered_key"
+                      :candidates="candidates" :confident="match.confident"
                       :labels="matchLabels" :busy="s.matchBusy" @pick="pick" />
     </div>
     <template v-if="!editing">
@@ -284,7 +283,6 @@ async function savePa() {
 .hc-match { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--oui-border); }
 .hc-match .oui-match-name { font-size: var(--oui-text-sm); }
 .hc-match-title { display: flex; align-items: center; gap: var(--oui-s1); }
-.hc-unsure { display: inline-flex; cursor: help; }
 /* Change-list names wrap instead of being cut off. */
 .hc-match .oui-match-option-name { align-items: flex-start; }
 .hc-match .oui-match-option-name .oui-truncate { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
