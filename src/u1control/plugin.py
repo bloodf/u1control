@@ -411,29 +411,16 @@ class U1ControlPage(orca.pages.PagesPluginCapabilityBase):
                             say(tr("Couldn't update the project filaments: %s") % e, problems=1)
                     if not self._background(job):
                         say(tr("Another preset update is running; try again in a moment."), problems=1)
-            elif kind == "ofd":   # Settings: the Open Filament Database line; refresh: Read again (only while it is on)
-                rid, store = data.get("id"), self._settings()
-
-                def ofd_job():
-                    try:
-                        self.post_message({"type": "reply", "id": rid, "result": ofd_status(store, data.get("refresh") is True)})
-                    except Exception as e:
-                        self.post_message({"type": "reply", "id": rid, "error": str(e)})
-                threading.Thread(target=ofd_job, name="u1control-ofd", daemon=True).start()
             elif kind in ("preset_matches", "preset_pick"):   # toolhead cards: each head's preset, why, and Change
                 rid, view, store = data.get("id"), svc.last_view, self._settings()
 
                 def matches_job():
                     try:
                         overrides = migrated_overrides(store)
-                        note = ""
-                        if kind == "preset_pick" and isinstance(data.get("ofd"), str):
-                            note = install_ofd(view, bound_spool_lookup(svc), data.get("head"), data["ofd"], store)
-                        elif kind == "preset_pick":
+                        if kind == "preset_pick":
                             name = data.get("name")
                             pick_preset(view, bound_spool_lookup(svc), data.get("head"), name if name is None else str(name), overrides)
-                        result = {"matches": preset_matches(view, bound_spool_lookup(svc), overrides,
-                                                            bool(store.effective().get("ofd_enabled"))), "note": note}
+                        result = {"matches": preset_matches(view, bound_spool_lookup(svc), overrides)}
                         self.post_message({"type": "reply", "id": rid, "result": result})
                     except Exception as e:
                         self.post_message({"type": "reply", "id": rid, "error": str(e)})
@@ -1255,11 +1242,9 @@ def network_grants(cap):
     try:   # never presets here: reading them while OrcaSlicer loads them crashed 2.5.1
         cfg = get_store(cap).effective()
         addresses += [clean(cfg.get("host")), clean(cfg.get("spoolman_url"))] + cfg["network_origins"]
-        ofd = [filmatch.OFD_ORIGIN] if cfg.get("ofd_enabled") else []   # the Open Filament Database, only while it is on
     except Exception as e:
         log("network permission: settings not readable at load (%s)" % e)
-        ofd = []
-    return _origins(addresses) + ofd
+    return _origins(addresses)
 
 
 def _origins(addresses):
@@ -2198,109 +2183,13 @@ def migrated_overrides(store):
     return {}
 
 
-# --- Open Filament Database (Settings, off by default) ----------------------------------------------------------------
-# While it is on, the toolhead cards also list the OFD presets of the head's manufacturer and material (filmatch.rank_ofd)
-# from OFD's index, kept a day in Spooler's folder (ofd/, shared) while Spooler is installed, else in U1 Control's own.
-# While it is off nothing is fetched and OrcaSlicer is not asked for access to OFD.
-
-def ofd_folder():
-    """The folder OFD's index is kept in ("" when there is none)."""
-    shared, own = spooler_dir(), _storage()
-    if shared and os.path.isfile(os.path.join(shared, spooler_bridge.SETTINGS_FILE)):
-        return os.path.join(shared, filmatch.OFD_DIR)
-    return os.path.join(own, filmatch.OFD_DIR) if own else ""
-
-
-def ofd_status(store, refresh=False):
-    """Settings' OFD line: {"on"} and, while on, {"fetched", "version", "count", "stale", "error"}. Plugin thread."""
-    folder = ofd_folder()
-    if not store.effective().get("ofd_enabled") or not folder:
-        return {"on": False}
-    found = filmatch.ofd_index(folder, force=refresh)
-    return {"on": True, "count": len(found["profiles"]), **{k: found[k] for k in ("fetched", "version", "stale", "error")}}
-
-
-def ofd_proposals(profiles, head, tag, spool):
-    """OFD presets for what a toolhead holds: its tag's (or spool's, or head's) manufacturer and material."""
-    return filmatch.rank_ofd(profiles, *_ofd_observation(head, tag, spool), MATCH_CHOICES)
-
-
-# --- Installing an OFD preset (Change on a toolhead card) ------------------------------------------------------------
-# With Spooler installed and the toolhead linked to a Spoolman spool, Spooler installs it: U1 Control remembers
-# "ofd:<id>" as the parent of that spool's filament in Spooler's matches.json, and Spooler's preset of the filament then
-# carries OFD's values (its own filament_id, so the printer agent's tray id loads it). Otherwise U1 Control installs it
-# itself: flattened (filmatch.flatten_ofd) with a filament_id of its own, in its own local bundle OFD_BUNDLE in the
-# signed-in account's folder, never a user's preset folder or another plugin's bundle.
-OFD_BUNDLE = "u1control_ofd"
-OFD_ID_PREFIX = "UOD"   # no OrcaSlicer system id starts with it (theirs: OF..., GF..., ...); Spooler's: SPL
-
-
-def _ofd_parent_config(name):
-    """UI thread: the settings of the system preset an OFD preset inherits, as OrcaSlicer serializes them; None when
-    OrcaSlicer has no such preset."""
-    preset = orca.host.preset_bundle().filaments.find_preset(name)
-    if preset is None or not getattr(preset, "is_system", False):
-        return None
-    return {str(k): str(preset.config_value(k)) for k in preset.config_keys() if preset.config_value(k) is not None}
-
-
-def install_ofd(view, bound, index, ofd_id, store):
-    """A toolhead card's Change to an OFD proposal (plugin thread). Returns a note for the page ("" when it is in
-    use now). Raises ValueError with the reason when it can't be used."""
-    heads = (view or {}).get("heads") or []
-    folder = ofd_folder() if store.effective().get("ofd_enabled") else ""
-    if not folder or not isinstance(index, int) or isinstance(index, bool) or not 0 <= index < len(heads):
-        raise ValueError(tr("that preset doesn't fit what T%d holds") % ((index if isinstance(index, int) else 0) + 1))
-    head, tags = heads[index], view.get("rfid") or []
-    tag = (tags[index] if index < len(tags) else None) or None
-    spool = bound(index) if bound else None
-    profiles = filmatch.ofd_index(folder)["profiles"]
-    profile = next((p for p in filmatch.rank_ofd(profiles, *_ofd_observation(head, tag, spool), 0) if p["id"] == ofd_id), None)
-    if profile is None:
-        raise ValueError(tr("that preset doesn't fit what T%d holds") % (index + 1))
-    config = on_ui_thread(lambda: _ofd_parent_config(profile["inherits"]))
-    entry = next(p for p in profiles if p["id"] == ofd_id)
-    preset, problem = filmatch.ofd_preset(folder, entry, parents={profile["inherits"]} if config else set())
-    if problem:
-        raise ValueError(tr("the Open Filament Database preset can't be used: %s") % problem)
-    shared = spooler_dir()
-    if shared and os.path.isfile(os.path.join(shared, spooler_bridge.SETTINGS_FILE)) and (spool or {}).get("filament_id") is not None:
-        filmatch.remember(os.path.join(shared, filmatch.MATCHES_FILE), {"filament:%s" % spool["filament_id"]: "ofd:" + ofd_id})
-        return tr("Spooler puts it into its preset of spool #%s on its next sync") % spool.get("id")
-    name = filmatch.safe_preset_name(preset["name"])
-    flat = filmatch.flatten_ofd(preset, config, filmatch.own_filament_id(OFD_ID_PREFIX, ofd_id), name)
-    root = os.path.dirname(shared) if shared else ""
-    if not root:
-        raise ValueError(tr("OrcaSlicer's data folder was not found"))
-    ctx = _match_context(bound)
-    folders = filmatch.user_folders(root, [p["file"] for p in ctx["mine"]])
-    filmatch.install_bundle(root, folders, OFD_BUNDLE, "U1 Control (Open Filament Database)", VERSION, {name + ".json": flat},
-                            orca.host.preset.bundles.reload_local)
-    names = [m["name"] for m in on_ui_thread(filament_meta)]
-    installed = next((n for n in names if n.rsplit("/", 1)[-1] == name and OFD_BUNDLE in n), "_local/%s/%s" % (OFD_BUNDLE, name))
-    keys = filmatch.toolhead_keys(head, tag, (spool or {}).get("id"))
-    write = match_paths()[1]
-    if keys and write:
-        filmatch.remember(write, {keys[0]: installed}, ctx["printer"])
-    return ""
-
-
-def _ofd_observation(head, tag, spool):
-    """(vendor, material, name) rank_ofd looks for, for what a toolhead holds."""
-    tag = tag or {}
-    vendor = tag.get("vendor") or tag.get("manufacturer") or (spool or {}).get("vendor") or head.get("vendor") or ""
-    material = tag.get("type") or head.get("type") or ""
-    name = " ".join(str(x) for x in ((spool or {}).get("name"), tag.get("sub_type") or head.get("sub_type")) if x)
-    return vendor, material, name
-
-
 def _sub_words(text):
     return set(re.findall(r"[a-z0-9]+", str(text or "").lower()))
 
 
 def _scoring_tag(head, tag, spool):
     """tag as the preset scoring reads it: when neither the printer nor the tag reports a sub-type, the sub-type words
-    (filmatch.SUB_TYPE_WORDS) of the bound spool's name, as _ofd_observation reads it. Only for scoring: the remembered
+    (filmatch.SUB_TYPE_WORDS) of the bound spool's name. Only for scoring: the remembered
     keys and pins keep the printer's own values. "Basic", which the scoring ignores, counts as no sub-type."""
     tag = tag or {}
     reported = _sub_words(tag.get("sub_type") or head.get("sub_type")) - {"basic"}
@@ -2368,27 +2257,23 @@ def _loaded_heads(heads, tags):
             yield head, tag
 
 
-def preset_matches(view, bound, overrides=None, ofd=False):
-    """[{"head", ...head_match, "ofd"}] for each loaded toolhead (a plugin thread): what the toolhead cards show. ofd:
-    the Open Filament Database is on, so its proposals are added (its index read again when a day old)."""
+def preset_matches(view, bound, overrides=None):
+    """[{"head", ...head_match, "shown"}] for each loaded toolhead (a plugin thread): what the toolhead cards show."""
     if not view:
         return []
     ctx = _match_context(bound)
-    folder = ofd_folder() if ofd else ""
-    profiles = filmatch.ofd_index(folder)["profiles"] if folder else []
     out = []
     for head, tag in _loaded_heads(view["heads"], view["rfid"]):
         spool = bound(head["index"]) if bound else None
         match = {k: v for k, v in head_match(ctx, head, tag, spool, overrides).items() if k != "keys"}
-        ofd_rows = ofd_proposals(profiles, head, tag, spool) if profiles else []
-        out.append({"head": head["index"], **_with_shown(match, ofd_rows), "ofd": ofd_rows})
+        out.append({"head": head["index"], **_with_shown(match)})
     return out
 
 
-def _with_shown(match, ofd_rows):
+def _with_shown(match):
     """match with "shown", the name the card shows, on it and on each candidate (Spooler's presets as Spooler/<preset>);
     the page picks by the real name."""
-    shown = spooler_bridge.shown_names([match["name"]] + [c["name"] for c in match["candidates"] + ofd_rows])
+    shown = spooler_bridge.shown_names([match["name"]] + [c["name"] for c in match["candidates"]])
     return {**match, "shown": shown[match["name"]],
             "candidates": [{**c, "shown": shown[c["name"]]} for c in match["candidates"]]}
 

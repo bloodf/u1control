@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { reasonTexts } from '../../src/core/match.ts';
+import { presetLabel } from '../../src/core/match.ts';
 
-test('reasons are worded in order; unknown codes and shapes are dropped', () => {
-  const word = (code: string, value: string) => `${code}:${value}`;
-  assert.deepEqual(reasonTexts([['material', 'PLA'], ['vendor', 'eSUN'], ['nope', 'x'], 'bad', ['printer', null]], word),
-    ['material:PLA', 'vendor:eSUN', 'printer:']);
-  assert.deepEqual(reasonTexts(null, word), []);
+test('a preset is shown without its bundle folder, Spooler/ and @printer', () => {
+  assert.equal(presetLabel('Spooler/3D Procer PLA Marrom terra @Snapmaker U1'), '3D Procer PLA Marrom terra');
+  assert.equal(presetLabel('_local/spooler/3D Procer PLA Marrom terra @Snapmaker U1'), '3D Procer PLA Marrom terra');
+  assert.equal(presetLabel('Generic PLA @System'), 'Generic PLA');
+  assert.equal(presetLabel('My PLA'), 'My PLA');
+  assert.equal(presetLabel('@U1'), '@U1');
 });

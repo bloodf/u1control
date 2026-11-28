@@ -1,6 +1,6 @@
 {
   "name": "u1control-ui",
-  "version": "0.22.1",
+  "version": "0.23.0",
   "private": true,
   "type": "module",
   "description": "U1 Control pages (Vue 3 + PrimeVue 5, shared Orca UI foundation 5.6.2), built into one offline HTML file",
@@ -12,7 +12,7 @@
     "test": "npm run test:unit && npm run test:page"
   },
   "dependencies": {
-    "@orca-plugins/ui-foundation": "github:bloodf/orca-ui-foundation#v5.13.3",
+    "@orca-plugins/ui-foundation": "github:bloodf/orca-ui-foundation#v5.14.0",
     "@primeuix/themes": "3.1.1",
     "primevue": "5.0.6",
     "vue": "3.5.46"

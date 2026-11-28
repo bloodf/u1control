@@ -34,6 +34,7 @@ async function connect(kind, gen) {
   await until(() => last('hello'), 'hello sent');
   await reply(last('hello'), {firmware: {kind: kind || 'stock', version: '1'}, address: 'u1:80', printer: 'Bench U1', generation: gen || 1, limits: {hotend: 320, bed: 110}});
 }
+const EXPERT = dash => post({type: 'config', mode: 'expert', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'expert', ...(dash === undefined ? {} : {dashboard: dash})}});
 async function tab(name) { await click(q('[data-tab="' + name + '"]')); }
 async function pick(root, label) {
   assert(root, 'select to open'); await reveal(root); root.click(); await until(() => q('.p-select-overlay') && !q('.p-select-overlay[class*="enter-active"]'), 'select overlay open');
@@ -154,10 +155,57 @@ test('feeder: a spool unloaded from the head but still in the feeder says so', `
   await post({type: 'status', data: VIEW({feed: [{state: 'preload_finish', detected: true}, {state: 'load_finish', detected: true}, {state: 'wait_insert'}, {}]})});
   await until(() => q('[data-not-in-head="0"]'), 'T1 says it is not in the head');
   eq(qa('[data-not-in-head]').map(e => e.dataset.notInHead), ['0', '2'], 'T1 and T3, not T2');
-  const meta = qa('.hc').map(c => qa('.oui-meta', c).map(text).find(x => x.startsWith('Feeder')));
-  eq(meta[0], 'Feeder: at the inlet, not in the head', 'feeder line in words, no repeated inlet note');
-  eq(meta[1], 'Feeder: in the head', 'no raw state and no inlet note once the filament is in the head');
-  eq(meta[2], 'Feeder: waiting for filament', 'T3 waits for filament');
+  // H3: the feeder line only for what is not the usual state of the head, in plain words.
+  eq(qa('.hc').map(c => q('[data-feed]', c) ? text(q('[data-feed]', c)) : null),
+    ['Filament at the inlet, not loaded', null, 'Waiting for filament at the inlet', null], 'only the anomalies have a feeder line; a head loaded as usual has none');
+  assert(!qa('.hc .oui-meta').some(e => /Feeder|load_finish|wait_insert/.test(text(e))), 'no "Feeder:" label and no firmware state names');
+`);
+
+test('toolhead card: weight said once, pressure advance spelled out, Edit and Read tag labelled, an empty head offers Load only', `
+  await connect();
+  await post({type: 'status', data: VIEW({heads: [head('PLA', {index: 0, nozzle: 'standard'}), head('PLA', {index: 1}), head('PLA', {index: 2}), head('', {index: 3})],
+    extruders: [0, 1, 2, 3].map(i => ({temp: 20, target: 0, active: i === 0, pa: i === 0 ? 0.02 : null})), feed: [{state: 'load_finish', detected: true}]})});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  await reply(last('cmd', 'spools'), {spools: [{id: 7, vendor: 'Generic', name: 'Matte Black', material: 'PLA', colour: '#111111', remaining: 396, initial: 1000}], bindings: {'0': 7}, via: 'moonraker'});
+  await until(() => text(q('[data-pick="0"]')).includes('Matte Black'), 'T1 shows its spool');
+  const card = q('.hc');
+  eq(text(q('[data-pick="0"]')), '#7 Generic Matte Black · PLA', 'H1: the chooser names the spool; the grams are on the bar above only');
+  assert(text(q('.oui-slot-amount', card)).includes('396'), 'the weight is on the bar');
+  assert(text(q('[data-pa="0"]')).startsWith('Pressure advance 0.02 · Standard nozzle') && q('[data-save-pa="0"]') && text(q('[data-save-pa="0"]')) === 'Save to spool', 'H3: spelled out, Save to spool kept: ' + text(q('[data-pa="0"]')));
+  assert(!q('[data-feed]', card) && !text(card).includes('Feeder'), 'H3: a head loaded as usual has no feeder line');
+  assert(!byTest('spool-source') && !text(q('.u1-heads .oui-panel-head') || q('.u1-heads')).includes('spools ('), 'H2: no Spoolman diagnostics in the header while the list is fine');
+  eq([text(q('[data-edit="0"]')), text(q('[data-rfid="0"]'))], ['Edit', 'Read tag'], 'H4: labelled buttons');
+  eq([q('[data-edit="0"]').getAttribute('aria-label'), q('[data-rfid="0"]').getAttribute('aria-label')], ['Edit T1 filament', 'Read the T1 RFID tag again'], 'their names still say which head');
+  assert(qa('.hc .oui-slot-actions button').every(b => text(b)), 'H4: no icon-only button on the cards');
+  const empty = qa('.hc')[3];
+  assert(empty.hasAttribute('data-empty') && text(q('.oui-slot-name', empty)) === 'No filament', 'T4 is empty');
+  assert(q('[data-load="3"]') && !q('[data-unload="3"]'), 'H5: an empty head offers Load, not Unload');
+  assert(!q('[data-load="3"]').classList.contains('p-button-secondary') && q('[data-load="0"]').classList.contains('p-button-secondary'), 'H5: Load is the main action of the empty head only');
+  eq(getComputedStyle(q('.oui-slot-main', empty)).justifyContent, 'center', 'H5: "No filament" in the middle');
+  await click(q('[data-edit="0"]'));
+  const sw = q('.hc-form [data-swatch="#111111"]');
+  assert(sw && sw.getAttribute('aria-label') === 'Generic Matte Black' && q('.hc-form input[type=color]').getAttribute('aria-label') === 'Other colour', 'G2: a swatch per spool colour, named, then any other colour');
+  await click(sw);
+  eq([sw.getAttribute('aria-pressed'), q('[data-hex="0"]').value], ['true', '#111111'], 'a swatch picks its colour and shows its code');
+  await type(q('[data-hex="0"]'), '#ABCDEF'); await settle();
+  eq([q('#e0-c').value, sw.getAttribute('aria-pressed')], ['#abcdef', 'false'], 'a typed code is the colour');
+  await type(q('[data-hex="0"]'), '#12'); await settle();
+  eq(q('#e0-c').value, '#abcdef', 'half a code changes nothing');
+  await click(btn('Save', q('.hc-form')));
+  eq(cmds('set_filament')[0].args.colour, '#abcdef', 'saved as #rrggbb, as before');
+`);
+
+test('unload several: Cancel shows the close icon, not the unload icon', `
+  await connect();
+  await post({type: 'status', data: VIEW({feed: [{state: 'load_finish'}, {state: 'load_finish'}, {state: 'load_finish'}, {state: 'load_finish'}]})});
+  await until(() => byTest('unload-many'), 'Unload several');
+  const icon = () => q('[data-test="unload-many"] svg').innerHTML;
+  const unloadIcon = icon();
+  await click(byTest('unload-many'));
+  eq(text(byTest('unload-many')), 'Cancel', 'the button now cancels');
+  assert(icon() !== unloadIcon, 'H6: Cancel has its own (x) icon');
+  await click(byTest('unload-many'));
+  eq(icon(), unloadIcon, 'back to the unload icon');
 `);
 
 test('unload several: tick the loaded heads, one confirmation, the batch command', `
@@ -220,31 +268,47 @@ test('park: only the head on the carriage offers Park, and it asks first', `
   await until(() => !q('[data-park]'), 'no Park while printing');
 `);
 
-test('temperatures & fans: chamber, drivers and fan readings; part and aux fan set only when idle', `
+test('temperatures & fans: the chamber, only the drivers that report, and the four fans set where they are read', `
   await connect();
-  const drivers = [['X', 45, 'ok'], ['Y', null, null], ['Z', null, 'otpw'], ['T1', null, 'ok'], ['T2', null, 'ot'], ['T3', null, null], ['T4', null, null]]
+  const drivers = [['X', 45, 'ok'], ['Y', null, null], ['Z', 71, 'otpw'], ['T1', null, 'ok'], ['T2', null, 'ot'], ['T3', null, null], ['T4', null, null]]
     .map(([name, temp, state]) => ({name, temp, state}));
-  await post({type: 'status', data: VIEW({chamber: 38.4, fan: 0.5, aux_fan: 0.25, drivers, purifier: {fitted: true, exhaust: 0.6, inner: 0}})});
+  await post({type: 'status', data: VIEW({chamber: 38.4, fan: 0.5, aux_fan: 0.25, drivers, features: ['cover_fan'], purifier: {fitted: true, mode: 3, recirculating: true, exhaust: 0, inner: 0.3}})});
   const card = byTest('temps-fans');
   assert(card && text(card).includes('Temperatures & fans'), 'the panel is on the Dashboard');
-  const kv = label => { const dt = qa('dt', card).find(d => text(d) === label); return dt ? text(dt.nextElementSibling) : null; };
-  eq([kv('Chamber'), kv('X driver'), kv('Y driver'), kv('Z driver'), kv('T1 driver'), kv('T2 driver')],
-     ['38 °C', '45 °C', '—', 'Hot (warning)', 'OK', 'Overheated'], 'temperatures and driver states');
-  eq([kv('Top cover exhaust fan'), kv('Top cover recirculation fan')], ['60 %', '0 %'], 'top-cover fan readings');
-  assert(text(card).includes('50 %') && text(card).includes('25 %'), 'part and aux fan readings');
+  assert(text(byTest('tf-chamber')).includes('38 °C'), 'the chamber is a reading of its own: ' + text(byTest('tf-chamber')));
+  const drv = n => { const el = q('[data-driver="' + n + '"]', card); return el ? text(q('dd', el)) : null; };
+  eq([drv('X'), drv('Y'), drv('Z'), drv('T1'), drv('T2'), drv('T3')], ['45 °C', null, '71 °C Hot (warning)', null, 'Overheated', null],
+     'only the drivers that read a temperature or warn; "OK" alone is not a reading');
+  assert(!text(byTest('tf-drivers')).includes('—'), 'no row of dashes: ' + text(byTest('tf-drivers')));
+  const now = id => text(q('[data-fan="' + id + '"] .tf-fan-now', card));
+  eq(['part', 'aux', 'exhaust', 'inner'].map(now), ['50 %', '25 %', '0 %', '30 %'], 'each of the four fans says what it runs at');
+  const at = qa('[data-fan]', card).map(e => e.getBoundingClientRect());
+  assert(at[1].left >= at[0].right - 1 && at[3].left >= at[2].right - 1 && at[2].top >= at[0].bottom - 1, 'two fans a row at the default width: ' + JSON.stringify(at.map(r => [Math.round(r.left), Math.round(r.top)])));
+  assert(!q('#fan-exhaust', byTest('controls')) && !q('#fan-inner', byTest('controls')), 'no fan is set from Controls any more');
+  assert(q('#fan-exhaust').disabled && text(q('#fan-exhaust-why')).includes('recirculates'), 'the exhaust is held while the cover recirculates, and says so: ' + text(q('#fan-exhaust-why')));
+  eq(q('#fan-exhaust').getAttribute('aria-describedby'), 'fan-exhaust-why', 'its field points at the reason');
+  await type(q('#fan-inner'), '40');
+  await click(q('[data-focus-key="fan-inner"]'));
+  eq(cmds('cover_fan').map(m => m.args), [{fan: 'inner', percent: 40}], 'a top-cover fan is set beside its reading');
+  await reply(last('cmd', 'cover_fan'), true);
   const set = id => q('[data-focus-key="tf-' + id + '"]');
   assert(set('part').disabled, 'Set waits for a value');
   await type(q('#tf-part'), '40');
   await click(set('part'));
   eq(cmds('fan').map(m => m.args), [{fan: 'part', percent: 40}], 'part fan sent');
   await reply(last('cmd', 'fan'), true);
-  await post({type: 'status', data: VIEW({busy: true, state: 'printing', drivers})});
+  await post({type: 'status', data: VIEW({drivers: drivers.map(d => ({...d, temp: null, state: null}))})});
+  assert(text(byTest('tf-drivers')).includes('Motors off') && !qa('[data-driver]', card).length, 'motors off: one line, not seven dashes: ' + text(byTest('tf-drivers')));
+  await post({type: 'status', data: VIEW({busy: true, state: 'printing', drivers, purifier: {fitted: true, exhaust: 0.6, inner: 0}})});
   await until(() => q('#tf-aux').disabled, 'fan fields off while printing');
   assert(set('aux').disabled && set('aux').getAttribute('aria-describedby') === 'heads-why', 'Set off, pointing at the reason');
+  assert(!q('#fan-exhaust') && now('exhaust') === '60 %', 'a printer without the command for them shows the cover fans as readings');
   eq(cmds('fan').length, 1, 'nothing more sent');
-`);
+  await post({type: 'status', data: VIEW({purifier: {fitted: false}})});
+  assert(!q('[data-fan="exhaust"]', card) && !q('[data-fan="inner"]', card), 'no top cover: no cover fans');
+`, { size: [1400, 900] });
 
-test('busy machine disables guided commands; unload-when-done is read-only; E-stop stays', `
+test('busy machine disables guided commands; unload-when-done has no row; E-stop stays', `
   await connect();
   await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING', options: {bed_level: true, unload_when_done: true}})});
   for (const sel of ['[data-load="0"]', '[data-unload="0"]', '[data-edit="0"]']) assert(q(sel).disabled, sel + ' disabled while calibrating');
@@ -256,53 +320,46 @@ test('busy machine disables guided commands; unload-when-done is read-only; E-st
   assert(!q('[data-test="estop"]').disabled, 'E-stop stays available');
   await tab('settings');
   assert(q('[data-cal="bed_mesh"]').disabled && document.body.textContent.includes('Calibration runs when it is idle'), 'calibration blocked, says why');
-  assert(q('#pref-unload_when_done').disabled, 'unload_when_done is not sent from this page');
-  assert(text(q('#pref-unload_when_done').closest('.oui-formrow')).includes('print setup pop-up'), 'says where to set it');
+  assert(q('#pref-bed_level') && !q('#pref-unload_when_done'), 'unload_when_done has no row here (chosen in the print setup pop-up)');
   await tab('dash');
   if (!q('.hc-pick')) { await until(() => last('cmd', 'spools'), 'spools asked'); await reply(last('cmd', 'spools'), {spools: [{id: 7, name: 'Black', vendor: 'G', material: 'PLA', colour: '#111', remaining: 500, initial: 1000}], bindings: {}, via: 'direct'}); }
   await post({type: 'offline', error: 'timed out'});
   assert(text(byTest('heads-why')).includes('doesn'), 'offline: the shared reason says so: ' + text(byTest('heads-why')));
-  for (const sel of ['[data-rfid="1"]', '.hc:nth-child(3) .hc-pick [role=combobox]']) {
+  for (const sel of ['[data-rfid="1"]', '.hc:nth-child(3) .hc-pick-btn']) {
     assert(q(sel) && (q(sel).disabled || q(sel).getAttribute('aria-disabled') === 'true'), sel + ' off while offline');
     eq(q(sel).getAttribute('aria-describedby'), 'heads-why', sel + ' points at the reason');
   }
 `);
 
-test('spool chooser search: brand, accents and abbreviations match fuzzily; an ID only matches exactly; nothing binds while searching', `
+test('spool chooser: colour first; search is fuzzy over brand and name; an ID only matches exactly; nothing binds while searching', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('cmd', 'spools'), 'spools asked');
-  await reply(last('cmd', 'spools'), {spools: [
+  const SP = [
     {id: 7, name: 'Matte Black', vendor: 'Prusament', material: 'PLA', colour: '#111111', remaining: 500, initial: 1000},
     {id: 12, name: 'Crème Brûlée', vendor: 'Polymaker', material: 'PLA', colour: '#eeddaa', remaining: 800, initial: 1000},
     {id: 120, name: 'Grey', vendor: 'Acme', material: 'PLA', colour: '#888888', remaining: 900, initial: 1000},
-    {id: 5, name: 'Red', vendor: '3DJake', material: 'PLA', colour: '#cc0000', remaining: 700, initial: 1000}], bindings: {}, via: 'direct'});
+    {id: 5, name: 'Red', vendor: '3DJake', material: 'PLA', colour: '#cc0000', remaining: 700, initial: 1000}];
+  await reply(last('cmd', 'spools'), {spools: SP, bindings: {}, via: 'direct'});
   await settle();
-  const pickRoot = q('.hc-pick');
-  pickRoot.querySelector('[role=combobox]').click();
-  await until(() => q('.p-select-overlay .p-select-filter'), 'the search box opens');
-  const opts = () => qa('.p-select-overlay [role=option]').map(o => text(o));
-  const search = async v => { await type(q('.p-select-overlay .p-select-filter'), v); await settle(); return opts(); };
-  assert(opts().some(o => o.includes('No spool')), 'without a search the list starts with No spool');
-  let r = await search('prus');
-  assert(r.length === 1 && r[0].includes('Matte Black'), 'brand: ' + r);
-  r = await search('creme');
-  assert(r.length === 1 && r[0].includes('Crème'), 'accents and case do not matter: ' + r);
-  r = await search('cb');
-  assert(r.length === 1 && r[0].includes('Crème'), 'name abbreviation (word starts): ' + r);
-  assert(!r.some(o => o.includes('No spool')), 'No spool is not offered while searching, so Enter cannot unlink');
-  r = await search('12');
-  assert(r.length === 1 && r[0].includes('Crème') && !r.some(o => o.includes('Grey')), 'a plain ID matches that spool only, not 120: ' + r);
-  r = await search('#120');
-  assert(r.length === 1 && r[0].includes('Grey'), '#ID matches that spool: ' + r);
-  r = await search('#1');
-  assert(r.length === 0, 'an ID is never matched by its letters: ' + r);
-  r = await search('3');
-  eq(r, [], 'a bare number is an ID only: "3" does not fuzzy-match the brand 3DJake');
-  r = await search('3d');
-  assert(r.length === 1 && r[0].includes('3DJake'), 'with a letter it is a brand search: ' + r);
+  eq(qa('[data-pick-panel], .oui-spick').length, 0, 'no picker is drawn until one is opened');
+  await click(q('[data-pick="0"]'));
+  const panel = () => q('[data-pick-panel="0"]');
+  await until(() => panel() && q('.oui-spick-q', panel()), 'the picker opens with its search');
+  assert(document.activeElement && panel().contains(document.activeElement), 'focus moves into the picker');
+  assert(q('[data-spick="none"]', panel()), 'No spool is offered');
+  const byColour = Object.fromEntries(SP.map(sp => [sp.colour, String(sp.id)]));
+  const ids = () => qa('[data-colour]', panel()).map(e => byColour[e.dataset.colour]).join(',');
+  const found = async v => { await type(q('.oui-spick-q', panel()), v); await settle(); return ids(); };
+  eq(await found('prus'), '7', 'brand');
+  eq(await found('creme'), '12', 'accents and case do not matter');
+  eq(await found('12'), '12', 'a plain ID matches that spool only, not 120');
+  eq(await found('#120'), '120', '#ID matches that spool');
+  eq(await found('3'), '', 'a bare number is an ID only: "3" does not fuzzy-match the brand 3DJake');
+  eq(await found('3d'), '5', 'with a letter it is a brand search');
   eq(cmds('bind_spool').length + cmds('unbind_spool').length, 0, 'nothing is bound or unbound while searching');
   await press('Escape'); await settle();
+  assert(!panel(), 'Escape closes the picker');
 `);
 
 test('spool chooser: the saved list shows before Spoolman answers; a pick shows at once and comes back when refused', `
@@ -317,10 +374,10 @@ test('spool chooser: the saved list shows before Spoolman answers; a pick shows 
   await reply(last('cmd', 'spools'), {spools: [SPOOL], bindings: {}, via: 'direct'});
   await settle();
   assert(!text(q('.u1-heads')).includes('saved list'), 'Spoolman answered: no longer the saved list');
-  q('.hc-pick [role=combobox]').click();
-  await until(() => qa('.p-select-overlay [role=option]').length > 1, 'the list opens');
-  await mouse(qa('.p-select-overlay [role=option]').find(o => text(o).includes('Matte Black')));
-  await until(() => !q('.p-select-overlay'), 'closed');
+  await click(q('[data-pick="0"]'));
+  await until(() => q('[data-pick-panel="0"] [data-colour="#111111"]'), 'the picker opens');
+  await click(q('[data-pick-panel="0"] [data-colour="#111111"]'));   // one black spool: picked at once
+  await until(() => !q('[data-pick-panel="0"]'), 'closed');
   await yes();
   eq(cmds('bind_spool').length, 1, 'bind asked');
   assert(q('.hc .oui-slot-amount'), 'the pick shows at once (the spool weight), before the plugin replied');
@@ -356,7 +413,7 @@ test('the printer photo: spools in the Spoolman colour, else the printer colour,
   const drawn = n => [cardSpool(n).dataset.level, cardSpool(n).hasAttribute('data-unknown'), cardSpool(n).querySelector('.oui-spool-unknown')?.textContent ?? null];
   eq(drawn(1), ['6', false, null], 'T1: 250 of 1000 g left');
   eq(drawn(2), ['1', true, '?'], 'T2: loaded, amount unknown: full reel with the unknown badge');
-  eq(drawn(3), ['8', false, null], 'T3: nothing loaded: the bare reel');
+  { const t3 = qa('.hc').find(c => text(c.querySelector('.oui-slot-badge')) === 'T3'); assert(t3 && !t3.querySelector('.oui-spool') && text(t3).includes('No filament'), 'T3: nothing loaded says so, with no reel: ' + text(t3)); }
   eq(drawn(4), ['2', false, null], 'T4: 900 of 1000 g left');
   eq(fig.getAttribute('role'), 'img');
   eq(fig.getAttribute('aria-label'), 'Printer and spools: T1 orange PETG, T2 blue PETG (in use), T3 empty, T4 multicolour PLA', 'says what each toolhead holds');
@@ -424,47 +481,6 @@ test('extended settings render the release format and an unfinished log is not A
   assert(alerts().includes('Result unknown'), 'an unfinished log is not Applied: ' + alerts());
 `, { needsGroups: true });
 
-test('settings: Open Filament Database is off by default; on and saved, its list line and Read again', `
-  await connect();
-  const config = {type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {installed: true}, automations: [],
-    settings: {mode: 'automagic', host: '', api_key: '', printer_name: 'Bench U1', spoolman_url: '', ofd_enabled: false}};
-  await post(config);
-  await tab('settings');
-  await until(() => q('.oui-settings-link[data-section="connection"]'), 'settings shown');
-  await click(q('.oui-settings-link[data-section="connection"]'));
-  await until(() => q('#ofd-on'), 'the OFD row');
-  assert(!q('#ofd-on').checked && !byTest('ofd-state'), 'off by default, nothing more shown');
-  await click(q('#ofd-on'));
-  await until(() => byTest('ofd-state'), 'turned on');
-  assert(text(byTest('ofd-state')).includes('Save to turn it on') && text(byTest('ofd-state')).includes('MIT'), 'saved first; the licence is named: ' + text(byTest('ofd-state')));
-  assert(!last('ofd'), 'nothing asked before the save');
-  await click(byTest('save'));
-  eq(last('save_settings').settings.ofd_enabled, true, 'saved on');
-  await reply(last('save_settings'), {saved: true});
-  await post({...config, settings: {...config.settings, ofd_enabled: true}});
-  await until(() => last('ofd'), 'once saved on, the line asks for the kept list');
-  await reply(last('ofd'), {on: true, fetched: 1795371399, version: '2026.11.22', count: 2133, stale: false, error: ''});
-  await until(() => text(byTest('ofd-state')).includes('2133'), 'the list line: ' + text(byTest('ofd-state')));
-  await click(byTest('ofd-refresh'));
-  eq(last('ofd').refresh, true, 'Read again asks OFD now');
-`);
-test('toolhead cards: an Open Filament Database proposal is marked untuned; picking it installs it by its id', `
-  await connect();
-  await post({type: 'status', data: VIEW()});
-  await until(() => last('preset_matches'), 'asked');
-  await reply(last('preset_matches'), {matches: [{head: 0, name: 'Generic PLA @U1', source: 'auto', score: 35, reasons: [['material', 'PLA']], confident: true, remembered_key: '',
-    candidates: [{name: 'Generic PLA @U1', score: 35, reasons: [['material', 'PLA']]}],
-    ofd: [{id: 'f667', name: 'Polymaker Panchroma Matte PLA (OFD)', score: 58, reasons: [['material', 'PLA'], ['vendor', 'Polymaker']]}]}]});
-  await until(() => q('[data-match="0"]'), 'T1 line');
-  await click(q('.oui-match-change', q('[data-match="0"]')));
-  await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'the candidate and the proposal');
-  const ofdRow = qa('.oui-match-option', q('[data-match="0"]'))[1];
-  assert(text(ofdRow).includes('OFD, untuned') && !ofdRow.disabled, 'marked and pickable: ' + text(ofdRow));
-  await click(ofdRow);
-  eq([last('preset_pick').head, last('preset_pick').ofd], [0, 'f667'], 'installed by its OFD id');
-  await reply(last('preset_pick'), {matches: [], note: 'Spooler puts it into its preset of spool #7 on its next sync'});
-  await until(() => toasts().includes('spool #7'), 'the note is shown: ' + toasts());
-`);
 
 test('settings draft survives mode switch; Saved needs the plugin answer', `
   await connect();
@@ -498,10 +514,11 @@ test('settings draft survives mode switch; Saved needs the plugin answer', `
 
 test('console routes M112 to the urgent path and shows replies', `
   await connect();
+  await EXPERT();
   await type(q('#console-cmd'), 'm112');
   await press('Enter');
   await until(dialogOpen, 'M112 asks like the E-stop button');
-  assert(btn('Stop now (E-stop)', dialogEl()), 'explicit confirm label');
+  assert(btn('Stop now', dialogEl()), 'explicit confirm label');
   await yes();
   eq(cmds('emergency_stop').length, 1, 'urgent path');
   eq(cmds('gcode'), [], 'not queued as G-code');
@@ -522,7 +539,10 @@ test('setup: the print, the printer, a card per filament with its head, spool an
   assert(line.includes('Snapmaker U1') && line.includes('192.168.1.40') && line.includes('Ready'), 'printer: ' + line);
   eq(qa('.su-card').length, 4, 'one card per filament');
   const c0 = q('.su-card[data-f="0"]');
-  assert(text(c0).includes('[1]') && text(c0).includes('PETG') && text(c0).includes('Head 1') && text(c0).includes('Generic Leaf Green'), 'card 1: ' + text(c0));
+  eq(text(c0.querySelector('.su-card-title')), 'Filament 1 · PETG', 'card title in words, no bracket');
+  assert(text(c0).includes('Head 1') && text(c0).includes('Generic Leaf Green'), 'card 1: ' + text(c0));
+  assert(!c0.querySelector('.hp text'), 'no head number inside the drawing: the text under it says it');
+  assert(c0.getAttribute('aria-haspopup') === 'dialog' && c0.querySelector('.su-card-chev'), 'a real button with a visible change sign');
   eq(getComputedStyle(c0.querySelector('.hp-strand')).stroke, 'rgb(108, 191, 90)', 'strand in the Spoolman colour');
   eq(getComputedStyle(q('.su-card[data-f="3"] .hp-strand')).stroke, 'rgb(245, 158, 11)', 'no spool: the printer colour');
   assert(byTest('preview') && byTest('preview').getAttribute('aria-label').includes('Top view'), 'preview drawn');
@@ -534,13 +554,43 @@ test('setup: the print, the printer, a card per filament with its head, spool an
   assert(tray[3] === 255 && tray[1] > tray[0] && tray[1] > tray[2], 'tray in its head colour (green): ' + tray);
   assert(inlay[2] > tray[2] + 40, 'the filament under the top shows through (blue): ' + inlay + ' vs ' + tray);
   eq(outside[3], 0, 'nothing printed: transparent');
-  assert(byTest('prefs') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
+  assert(byTest('menu') && byTest('flow-more') && byTest('cover-more'), 'extra controls offered');
+  eq(byTest('flow-more').getAttribute('aria-label'), 'Flow calibration heads', 'flow options say what opens');
+  eq(byTest('cover-more').getAttribute('aria-label'), 'Top cover options: Auto', 'cover options say what opens, with the value');
+  assert(!text(byTest('flow-more')).includes('…') && !text(byTest('cover-more')).includes('…'), 'no bare ellipsis buttons');
   assert(!alerts() && !byTest('send').disabled && text(byTest('send')) === 'Apply & continue', 'nothing to confirm');
   await click(byTest('send'));
   const s0 = __t.submits[0];
   eq(s0.map, {0: 0, 1: 2, 2: 1, 3: 3}, 'map');
   eq([s0.prefs.tangle_level, s0.prefs.exhaust_fan, s0.remember], ['medium', 60, true], 'prefs as offered');
 `, { mode: 'setup', data: SETUP_FULL });
+
+test('setup: a colour mismatch is a warning with both colours, each named', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  const c0 = q('.su-card[data-f="0"]'), hint = c0.querySelector('[data-test="colour-hint"]');
+  assert(hint, 'filament 1 (blue) on T1 (green): flagged');
+  eq(hint.dataset.tone, 'warn', 'warning tone');
+  const probe = document.createElement('span'); probe.style.color = 'var(--oui-warning)'; hint.append(probe);
+  eq(getComputedStyle(hint.querySelector('.su-mismatch-title')).color, getComputedStyle(probe).color, 'in the warning colour, not grey');
+  probe.remove();
+  assert(hint.querySelector('.oui-icon, svg'), 'warning icon');
+  assert(text(hint).includes('Colour differs'), 'says it in words: ' + text(hint));
+  const proj = hint.querySelector('[data-test="hint-project"]'), load = hint.querySelector('[data-test="hint-loaded"]');
+  eq([text(proj), text(load)], ['Project', 'Loaded'], 'each colour labelled');
+  eq(getComputedStyle(proj.querySelector('.oui-swatch')).backgroundColor, 'rgb(59, 130, 246)', 'project swatch: the filament colour');
+  eq(getComputedStyle(load.querySelector('.oui-swatch')).backgroundColor, 'rgb(108, 191, 90)', 'loaded swatch: the head colour');
+  assert(proj.compareDocumentPosition(load) & Node.DOCUMENT_POSITION_FOLLOWING, 'project then loaded');
+  assert(c0.getAttribute('aria-label').includes('T1 holds another colour'), 'in the card name too: ' + c0.getAttribute('aria-label'));
+  assert(!q('.su-card[data-f="3"] [data-test="colour-hint"]'), 'filament 4 (yellow) on T4 (amber): no flag');
+`, { mode: 'setup', data: SETUP_FULL });
+
+test('setup: at 900 px the four cards are two by two', `
+  await until(() => sent().some(m => m.ready), 'ready posted');
+  const r = qa('.su-card').map(c => c.getBoundingClientRect());
+  eq(r.length, 4, 'four cards');
+  assert(Math.abs(r[0].top - r[1].top) < 1 && Math.abs(r[2].top - r[3].top) < 1 && r[2].top > r[0].bottom, 'two rows of two: ' + r.map(x => Math.round(x.left) + ',' + Math.round(x.top)));
+  assert(Math.abs(r[0].left - r[2].left) < 1 && Math.abs(r[1].left - r[3].left) < 1 && Math.abs(r[0].width - r[3].width) < 1, 'two equal columns, no orphan');
+`, { mode: 'setup', data: SETUP_FULL, size: [900, 900] });
 
 test('setup: the top view drawn after the window opened takes the placeholder\'s place', `
   assert(byTest('preview-wait') && !byTest('preview'), 'a placeholder while the plugin draws the top view');
@@ -560,8 +610,11 @@ test('setup: no top view at all leaves no placeholder', `
 
 test('setup: a control the printer lacks is not shown', `
   await until(() => sent().some(m => m.ready), 'ready posted');
-  assert(!byTest('prefs') && !byTest('flow-more') && !q('#su-p-flow_calibrate') && !q('#su-p-time_lapse_camera') && !byTest('preview'), 'only what was offered');
+  assert(!byTest('flow-more') && !q('#su-p-flow_calibrate') && !q('#su-p-time_lapse_camera') && !byTest('preview'), 'only what was offered');
   assert(q('#su-p-bed_level'), 'bed leveling offered');
+  await click(byTest('menu')); await until(() => q('.oui-menu'), 'menu');
+  eq(qa('.oui-menu [data-menu]').map(b => b.dataset.menu), ['plugin-settings'], 'no print preferences to offer: only plugin settings');
+  await press('Escape'); await until(() => !q('.oui-menu'), 'menu closed');
   await click(byTest('cover-more'));
   await until(() => byTest('cover-pop'), 'cover popover');
   assert(!byTest('exhaust-mode') && !byTest('inner-mode'), 'no fan control without the command');
@@ -607,8 +660,14 @@ test('setup: the Print dialog\'s slots survive a toolhead refresh; Auto map stil
 test('setup: a busy printer locks the settings and Apply', `
   await until(() => sent().some(m => m.ready), 'ready posted');
   assert(text(byTest('busy')).includes('can’t change during a print'), 'busy notice: ' + text(byTest('busy')));
-  assert(byTest('send').disabled && q('.su-card').disabled && byTest('prefs').disabled && q('#su-p-bed_level').disabled, 'locked');
-  assert(text(q('#su-why')).includes('busy'), 'why');
+  assert(byTest('send').disabled && q('.su-card').disabled && q('#su-p-bed_level').disabled, 'locked');
+  assert(!q('#su-why'), 'busy is not said again above the buttons');
+  eq(document.body.textContent.split('change during a print').length - 1, 1, 'busy said once');
+  eq(byTest('send').getAttribute('aria-describedby'), 'su-busy', 'Apply points at the banner for why');
+  eq(byTest('busy').id, 'su-busy', 'the banner is that reason');
+  await click(byTest('menu')); await until(() => q('.oui-menu'), 'menu');
+  assert(q('.oui-menu [data-menu="prefs"]').disabled && !q('.oui-menu [data-menu="plugin-settings"]').disabled, 'preferences locked, plugin settings still open');
+  await press('Escape'); await until(() => !q('.oui-menu'), 'menu closed');
   await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {}});
   assert(!byTest('busy') && !byTest('send').disabled && !q('.su-card').disabled, 'unlocked when ready');
 `, { mode: 'setup', data: SETUP_BUSY });
@@ -621,9 +680,21 @@ test('setup: auto mapping, plugin settings, print preferences and the top-cover 
   assert(sent().some(m => m.refresh), 'asks the plugin to match again');
   await post({heads: ${JSON.stringify(SETUP_FULL.heads)}, busy: false, map: {0: 0, 1: 2, 2: 1, 3: 3}});
   eq(q('.su-card[data-f="0"]').dataset.t, '0', 'auto mapping replaces a hand choice');
-  await click(byTest('plugin-settings'));
-  assert(sent().some(m => m.open_settings), 'asks the tab to open Settings');
-  await click(byTest('prefs'));
+  assert(!byTest('plugin-settings') && !byTest('prefs'), 'no separate settings buttons: one overflow');
+  assert(!document.body.textContent.includes('once this window is closed'), 'no sentence explaining where it opens');
+  byTest('menu').focus();
+  await press('Enter');
+  await until(() => q('.oui-menu'), 'the overflow opens from the keyboard');
+  eq(byTest('menu').getAttribute('aria-haspopup'), 'menu', 'announced as a menu');
+  eq(qa('.oui-menu [role=menuitem]').map(b => text(b)), ['Print preferences', 'Plugin settings'], 'both destinations in one menu');
+  await until(() => document.activeElement && document.activeElement.dataset.menu === 'prefs', 'focus on the first item');
+  await press('ArrowDown');
+  eq(document.activeElement.dataset.menu, 'plugin-settings', 'arrows move');
+  await press('Enter');
+  await until(() => sent().some(m => m.open_settings), 'asks the tab to open Settings');
+  assert(document.activeElement === byTest('menu'), 'focus back on the menu button');
+  await press('Enter'); await until(() => q('.oui-menu [data-menu="prefs"]'));
+  await press('Enter');
   await until(() => byTest('prefs-dialog'), 'preferences dialog');
   assert(text(byTest('prefs-dialog')).includes('Air printing'), 'tangle detection named as air printing');
   eq(qa('[data-level="spaghetti_level"] [role=radio], [data-level="spaghetti_level"] button').length, 2, 'spaghetti: low/high only');
@@ -708,7 +779,8 @@ test('stock: without Spooler\'s list the tab lists U1 Control\'s own Spoolman an
   eq(text(q('[data-tab="stock"] .oui-appbar-count')), '2', 'the Stock tab counts the spools');
   await tab('stock');
   eq(stockRows().length, 2, 'the spools are listed, not a wait for Spooler');
-  assert(text(byTest('stock-own')).includes('straight from Spoolman'), 'says where the list comes from');
+  assert(!byTest('stock-own') && !q('.sc-notes .oui-banner'), 'ST1: the list works, so no banner about Spooler');
+  assert(text(byTest('stock-meta')).startsWith('2 spools'), 'the header counts the spools: ' + text(byTest('stock-meta')));
   assert(!text(byTest('stock-about')).includes('through the printer'), 'not read through the printer');
   await click(q('[data-stock="7"]'));
   await yes();
@@ -738,7 +810,8 @@ test('stock lists, filters and links with the list key and printer generation', 
   await tab('stock');
   const page = q('[aria-labelledby="oui-tab-stock"]');
   assert(byTest('stock-card').checkVisibility(), 'list shown while Spooler runs');
-  assert(text(q('.oui-pagehead-title', page)).includes('Stock (Spooler)'), 'named as stock of Spooler (X02)');
+  eq(text(q('.oui-pagehead-title', page)), 'Spools', 'ST1: named for what it lists, not the plugin that shares it');
+  assert(/^2 spools · updated /.test(text(byTest('stock-meta'))) && !text(q('.oui-pagehead', page)).includes('Spooler 0'), 'ST1: count and age, no plugin version: ' + text(byTest('stock-meta')));
   eq(stockRows().length, 2, 'both spools listed');
   assert(text(byTest('stock-about')).includes('recorded in Spoolman by U1 Control'), 'says who records filament use, behind the (i)');
   assert(!qa('p', page).some(e => text(e).includes('recorded in Spoolman')), 'no helper paragraph under the list');
@@ -817,7 +890,7 @@ test('stock: other Spoolman, stale and stopped states, each with its own severit
   eq(last('cmd', 'stock').args, {refresh: true}, 'Refresh asks Spooler for a new list');
   await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, state: 'stale', ts: Date.now() / 1000 - 600}}));
   const stale = byTest('stock-stale');
-  assert(stale && stale.dataset.state === 'stale' && stale.closest('.oui-pagehead') && text(stale).includes('read') && stockRows().length === 2, 'stale list stays; the page header says its age as a stale state');
+  assert(stale && stale.dataset.state === 'stale' && stale.closest('.oui-pagehead') && text(stale).includes('updated') && stockRows().length === 2, 'stale list stays; the page header says its age as a stale state');
   assert(text(byTest('stock-about')).includes('out of date'), 'what stale means is behind the (i)');
   assert(!q('[data-test="stock-card"] [data-tone="danger"], [data-test="stock-card"] [data-state="error"]'), 'stale is not shown as an error (U09)');
   await click(btn('Refresh stock'));
@@ -843,6 +916,94 @@ test('stock: busy printer disables links with a visible reason; refresh keeps fo
   btn('Refresh stock').click();
   await reply(last('cmd', 'stock'), STOCK());
   eq(document.activeElement.dataset.stock, '11', 'keyboard focus survives a refresh');
+`);
+
+test('stock: Link to on hover and focus, the row links too; empty spools last and in red; Use first after the name', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  const gone = {...ROWS[0], id: 12, name: 'Used Up', remaining: 0, low: true, use_first: false};
+  await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, rows: [gone, ...ROWS]}}));
+  await tab('stock');
+  eq(qa('.sc-row').map(r => r.dataset.row), ['7', '11', '12'], 'ST3: the empty spool sorts last');
+  const g = q('[data-gone="12"]');
+  eq(text(g), 'Empty', 'ST3: 0 g says empty');
+  const probe = document.createElement('span'); probe.style.color = 'var(--oui-danger)'; g.parentElement.append(probe);
+  eq(getComputedStyle(g).color, getComputedStyle(probe).color, 'ST3: in the danger colour'); probe.remove();
+  assert(!g.closest('.u1-low'), 'not the low colour');
+  const first = q('[data-test="use-first"]');
+  eq(text(first), 'Use first', 'ST6: capitalised');
+  assert(first.closest('.sc-id') && first.previousElementSibling && text(first.closest('p')).startsWith('White'), 'ST6: after the name');
+  const b = q('[data-stock="11"]');
+  await cdp({op: 'mouse', type: 'mouseMoved', x: 2, y: 2}); await sleep(300);   // the pointer may rest on a row from the last test
+  if (!matchMedia('(hover: none)').matches) eq(getComputedStyle(b).opacity, '0', 'ST2: the link button waits for hover or focus');
+  b.focus(); await settle();
+  eq(getComputedStyle(b).opacity, '1', 'ST2: Tab reaches it and shows it');
+  b.blur(); await settle();
+  await click(q('[data-row="11"] .sc-id'));
+  assert(dialogOpen() && dialogText().includes('#11'), 'ST2: the row itself links, asking first: ' + dialogText());
+  await yes();
+  eq(cmds('stock_assign').map(m => m.args.spool_id), [11], 'linked from the row');
+  await reply(last('cmd', 'stock_assign'), {bindings: {'0': 11}});
+  await until(() => q('[data-linked="11"]'), 'Linked');
+  eq(getComputedStyle(q('[data-linked="11"]')).opacity, '1', 'ST2: the Linked chip always shows');
+  await click(q('[data-row="11"] .sc-id'));
+  assert(!dialogOpen(), 'a linked row does nothing');
+`);
+
+test('stock: no spools and a failed read are centred states, with ways out and no Link-to panel', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, rows: []}}));
+  await tab('stock');
+  const card = byTest('stock-card');
+  assert(q('.oui-empty', card) && text(q('.oui-empty .oui-strong', card)) === 'Spoolman has no spools in stock.', 'ST4: the empty state: ' + text(card));
+  assert(!byTest('stock-head') && !q('.sc-table'), 'ST4: no Link-to panel and no table without rows');
+  await click(btn('Refresh stock'));
+  await fail(last('cmd', 'stock'), 'HTTP 502 from http://box:7912/api/v1/spool');
+  const err = q('.oui-empty[data-state="error"]', byTest('stock-card'));
+  assert(err, 'ST4: an error state');
+  eq(text(q('.oui-strong', err)), 'Couldn’t read your spools.', 'ST4: a plain sentence as the title');
+  assert(text(q('.oui-meta', err)).includes('HTTP 502'), 'the detail at most under it');
+  const asked = cmds('stock').length;
+  await click(byTest('stock-retry'));
+  eq(cmds('stock').length, asked + 1, 'ST4: Try again reads again');
+  await fail(last('cmd', 'stock'), 'boom');
+  await click(byTest('stock-settings'));
+  await until(() => q('[aria-labelledby="oui-tab-settings"]')?.checkVisibility(), 'ST4: Open Settings goes to Settings');
+`);
+
+test('stock at 900 px: the four Link to targets are one row', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  await reply(last('cmd', 'stock'), STOCK());
+  await tab('stock');
+  const tops = qa('[data-stock-target]').map(e => Math.round(e.getBoundingClientRect().top));
+  eq(new Set(tops).size, 1, 'ST5: one row of four: ' + tops);
+`, { size: [900, 900] });
+
+test('stock with 2000 spools: only the rows in view are drawn; a short list stays a plain table', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'stock'));
+  const N = 2000;
+  await reply(last('cmd', 'stock'), STOCK({stock: {...STOCK().stock, rows: Array.from({length: N}, (_, k) => ({...ROWS[k % 2], id: 1000 + k, name: 'Spool ' + k, remaining: 100 + k, use_first: false}))}}));
+  const t0 = performance.now();
+  await tab('stock');
+  await until(() => qa('.sc-row').length, 'rows');
+  const took = performance.now() - t0;
+  assert(qa('.sc-row').length < 60, 'P3: only the rows in view: ' + qa('.sc-row').length);
+  assert(took < 1500, 'opens at once: ' + Math.round(took) + ' ms');
+  eq([...new Set(qa('.sc-row').map(r => Math.round(r.getBoundingClientRect().height)))], [56], 'every row is exactly the row size');
+  const sc = q('.sc-wrap .p-virtualscroller');
+  for (let k = 0; k < 3; k++) { sc.scrollTop = sc.scrollHeight; sc.dispatchEvent(new Event('scroll')); await settle(); await settle(); }
+  assert(qa('.sc-row').some(r => r.dataset.row === String(1000 + N - 1)), 'the last spool scrolls into view');
+  const last1 = q('[data-row="' + (1000 + N - 1) + '"]').getBoundingClientRect(), box = sc.getBoundingClientRect();
+  assert(last1.bottom <= box.bottom + 1, 'and is not cut off: ' + last1.bottom + ' > ' + box.bottom);
+  await type(q('input[type=search]', q('[aria-labelledby="oui-tab-stock"]')), 'Spool 19'); await settle();
+  assert(!q('.sc-wrap .p-virtualscroller') && qa('.sc-row').length === 111, 'P3: a short result is a plain table again: ' + qa('.sc-row').length);
 `);
 
 test('stock: many spools scroll inside the table; the reel never sets the row height; plain note is not a box', `
@@ -883,8 +1044,8 @@ test('U01/U12: destructive dialogs name both answers; E-stop apart from Cancel',
   await no();
   eq(cmds('cancel'), [], 'Keep printing sends nothing');
   await click(byTest('estop'));
-  assert(btn('Stop now (E-stop)', dialogEl()) && btn('Go back', dialogEl()), 'E-stop dialog labels');
-  assert(!dialogText().includes('Klipper will halt'), 'plain language (U10)');
+  assert(btn('Stop now', dialogEl()) && btn('Go back', dialogEl()), 'E-stop dialog labels');
+  assert(!/Klipper|E-stop|[(]/.test(dialogText()), 'plain language, nothing in brackets (U10): ' + dialogText());
   await no();
   assert(byTest('estop').closest('.oui-appbar') && !byTest('cancel').closest('.oui-appbar'), 'E-stop in its own group, in the app bar, away from Cancel');
 `);
@@ -967,7 +1128,7 @@ test('E-stop: in the app bar and usable on every tab; while connecting it is sho
     assert(r.width > 0 && r.height > 0 && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('[data-test="estop"]') === b, name + ': E-stop visible and on top');
   }
   await click(byTest('estop'));
-  assert(btn('Stop now (E-stop)', dialogEl()), 'asks first, from the Settings tab too');
+  assert(btn('Stop now', dialogEl()), 'asks first, from the Settings tab too');
   await yes();
   eq(cmds('emergency_stop').length, 1, 'sent from the Settings tab');
 `);
@@ -1048,11 +1209,20 @@ test('stale status: the banner is announced once; its ticking age is kept out of
 test('U03: known target offline keeps E-stop on the urgent path; other commands off', `
   await until(() => last('hello'));
   await fail(last('hello'), 'the U1 did not answer in 5 s');
-  assert(text(byTest('target-alert')).includes('U1 unreachable'), 'unreachable, not "no target"');
-  eq(byTest('target-alert').getAttribute('aria-live'), 'assertive', 'unreachable is announced at once, as before 0.9.0');
+  // A printer that never answered: the Dashboard is one panel saying so, with the way out, not a page of empty cards.
+  const panel = byTest('unreachable');
+  assert(panel && text(panel).includes('U1 unreachable') && text(panel).includes('did not answer in 5 s'), 'unreachable, not "no target": ' + text(panel));
+  eq(panel.getAttribute('role'), 'alert', 'unreachable is announced at once, as before 0.9.0');
+  assert(q('#heads-why') === panel && qa('#heads-why').length === 1, 'the reason is said once, by the panel');
+  eq([byTest('job-card'), byTest('temps-fans'), byTest('controls'), q('.oui-dash-grid')], [null, null, null, null], 'no dashboard of empty cards');
+  assert(btn('Try again', panel) && btn('Open Settings', panel), 'both ways out');
+  eq([byTest('pause'), byTest('cancel')], [null, null], 'no print known: nothing to pause or cancel');
+  await tab('files');
+  assert(text(byTest('target-alert')).includes('U1 unreachable') && byTest('target-alert').getAttribute('aria-live') === 'assertive', 'on another tab the banner says it, assertively');
   eq(q('#heads-why').closest('[aria-live]'), byTest('target-alert'), 'the reason is in the assertive region');
   eq(q('#heads-why').getAttribute('role'), 'none', 'the banner does not add a second live region');
-  eq([byTest('pause'), byTest('cancel')], [null, null], 'no print known: nothing to pause or cancel');
+  eq(qa('#heads-why').length, 1, 'still said once');
+  await tab('dash');
   assert(byTest('sync').disabled && byTest('sync').getAttribute('aria-describedby') === 'heads-why', 'normal commands off, pointing at the reason');
   assert(!byTest('estop').disabled, 'E-stop available for the known target');
   await click(byTest('estop'));
@@ -1179,7 +1349,7 @@ test('X04: host language pt_BR gives Portuguese, including safety dialogs', `
   assert(btn('Cancelar impressão', dialogEl()) && btn('Continuar imprimindo', dialogEl()), 'cancel dialog in pt-BR');
   await no();
   await click(byTest('estop'));
-  assert(btn('Parar agora (E-stop)', dialogEl()) && btn('Voltar', dialogEl()), 'E-stop dialog in pt-BR');
+  assert(btn('Parar agora', dialogEl()) && btn('Voltar', dialogEl()), 'E-stop dialog in pt-BR');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1233,7 +1403,7 @@ test('i18n: host language de_DE gives de, including safety dialogs and errors', 
   assert(btn('Druck abbrechen', dialogEl()) && btn('Weiterdrucken', dialogEl()), 'cancel dialog in de');
   await no();
   await click(byTest('estop'));
-  assert(btn('Jetzt stoppen (Not-Aus)', dialogEl()) && btn('Zurück', dialogEl()), 'E-stop dialog in de');
+  assert(btn('Jetzt stoppen', dialogEl()) && btn('Zurück', dialogEl()), 'E-stop dialog in de');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1252,7 +1422,7 @@ test('i18n: host language es_ES gives es, including safety dialogs and errors', 
   assert(btn('Cancelar impresión', dialogEl()) && btn('Seguir imprimiendo', dialogEl()), 'cancel dialog in es');
   await no();
   await click(byTest('estop'));
-  assert(btn('Detener ahora (parada de emergencia)', dialogEl()) && btn('Volver', dialogEl()), 'E-stop dialog in es');
+  assert(btn('Detener ahora', dialogEl()) && btn('Volver', dialogEl()), 'E-stop dialog in es');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1271,7 +1441,7 @@ test('i18n: host language zh_CN gives zh-CN, including safety dialogs and errors
   assert(btn('取消打印', dialogEl()) && btn('不取消', dialogEl()), 'cancel dialog in zh-CN');
   await no();
   await click(byTest('estop'));
-  assert(btn('立即停止（紧急停止）', dialogEl()) && btn('返回', dialogEl()), 'E-stop dialog in zh-CN');
+  assert(btn('立即停止', dialogEl()) && btn('返回', dialogEl()), 'E-stop dialog in zh-CN');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1290,7 +1460,7 @@ test('i18n: host language pl_PL gives pl, including safety dialogs and errors', 
   assert(btn('Anuluj druk', dialogEl()) && btn('Drukuj dalej', dialogEl()), 'cancel dialog in pl');
   await no();
   await click(byTest('estop'));
-  assert(btn('Zatrzymaj teraz (E-stop)', dialogEl()) && btn('Wróć', dialogEl()), 'E-stop dialog in pl');
+  assert(btn('Zatrzymaj teraz', dialogEl()) && btn('Wróć', dialogEl()), 'E-stop dialog in pl');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1309,7 +1479,7 @@ test('i18n: host language cs_CZ gives cs, including safety dialogs and errors', 
   assert(btn('Zrušit tisk', dialogEl()) && btn('Pokračovat v tisku', dialogEl()), 'cancel dialog in cs');
   await no();
   await click(byTest('estop'));
-  assert(btn('Zastavit hned (E-stop)', dialogEl()) && btn('Zpět', dialogEl()), 'E-stop dialog in cs');
+  assert(btn('Zastavit hned', dialogEl()) && btn('Zpět', dialogEl()), 'E-stop dialog in cs');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1467,7 +1637,7 @@ test('files: rename in place, from the details or the context menu; an unchanged
   q('[data-file="gcodes/clip.gcode"]').dispatchEvent(new MouseEvent('contextmenu', {bubbles: true, cancelable: true, clientX: centre(q('[data-file="gcodes/clip.gcode"]'))[0], clientY: centre(q('[data-file="gcodes/clip.gcode"]'))[1]}));
   await until(() => q('.oui-menu'), 'a menu');
   eq(qa('.oui-menu [role=menuitem]').map(text), ['Print', 'Save', 'Rename', 'Move to…', 'Delete'], 'the page\\u2019s actions, then rename, move and delete');
-  eq(qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file), ['gcodes/clip.gcode'], 'a file outside the selection is selected alone');
+  eq(qa('.oui-files-row[aria-selected="true"], .oui-files-row[aria-current]').map(r => r.dataset.file), ['gcodes/clip.gcode'], 'a file outside the selection is looked at alone');
   await click(qa('.oui-menu [role=menuitem]').find(b => text(b) === 'Rename'));
   await until(() => document.activeElement === field() && field().value === 'clip.gcode', 'renamed from the menu');
   await press('Escape');
@@ -1476,6 +1646,15 @@ test('files: rename in place, from the details or the context menu; an unchanged
   await until(() => document.activeElement === field(), 'F2 renames the focused file');
   await press('Escape');
   eq(cmds('rename').length, 2, 'Escape sends nothing');
+`);
+
+test('files: the kind tag only in a folder with more than one kind', `
+  await connect();
+  await tab('files');
+  await trees();
+  await until(() => last('cmd', 'files'));
+  await reply(last('cmd', 'files'), {...${JSON.stringify(FILES)}, files: [{name: 'benchy.gcode', size: 10, modified: 5}, {name: 'part.3mf', size: 5, modified: 4}]});
+  eq(qa('.oui-files-row .oui-chip').map(text), ['G-code', '3MF'], 'F1: mixed folder: each row says its kind');
 `);
 
 test('files: filter by name and show each file\'s filament', `
@@ -1490,10 +1669,9 @@ test('files: filter by name and show each file\'s filament', `
   await type(q('#files-filter'), 'BNCH');
   eq(rows(), ['gcodes/benchy.gcode'], 'fuzzy: case-insensitive, the letters in order');
   eq(qa('.oui-files-row .oui-files-hit').map(text).join(''), 'bnch', 'the matched letters are marked');
-  await click(btn('Clear', q('.oui-files-bar')));
   assert(text(q('.oui-files-bar')).includes('Showing 1 of 2 files'), 'with nothing selected the bar says how many of the files are shown: ' + text(q('.oui-files-bar')));
   eq([q('#files-filter').placeholder, q('#files-filter').getAttribute('aria-label')], ['Search by name', 'Search files'], 'the search field, named as in the other printer plugin');
-  eq(text(q('.oui-files-row .oui-chip')), 'G-code', 'a print file is tagged G-code');
+  eq(qa('.oui-files-row .oui-chip').length, 0, 'F1: print files are all G-code, so no row carries a kind tag');
   assert(q('[data-folder="gcodes/sub"]'), 'the folder tree is not filtered');
   await type(q('#files-filter'), 'zzz');
   assert(text(byTest('files')).includes('No file matches'), 'says nothing matches');
@@ -1516,6 +1694,7 @@ const FILES_OPEN = `
   const again = async (tree, answer) => { await trees(tree); await until(() => last('cmd', 'files').id !== listed, 'listed again'); listed = last('cmd', 'files').id; if (answer) await reply(last('cmd', 'files'), answer); };
   const row = n => q('[data-file="gcodes/' + n + '.gcode"]');
   const picked = () => qa('.oui-files-row[aria-selected="true"]').map(r => r.dataset.file.split('/').pop());
+  const tick = el => { el.dispatchEvent(new MouseEvent('click', {bubbles: true, ctrlKey: true})); return settle(); };   // a plain click only looks at a file (5.14)
   const folderEl = id => q('[data-folder="' + id + '"]');
   const bar = () => q('.oui-files-bar');
 `;
@@ -1523,12 +1702,12 @@ test('files: a tree of the printer\'s folders, several files selected, moved by 
   ${FILES_OPEN}
   eq(cmds('folders').map(m => [m.args.root, m.gen]).sort(), [['camera', 1], ['gcodes', 1]], 'one walk a root, for the selected printer');
   eq(qa('[data-folder]').map(f => [f.dataset.folder, text(f.querySelector('.oui-files-foldername')), f.getAttribute('aria-level')]),
-    [['gcodes', 'Print files', '1'], ['gcodes/sub', 'sub', '2'], ['camera', 'Timelapses & camera', '1']], 'roots named and open, print files first; a folder inside a closed one is not shown');
+    [['gcodes', 'Print files', '1'], ['gcodes/sub', 'sub', '2'], ['camera', 'Time-lapses', '1']], 'roots named and open, print files first; a folder inside a closed one is not shown');
   eq(folderEl('gcodes').getAttribute('aria-selected'), 'true', 'the open folder is marked');
   eq(text(q('[aria-labelledby="oui-tab-files"] .oui-pagehead-meta')), '2 GB free', 'free space in the page header');
   assert(text(bar()).includes('3 files'), 'the bar counts the files: ' + text(bar()));
-  await click(row('a'));
-  eq(picked(), ['a.gcode'], 'a click selects one');
+  await tick(row('a'));
+  eq(picked(), ['a.gcode'], 'Ctrl-click selects one');
   row('c').dispatchEvent(new MouseEvent('click', {bubbles: true, shiftKey: true})); await settle();
   eq(picked(), ['a.gcode', 'b.gcode', 'c.gcode'], 'Shift-click selects the range');
   assert(text(bar()).includes('3 selected') && !btn('Print a.gcode'), 'the bar says how many; the actions of one file are gone: ' + text(bar()));
@@ -1831,8 +2010,8 @@ test('files: a card shows its name on two lines at most, broken between words, w
 
 test('files: Delete asks once, with the names; the camera folder is read only and says why', `
   ${FILES_OPEN}
-  await click(row('a'));
-  row('b').dispatchEvent(new MouseEvent('click', {bubbles: true, ctrlKey: true})); await settle();
+  await tick(row('a'));
+  await tick(row('b'));
   eq(picked(), ['a.gcode', 'b.gcode'], 'Ctrl-click adds one');
   const del = btn('Delete', bar());
   assert(del.classList.contains('p-button-danger') && del.classList.contains('p-button-outlined'), 'Delete is a red outline in the page');
@@ -1871,7 +2050,7 @@ test('files: Delete asks once, with the names; the camera folder is read only an
   await click(folderEl('camera'));
   eq(last('cmd', 'files').args.path, 'camera', 'the other root');
   await reply(last('cmd', 'files'), {path: 'camera', dirs: [], files: [{name: 'shot.jpg', size: 2000, modified: 9}]});
-  await click(q('[data-file="camera/shot.jpg"]'));
+  await tick(q('[data-file="camera/shot.jpg"]'));
   assert(q('#files-ro') && text(q('#files-ro')) === 'Read only', 'says it is read only, once');
   assert(btn('Delete', bar()).disabled && btn('Delete', bar()).getAttribute('aria-describedby') === 'files-ro', 'Delete off, pointing at the reason');
   assert(q('.oui-files-move').classList.contains('p-disabled') && !q('[data-files-mkdir]') && !byTest('folder-delete'), 'Move off; no folder is made, renamed or deleted here');
@@ -1912,7 +2091,7 @@ test('files: newest first; a read that fails says so, keeps the tree and reads a
 // A narrow tab: the folders go above the list and the open file's details under it. The list keeps its rows.
 for (const size of [[420, 900], [600, 720]]) test(`files: at ${size.join('x')} the rows stay in sight with a file's details open`, `
   ${FILES_OPEN}
-  await click(row('b'));
+  await tick(row('b'));
   await until(() => btn('Print b.gcode'), 'the details of the file are open');
   await settle();
   const box = sel => q(sel).getBoundingClientRect();
@@ -2061,7 +2240,8 @@ test('time-lapses: one row per video with its cover; saving says where the file 
   assert(text(panel).includes('Listing time-lapses'), 'loading is said');
   await reply(last('cmd', 'timelapses'), ${JSON.stringify(TL)});
   eq(qa('.tl-name', panel).map(text), ['benchy', 'vase', 'no cover'], 'print names, in the order the plugin gave');
-  assert(text(row('benchy_20261116130921.mp4')).includes('benchy_20261116130921.mp4') && text(row('benchy_20261116130921.mp4')).includes('376 kB'), 'file name and size: ' + text(row('benchy_20261116130921.mp4')));
+  assert(!text(row('benchy_20261116130921.mp4')).includes('benchy_20261116130921.mp4') && text(row('benchy_20261116130921.mp4')).includes('376 kB'), 'F4: print name and size, no raw file name on screen: ' + text(row('benchy_20261116130921.mp4')));
+  eq(q('[title]', row('benchy_20261116130921.mp4')).title, 'benchy_20261116130921.mp4', 'F4: the file name stays as the row’s title');
   assert(text(panel).includes('3 videos'), 'count in the header');
   eq(text(q('#timelapses-h')), 'Time-lapses', 'its own titled section');
   eq(panel.getAttribute('aria-labelledby'), 'timelapses-h', 'labelled by its title');
@@ -2113,7 +2293,7 @@ test('time-lapses: delete asks first, names both answers, takes the video and ke
   await reply(last('cmd', 'timelapses'), ${JSON.stringify({ ...TL, videos: TL.videos.slice(1) })});
   eq(qa('[data-timelapse]', panel).map(r => r.dataset.timelapse), ['timelapse/vase_20261115080000.mp4', 'timelapse/no cover.mp4'], 'the row is gone');
   assert(text(panel).includes('2 videos'), 'count follows');
-  await until(() => document.activeElement === byTest('tl-refresh'), 'focus goes to Refresh, not to the top of the page');
+  await until(() => document.activeElement === q('[data-timelapse="timelapse/vase_20261115080000.mp4"] .tl-del', panel), 'focus goes to the next video’s Delete, not to the top of the page');
   assert(toasts().includes('Deleted'), 'success is said');
   btn('Delete the time-lapse no cover.mp4').focus();
   await click(btn('Delete the time-lapse no cover.mp4'));
@@ -2132,21 +2312,21 @@ test('time-lapses: no printer, empty, error with a way out, firmware without the
   await tab('files');
   const panel = byTest('timelapses');
   assert(text(panel).includes('Connect to a U1 to see its time-lapses.'), 'no printer yet: ' + text(panel));
-  assert(byTest('tl-refresh').disabled, 'nothing to refresh without a printer');
+  assert(!byTest('tl-refresh') && byTest('files-refresh').disabled, 'F3: one Refresh for the page, and nothing to refresh without a printer');
   eq(cmds('timelapses'), [], 'nothing asked without a printer');
   await connect();
   await until(() => last('cmd', 'timelapses'), 'asked once connected');
   await reply(last('cmd', 'timelapses'), {supported: true, videos: []});
   assert(text(panel).includes('No time-lapses yet.') && !q('table', panel), 'empty state: ' + text(panel));
-  await click(byTest('tl-refresh'));
-  eq(cmds('timelapses').length, 2, 'Refresh asks again');
+  await click(byTest('files-refresh'));
+  eq(cmds('timelapses').length, 2, 'the page Refresh asks for the time-lapses again too');
   assert(q('[aria-busy="true"]', panel) || q('.p-button-loading', panel), 'busy while it waits');
   await fail(last('cmd', 'timelapses'), 'printer said: boom');
   eq(text(q('[role=alert]', panel)).includes('Couldn’t list the time-lapses: printer said: boom'), true, 'the error is announced in the section: ' + text(panel));
   await click(btn('Try again', panel));
   await reply(last('cmd', 'timelapses'), {supported: false, videos: []});
   assert(text(panel).includes('This printer shares no time-lapse folder.') && !q('[role=alert]', panel), 'a firmware without the folder is said, not shown as an error');
-  await click(byTest('tl-refresh'));
+  await click(byTest('files-refresh'));
   await reply(last('cmd', 'timelapses'), ${JSON.stringify(TL)});
   eq(qa('[data-timelapse]', panel).length, 3, 'listed');
   const before = cmds('timelapses').length;
@@ -2200,19 +2380,28 @@ test('camera: save the picture on screen', `
   await until(() => toasts().includes('Saved to'), 'says where it was saved');
 `);
 
-test('camera: frame rate choice starts at the stored rate, is sent to the plugin and says its limits', `
+test('camera: the frame rate is a setting of its widget, starts at the stored rate, is sent to the plugin and says its limits', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [], settings: {mode: 'automagic', camera_fps: 10}});
-  eq(byTest('cam-fps'), null, 'no choice while the camera is off');
+  eq(byTest('cam-fps'), null, 'no rate in the card header');
   await click(byTest('camera'));
-  const sel = byTest('cam-fps');
-  assert(sel && text(sel).includes('10 fps'), 'shows the stored rate: ' + text(sel));
-  eq(q('[role=combobox]', sel).getAttribute('aria-describedby'), 'cam-fps-help', 'the combobox itself is described by its help');
-  assert(text(q('#cam-fps-help')).includes('can be lower'), 'does not promise the rate: ' + text(q('#cam-fps-help')));
-  await pick(sel, '30 fps');
-  eq(last('camera_fps'), {type: 'camera_fps', value: 30}, 'choice sent to the plugin');
-  assert(text(byTest('cam-fps')).includes('30 fps'), 'choice kept on screen');
+  await post({type: 'frame', image: ${JSON.stringify(PIXEL)}});
+  await until(() => q('.oui-camera-overlay'), 'live');
+  assert(text(q('.oui-camera-overlay')).includes('10 fps'), 'the picture says the stored rate: ' + text(q('.oui-camera-overlay')));
+  assert(text(q('#cam-fps-help')).includes('can be lower') && !text(q('#cam-fps-help')).includes('30'), 'does not promise the rate: ' + text(q('#cam-fps-help')));
+  eq(last('camera_fps'), undefined, 'nothing sent while the rate is the stored one');
+  await click(byTest('dash-edit'));
+  await click(q('[data-settings="camera"]'));
+  const sel = q('[data-setting="fps"]', byTest('dash-settings'));
+  assert(text(sel).includes('10 fps'), 'the setting starts at the stored rate: ' + text(sel));
+  await pick(sel, '15 fps');
+  await click(byTest('dash-save'));
+  await until(() => last('camera_fps'), 'choice sent to the plugin');
+  eq(last('camera_fps'), {type: 'camera_fps', value: 15}, 'the rate chosen');
+  const layout = last('dashboard').value;
+  eq(layout.layouts[layout.active].items.find(i => i.id === 'camera').cfg, {fps: 15}, 'kept with the layout');
+  assert(text(q('.oui-camera-overlay')).includes('15 fps'), 'and said over the picture');
 `);
 
 test('settings: says whether the process preset runs the toolhead choice and when its pop-up opens', `
@@ -2231,8 +2420,13 @@ test('settings: says whether the process preset runs the toolhead choice and whe
   assert(text(byTest('ps-agent')).includes('Printer Agent to u1control'), 'says how to pick U1 Control as the printer agent: ' + text(byTest('ps-agent')));
   assert(text(byTest('ps-agent')).includes('start ticked'), 'says the dialog boxes start ticked and the settings decide');
   assert(text(byTest('ps-agent')).includes('OrcaSlicer remembers the box'), 'says OrcaSlicer keeps an unticked box');
+  eq(qa('details', byTest('print-setup')).map(d => [text(q('summary', d)), d.open]), [['When it runs', false], ['With printer agents', false]], 'the long texts sit behind two closed disclosures');
+  assert(!byTest('ps-rule').checkVisibility() && !byTest('ps-agent').checkVisibility(), 'closed: not on screen');
   await cfg({preset: '0.20 Standard @U1', on: true}, 'always');
-  assert(!byTest('ps-off') && text(byTest('ps-on')).includes('runs for the process preset'), 'running: a plain line');
+  assert(!byTest('ps-off') && text(byTest('ps-on')).includes('runs for the process preset'), 'running: a status line');
+  eq(text(q('.oui-status', byTest('ps-on'))), 'On', 'with an On chip');
+  await click(q('summary', byTest('ps-when')));
+  assert(byTest('ps-rule').checkVisibility(), 'opens on a click');
   assert(text(byTest('ps-rule')).includes('every print'), 'always rule');
   await cfg(null, 'never');
   assert(!byTest('ps-off') && !byTest('ps-on'), 'no U1 preset: nothing claimed about it');
@@ -2270,25 +2464,29 @@ test('requirements: one section; each row says status, why and how; Check again 
   await post({type: 'requirements', items: REQS('unknown', 'missing', 'missing', 'missing')});
   eq(qa('[data-test="requirements"]').length, 1, 'one Requirements section');
   eq(qa('[data-test="requirements"] .oui-req').map(r => r.dataset.test), ['req-agents', 'req-ext', 'req-spoolman', 'req-spooler'], 'four rows');
-  eq(reqStatus('agents'), 'Not detected', 'agents: not detected');
+  eq(reqStatus('agents'), 'Missing', 'agents: not detected');
+  assert(text(reqRow('agents')).includes('Not detected'), 'the detail says not detected');
   eq(q('.oui-status', reqRow('agents')).dataset.state, 'warn', 'a warning, not an error');
   assert(reqSteps('agents').some(x => x.includes('Developer tab > Experimental Features') && x.includes('Use printer agents instead of print hosts')), 'names the exact preference: ' + reqSteps('agents'));
   assert(reqSteps('agents').some(x => x.includes('Restart OrcaSlicer')), 'says to restart');
-  eq(reqStatus('ext'), 'Official firmware', 'stock firmware');
+  eq(reqStatus('ext'), 'Missing', 'stock firmware');
+  assert(text(reqRow('ext')).includes('Official firmware'), 'the detail says it is the official firmware');
   assert(reqSteps('ext').some(x => x.includes('firmware_config: true')), 'how to install the Extended Firmware');
   assert(q('a[href*="SnapmakerU1-Extended-Firmware"]', reqRow('ext')), 'links the project');
-  eq(reqStatus('spoolman'), 'Not set', 'no Spoolman');
+  eq(reqStatus('spoolman'), 'Missing', 'no Spoolman');
+  assert(text(reqRow('spoolman')).includes('Not set'), 'the detail says none is set');
   assert(reqSteps('spoolman').some(x => x.startsWith('macOS')) && reqSteps('spoolman').some(x => x.startsWith('Linux')), 'one line per OS: ' + reqSteps('spoolman'));
   assert(q('a[href="https://github.com/Donkie/Spoolman"]', reqRow('spoolman')), 'official Spoolman link');
   eq(reqRow('spooler').dataset.status, 'missing', 'Spooler from the plugin check');
   eq(q('.oui-req-link', reqRow('spooler')).getAttribute('href'), 'https://example.invalid/spooler', 'Spooler install link');
   await post({type: 'requirements', items: REQS('ok', 'ok', 'ok')});
-  eq(reqStatus('agents'), 'On', 'agents on');
-  eq(reqStatus('spoolman'), 'Set', 'Spoolman set');
+  eq(reqStatus('agents'), 'Ready', 'agents on');
+  eq(reqStatus('spoolman'), 'Ready', 'Spoolman set');
+  eq(['agents', 'ext', 'spoolman', 'spooler'].map(reqStatus), ['Ready', 'Ready', 'Ready', 'Ready'], 'one chip word for every row');
   assert(text(reqRow('spoolman')).includes('http://box:7912'), 'shows the address');
   eq(qa('[data-test="requirements"] .oui-req-install').length, 0, 'nothing to install: no steps');
   const before = cmds('spools').length;
-  await click(q('.oui-req-check', reqRow('agents')));
+  await click(byTest('req-check'));
   assert(sent().some(m => m.type === 'requirements' && m.recheck === true), 'Check again rechecks');
   assert(cmds('spools').length > before, 'and asks the printer for its Spoolman link again');
 `);
@@ -2297,8 +2495,11 @@ test('requirements: printer screen stays on stock firmware, off, with its reason
   await connect('stock');
   await post({type: 'status', data: VIEW()});
   assert(byTest('screen-card'), 'the card is not hidden on stock firmware');
-  assert(byTest('screen-show').disabled, 'Show screen is off');
-  assert(text(byTest('screen-card')).includes('Needs the U1 Extended Firmware'), 'one-line reason: ' + text(byTest('screen-card')));
+  eq(byTest('screen-show'), null, 'no Show screen that cannot work');
+  assert(text(byTest('screen-card')).includes('Needs the U1 Extended Firmware') && !text(byTest('screen-card')).includes('>'), 'one-line reason, without a path to follow by hand: ' + text(byTest('screen-card')));
+  await click(byTest('screen-req'));
+  await until(() => q('#requirements') && q('#requirements').getClientRects().length, 'the button opens the requirements');
+  await tab('dash');
   await post({type: 'selection_changed'});
   await connect('extended');
   await post({type: 'status', data: VIEW()});
@@ -2440,7 +2641,7 @@ test('toolhead cards: the matched preset can be hidden in Settings, and comes ba
   await until(() => byTest('match-show'), 'the switch in Settings');
 `);
 
-test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and reasons; Change remembers another', `
+test('toolhead cards: the OrcaSlicer preset Apply gives each head, without score or reasons; Change remembers another', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('preset_matches'), 'the cards ask for the presets once the heads are known');
@@ -2451,8 +2652,8 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and
   await reply(ask, {matches: [row]});
   await until(() => q('[data-match="0"]'), 'T1 shows its preset');
   const card = q('[data-match="0"]');
-  assert(text(card).includes('Generic PLA @U1') && text(card).includes('material PLA') && text(card).includes('Score 35'), 'name, reasons, score: ' + text(card));
-  assert(q('.oui-status[data-state="warn"]', card), 'a close call is marked');
+  assert(text(card).includes('Generic PLA') && !text(card).includes('@U1') && !text(card).includes('material PLA') && !text(card).includes('35'), 'only the clean name: ' + text(card));
+  assert(!q('.oui-status', card) && q('.oui-match-unsure svg', card) && q('.oui-match-unsure', card).title.includes('Not sure'), 'a close call: one warning icon, said in words');
   assert(!q('[data-match="1"]'), 'no line for a head the plugin gave no preset');
   await click(q('.oui-match-change', card));
   await until(() => qa('.oui-match-option', card).length === 2, 'the candidates, no Automatic while nothing was picked by hand');
@@ -2460,14 +2661,15 @@ test('toolhead cards: the OrcaSlicer preset Apply gives each head, its score and
   const pick = last('preset_pick');
   eq([pick.head, pick.name], [0, 'Generic PLA Silk @U1'], 'remembered for T1');
   await reply(pick, {matches: [{...row, name: 'Generic PLA Silk @U1', source: 'remembered', score: 29, reasons: choices[1].reasons, confident: true, remembered_key: 'mat:g|pla|'}]});
-  await until(() => text(q('[data-match="0"]')).includes('Picked by hand'), 'the new pick, marked as picked by hand');
+  await until(() => text(q('[data-match="0"]')).includes('Generic PLA Silk'), 'the new pick');
+  assert(!q('.oui-match-unsure'), 'a pick by hand is not doubted');
   await click(q('.oui-match-change', q('[data-match="0"]')));
   const auto = () => qa('.oui-match-option', q('[data-match="0"]')).find(b => text(b).includes('Automatic'));
   await until(auto, 'Automatic offered');
   await click(auto());
   eq(last('preset_pick').name, null, 'Automatic forgets the pick');
 `);
-test('toolhead cards: a Spooler preset shows as Spooler/<name>, long names wrap, a pick sends the real name', `
+test('toolhead cards: a Spooler preset shows without Spooler/ and @printer, long names wrap, a pick sends the real name', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('preset_matches'), 'asked');
@@ -2476,30 +2678,32 @@ test('toolhead cards: a Spooler preset shows as Spooler/<name>, long names wrap,
   await reply(last('preset_matches'), {matches: [{head: 0, name: real, shown, source: 'spooler', score: 40, reasons: [], confident: true, remembered_key: '',
     candidates: [{name: 'Generic PLA @U1', shown: 'Generic PLA @U1', score: 35, reasons: []}, {name: real, shown, score: 40, reasons: []}]}]});
   await until(() => q('[data-match="0"]'), 'T1 line');
+  const clean = 'Acme Extra Long Matte Silk Dual Colour PLA Plus';
   const line = q('.oui-match-name', q('[data-match="0"]'));
-  eq([text(line), line.title], [shown, shown], 'the line shows Spooler/');
+  eq([text(line), line.title], [clean, clean], 'the line shows the clean name');
+  assert(!text(q('[data-match="0"]')).includes('Spooler') && !q('.oui-match-unsure'), 'no internal prefix, no doubt: ' + text(q('[data-match="0"]')));
   await click(q('.oui-match-change', q('[data-match="0"]')));
   await until(() => qa('.oui-match-option', q('[data-match="0"]')).length === 2, 'both candidates');
   const row = qa('.oui-match-option', q('[data-match="0"]'))[1], name = q('.oui-truncate', row);
-  eq([text(name), name.title], [shown, shown], 'the list row shows Spooler/');
+  eq(text(name), clean, 'the list row shows the clean name');
   eq([row.getAttribute('aria-current'), qa('.oui-match-option', q('[data-match="0"]'))[0].hasAttribute('aria-current')], ['true', false],
     'the selected row is still the current one');
   assert(q('.oui-match-option-name svg', row), 'the selected row keeps its check mark');
   assert(!text(q('[data-match="0"]')).includes('_local'), 'no _local on the card: ' + text(q('[data-match="0"]')));
   eq(getComputedStyle(name).whiteSpace, 'normal', 'a long name wraps');
   await click(row);
-  eq([last('preset_pick').head, last('preset_pick').name, last('preset_pick').ofd], [0, real, undefined], 'picked by its real name');
+  eq([last('preset_pick').head, last('preset_pick').name], [0, real], 'picked by its real name');
 `);
 
 // ------------------------------------------------------------------ foundation 4.2.0 on: toasts, dismissible notices, requirements
-test('toasts: bottom-left, each with a Close button, gone once closed', `
+test('toasts: bottom-right, each with a Close button, gone once closed', `
   await connect();
   await post({type: 'notice', text: 'Project filaments updated'});
   await until(() => q('.oui-toast'), 'toast shown');
   const host = q('.oui-toasts');
   eq(qa('.oui-toasts').length, 1, 'one toast host on the page');
   const toast = q('.oui-toast'), r = toast.getBoundingClientRect();
-  assert(r.left <= 20 && innerHeight - r.bottom <= 20 && r.bottom <= innerHeight, 'bottom-left: ' + JSON.stringify(r));
+  assert(innerWidth - r.right <= 40 && innerHeight - r.bottom <= 40 && r.bottom <= innerHeight, 'bottom-right: ' + JSON.stringify(r));
   eq(toast.getAttribute('role'), 'status', 'an info toast is polite');
   assert(toasts().includes('Project filaments updated'), 'text shown: ' + toasts());
   const close = q('.oui-toast-close', toast);
@@ -2540,34 +2744,35 @@ test('notices: a closed banner stays closed while its condition holds and comes 
   assert(!byTest('usage-banner'), 'same entries: stays closed across a poll');
 `);
 
-test('settings: requirements say what was found; Check again asks again', `
+test('settings: requirements say what was found; one Check again asks again', `
   await connect();
   await tab('settings');
-  await click(q('.oui-settings-link[data-section="requirements"]'));
+  await click(q('.oui-settings-link[data-section="about"]'));
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
   const sp = byTest('req-spooler'), sm = byTest('req-spoolman');
   assert(sp && sm, 'Spoolman and Spooler rows');
+  eq(qa('.oui-req .oui-req-check', byTest('requirements')).filter(b => b.getClientRects().length).length, 0, 'no Check again on the rows');
+  eq(qa('[data-test="req-check"]').length, 1, 'one Check again for the list');
   eq(sp.dataset.status, 'missing', 'Spooler not found');
-  assert(text(sp).includes('Not found') && text(sp).includes('Install Spooler'), 'says so and how to get it: ' + text(sp));
-  await click(q('.oui-req-check', sp));
+  assert(text(sp).includes('Missing') && text(sp).includes('Install Spooler'), 'says so and how to get it: ' + text(sp));
+  eq(reqStatus('ext'), 'Not checked', 'not checked yet');
+  assert(getComputedStyle(q('.oui-req-detail', byTest('req-ext'))).fontFamily === getComputedStyle(q('.oui-req-name', byTest('req-ext'))).fontFamily, 'details in the normal font');
+  assert(text(sp).includes('Stock tab') && !text(sp).includes('Dashboard'), 'the stock is its own tab: ' + text(sp));
+  await click(byTest('req-check'));
   const ask = [...sent()].reverse().find(m => m.type === 'requirements' && m.recheck === true);
   assert(ask, 'Check again asks the plugin to look again');
   eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
+  assert(byTest('req-check').disabled, 'Check again off while it looks');
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'ok')});
   eq(byTest('req-spooler').dataset.status, 'found', 'found after installing');
-  assert(text(byTest('req-spooler')).includes('Found') && !q('.oui-req-link', byTest('req-spooler')), 'no install link once found');
+  assert(text(byTest('req-spooler')).includes('Ready') && !q('.oui-req-link', byTest('req-spooler')), 'no install link once found');
   await reply(last('cmd', 'spools'), {spools: ROWS, bindings: {}, via: 'direct'});
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'ok', 'ok')});
   eq(byTest('req-spoolman').dataset.status, 'found', 'Spoolman reached');
-  assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'Spoolman Check again off while the printer has sent no status');
-  await post({type: 'status', data: VIEW()});
-  assert(!q('.oui-req-check', byTest('req-spoolman')).disabled, 'on once the printer answers');
-  await post({type: 'offline', error: 'timed out'});
-  assert(q('.oui-req-check', byTest('req-spoolman')).disabled, 'off again while the printer is offline');
   await post({type: 'status', data: VIEW()});
   const before = cmds('spools').length;
-  await click(q('.oui-req-check', byTest('req-spoolman')));
-  eq(cmds('spools').length, before + 1, 'Check again loads the spools again');
+  await click(byTest('req-check'));
+  eq(cmds('spools').length, before + 1, 'Check again also loads the spools again');
   await fail(last('cmd', 'spools'), 'connection refused');
   eq(byTest('req-spoolman').dataset.status, 'missing', 'Spoolman not reached');
   assert(text(byTest('req-spoolman')).includes('connection refused'), 'says why');
@@ -2576,9 +2781,9 @@ test('settings: requirements say what was found; Check again asks again', `
 test('settings: requirements Check again stops after 10 s without an answer and says so', `
   await connect();
   await tab('settings');
-  await click(q('.oui-settings-link[data-section="requirements"]'));
+  await click(q('.oui-settings-link[data-section="about"]'));
   await post({type: 'requirements', items: REQS('unknown', 'unknown', 'unknown', 'missing')});
-  await click(q('.oui-req-check', byTest('req-spooler')));
+  await click(byTest('req-check'));
   eq(byTest('req-spooler').dataset.status, 'checking', 'checking while it looks');
   await sleep(10500);
   eq(byTest('req-spooler').dataset.status, 'missing', 'Checking ends after 10 s');
@@ -2631,7 +2836,7 @@ test('notices: dismissals are keyed on the condition, survive a remount and are 
 `);
 
 // ------------------------------------------------------------------ settings pages (one page per section)
-const PAGES = ['mode', 'print-setup', 'options', 'calibration', 'connection', 'firmware', 'requirements', 'language', 'about'];
+const PAGES = ['general', 'printing', 'connection', 'printer', 'about'];
 const PAGES_JS = `
 const PAGES = ${JSON.stringify(PAGES)};
 const link = id => q('.oui-settings-link[data-section="' + id + '"]');
@@ -2645,15 +2850,16 @@ test('settings pages: list beside one page; a page opens with focus on its headi
   await connect(); await CFG();
   await tab('settings');
   eq(qa('.oui-settings-link').map(e => e.dataset.section), PAGES, 'one page per section');
-  eq(shown(), ['mode'], 'only the first page');
+  eq(shown(), ['general'], 'only the first page');
   assert(listShown() && pageShown() && !byTest('settings-back').getClientRects().length, 'wide: list and page side by side, no Back');
-  await click(link('calibration'));
-  eq(shown(), ['calibration'], 'only Calibration');
-  assert(onHeading('calibration'), 'focus on the page heading');
-  assert(Object.entries(localStorage).some(([k, v]) => k.startsWith('oui-settings:') && v === 'calibration'), 'last page stored');
-  link('calibration').focus(); await press('ArrowDown'); await settle();
-  eq([shown(), document.activeElement.dataset.section], [['connection'], 'connection'], 'arrow keys move along the list');
-  assert(byTest('save'), 'one save bar');
+  await click(link('printer'));
+  eq(shown(), ['printer'], 'only Printer');
+  assert(onHeading('printer'), 'focus on the page heading');
+  assert(Object.entries(localStorage).some(([k, v]) => k.startsWith('oui-settings:') && v === 'printer'), 'last page stored');
+  link('printer').focus(); await press('ArrowDown'); await settle();
+  eq([shown(), document.activeElement.dataset.section], [['about'], 'about'], 'arrow keys move along the list');
+  await click(link('general'));
+  eq(qa('[data-test="save"]').length, 1, 'one save bar');
 `);
 test('settings pages: narrow shows the list, then one page with Back', PAGES_JS + `
   await connect(); await CFG();
@@ -2671,14 +2877,14 @@ test('settings pages: narrow shows the list, then one page with Back', PAGES_JS 
 test('settings pages: the last page opens again; Plugin settings opens Print setup, also before the config came', PAGES_JS + `
   await connect();
   await tab('settings');
-  eq(shown(), ['language'], 'remembered page');
+  eq(shown(), ['about'], 'remembered page');
   await tab('dash');
   await post({type: 'show_tab', tab: 'settings'});
-  eq(shown(), ['language'], 'Print setup is not there yet: the page stays');
+  eq(shown(), ['about'], 'Print setup is not there yet: the page stays');
   await CFG();
-  await until(() => shown()[0] === 'print-setup', 'Print setup opened once it exists');
-  assert(onHeading('print-setup'), 'heading focused');
-`, { lastPage: 'language' });
+  await until(() => shown()[0] === 'printing', 'Printing (with Print setup) opened once it exists');
+  assert(onHeading('print-setup'), 'Print setup heading focused');
+`, { lastPage: 'about' });
 test('settings pages: with no printer the address entered in Connection is saved and connects', PAGES_JS + `
   await until(() => last('hello'));
   const first = last('hello');
@@ -2702,15 +2908,86 @@ test('settings pages: Open Settings with no printer opens Connection', PAGES_JS 
   eq(shown(), ['connection'], 'Connection page');
   assert(onHeading('connection'), 'heading focused');
 `, { lastPage: 'about' });
+const SAVE_CFG = `post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [{key: 'purifier', label: 'Top cover', help: 'h', automagic: 'auto', choices: ['auto', 'keep-warm', 'off']}],
+  settings: {mode: 'automagic', host: 'u1.saved', api_key: '', printer_name: 'Bench U1', spoolman_url: '', purifier: 'auto'}})`;
+test('settings pages: Save is off until something changed; the bar shows only where there is something to save, or a change waits', PAGES_JS + `
+  await connect(); await ${SAVE_CFG};
+  await tab('settings');
+  await click(link('connection'));
+  assert(byTest('save').disabled && byTest('discard').disabled, 'clean: Save and Discard off');
+  eq(byTest('save').getAttribute('aria-describedby'), 'set-clean', 'Save says why it is off');
+  assert(text(q('#set-clean')).includes('No changes to save'), 'nothing to save, said');
+  q('#c-host').focus(); await press('Enter');
+  eq(last('save_settings'), undefined, 'Enter saves nothing while nothing changed');
+  for (const id of ['printing', 'printer', 'about']) { await click(link(id)); assert(!byTest('save'), id + ': no save bar (changes there apply at once)'); }
+  await click(link('general'));
+  assert(byTest('save'), 'General has the bar');
+  await click(link('connection'));
+  await type(q('#c-host'), 'u1.typed');
+  assert(!byTest('save').disabled && !byTest('save').hasAttribute('aria-describedby'), 'Save on after an edit');
+  await click(link('about'));
+  assert(byTest('save') && text(q('.oui-settings-foot')).includes('Unsaved changes'), 'a waiting change keeps the bar on every page');
+  await click(link('connection'));
+  q('#c-host').focus(); await press('Enter');
+  eq(last('save_settings')?.settings.host, 'u1.typed', 'Enter saves once something changed');
+`);
+test('settings pages: the older page ids open the page that now holds them, at that group', PAGES_JS + `
+  await connect(); await CFG();
+  await tab('settings');
+  const HOMES = {mode: 'general', language: 'general', 'print-setup': 'printing', options: 'printing', connection: 'connection',
+    calibration: 'printer', firmware: 'printer', requirements: 'about', about: 'about'};
+  for (const [old, page] of Object.entries(HOMES)) {
+    await click(link(page === 'general' ? 'about' : 'general'));
+    location.hash = '#' + old; await sleep(50); await settle();
+    eq(shown(), [page], '#' + old + ' opens ' + page);
+    if (old !== page) assert(onHeading(old), '#' + old + ': focus on its group heading');
+  }
+  location.hash = '';
+  await click(link('about'));
+  await post({type: 'show_tab', tab: 'settings'});
+  await until(() => shown()[0] === 'printing', 'openSettings("print-setup") opens Printing');
+`);
+test('settings: mode is one SelectButton; choices are words, not values', `
+  await connect();
+  await ${SAVE_CFG};
+  await tab('settings');
+  const group = byTest('mode');
+  assert(group.classList.contains('p-selectbutton'), 'a SelectButton');
+  const pressed = () => qa('button', group).filter(b => b.getAttribute('aria-pressed') === 'true').map(text);
+  eq(pressed(), ['Automagic'], 'Automagic chosen');
+  assert(text(q('#mode')).includes('Top cover') && text(q('#mode')).includes('Auto') && !q('[data-auto]'), 'automagic: values read out, no fields');
+  await click(q('[data-mode="expert"]'));
+  eq(pressed(), ['Expert'], 'Expert chosen');
+  assert(q('[data-auto="purifier"]') && text(q('[data-auto="purifier"]')).includes('Auto'), 'the choice shown as a word: ' + text(q('[data-auto="purifier"]')));
+  assert(!byTest('save').disabled, 'a mode change waits for Save');
+  await click(q('[data-mode="expert"]'));
+  eq(pressed(), ['Expert'], 'pressing the chosen one keeps it');
+  await click(q('[data-mode="automagic"]'));
+  eq(pressed(), ['Automagic'], 'back to Automagic');
+  assert(byTest('save').disabled, 'nothing changed any more');
+`);
+test('settings: About links the changes, the documentation, issues and licences; calibrations say what they do', `
+  await connect(); await ${SAVE_CFG};
+  await post({type: 'status', data: VIEW()});
+  await tab('settings');
+  const links = qa('a', byTest('about-links'));
+  eq(links.map(a => text(a)), ['What’s new', 'Documentation', 'Report a problem', 'Licences'], 'four links');
+  assert(links.every(a => a.href.startsWith('https://github.com/bloodf/u1control') && a.target === '_blank'), 'the project pages');
+  const cal = ['bed_mesh', 'input_shaper', 'flow'].map(k => q('[data-cal="' + k + '"]'));
+  eq(new Set(cal.map(b => q('svg', b).innerHTML)).size, 3, 'a different icon each');
+  assert(cal.every(b => text(q('.oui-formrow-label .oui-meta', b.closest('.oui-formrow'))).length > 20), 'one line each on what it does');
+  eq(cal[0].getAttribute('aria-label'), 'Run the Bed mesh calibration', 'named for its calibration');
+`);
 // U1: what the shared dashboard scenarios need to know about this page.
 const DASH_PLUGIN = `
-const STORE = dash => post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'automagic', dashboard: dash}});
-async function READY(dash) { await connect(); if (dash !== undefined) await STORE(dash); await post({type: 'status', data: VIEW()}); }
+// The shared scenarios arrange every widget, the console too: an expert's dashboard (the console is on the default only in Expert mode).
+const STORE = dash => EXPERT(dash);
+async function READY(dash) { await connect(); await STORE(dash); await post({type: 'status', data: VIEW()}); }
 const DEFAULT_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'screen', 'console'];
-const DEFAULT_ORDER = ['job', 'temps', 'controls', 'heads', 'camera', 'screen', 'console'];
+const DEFAULT_ORDER = ['job', 'heads', 'controls', 'temps', 'camera', 'screen', 'console'];
 const ALL_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'console', 'screen', 'files', 'ace'];
-const MOVER = 'camera', MOVER_FROM = '6 / span 3 | 8 / span 8', MOVE_COLS = -3, MOVER_TO = '9 / span 3 | 8 / span 8';
-const CAM_W = 3, CAM_H = 8, TEMPS = 'temps', CONSOLE_LEAST = 'span 3 | span 5';
+const MOVER = 'camera', MOVER_FROM = '6 / span 4 | 9 / span 7', MOVE_COLS = -3, MOVER_TO = '9 / span 4 | 9 / span 7';
+const CAM_W = 4, CAM_H = 7, TEMPS = 'temps', CONSOLE_LEAST = 'span 3 | span 5';
 const OLD_DEFAULT = [{id: 'job', x: 0, y: 0, w: 12, h: 3}, {id: 'heads', x: 0, y: 3, w: 12, h: 10}, {id: 'controls', x: 0, y: 13, w: 8, h: 6},
   {id: 'camera', x: 8, y: 13, w: 4, h: 6}, {id: 'temps', x: 0, y: 19, w: 8, h: 7}, {id: 'screen', x: 8, y: 19, w: 4, h: 7}, {id: 'console', x: 0, y: 26, w: 12, h: 7}];
 const MINE_CAMERA = '9 / span 4 | 14 / span 8';
@@ -2718,7 +2995,7 @@ const MINE_CAMERA = '9 / span 4 | 14 / span 8';
 const DEFAULT_016 = [{id: 'job', x: 0, y: 0, w: 6, h: 2}, {id: 'heads', x: 0, y: 2, w: 6, h: 14}, {id: 'controls', x: 6, y: 0, w: 6, h: 4},
   {id: 'temps', x: 6, y: 4, w: 3, h: 8}, {id: 'camera', x: 9, y: 4, w: 3, h: 8}, {id: 'screen', x: 6, y: 12, w: 6, h: 4}, {id: 'console', x: 0, y: 16, w: 12, h: 6}];
 // Narrow, a fan's field goes under its name instead of beside it.
-const TEMPS_COMPACT = () => { const c = qa('.oui-control-row-control', cell('temps')); return c.length > 0 && c.every(e => e.getBoundingClientRect().top >= e.parentElement.firstElementChild.getBoundingClientRect().bottom - 1); };
+const TEMPS_COMPACT = () => { const c = qa('.tf-fan-set', cell('temps')); return c.length > 0 && c.every(e => e.getBoundingClientRect().top >= e.parentElement.firstElementChild.getBoundingClientRect().bottom - 1); };
 `;
 const CONSOLE_CHECK = `
   assert(q('#console-cmd', cell('console')) && q('[role=log]', cell('console')), 'the command line and its log');
@@ -2738,6 +3015,9 @@ const cell = id => q('.oui-dash-cell[data-widget="' + id + '"]');
 const frame = id => q('[data-frame="' + id + '"]');
 const handle = (id, h) => q('[data-frame="' + id + '"] [data-handle="' + h + '"]');
 const place = id => { const c = cell(id); return c ? c.style.gridColumn + ' | ' + c.style.gridRow : null; };
+// Outside edit mode a cell sits at row 1 and is as tall as its content (foundation 5.14): there only its column is its place.
+const col = id => { const p = place(id); return p && p.split(' | ')[0]; };
+const colOf = p => p.split(' | ')[0];
 const step = () => (q('.oui-dash-grid').getBoundingClientRect().width + 12) / 12;
 const ROW = 44;
 const mouseAt = (type, x, y) => cdp({op: 'mouse', type, x, y});
@@ -2751,6 +3031,7 @@ async function dragBy(el, dx, dy, opts = {}) {
 const saved = () => last('dashboard') && last('dashboard').value;
 const itemOf = (st, id) => st.layouts[st.active].items.find(i => i.id === id);
 const shown = () => qa('.oui-dash-cell').filter(c => c.getClientRects().length).map(c => c.dataset.widget);
+async function menuItem(n) { await click(byTest('dash-menu')); await click(q('[data-menu="dash-' + n + '"]')); }
 async function edit() { await click(byTest('dash-edit')); assert(q('.oui-dash-board[data-editing]'), 'edit mode on'); }
 `;
 
@@ -2766,7 +3047,7 @@ test('dashboard: drag a widget with the pointer; the others make room; Escape pu
   await READY();
   await edit();
   eq(place(MOVER), MOVER_FROM, 'starts at its default place');
-  const before = JSON.stringify(qa('.oui-dash-cell').map(c => [c.dataset.widget, c.style.gridColumn, c.style.gridRow]));
+  const before = JSON.stringify(qa('.oui-dash-cell').map(c => [c.dataset.widget, c.style.gridColumn]));
   await dragBy(frame(MOVER), -MOVE_COLS * step(), 0, { during: async () => { await settle();
     assert(q('.oui-dash-slot'), 'the place it would land is marked');
     assert(cell(MOVER).dataset.dragged !== undefined && cell(MOVER).style.transform.includes('translate'), 'the widget follows the pointer'); } });
@@ -2784,7 +3065,7 @@ test('dashboard: drag a widget with the pointer; the others make room; Escape pu
   eq(place(MOVER), now, 'Escape cancels the drag');
   eq(last('dashboard'), undefined, 'nothing stored before Save');
   await click(byTest('dash-cancel'));
-  eq(JSON.stringify(qa('.oui-dash-cell').map(c => [c.dataset.widget, c.style.gridColumn, c.style.gridRow])), before, 'Cancel drops the edit');
+  eq(JSON.stringify(qa('.oui-dash-cell').map(c => [c.dataset.widget, c.style.gridColumn])), before, 'Cancel drops the edit');
 `);
 
 test('dashboard: resize from a corner and from an edge snaps to the grid, keeps a least size and is saved', DASH_JS + `
@@ -2802,7 +3083,7 @@ test('dashboard: resize from a corner and from an edge snaps to the grid, keeps 
   const cam = itemOf(saved(), 'camera');
   eq([cam.w, cam.h], [3, 4], 'the size is saved');
   assert(!q('.oui-dash-board[data-editing]'), 'Save ends edit mode');
-  eq(place('camera').replace(/\\d+ \\/ /g, ''), 'span 3 | span 4', 'and stays after it');
+  eq(col('camera').replace(/\\d+ \\/ /g, ''), 'span 3', 'and stays after it');
 `);
 
 test('dashboard: widget content follows its size: the camera keeps its shape, the console shows more lines, temperatures go compact', DASH_JS + `
@@ -2866,7 +3147,7 @@ test('dashboard: keyboard moves, resizes and removes; the catalogue adds; settin
 test('dashboard: named layouts are created, switched, renamed, reset and deleted, and come back after a reload', DASH_JS + `
   await READY();
   await edit();
-  await click(byTest('dash-new'));
+  await menuItem('new');
   await type(q('#oui-dash-name'), 'default');
   await click(byTest('dash-name-ok'));
   assert(text(byTest('dash-strip')).includes('Another layout has this name'), 'a name in use is refused');
@@ -2883,7 +3164,7 @@ test('dashboard: named layouts are created, switched, renamed, reset and deleted
   assert(cell('console'), 'Default still has its console');
   await pick(byTest('dash-layout'), 'Watch');
   await edit();
-  await click(byTest('dash-rename'));
+  await menuItem('rename');
   await type(q('#oui-dash-name'), 'Camera view');
   await press('Enter');
   eq(saved().layouts.map(l => l.name), ['Default', 'Camera view'], 'renamed');
@@ -2892,14 +3173,14 @@ test('dashboard: named layouts are created, switched, renamed, reset and deleted
   await click(byTest('dash-cancel'));
   eq(shown().includes('console'), false, 'a reset is kept only by Save');
   await edit();
-  await click(byTest('dash-delete'));
+  await menuItem('delete');
   await click(byTest('dash-delete-ok'));
   eq(saved().layouts.map(l => l.name), ['Default'], 'deleted');
   assert(!byTest('dash-delete') || byTest('dash-delete').disabled, 'the last layout cannot be deleted');
   await click(byTest('dash-cancel'));
   // a second layout to bring back after the reload
   await edit();
-  await click(byTest('dash-new'));
+  await menuItem('new');
   await type(q('#oui-dash-name'), 'Night');
   await press('Enter');
   await click(q('[data-remove="camera"]'));
@@ -2916,8 +3197,10 @@ test('dashboard: named layouts are created, switched, renamed, reset and deleted
 test('dashboard: a stored layout is checked: unknown widgets dropped, sizes brought within limits, broken data gives the default', DASH_JS + `
   await READY({v: 1, active: 0, layouts: [{name: 'Mine', items: [{id: 'ghost', x: 0, y: 0, w: 4, h: 4}, {id: 'camera', x: 9, y: 3, w: 99, h: 1}, {id: 'console', x: 0, y: 0, w: 2, h: 2, cfg: {lines: 7}}]}]});
   eq(shown().sort(), ['camera', 'console'], 'the unknown widget is dropped');
+  await edit();
   eq(place('camera').replace(/\\d+ \\/ /g, ''), 'span 12 | span 4', 'too wide and too short: brought within limits');
   eq(place('console').replace(/\\d+ \\/ /g, ''), CONSOLE_LEAST, 'the least size of the console');
+  await click(byTest('dash-cancel'));
   await STORE('not a dashboard');
   eq(shown(), DEFAULT_IDS, 'broken data: the default layout');
 `);
@@ -2943,23 +3226,23 @@ test('dashboard: a narrow window shows one column in reading order and is not ed
 test('dashboard: a layout still as the first default gets the new one; an arranged one stays; Reset gives the new one', DASH_JS + `
   await READY({v: 1, active: 0, layouts: [{name: 'Default', items: OLD_DEFAULT}, {name: 'Mine', items: OLD_DEFAULT.map(i => i.id === 'camera' ? {...i, h: i.h + 2} : i)}]});
   eq(shown(), DEFAULT_IDS, 'the untouched default shows the new default');
-  eq(place(MOVER), MOVER_FROM, 'at its new place');
+  eq(col(MOVER), colOf(MOVER_FROM), 'at its new place');
   await pick(byTest('dash-layout'), 'Mine');
-  eq(place('camera'), MINE_CAMERA, 'the arranged layout is as it was saved');
+  eq(col('camera'), colOf(MINE_CAMERA), 'the arranged layout is as it was saved');
   await edit();
   await click(byTest('dash-reset'));
   await click(byTest('dash-save'));
   eq(saved().layouts[1].items.map(i => i.id), DEFAULT_IDS, 'Reset to default gives the new default');
-  eq(place(MOVER), MOVER_FROM, 'with its places');
+  eq(col(MOVER), colOf(MOVER_FROM), 'with its places');
 `);
 test('dashboard: 0.16.0\'s untouched default gets the arranged one; with multiACE the filament units join under the toolheads', DASH_JS + `
   await READY({v: 1, active: 0, layouts: [{name: 'Default', items: DEFAULT_016}]});
   eq(shown(), DEFAULT_IDS, 'the new default');
-  eq(place(MOVER), MOVER_FROM, 'camera at its new place');
+  eq(col(MOVER), colOf(MOVER_FROM), 'camera at its new place');
   await post({type: 'status', data: {...VIEW(), ace: {mode: 'multi', swapping: false, heads: {'0': [0, 1]}, units: []}}});
   await settle();
-  eq(place('ace'), '1 / span 5 | 19 / span 6', 'filament units under the toolheads');
-  eq(place(MOVER), MOVER_FROM, 'nothing else moved');
+  eq(col('ace'), '1 / span 5', 'filament units under the toolheads');
+  eq(col(MOVER), colOf(MOVER_FROM), 'nothing else moved');
 `);
 const SCREEN_SHOWN = `
   await click(byTest('screen-show'));
@@ -2968,10 +3251,11 @@ const SCREEN_SHOWN = `
 `;
 test('printer screen on the dashboard: bottom row beside the camera; a click on the picture is sent in its own pixels', DASH_JS + `
   await connect('extended');
+  await EXPERT();
   await post({type: 'status', data: VIEW()});
 ` + SCREEN_SHOWN + `
   const r = id => cell(id).getBoundingClientRect(), s = r('screen'), cam = r('camera'), c = r('console');
-  assert(Math.abs(s.top - cam.top) < 2 && s.left >= cam.right - 1, 'the screen sits beside the camera, in the bottom row: ' + JSON.stringify([s.top, cam.top, s.left, cam.right]));
+  assert(Math.abs(s.top - cam.top) < 120 && s.left >= cam.right - 1, 'the screen sits beside the camera, in the bottom row: ' + JSON.stringify([s.top, cam.top, s.left, cam.right]));
   assert(s.top >= r('controls').bottom - 1 && s.bottom <= c.top + 1, 'under the controls, above the console');
   const f = q('.u1-view-screen').getBoundingClientRect(), i = q('.u1-view-screen img').getBoundingClientRect();
   assert(f.bottom <= s.bottom + 1 && f.right <= s.right + 1 && i.height <= f.height + 1, 'the picture is not cut off by its widget');
@@ -2988,6 +3272,7 @@ test('printer screen on the dashboard: bottom row beside the camera; a click on 
 
 test('printer screen in a narrow window: after the camera, before the console; a click is sent in the picture pixels', DASH_JS + `
   await connect('extended');
+  await EXPERT();
   await post({type: 'status', data: VIEW()});
 ` + SCREEN_SHOWN + `
   assert(q('.oui-dash-grid[data-narrow]'), 'one column');
@@ -3001,11 +3286,13 @@ test('printer screen in a narrow window: after the camera, before the console; a
   assert(Math.abs(a.x - 240) <= 1 && Math.abs(a.y - 160) <= 1, 'the centre of the picture: ' + JSON.stringify(a));
 `, { size: [480, 900] });
 
-for (const size of [[1280, 800], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
+for (const size of [[900, 800], [1280, 800], [1400, 900], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
   await READY();
   const bad = qa('.oui-dash-cell').map(c => [c.dataset.widget, q('.oui-panel-body', c)]).filter(([, b]) => b && (b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1))
     .map(([id, b]) => id + ' ' + b.scrollHeight + '/' + b.clientHeight);
   eq(bad, [], 'every widget fits');
+  const out = ['temps', 'heads'].flatMap(id => { const c = cell(id), r = c.getBoundingClientRect(); return qa('.tf-fans > *, .tf-cover > div, button', c).filter(e => e.getBoundingClientRect().width && e.getBoundingClientRect().right > r.right + 1).map(e => id + ' ' + e.className); });
+  eq(out, [], 'fan setters, cover readouts and Change buttons stay inside their widget');
 `, { size });
 
 
@@ -3013,6 +3300,7 @@ test('dashboard: a stored size too small for its content shows all of it and is 
   await READY({v: 1, active: 0, layouts: [{name: 'Tiny', items: [{id: 'job', x: 0, y: 0, w: 6, h: 2}, {id: 'console', x: 0, y: 2, w: 12, h: 6}]}]});
   const body = q('.oui-panel-body', cell('job'));
   assert(body.scrollHeight <= body.clientHeight + 1 && cell('job').getBoundingClientRect().height > 76, 'its rows grew to the content: ' + cell('job').getBoundingClientRect().height);
+  await edit();
   eq(place('job'), '1 / span 6 | 1 / span 2', 'its stored size is not changed');
   eq(last('dashboard'), undefined, 'nothing is saved');
 `);
@@ -3049,34 +3337,243 @@ for (const size of [[1440, 1000], [1920, 1080]]) test(`toolheads at ${size.join(
   assert(body.scrollHeight <= body.clientHeight + 1, 'the widget still fits its content');
 `, { size });
 
-test('spool chooser with 2000 spools: opens at once, draws only the rows in view, keeps up with status refreshes and search', `
-  const N = 2000;
+test('spool chooser: a colour with several spools opens a dialog fullest first; material chips start at the head’s; unlink', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  await until(() => last('cmd', 'spools'), 'spools asked');
+  const row = (id, colour, material, remaining) => ({id, name: 'Spool ' + id, vendor: 'Acme', material, colour, remaining, initial: 1000});
+  await reply(last('cmd', 'spools'), {spools: [row(21, '#E5484D', 'PLA', 100), row(22, '#e5484d', 'PLA+', 800), row(23, '#e5484d', 'PLA', null),
+    row(24, '#3e63dd', 'PETG', 500), row(25, '#111111', 'ABS', 900)], bindings: {}, via: 'direct'});
+  await click(q('[data-pick="1"]'));   // T2 holds PLA
+  const panel = () => q('[data-pick-panel="1"]');
+  await until(panel, 'picker open');
+  eq(text(q('.oui-spick-mat[aria-pressed="true"]', panel())), 'PLA', 'the material chip starts at the head’s family (PLA+ counts as PLA)');
+  eq(qa('[data-colour]', panel()).map(e => e.dataset.colour), ['#e5484d'], 'one swatch per colour of that material, not one row per spool');
+  await click(q('.oui-spick-mat:not([data-material])', panel()));
+  eq(qa('[data-colour]', panel()).length, 3, 'All: every colour');
+  await click(q('.oui-spick-mat[data-material="PLA"]', panel()));
+  await click(q('[data-colour="#e5484d"]', panel()));
+  await until(() => qa('[data-spick="dialog"] [data-spool]').length === 3, 'the dialog of red');
+  eq(qa('[data-spick="dialog"] [data-spool]').map(e => e.dataset.spool), ['22', '21', '23'], 'fullest first, an unknown weight last');
+  eq(cmds('bind_spool').length, 0, 'nothing is linked before a spool is chosen');
+  await click(q('[data-spick="dialog"] [data-spool="21"]'));
+  await until(() => !q('[data-spick="dialog"]') && !panel(), 'dialog and picker closed');
+  assert(dialogOpen() && dialogText().includes('21'), 'bind asks: ' + dialogText()); await yes();
+  eq(cmds('bind_spool').map(m => [m.args.head, m.args.spool_id]), [[1, 21]], 'the spool chosen in the dialog is linked');
+  await reply(last('cmd', 'bind_spool'), true);
+  await post({type: 'status', data: VIEW({bindings: {'1': 21}})});
+  await until(() => text(q('[data-pick="1"]')).includes('#21'), 'the card shows it: ' + text(q('[data-pick="1"]')));
+  await click(q('[data-pick="1"]')); await until(panel, 'opened again');
+  eq(q('[data-colour][aria-current="true"]', panel())?.dataset.colour, '#e5484d', 'the linked colour is marked');
+  document.body.dispatchEvent(new PointerEvent('pointerdown', {bubbles: true})); await settle();
+  assert(!panel(), 'a press outside closes it');
+  await click(q('[data-pick="1"]')); await until(panel, 'opened again');
+  await click(q('[data-spick="none"]', panel()));
+  assert(dialogOpen() && dialogText().includes('21'), 'unlink asks: ' + dialogText()); await yes();
+  eq(cmds('unbind_spool').map(m => m.args.head), [1], 'No spool unlinks');
+`);
+
+test('spool chooser with 2000 spools: opens at once with one swatch per colour; search finds one by id', `
+  const N = 2000, COLOURS = ['#e5484d', '#3e63dd', '#30a46c', '#ffc53d', '#8e4ec6', '#f76b15', '#12a594', '#d6409f', '#111111', '#fafafa', '#8d8d8d', '#a18072', '#0090ff', '#bdee63', '#ff977d'];
   await connect();
   await post({type: 'status', data: VIEW()});
   await until(() => last('cmd', 'spools'), 'spools asked');
   await reply(last('cmd', 'spools'), {spools: Array.from({length: N}, (_, k) => ({id: k + 1, name: 'Spool ' + (k + 1), vendor: 'Acme', material: k % 3 ? 'PLA' : 'PETG',
-    colour: '#336699', remaining: 500, initial: 1000})), bindings: {}, via: 'direct'});
-  await until(() => q('.hc-pick'), 'the chooser');
+    colour: COLOURS[k % COLOURS.length], remaining: 500, initial: 1000})), bindings: {}, via: 'direct'});
+  await until(() => q('[data-pick="0"]'), 'the chooser');
   const long = []; new PerformanceObserver(l => l.getEntries().forEach(e => long.push(e.duration))).observe({entryTypes: ['longtask']});
   const t0 = performance.now();
-  q('.hc-pick [role=combobox]').click();
-  await until(() => qa('.p-select-overlay [role=option]').length, 'the list opens');
+  q('[data-pick="0"]').click();
+  await until(() => qa('[data-pick-panel="0"] [data-colour]').length, 'the picker opens');
   const opened = performance.now() - t0;
-  const rows = qa('.p-select-overlay [role=option]').length;
-  assert(rows < 60, 'only the rows in view are drawn, not all ' + N + ': ' + rows);
+  await click(q('[data-pick-panel="0"] .oui-spick-mat:not([data-material])'));
+  eq(qa('[data-pick-panel="0"] [data-colour]').length, COLOURS.length, 'one swatch per colour, not ' + N + ' rows');
   assert(opened < 750, 'opens at once: ' + Math.round(opened) + ' ms');
   for (let k = 0; k < 3; k++) await post({type: 'status', data: VIEW({bed: {temp: 21 + k, target: 0}})});
-  assert(q('.p-select-overlay'), 'status refreshes leave the list open');
-  const list = q('.p-select-overlay .p-virtualscroller');
-  list.scrollTop = list.scrollHeight; list.dispatchEvent(new Event('scroll')); await settle(); await settle();
-  assert(qa('.p-select-overlay [role=option]').some(o => text(o).startsWith('#1999 ')), 'the end of the list (the last PETG spool) scrolls into view: '
-    + qa('.p-select-overlay [role=option]').map(text).slice(-2).join(' | '));
-  await type(q('.p-select-overlay .p-select-filter'), '#1999'); await settle();
-  const hit = qa('.p-select-overlay [role=option]').map(text);
-  assert(hit.length === 1 && hit[0].includes('Spool 1999'), 'search finds one spool among ' + N + ': ' + hit);
+  assert(q('[data-pick-panel="0"]'), 'status refreshes leave the picker open');
+  await type(q('[data-pick-panel="0"] .oui-spick-q'), '#1999'); await settle();
+  eq(qa('[data-pick-panel="0"] [data-colour]').map(e => e.dataset.colour), [COLOURS[1998 % COLOURS.length]], 'search finds one spool among ' + N);
   assert(!long.some(d => d > 250), 'no long main-thread block: ' + long.map(Math.round));
   await press('Escape'); await settle();
 `);
+// ------------------------------------------------------------------ 2026-11 UX review: the Dashboard
+test('an out-of-range temperature or speed stays as typed when the field is left: refused, never turned into the limit', `
+  await connect('stock', 7);
+  await post({type: 'status', data: VIEW()});
+  await type(q('#temp-1'), '999');
+  await press('Tab');
+  assert(q('#temp-1').value.includes('999'), 'the typed value stays when the field is left, it is not made 320: ' + q('#temp-1').value);
+  assert(q('[data-set="1"]').disabled, 'Set stays off for 999 °C');
+  assert(text(q('#temp-why-1')).includes('320'), 'and the row says the limit: ' + text(q('#temp-why-1')));
+  await type(q('#temp-bed'), '500');
+  await press('Tab');
+  assert(q('#temp-bed').value.includes('500') && q('[data-set="bed"]').disabled && text(q('#temp-why-bed')).includes('110'), 'the bed too: ' + q('#temp-bed').value);
+  await type(q('#speed'), '999');
+  await press('Tab');
+  assert(q('#speed').value.includes('999') && q('[data-focus-key="speed"]').disabled && text(q('#speed-why')).includes('10 to 300'), 'and the speed: ' + q('#speed').value);
+  await type(q('#temp-1'), '-5');
+  await press('Tab');
+  assert(q('[data-set="1"]').disabled, 'a negative target is refused as well');
+  eq([cmds('temperature').length, cmds('speed').length, dialogOpen()], [0, 0, false], 'nothing sent, nothing asked');
+`);
+
+test('printer errors and a power cut are said in words, never as the record the printer sent', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW({exceptions: [{code: 522, level: 2, msg: 'filament_entangle'}, {code: 7}, {level: 2, extra: {a: 1}}, {code: 522, level: 2, msg: 'filament_entangle'}],
+    power_loss: true, reprint: {file: 'gcodes/sub/part.gcode', layer: 41}})});
+  const ex = byTest('exceptions');
+  eq(qa('li', ex).map(text), ['Filament entangle (code 522)', 'Error code 7', 'An error it doesn’t describe. Look at the printer’s screen.'], 'one line an error, the same one said once');
+  assert(!/[{}"]|level/.test(text(ex)), 'no record on screen: ' + text(ex));
+  const pl = text(byTest('power-loss'));
+  assert(pl.includes('part.gcode stopped at layer 41.') && !/[{}"]|Options|gcodes\\//.test(pl), 'the power cut names the file and the layer: ' + pl);
+  await post({type: 'status', data: VIEW({power_loss: true, reprint: {something: [1, 2]}})});
+  assert(!/[{}\\[\\]]/.test(text(byTest('power-loss'))) && qa('button', byTest('power-loss')).length === 2, 'a record it cannot read adds nothing: ' + text(byTest('power-loss')));
+`);
+
+test('camera and printer screen are not streamed to while their card is scrolled out of view', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  const show = async el => { el.scrollIntoView({block: 'center'}); await settle(); };
+  await show(byTest('camera'));
+  await click(byTest('camera'));
+  await until(() => last('lease').camera === true, 'in view: the camera is asked for');
+  window.scrollTo(0, 0);
+  await until(() => last('lease').camera === false, 'scrolled away: no more pictures are asked for');
+  assert(q('.oui-camera').dataset.state !== 'off', 'the camera stays on for when it is back in view');
+  await show(q('.oui-camera'));
+  await until(() => last('lease').camera === true, 'back in view: asked for again');
+  await click(byTest('camera'));
+  await show(byTest('screen-show'));
+  await click(byTest('screen-show'));
+  await until(() => last('lease').screen === true, 'in view: the screen is asked for');
+  window.scrollTo(0, 0);
+  await until(() => last('lease').screen === false && last('lease').camera === false, 'scrolled away: neither is asked for');
+`, { size: [600, 700] });
+
+test('default layout: every card is as tall as its rows; the console only in Expert mode; the old default moves to it', `
+  const cell = id => q('.oui-dash-cell[data-widget="' + id + '"]');
+  const place = id => cell(id).style.gridColumn;
+  const ids = () => qa('.oui-dash-cell').map(c => c.dataset.widget);
+  const cfg = (mode, dash) => post({type: 'config', mode, stored: {}, version: 't', spooler: {}, automations: [], settings: {mode, ...(dash ? {dashboard: dash} : {})}});
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await cfg('automagic');
+  eq(ids(), ['job', 'heads', 'temps', 'controls', 'camera', 'screen'], 'Automagic: no G-code console on the default');
+  eq([place('camera'), place('screen')], ['6 / span 7', '6 / span 4'], 'its rows go to the camera and the screen');
+  await cfg('expert');
+  eq(ids(), ['job', 'heads', 'temps', 'controls', 'camera', 'screen', 'console'], 'Expert: the console is on the default');
+  eq([place('job'), place('heads'), place('temps'), place('controls'), place('camera'), place('screen'), place('console')],
+     ['1 / span 5', '1 / span 5', '6 / span 3', '9 / span 4', '6 / span 4', '10 / span 3', '6 / span 7'], 'the default places');
+  // rows are 32 px with 12 px between them: a card of n rows is 44 n - 12 px high unless its content stretched it
+  const high = id => Math.round(cell(id).getBoundingClientRect().height);
+  assert(high('job') <= 164 && high('temps') <= 340 && high('controls') <= 340 && high('camera') <= 296 && high('screen') <= 296, 'no card is taller than its rows: ' + [high('job'), high('temps'), high('controls'), high('camera'), high('screen')]);
+  const cam = q('.oui-camera', cell('camera')).getBoundingClientRect();
+  assert(cam.width >= cell('camera').getBoundingClientRect().width - 2, 'the 16:9 camera box fills its cell: ' + Math.round(cam.width) + ' x ' + Math.round(cam.height));
+  await cfg('expert', {v: 1, active: 0, layouts: [{name: 'Default', items: [{id: 'job', x: 0, y: 0, w: 5, h: 4}, {id: 'heads', x: 0, y: 4, w: 5, h: 14}, {id: 'temps', x: 5, y: 0, w: 3, h: 7},
+    {id: 'controls', x: 8, y: 0, w: 4, h: 7}, {id: 'camera', x: 5, y: 7, w: 3, h: 8}, {id: 'screen', x: 8, y: 7, w: 4, h: 8}, {id: 'console', x: 5, y: 15, w: 7, h: 6}]}]});
+  eq([place('heads'), place('camera')], ['1 / span 5', '6 / span 4'], 'a layout still as the last default gets the new one');
+`, { size: [1400, 900] });
+
+test('status block: a print that ended says what it took and offers Print again; a failure says why; an idle printer leads to the files', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'complete', filename: 'sub/part.gcode', progress: 1, layer: 110, total_layers: 110, total_duration: 4500, message: 'Printer is ready'})});
+  const card = byTest('job-card');
+  assert(!q('[role=progressbar]', card) && !text(card).includes('100'), 'no full bar for a print that ended: ' + text(card));
+  assert(/Took\\s*1 h 15 min/.test(text(card)) && /Layers\\s*110/.test(text(card)), 'how long it took and its layers: ' + text(card));
+  assert(text(byTest('job-name')) === 'sub/part.gcode' && !text(card).includes('Bench U1'), 'named by its file, not by the printer again');
+  await click(byTest('print-again'));
+  assert(dialogText().includes('part.gcode') && dialogText().includes('Bench U1'), 'asks first, like Print on the Files tab: ' + dialogText());
+  await yes();
+  eq(cmds('print_file').map(m => m.args), [{path: 'gcodes/sub/part.gcode'}], 'the same file is printed again');
+  await reply(last('cmd', 'print_file'), true);
+  await post({type: 'status', data: VIEW({state: 'error', filename: 'part.gcode', message: 'Heater extruder not heating at expected rate', layer: 3, total_layers: 110, machine_state: 'ABNORMAL', busy: true})});
+  const err = byTest('job-error');
+  assert(err && text(err) === 'Heater extruder not heating at expected rate' && err.scrollWidth <= err.clientWidth + 1, 'the printer’s message whole, not cut: ' + text(err));
+  assert(getComputedStyle(err).color !== getComputedStyle(byTest('job-name')).color, 'in the error colour, not as plain text');
+  assert(!/Machine|abnormal/i.test(text(card)), 'no firmware state name: ' + text(card));
+  assert(byTest('print-again').disabled && byTest('print-again').getAttribute('aria-describedby') === 'heads-why', 'Print again waits for an idle printer, with the reason');
+  await post({type: 'status', data: VIEW()});
+  eq(text(byTest('job-name')), 'Ready to print', 'idle: what it is ready for');
+  assert(!byTest('print-again') && !text(card).includes('No print is running'), 'idle: ' + text(card));
+  await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING'})});
+  eq(text(byTest('job-name')), 'Leveling the bed', 'what the machine does is said in words');
+  await post({type: 'status', data: VIEW({busy: true, machine_state: 'SOME_NEW_STATE'})});
+  assert(!/some new state|Machine/i.test(text(card)), 'a state without words is left out: ' + text(card));
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, filename: 'part.gcode', progress: 0.4, layer: 41, total_layers: 110, machine_state: 'PRINTING'})});
+  assert(q('[role=progressbar]', card) && text(card).includes('Layer 41 of 110') && !/Machine|printing ·/.test(text(card)), 'printing: bar and layer, no "Machine: printing": ' + text(card));
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('choose-file'));
+  eq(q('[data-tab="files"]').getAttribute('aria-selected'), 'true', 'Choose a file opens the Files tab');
+`);
+
+test('controls: the top cover says its mode and Apply waits for a different one; a cover that is not fitted has no control', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW({purifier: {fitted: true, mode: 3, recirculating: true}})});
+  const row = () => byTest('cover-row'), apply = () => q('[data-focus-key="purifier"]');
+  assert(text(q('.oui-control-row-value', row())) === 'Keep warm' && text(byTest('cover-mode')).includes('Keep warm'), 'the current mode is the row value and the choice shown: ' + text(row()));
+  assert(apply().disabled, 'nothing to apply while the choice is the current mode');
+  await pick(byTest('cover-mode'), 'Strong cooling');
+  assert(!apply().disabled, 'another mode can be applied');
+  await click(apply());
+  eq(cmds('purifier').map(m => m.args), [{mode: 'strong'}], 'sent');
+  await reply(last('cmd', 'purifier'), true);
+  await post({type: 'status', data: VIEW({purifier: {fitted: true, mode: 1}})});
+  assert(text(q('.oui-control-row-value', row())) === 'Strong cooling' && apply().disabled, 'the mode this page set is shown, and Apply rests: ' + text(row()));
+  await post({type: 'selection_changed'});
+  await connect('extended');
+  await post({type: 'status', data: VIEW({purifier: {fitted: true, mode: 0}})});
+  assert(text(q('.oui-control-row-value', row())) === 'Idle' && apply().disabled, 'idle is said too: ' + text(row()));
+  await post({type: 'status', data: VIEW({purifier: {fitted: false}})});
+  assert(text(row()).includes('Not detected') && !byTest('cover-mode') && !apply(), 'not fitted: the row says so, without a control: ' + text(row()));
+  const v = q('.oui-control-row-value', row());
+  assert(v.scrollWidth <= v.clientWidth + 1, 'and the text is not cut');
+`);
+
+test('camera: off offers Start inside the picture box; an error is plain words with Try again; a lost printer keeps the last picture, named as that', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  const box = () => q('.oui-camera');
+  assert(text(box()).includes('Camera off') && box().contains(byTest('camera')) && text(byTest('camera')) === 'Start camera', 'off: Start camera in the box: ' + text(box()));
+  assert(!text(box()).includes('only runs'), 'no sentence about how it works: ' + text(box()));
+  await click(byTest('camera'));
+  await post({type: 'camera_error', error: 'HTTP Error 502: Bad Gateway'});
+  assert(text(box()).includes('Camera unavailable') && !/502|HTTP|Gateway/.test(text(box())), 'an error in plain words, without the transport text: ' + text(box()));
+  await click(byTest('cam-retry'));
+  assert(text(box()).includes('Starting the camera') && last('lease').camera === true, 'Try again starts it anew: ' + text(box()));
+  await post({type: 'frame', image: ${JSON.stringify(PIXEL)}});
+  await until(() => q('.oui-camera-overlay'), 'live');
+  assert(text(q('.oui-camera-overlay')).includes('Live') && !byTest('cam-last'), 'live while the printer answers');
+  await post({type: 'offline', error: 'timed out'});
+  assert(byTest('cam-last') && text(byTest('cam-last')) === 'Last picture' && !text(q('.oui-camera-overlay')).includes('Live'), 'the printer went away: the last picture, not live: ' + text(q('.oui-camera-overlay')));
+  assert(box().dataset.stale !== undefined, 'and it is drawn as old');
+`);
+
+test('unreachable, busy, connecting, plugin errors and the Spooler suggestion are each said once, in plain words', `
+  await until(() => last('hello'));
+  assert(q('#heads-why') && q('#heads-why').classList.contains('oui-sr') && !q('.oui-banner'), 'connecting: no banner, the reason is kept for the controls that point at it');
+  await connect();
+  await post({type: 'config', mode: 'expert', stored: {}, version: 't', spooler: {installed: false, url: 'https://example.invalid/spooler'}, automations: [], settings: {mode: 'expert'}});
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, filename: 'a.gcode'})});
+  const wrap = byTest('busy-wrap');
+  assert(wrap.classList.contains('oui-sr') && wrap.contains(q('#heads-why')) && text(q('#heads-why')).includes('busy'), 'a print is the normal case: the busy reason is kept, not drawn');
+  eq(byTest('cancel').getAttribute('aria-describedby'), null, 'Cancel is on');
+  eq(q('[data-load="0"]').getAttribute('aria-describedby'), 'heads-why', 'and what is off still points at the reason');
+  await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING'})});
+  assert(!wrap.classList.contains('oui-sr') && byTest('heads-why').getClientRects().length, 'busy without a print is shown');
+  await post({type: 'status', data: VIEW()});
+  await post({type: 'reply', id: 99999, error: 'boom'});
+  assert(toasts().includes('boom') && !toasts().includes('U1 Control'), 'a plugin error without the plugin’s own name in front: ' + toasts());
+  const hint = byTest('spooler-dash'), get = byTest('spooler-get');
+  assert(get && get.getAttribute('href') === 'https://example.invalid/spooler' && text(get) === 'Get Spooler', 'Get Spooler is a button of the suggestion');
+  assert(!text(hint).includes('https://') && !text(hint).trim().endsWith(':'), 'no bare address in the sentence: ' + text(hint));
+  assert(!text(q('.oui-panel-head', byTest('console')) || byTest('console')).includes('Bench U1'), 'the console does not name the printer again');
+  await post({type: 'selection_changed'});
+  await until(() => sent().filter(m => m.type === 'hello').length === 2);
+  await fail(last('hello'), 'Select a Snapmaker U1 printer, or set "host" in the plugin config.', {no_target: true});
+  const first = byTest('target-banner');
+  assert(text(first).includes('No U1 selected') && !/host|Details/.test(text(first)), 'no printer: said once, without the config key: ' + text(first));
+`);
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');

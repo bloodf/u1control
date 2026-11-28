@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue';
 import Button from 'primevue/button';
 import InputText from 'primevue/inputtext';
 import Select from 'primevue/select';
-import { fuzzyFilter, longList, OuiHint, OuiIcon, OuiLevel, OuiPresetMatch, OuiSlot, OuiSpool, OuiStatus } from '@orca-plugins/ui-foundation/src/components';
-import { download, edit as editIcon, home as parkIcon, rfid as rfidIcon, upload } from '@orca-plugins/ui-foundation/src/icons';
+import { groupByColour, normHex, OuiHint, OuiIcon, OuiLevel, OuiPresetMatch, OuiSlot, OuiSpool, OuiSpoolPick, OuiStatus, OuiSwatch, type OuiSpoolPickLabels } from '@orca-plugins/ui-foundation/src/components';
+import { chevronDown, download, home as parkIcon, upload, warning } from '@orca-plugins/ui-foundation/src/icons';
 import HeaterControl from './HeaterControl.vue';
 import { config } from '../app/settings';
 import { s, run, tracker, busy, controlsOff, loadSpools, relink, guidedWhy, pickPreset } from '../app/store';
-import { reasonTexts } from '../core/match';
-import type { MessageKey } from '../core/messages';
+import { presetLabel } from '../core/match';
 import { ask } from '../core/dialog';
 import { t, fmt, tMaybe } from '../core/i18n';
 import { family } from '../core/logic';
@@ -31,7 +30,13 @@ const has = computed(() => present(head.value));
 // The feeder knows whether the filament went all the way into the toolhead (load_finish) or only waits at the
 // inlet (preload_finish, e.g. after Unload): the RFID tag and filament_exist stay set either way.
 const notInHead = computed(() => has.value && AT_INLET.includes(feed.value.state || ''));
-const feedText = computed(() => (feed.value.state ? tMaybe(`heads.feedState.${feed.value.state}`, feed.value.state) : '—'));
+// The feeder line only for what is not the usual state of the head (loaded and in the head, or empty): said in words, never
+// the firmware's state name; an unknown state says nothing.
+const feedNote = computed(() => {
+  const st = feed.value.state || '';
+  if (has.value && st === 'wait_insert') return t('heads.feed.waiting');
+  return (has.value && AT_INLET.includes(st)) || (feed.value.detected && st !== 'load_finish') ? t('heads.feed.atInlet') : '';
+});
 // On the carriage (park detector ACTIVATE): offer Park, e.g. after a manual bed mesh left the head picked up.
 const picked = computed(() => !!s.status?.extruders[i]?.picked);
 const tagged = computed(() => !!(head.value?.official || tag.value));
@@ -62,9 +67,21 @@ const rfid = () => run({ key: `rfid:${i}`, label: t('act.rfid', { n }), cmd: 're
 // ---------------------------------------------------------------- edit form (survives status refreshes)
 const editing = ref(false);
 const form = reactive({ vendor: '', type: 'PLA', sub: '', colour: '#ffffff' });
+// Colour: one swatch per colour of the Spoolman spools (named by a spool of it), then any other colour (the system picker,
+// or its hex code typed in). The value stays '#rrggbb'.
+const swatches = computed(() => groupByColour(s.spools).filter(g => g.colour && !g.colours).slice(0, 12)
+  .map(g => ({ hex: g.colour!, name: [g.spools[0].vendor, g.spools[0].name].filter(Boolean).join(' ') || g.colour! })));
+const hexText = ref('');
+watch(() => form.colour, c => { if (normHex(hexText.value) !== normHex(c)) hexText.value = c; });
+function typedHex(v: string | undefined) {
+  hexText.value = v ?? '';
+  const c = normHex(v);
+  if (c && /^#?[0-9a-f]{6}$/i.test((v ?? '').trim())) form.colour = c;
+}
 function startEdit() {
   const h = head.value;
   Object.assign(form, { vendor: h?.vendor || 'Generic', type: h?.type || 'PLA', sub: h?.sub_type || 'Basic', colour: h?.colour || '#ffffff' });
+  hexText.value = form.colour;
   editing.value = true;
 }
 async function saveEdit() {
@@ -87,38 +104,47 @@ const colours = computed(() => headColours(linked.value, head.value));
 // the unknown badge. The weight line below is ours.
 const fraction = computed(() => headFraction(has.value, linked.value));
 const grams = (v: number) => Math.round(v).toLocaleString(document.documentElement.lang || undefined);
-const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material, grams: fmt.grams(sp.remaining) });
-// The chooser's search: brand, name and material by fuzzyFilter (foundation: case and accents ignored, letters in order, best
-// first); a spool's ID only ever matches exactly: "12" or "#12" lists that spool and nothing fuzzy (a bare number is an ID, so a
-// brand like "3D" is typed with a letter, "3d x"). While it is typed the list is only the hits, without "no spool" (Enter on the
-// first hit must never unlink), and nothing is bound until one is chosen.
-// ponytail: Select still runs its own "contains" pass; every option carries the typed text as `q` so it keeps all of ours.
-const query = ref('');
-const idQuery = computed(() => /^#?(\d+)$/.exec(query.value.trim()));
-const hits = computed(() => {
-  const m = idQuery.value;
-  const byId = m ? s.spools.filter(sp => sp.id === Number(m[1])) : [];
-  const fuzzy = m ? [] : fuzzyFilter(s.spools, query.value, sp => [sp.vendor, sp.name, sp.material].filter(Boolean).join(' ')).map(r => r.item);
-  return [...byId, ...fuzzy.filter(sp => !byId.includes(sp))];
-});
-// The material family on its own: a status refresh gives the head a new object every 2 s, and the 2000-spool list below must
-// not be rebuilt for it (only a different family, the spools or the search do that).
+// The weight is on the bar right above: the line names the spool only.
+const label = (sp: Spool) => t('pick.option', { id: sp.id, vendor: sp.vendor, name: sp.name, material: sp.material });
+// The compact line shows the linked spool; it opens the shared colour-first picker (OuiSpoolPick) under it, over the card.
+// One swatch per colour, drawn only while open: a colour with one spool picks it, with several a dialog lists them fullest
+// first. Material chips start at the head's material family; "No spool" unlinks.
 const fam = computed(() => (head.value?.type ? family(head.value.type) : ''));
-const groups = computed(() => {
-  const searching = !!query.value.trim();
-  const list = searching ? hits.value : s.spools;
-  const fit: Spool[] = [], rest: Spool[] = [];
-  for (const sp of list) (!fam.value || family(sp.material) === fam.value ? fit : rest).push(sp);
-  const opt = (sp: Spool) => ({ value: sp.id, label: label(sp), sp, q: query.value });
-  return searching
-    ? [...(fit.length ? [{ label: t('pick.fit'), items: fit.map(opt) }] : []), ...(rest.length ? [{ label: t('pick.other'), items: rest.map(opt) }] : [])]
-    : [
-      { label: t('pick.fit'), items: [{ value: 0, label: t('pick.none'), sp: null, q: '' }, ...fit.map(opt)] },
-      ...(rest.length ? [{ label: t('pick.other'), items: rest.map(opt) }] : []),
-    ];
-});
-const groupRows = computed(() => groups.value.reduce((n, g) => n + 1 + g.items.length, 0));
+const picking = ref(false);
+const pickFam = ref('');
+const trigger = ref<HTMLButtonElement | null>(null);
+const panel = ref<HTMLElement | null>(null);
+const pickSpools = computed(() => s.spools.map(sp => ({ ...sp, material: family(sp.material) })));
+const pickLabels = computed<OuiSpoolPickLabels>(() => ({ label: t('pick.label', { n }), spools: t('pick.count'), noColour: t('pick.noColour'),
+  choose: t('pick.dialog'), unknown: t('pick.weightUnknown'), empty: t('pick.empty'), search: t('pick.filter'), noMatch: t('pick.noMatch'),
+  allMaterials: t('pick.allMaterials'), none: t('pick.none') }));
+async function openPick() {
+  if (picking.value) { closePick(); return; }
+  pickFam.value = fam.value;
+  picking.value = true;
+  await nextTick();
+  const box = panel.value, r = trigger.value?.getBoundingClientRect();
+  if (box && r) box.toggleAttribute('data-up', innerHeight - r.bottom < box.offsetHeight + 4 && r.top > innerHeight - r.bottom);
+  box?.querySelector<HTMLElement>('.oui-spick-q, [data-colour][tabindex="0"]')?.focus();
+}
+function closePick() {
+  picking.value = false;
+  trigger.value?.focus();
+}
+// A press outside the open picker closes it; its dialog of one colour's spools is outside the card but belongs to it.
+function outside(e: Event) {
+  const at = e.target as Element | null;
+  if (!at || panel.value?.contains(at) || trigger.value?.contains(at) || at.closest?.('.p-dialog-mask')) return;
+  picking.value = false;
+}
+watch(picking, on => document[on ? 'addEventListener' : 'removeEventListener']('pointerdown', outside, true));
+onBeforeUnmount(() => document.removeEventListener('pointerdown', outside, true));
+function onPick(id: number | string | null) {
+  closePick();
+  void choose(id == null ? null : Number(id));
+}
 async function choose(id: number | null) {
+  if (id === bound.value) return;
   if (!id) {
     const was = bound.value;
     if (was == null) return;
@@ -131,20 +157,17 @@ async function choose(id: number | null) {
     yes: t('confirm.bind.yes', { n }), no: t('common.goBack'), danger: force })) return;
   await relink(i, id, () => run({ key: `bind:${i}`, label: t('act.bind', { n }), cmd: 'bind_spool', args: { head: i, spool_id: id, force }, okText: t('ok.bind', { n, id }), timeoutMs: 60000 }));
 }
-const spoolOf = (id: number) => s.spools.find(x => x.id === id) ?? null;
-// The OrcaSlicer preset Apply to project filaments gives this head, why, and Change (remembered by the plugin).
+// The OrcaSlicer preset Apply to project filaments gives this head, and Change (remembered by the plugin). The card shows
+// only a clean name (presetLabel); scores and reasons stay with the plugin, a doubtful automatic pick gets a warning icon.
 const match = computed(() => s.matches[String(i)] ?? null);
 // Settings > Connection "Show the matched preset": off hides the block; Apply to project filaments still uses the match.
 const showMatch = computed(() => config.value?.settings?.show_preset_match !== false);
-const words = (reasons: unknown) => reasonTexts(reasons, (code, v) => t(`match.r.${code}` as MessageKey, { v }));
-const BADGES: Record<string, MessageKey> = { remembered: 'match.remembered', linked: 'match.linked', spooler: 'match.spooler' };
-const candidates = computed(() => (!match.value || match.value.source === 'linked' ? [] : [
-  ...match.value.candidates.map(c => ({ name: c.shown ?? c.name, score: c.score, reasons: words(c.reasons) })),
-  ...(match.value.ofd ?? []).map(c => ({ name: c.name, score: c.score, reasons: words(c.reasons), badge: t('ofd.badge'), note: t('ofd.note') }))]));
-// The card shows Spooler's presets as Spooler/<preset> (shown); a pick goes back to the real name.
-const realName = (name: string | null) => name && (match.value?.candidates.find(c => (c.shown ?? c.name) === name)?.name ?? name);
-function pick(name: string | null) { const real = realName(name); pickPreset(i, real, match.value?.ofd?.find(c => c.name === real)?.id); }
-const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), score: t('match.score'), auto: t('match.auto'), autoHint: t('match.autoHint') }));
+// Change's list by shown name, first (best) of each; a pick goes back to the real name.
+const candidates = computed(() => (!match.value || match.value.source === 'linked' ? []
+  : [...new Set(match.value.candidates.map(c => presetLabel(c.name)))].map(name => ({ name }))));
+const realName = (name: string | null) => name && (match.value?.candidates.find(c => presetLabel(c.name) === name)?.name ?? name);
+const pick = (name: string | null) => pickPreset(i, realName(name));
+const matchLabels = computed(() => ({ change: t('match.change'), none: t('match.none'), review: t('match.unsure'), auto: t('match.auto'), autoHint: t('match.autoHint') }));
 // Pressure advance the head has now; Save keeps it on the linked spool (Spoolman only, keyed by the nozzle).
 const pa = computed(() => s.status?.extruders[i]?.pa ?? null);
 async function savePa() {
@@ -176,32 +199,28 @@ async function savePa() {
 
     <!-- The nozzle heater stays on screen while the Edit form is open: its reading and Off must not disappear. -->
     <template v-if="!editing">
-      <Select v-if="s.spools.length" :model-value="bound ?? 0" :options="groups" option-group-label="label" option-group-children="items" size="small"
-              option-label="label" option-value="value" :virtual-scroller-options="longList(groupRows, 38)" filter :filter-fields="['q']" reset-filter-on-hide :filter-placeholder="t('pick.filter')" :aria-label="t('pick.label', { n })"
-              :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" :pt="{ label: { 'aria-describedby': offWhy } }" class="hc-pick" :data-focus-key="`pick:${i}`" :data-pick="i"
-              @update:model-value="choose" @filter="e => (query = e.value)" @hide="query = ''">
-        <template #value="{ value }">
-          <span class="hc-opt"><OuiSpool v-if="value" :color="spoolOf(value)?.colour" :colors="spoolOf(value)?.colours" :fraction="spoolFraction(spoolOf(value)?.remaining, spoolOf(value)?.initial)" :size="22" />
-            <span class="oui-truncate">{{ value ? label(spoolOf(value) ?? { id: value, vendor: '', name: '', material: '' } as Spool) : t('pick.choose') }}</span></span>
-        </template>
-        <template #option="{ option }">
-          <span class="hc-opt"><OuiSpool v-if="option.sp" :color="option.sp.colour" :colors="option.sp.colours" :fraction="spoolFraction(option.sp.remaining, option.sp.initial)" :size="28" />
-            <span class="oui-truncate">{{ option.label }}</span>
-            <span v-if="option.sp && option.sp.remaining != null && option.sp.remaining < 100" class="oui-chip" data-tone="warn">{{ t('stock.low') }}</span></span>
-        </template>
-      </Select>
+      <div v-if="s.spools.length" class="hc-pick" :data-open="picking || undefined">
+        <button ref="trigger" type="button" class="hc-pick-btn" :aria-label="t('pick.label', { n })" :aria-expanded="picking" aria-haspopup="true"
+                :disabled="!!controlsOff || tracker.isBusy(`bind:${i}`)" :aria-describedby="offWhy" :data-focus-key="`pick:${i}`" :data-pick="i" @click="openPick">
+          <OuiSpool v-if="linked" :color="linked.colour" :colors="linked.colours" :fraction="spoolFraction(linked.remaining, linked.initial)" :size="22" />
+          <span class="oui-truncate">{{ bound == null ? t('pick.choose') : label(linked ?? { id: bound, vendor: '', name: '', material: '' } as Spool) }}</span>
+          <OuiIcon :icon="chevronDown" :size="14" />
+        </button>
+        <div v-if="picking" ref="panel" class="hc-pick-panel" :data-pick-panel="i">
+          <OuiSpoolPick v-model:material="pickFam" :spools="pickSpools" :labels="pickLabels" :selected="bound" :grams="fmt.grams" @pick="onPick" @close="closePick" />
+        </div>
+      </div>
     </template>
     <HeaterControl :id="String(i)" card />
     <div v-if="!editing && match && has && showMatch" class="hc-match" :data-match="i">
-      <p class="oui-label">{{ t('match.title') }}</p>
-      <OuiPresetMatch :name="match.shown ?? match.name" :score="match.score" :confident="match.confident" :reasons="words(match.reasons)"
-                      :badge="BADGES[match.source] ? t(BADGES[match.source]) : undefined" :remembered="match.source === 'remembered' && !!match.remembered_key"
-                      :candidates="candidates"
+      <p class="oui-label hc-match-title">{{ t('match.title') }}</p>
+      <OuiPresetMatch :name="match.name ? presetLabel(match.name) : null" :remembered="match.source === 'remembered' && !!match.remembered_key"
+                      :candidates="candidates" :confident="match.confident"
                       :labels="matchLabels" :busy="s.matchBusy" @pick="pick" />
     </div>
     <template v-if="!editing">
-      <p class="oui-meta"><template v-if="tag">{{ t('heads.tagDetail', { text: tagText }) }} · </template>{{ t('heads.feeder', { state: feedText }) }}<template v-if="feed.detected && !['preload_finish', 'load_finish'].includes(feed.state || '')"> · {{ t('heads.atInlet') }}</template></p>
-      <p v-if="pa != null" class="oui-meta oui-row" :data-pa="i">{{ t('heads.pa', { v: pa }) }}<template v-if="head.nozzle"> · {{ tMaybe(`nozzle.${head.nozzle}`, head.nozzle) }}</template>
+      <p v-if="tag || feedNote" class="oui-meta" :data-feed="feedNote ? i : undefined">{{ [tag ? t('heads.tagDetail', { text: tagText }) : '', feedNote].filter(Boolean).join(' · ') }}</p>
+      <p v-if="pa != null && has" class="oui-meta oui-row" :data-pa="i">{{ t('heads.pa', { v: pa }) }}<template v-if="head.nozzle"> · {{ t('heads.nozzle', { nozzle: tMaybe(`nozzle.${head.nozzle}`, head.nozzle) }) }}</template>
         <Button v-if="linked" text size="small" :label="t('heads.savePa')" :aria-label="t('heads.savePaLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`pa:${i}`)"
                 :loading="tracker.isBusy(`pa:${i}`)" :data-save-pa="i" @click="savePa" /></p>
     </template>
@@ -211,7 +230,13 @@ async function savePa() {
         <label :for="`e${i}-v`">{{ t('edit.vendor') }}</label><InputText :id="`e${i}-v`" v-model="form.vendor" size="small" />
         <label :id="`e${i}-tl`">{{ t('edit.type') }}</label><Select v-model="form.type" :options="TYPES" :aria-labelledby="`e${i}-tl`" size="small" />
         <label :for="`e${i}-s`">{{ t('edit.subtype') }}</label><InputText :id="`e${i}-s`" v-model="form.sub" size="small" />
-        <label :for="`e${i}-c`">{{ t('edit.colour') }}</label><input :id="`e${i}-c`" v-model="form.colour" type="color" class="hc-colour">
+        <span :id="`e${i}-cl`" class="hc-label">{{ t('edit.colour') }}</span>
+        <div class="hc-colours" role="group" :aria-labelledby="`e${i}-cl`">
+          <button v-for="c in swatches" :key="c.hex" type="button" class="hc-sw" :aria-pressed="normHex(form.colour) === c.hex" :aria-label="c.name" :title="c.name"
+                  :data-swatch="c.hex" @click="form.colour = c.hex"><OuiSwatch :color="c.hex" :size="18" /></button>
+          <input :id="`e${i}-c`" v-model="form.colour" type="color" class="hc-colour" :aria-label="t('edit.otherColour')" :title="t('edit.otherColour')">
+          <InputText :model-value="hexText" size="small" class="hc-hex oui-num" maxlength="7" spellcheck="false" :aria-label="t('edit.hex')" :data-hex="i" @update:model-value="typedHex" />
+        </div>
       </div>
       <div class="oui-row">
         <Button type="submit" size="small" :label="t('common.save')" :loading="tracker.isBusy(`edit:${i}`)" :disabled="!!guidedWhy" :aria-describedby="why" />
@@ -220,17 +245,17 @@ async function savePa() {
     </form>
 
     <template v-if="!editing" #actions>
-      <Button size="small" severity="secondary" :label="t('heads.load')" :aria-label="t('heads.loadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`load:${i}`)" :aria-describedby="why"
+      <Button size="small" :severity="has ? 'secondary' : undefined" :label="t('heads.load')" :aria-label="t('heads.loadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`load:${i}`)" :aria-describedby="why"
               :loading="tracker.isBusy(`load:${i}`)" :data-focus-key="`load:${i}`" :data-load="i" @click="load"><template #icon><OuiIcon :icon="download" :size="14" /></template></Button>
-      <Button size="small" severity="secondary" :label="t('heads.unload')" :aria-label="t('heads.unloadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`unload:${i}`)" :aria-describedby="why"
+      <Button v-if="has" size="small" severity="secondary" :label="t('heads.unload')" :aria-label="t('heads.unloadLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`unload:${i}`)" :aria-describedby="why"
               :loading="tracker.isBusy(`unload:${i}`)" :data-focus-key="`unload:${i}`" :data-unload="i" @click="unload"><template #icon><OuiIcon :icon="upload" :size="14" /></template></Button>
       <Button v-if="picked && !busy" size="small" severity="secondary" :label="t('heads.park')" :aria-label="t('heads.parkLabel', { n })" :disabled="!!guidedWhy || tracker.isBusy(`park:${i}`)" :aria-describedby="why"
               :loading="tracker.isBusy(`park:${i}`)" :data-focus-key="`park:${i}`" :data-park="i" @click="park"><template #icon><OuiIcon :icon="parkIcon" :size="14" /></template></Button>
-      <span class="oui-spacer" />
-      <Button size="small" severity="secondary" text :aria-label="t('heads.editLabel', { n })" :title="t('heads.editLabel', { n })" :disabled="!!guidedWhy" :aria-describedby="why"
-              :data-focus-key="`edit:${i}`" :data-edit="i" @click="startEdit"><template #icon><OuiIcon :icon="editIcon" :size="14" /></template></Button>
-      <Button size="small" severity="secondary" text :aria-label="t('heads.rfidLabel', { n })" :title="t('heads.rfidLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`rfid:${i}`)" :aria-describedby="offWhy"
-              :data-focus-key="`rfid:${i}`" :data-rfid="i" @click="rfid"><template #icon><OuiIcon :icon="rfidIcon" :size="14" /></template></Button>
+      <span v-if="has" class="oui-spacer" />
+      <Button size="small" severity="secondary" text :label="t('heads.edit')" :aria-label="t('heads.editLabel', { n })" :disabled="!!guidedWhy" :aria-describedby="why"
+              :data-focus-key="`edit:${i}`" :data-edit="i" @click="startEdit" />
+      <Button size="small" severity="secondary" text :label="t('heads.readTag')" :aria-label="t('heads.rfidLabel', { n })" :disabled="!!controlsOff || tracker.isBusy(`rfid:${i}`)" :aria-describedby="offWhy"
+              :loading="tracker.isBusy(`rfid:${i}`)" :data-focus-key="`rfid:${i}`" :data-rfid="i" @click="rfid" />
     </template>
   </OuiSlot>
 </template>
@@ -249,17 +274,43 @@ async function savePa() {
 .oui-slot.hc .oui-slot-extra { gap: 6px; }
 .oui-slot.hc .oui-slot-extra > .oui-meta { font-size: var(--oui-text-xs); line-height: 1.35; }
 .oui-slot.hc .oui-slot-actions { padding-top: 0; }
+/* Load, Unload, Edit and Read tag stay on one line: the text buttons are tight, and a narrow card (two a row in half the
+   dashboard) drops the Load / Unload icons before it would wrap. */
+.oui-slot.hc { container: hc / inline-size; }
+.oui-slot.hc .oui-slot-actions .p-button-text { padding-inline: 6px; }
+@container hc (max-width: 290px) { .oui-slot-actions .p-button:not(.p-button-text) .oui-icon { display: none; } }
 .hc-tag { margin-inline-start: var(--oui-s2); }
 .hc-match { display: grid; gap: 2px; padding-top: 6px; border-top: 1px solid var(--oui-border); }
 .hc-match .oui-match-name { font-size: var(--oui-text-sm); }
+.hc-match-title { display: flex; align-items: center; gap: var(--oui-s1); }
 /* Change-list names wrap instead of being cut off. */
 .hc-match .oui-match-option-name { align-items: flex-start; }
 .hc-match .oui-match-option-name .oui-truncate { white-space: normal; overflow: visible; overflow-wrap: anywhere; }
-.hc-pick { width: 100%; min-width: 0; }
-.hc-opt { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 100%; }
+.hc-pick { position: relative; min-width: 0; }
+.orca-ui .hc-pick-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-width: 0; height: 32px; padding: 0 var(--oui-s2); border: 1px solid var(--oui-control-border);
+  border-radius: var(--oui-radius-sm); background: var(--oui-control); color: var(--oui-text); font: inherit; font-size: var(--oui-text-sm); text-align: start; cursor: pointer; }
+.orca-ui .hc-pick-btn > .oui-truncate { flex: 1; min-width: 0; }
+.orca-ui .hc-pick-btn:disabled { opacity: .6; cursor: default; }
+.orca-ui .hc-pick-btn:focus-visible { outline: 2px solid var(--oui-primary-mark); outline-offset: 1px; }
+/* The picker floats over the card under its line, as wide as the card: opening it never grows the card. */
+.oui-slot.hc:has(.hc-pick[data-open]) { position: relative; z-index: 30; }
+.hc-pick-panel { position: absolute; inset-inline: 0; top: calc(100% + 2px); z-index: 1; padding: var(--oui-s2); border-radius: var(--oui-radius-sm);
+  background: var(--oui-surface); box-shadow: 0 0 0 1px var(--oui-border), 0 8px 24px rgb(0 0 0 / .28); }
+.hc-pick-panel[data-up] { top: auto; bottom: calc(100% + 2px); }
 .hc-form-title { display: flex; align-items: center; gap: var(--oui-s1); }
 .hc-form { display: grid; gap: var(--oui-s2); padding-top: var(--oui-s2); border-top: 1px solid var(--oui-border); }
 .hc-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--oui-s2); align-items: center; }
 .hc-grid > label { font-size: var(--oui-text-sm); font-weight: 600; color: var(--oui-muted); }
-.hc-colour { width: 44px; height: var(--oui-control-sm); padding: 0; border: 1px solid var(--oui-control-border); border-radius: var(--oui-radius); background: none; }
+.hc-grid > .hc-label { font-size: var(--oui-text-sm); font-weight: 600; color: var(--oui-muted); }
+/* Colour: the spools' colours as swatches, then any other colour (system picker or hex code). */
+.hc-colours { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
+.hc-sw { display: inline-grid; place-items: center; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 50%; background: none; cursor: pointer; }
+.hc-sw[aria-pressed='true'] { box-shadow: 0 0 0 2px var(--oui-primary-mark); }
+.hc-sw:focus-visible, .hc-colour:focus-visible { outline: 2px solid var(--oui-primary-mark); outline-offset: 1px; }
+.hc-colour { width: 26px; height: 26px; padding: 0; border: 1px solid var(--oui-control-border); border-radius: 50%; background: none; cursor: pointer; overflow: hidden; }
+.hc-colour::-webkit-color-swatch-wrapper { padding: 2px; }
+.hc-colour::-webkit-color-swatch { border: 0; border-radius: 50%; }
+.orca-ui .hc-hex { width: 86px; flex: none; }
+/* An empty head: "No filament" in the middle and Load as its one main action. */
+.oui-slot.hc[data-empty] .oui-slot-main, .oui-slot.hc[data-empty] .oui-slot-actions { justify-content: center; }
 </style>

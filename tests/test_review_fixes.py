@@ -218,10 +218,15 @@ class GenerationTests(unittest.TestCase):
         svc, _ = make_service(self, _Dummy())
         svc.last_frame_at = time.monotonic() - 0.1
         self.assertFalse(svc._frame_due())               # 5 fps by default: 0.1 s is too soon
-        svc.set_camera_fps(30)
-        self.assertTrue(svc._frame_due())                # 30 fps: due after 1/30 s
+        svc.set_camera_fps(15)
+        self.assertFalse(svc._frame_due())               # nothing prints: at most 2 a second, whatever the setting
+        svc.last_state = "printing"
+        self.assertTrue(svc._frame_due())                # 15 fps while it prints: due after 1/15 s
         svc.last_frame_at = time.monotonic()
         self.assertFalse(svc._frame_due())
+        svc.last_state = "standby"
+        svc.last_frame_at = time.monotonic() - 0.6
+        self.assertTrue(svc._frame_due())                # idle: due after half a second
 
 
 class _Camera:
@@ -250,7 +255,7 @@ class CameraRateTests(unittest.TestCase):
         self.addCleanup(self.svc.close)
         self.svc.set_target(Target("cam-u1"))
         self.svc.firmware = {"kind": "stock", "version": ""}
-        self.svc.set_camera_fps(30)
+        self.svc.set_camera_fps(15)
 
     def frames(self):
         return [m for m in self.pub if m.get("type") == "frame"]
@@ -278,7 +283,7 @@ class CameraRateTests(unittest.TestCase):
         for n in range(10):
             _Camera.picture = b"\xff\xd8" + bytes([n])
             self.svc._push_frame()
-        self.assertAlmostEqual(self.svc.frame_wait, 1 / 30)                # never faster than camera_fps
+        self.assertAlmostEqual(self.svc.frame_wait, 1 / 15)                # never faster than camera_fps
 
     def test_waiting_for_the_ack_does_not_tick(self):
         self.svc._push_frame()                             # sent: the page must show it first

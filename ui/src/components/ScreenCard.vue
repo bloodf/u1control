@@ -3,11 +3,17 @@ import { computed, ref } from 'vue';
 import Button from 'primevue/button';
 import { OuiEmpty, OuiIcon, OuiPanel, OuiWidgetMaximize } from '@orca-plugins/ui-foundation/src/components';
 import { hand, x } from '@orca-plugins/ui-foundation/src/icons';
-import { s, lease, run, tracker } from '../app/store';
+import { s, lease, openSettings, run, tracker } from '../app/store';
+import { watchInView } from '../core/in-view';
 import { t } from '../core/i18n';
 
 /** The remote screen is the Extended Firmware's: on other firmware the card stays, off, and says why. */
-const off = computed(() => (s.info?.firmware.kind === 'extended' ? '' : s.info?.firmware.kind === 'stock' ? t('scr.needsExt') : t('reason.waiting')));
+const needsExt = computed(() => s.info?.firmware.kind === 'stock');
+const off = computed(() => (s.info?.firmware.kind === 'extended' ? '' : needsExt.value ? t('scr.needsExt') : t('reason.waiting')));
+
+// A card scrolled out of view (or behind a maximised widget) is not streamed to: the lease says so.
+const panel = ref<{ $el: Element }>();
+watchInView(() => panel.value?.$el, seen => { s.scrSeen = seen; lease(); });
 
 /** The picture's own size (the U1 sends 480 x 320): the frame takes its proportions, so nothing is cut off. */
 const dim = ref({ w: 480, h: 320 });
@@ -58,14 +64,22 @@ function up(e: PointerEvent) {
 }
 </script>
 <template>
-  <OuiPanel :icon="hand" flush aria-labelledby="scr-h" :hint="t('scr.hint')" :hint-label="t('scr.about')">
+  <OuiPanel ref="panel" :icon="hand" flush aria-labelledby="scr-h" :hint="t('scr.hint')" :hint-label="t('scr.about')">
     <template #title><span id="scr-h">{{ t('scr.title') }}</span></template>
     <template #actions>
-      <Button severity="secondary" size="small" :label="s.scrOn && !off ? t('scr.hide') : t('scr.show')" :disabled="!!off" data-focus-key="screen" data-test="screen-show" @click="toggle">
-        <template #icon><OuiIcon :icon="s.scrOn && !off ? x : hand" :size="14" /></template></Button>
+      <Button v-if="s.scrOn && !off" severity="secondary" size="small" :label="t('scr.hide')" data-focus-key="screen" data-test="screen-show" @click="toggle">
+        <template #icon><OuiIcon :icon="x" :size="14" /></template></Button>
       <OuiWidgetMaximize />
     </template>
-    <OuiEmpty v-if="!s.scrOn || off" compact :icon="hand" :title="t('scr.off')" :text="off || undefined" data-test="screen-card" />
+    <!-- Off: the same centred state as the camera beside it, with the way on in it. On official firmware it says what
+         it needs, with the way to the requirements. -->
+    <OuiEmpty v-if="!s.scrOn || off" class="u1-scr-off" :icon="hand" :title="t('scr.off')" :text="off || undefined" data-test="screen-card">
+      <template #actions>
+        <Button v-if="needsExt" severity="secondary" :label="t('scr.requirements')" data-test="screen-req" @click="openSettings('requirements')" />
+        <Button v-else severity="secondary" :label="t('scr.show')" :disabled="!!off" data-focus-key="screen" data-test="screen-show" @click="toggle">
+          <template #icon><OuiIcon :icon="hand" :size="14" /></template></Button>
+      </template>
+    </OuiEmpty>
     <div v-else class="u1-view-screen" :style="{ '--u1-scr-w': dim.w, '--u1-scr-h': dim.h }" :role="s.screen ? undefined : 'status'" :aria-busy="tracker.isBusy('screen')" :data-busy="tracker.isBusy('screen') || undefined">
       <img v-if="s.screen" :src="s.screen" :alt="t('scr.alt')" @load="sized" draggable="false" @pointerdown="down" @pointermove="move" @pointerup="up" @pointercancel="up">
       <OuiEmpty v-else :state="s.screenError ? 'error' : 'loading'" :title="s.screenError || t('scr.connecting')" />
@@ -73,6 +87,7 @@ function up(e: PointerEvent) {
   </OuiPanel>
 </template>
 <style>
+.u1-scr-off { height: 100%; }
 /* The touchscreen at its own proportions, on the neutral track every picture sits on. The picture is fitted, never
    cropped: a click is mapped back to the screen's pixels. */
 .u1-view-screen { display: grid; grid-template: minmax(0, 1fr) / minmax(0, 1fr); place-items: center; overflow: hidden; aspect-ratio: var(--u1-scr-w) / var(--u1-scr-h); background: var(--oui-inset); border-radius: 0 0 var(--oui-radius-lg) var(--oui-radius-lg); }

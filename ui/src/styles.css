@@ -1,15 +1,6 @@
 /* U1 Control's own layout on top of the shared foundation (@orca-plugins/ui-foundation): where the page's banners sit, the plain tables and
    a few lines the pages share. Colours are the foundation's --oui-* roles only; nothing here defines a colour. */
 
-/* Narrow bar: the tabs wrap under Emergency stop. Keep a clear gap so a tab press never lands on it. */
-@container oui-appbar (max-width: 760px) { .oui-appbar-actions { padding-bottom: var(--oui-s3); } }
-/* Phone-narrow bar with a long Emergency stop label (es, de): the state chip takes its own line instead of being cut,
-   and the tabs drop their icons so the five labels still fit. */
-@container oui-appbar (max-width: 480px) {
-  .oui-appbar .oui-appbar-status { order: 4; flex: 1 0 100%; padding-bottom: var(--oui-s2); }
-  .oui-appbar .oui-appbar-actions { padding-bottom: 0; }
-  .oui-appbar-tab > .oui-icon { display: none; }
-}
 
 /* The top of every page: its header, then the page-level banners (PageMessages is moved under the open tab's header)
    and the page's own. One grid item of .oui-page, so an empty banner place takes no room. The live regions stay in
@@ -45,8 +36,8 @@
    other one they would vanish. Ours follow the page's theme. */
 .orca-ui :is(h1,h2,h3,h4,h5,h6){color:inherit}.orca-ui th{color:var(--oui-muted)}
 
-/* The busy state's dot stays still. The foundation pulses it for ever (oui-halo, an animated box-shadow), and on macOS any
+/* The busy state's dot stays still. The foundation pulses it for ever (oui-halo on the dot's ::after), and on macOS any
    never-ending animation makes WindowServer redraw OrcaSlicer's window every frame, even while another tab is showing
    (OrcaSlicer doesn't tell the page it's hidden): about 30% of WindowServer's CPU. "Printing" and the progress already
    say it is live. The class is doubled to outrank the foundation rule, which loads later. */
-.oui-status[data-state=busy] .oui-status-dot.oui-status-dot { animation: none; }
+.oui-status[data-state=busy] .oui-status-dot.oui-status-dot, .oui-status[data-state=busy] .oui-status-dot.oui-status-dot::after { animation: none; }

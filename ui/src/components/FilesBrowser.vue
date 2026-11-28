@@ -20,7 +20,7 @@ import { fileKind, folderTree, rootOf } from '../core/logic';
 interface Listed extends OuiFile { time?: number; weight?: number | null; rel?: string }
 // The U1 serves its camera folder read only (Moonraker answers 405 to a delete there): its files can only be saved.
 const READ_ONLY = ['camera'];
-const rootLabel = (r: string) => (r === 'gcodes' ? t('files.root.gcodes') : t('files.root.camera'));
+const rootLabel = (r: string) => (r === 'gcodes' ? t('files.root.gcodes') : t('tl.title'));
 const nameOf = (id: string) => id.slice(id.lastIndexOf('/') + 1);
 const command = (cmd: string, args: Record<string, unknown>) => bridge.command(cmd, args, s.info?.generation);
 const disk = ref('');
@@ -82,11 +82,13 @@ const thumbs = ref<Record<string, string>>({});
 watch(() => files.folder, () => { thumbs.value = {}; filter.value = ''; });
 // The filter is fuzzy (case, accents and separators do not matter; the letters in order): best match first, matches marked.
 const ranked = computed(() => !!filter.value.trim());
+// The kind tag only tells files apart in a folder that holds more than one kind (print files are all G-code).
+const mixed = computed(() => new Set((files.files as Listed[]).map(f => fileKind(f.name))).size > 1);
 const shown = computed<OuiFile[]>(() => {
   const found = ranked.value ? fuzzyFilter(files.files as Listed[], filter.value, f => f.name) : (files.files as Listed[]).map(item => ({ item, match: null }));
   return found.map(({ item: f, match }) => ({ match: match?.hits,
     id: f.id, name: f.name, size: f.size, sizeText: fmt.bytes(f.size) || undefined, modified: f.modified, modifiedText: f.modified ? fmt.dateTime(f.modified) : undefined,
-    kind: fileKind(f.name), thumb: thumbs.value[f.id] ?? null,
+    kind: mixed.value ? fileKind(f.name) : undefined, thumb: thumbs.value[f.id] ?? null,
     facts: root.value === 'gcodes' ? [{ label: t('files.col.time'), value: f.time ? fmt.duration(f.time) : null }, { label: t('files.col.weight'), value: f.weight ? fmt.grams(f.weight) : null }] : [],
   }));
 });

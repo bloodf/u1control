@@ -1,6 +1,7 @@
 // Pure rules of the page (node --test runs this TypeScript directly).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { coverMode, exceptionParts, reprintParts } from '../../src/core/logic.ts';
 import { parseTarget, parseSpeed, heaterPhase, setupWarnings, warningKey, moveTargets, folderTree, fileKind, rootOf, boundHeads, withLink, family, overEnglish, colourFar } from '../../src/core/logic.ts';
 import { normalizeLocale, resolveLocale, interpolate } from '../../src/core/i18n-core.ts';
 
@@ -116,4 +117,23 @@ test('a chosen spool shows on its head at once and leaves the head it was on; un
   assert.deepEqual(withLink(was, 0, 9), { '0': 9, '1': 7 });
   assert.deepEqual(withLink(was, 1, null), { '0': 3 });
   assert.deepEqual(was, { '0': 3, '1': 7 });   // the old links are kept, for the rollback
+});
+
+test('printer records are said in words: an error by its text and code, a power cut by its file and layer', () => {
+  assert.deepEqual(exceptionParts({ code: 522, level: 2, msg: 'filament_entangle' }), { name: 'Filament entangle', code: '522' });
+  assert.deepEqual(exceptionParts({ id: 'E7', message: 'Nozzle  clogged' }), { name: 'Nozzle clogged', code: 'E7' });
+  assert.deepEqual(exceptionParts({ code: 7 }), { name: '', code: '7' });
+  assert.deepEqual(exceptionParts('heater_fault'), { name: 'Heater fault', code: '' });
+  assert.deepEqual(exceptionParts({ level: 2, nested: { a: 1 } }), { name: '', code: '' });   // nothing it can say: never the record
+  assert.deepEqual(exceptionParts(null), { name: '', code: '' });
+  assert.deepEqual(reprintParts({ file: 'gcodes/sub/part.gcode', layer: 41 }), { file: 'part.gcode', layer: 41 });
+  assert.deepEqual(reprintParts({ file_path: 'C:\\x\\part.gcode' }), { file: 'part.gcode', layer: null });
+  assert.deepEqual(reprintParts({ current_layer: 3 }), { file: '', layer: 3 });
+  assert.deepEqual(reprintParts('x'), { file: '', layer: null });
+});
+
+test('the top cover mode as the printer reports it; cooling does not say how hard', () => {
+  assert.equal(coverMode(0), 'idle'); assert.equal(coverMode(1), 'cooling');
+  assert.equal(coverMode(2), 'keep-warm'); assert.equal(coverMode(3), 'keep-warm'); assert.equal(coverMode('keep-warm'), 'keep-warm');
+  assert.equal(coverMode(undefined), ''); assert.equal(coverMode(true), ''); assert.equal(coverMode(9), '');
 });

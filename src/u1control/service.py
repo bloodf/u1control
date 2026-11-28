@@ -38,6 +38,7 @@ CAMERA_RETRY = 2.0
 CAMERA_KEEPALIVE = 50.0
 FRAME_MIN_INTERVAL = 0.2    # ~5 fps cap unless the camera_fps setting asks for more (set_camera_fps)
 FRAME_SLOWEST = 1.0         # s: an unchanging camera picture is still fetched this often
+FRAME_IDLE_INTERVAL = 0.5   # s: a printer that isn't printing is asked at most twice a second, whatever camera_fps says
 FRAME_SAME_BEFORE_SLOWING = 2   # unchanged pictures in a row before asking half as often
 FRAME_ACK_TIMEOUT = 2.0     # fetch the next frame without an ack after this long
 SNAPSHOT_MAX_AGE = 10.0     # s: Save picture keeps only a camera frame this fresh
@@ -428,9 +429,11 @@ class Service(FilesMixin, usage.UsageMixin, StockMixin):
             self.publish({"type": "rfid", "heads": changed, "tags": tags})
 
     def _frame_due(self):
-        """At most camera_fps, and the page must have shown the previous frame (ack) unless FRAME_ACK_TIMEOUT passed."""
+        """At most camera_fps (2 a second while nothing prints: little moves then), and the page must have shown the
+        previous frame (ack) unless FRAME_ACK_TIMEOUT passed."""
         waited = time.monotonic() - self.last_frame_at
-        return waited >= self.frame_wait and (self.frame_ack.is_set() or waited >= FRAME_ACK_TIMEOUT)
+        wait = self.frame_wait if u1.is_busy(self.last_state) else max(self.frame_wait, FRAME_IDLE_INTERVAL)
+        return waited >= wait and (self.frame_ack.is_set() or waited >= FRAME_ACK_TIMEOUT)
 
     def _push_frame(self):
         gen, client, _ = self._ctx()

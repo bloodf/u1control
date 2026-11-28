@@ -45,12 +45,15 @@ class SettingsTests(unittest.TestCase):
         """Live camera rate: 5 fps by default, the same in both modes, only the offered rates are kept."""
         st, d = self.store()
         self.assertEqual(st.effective()["camera_fps"], 5)
-        for bad in (60, 0, True, 30.0, "30", None):
+        for bad in (60, 30, 0, True, 15.0, "15", None):
             self.assertEqual(st.update({"camera_fps": bad})["camera_fps"], 5, bad)
-        self.assertEqual(st.update({"camera_fps": 30})["camera_fps"], 30)
-        self.assertEqual(st.update({"mode": "expert"})["camera_fps"], 30)
+        self.assertEqual(st.update({"camera_fps": 15})["camera_fps"], 15)
+        self.assertEqual(st.update({"mode": "expert"})["camera_fps"], 15)
+        self.assertEqual(st.update({"camera_fps": 2})["camera_fps"], 2)
         write(os.path.join(d, "settings.json"), json.dumps({"camera_fps": 60}))
         self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["camera_fps"], 5)  # hand-edited
+        write(os.path.join(d, "settings.json"), json.dumps({"camera_fps": 30}))   # offered until 0.22: now the fastest
+        self.assertEqual(settings.Store(os.path.join(d, "settings.json")).effective()["camera_fps"], 15)
 
     def test_ui_theme(self):
         """Settings > Appearance: auto by default, only auto/light/dark are kept."""
@@ -309,11 +312,11 @@ class PipelineTests(PluginBase):
         svc = ns["service"]()
         self.addCleanup(svc.close)
         self.assertAlmostEqual(svc.frame_interval, 0.2)
-        page.on_message({"type": "camera_fps", "value": 30})
-        self.assertAlmostEqual(svc.frame_interval, 1 / 30)
-        self.assertEqual(page._config_message()["settings"]["camera_fps"], 30)
-        page.on_message({"type": "camera_fps", "value": 120})   # not offered: the stored rate stays
-        self.assertAlmostEqual(svc.frame_interval, 1 / 30)
+        page.on_message({"type": "camera_fps", "value": 15})
+        self.assertAlmostEqual(svc.frame_interval, 1 / 15)
+        self.assertEqual(page._config_message()["settings"]["camera_fps"], 15)
+        page.on_message({"type": "camera_fps", "value": 30})   # not offered: the stored rate stays
+        self.assertAlmostEqual(svc.frame_interval, 1 / 15)
 
 
 class DialogFlowTests(PluginBase):

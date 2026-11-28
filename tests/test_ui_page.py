@@ -72,7 +72,8 @@ class BuiltPage(unittest.TestCase):
             env = {**os.environ, "PAGE": page, "RESULTS": results,
                    "EXT_GROUPS": json.dumps(extended.normalize_settings(fakes.ext_settings()))}
             proc = subprocess.run([NODE, RUNNER], capture_output=True, text=True, timeout=600, env=env, cwd=os.path.join(ROOT, "ui"))
-            self.assertEqual(proc.returncode, 0, proc.stdout[-6000:] + proc.stderr[-3000:])
+            failed = "\n".join(l for l in proc.stdout.splitlines() if l.startswith("FAIL") or l.startswith("     "))
+            self.assertEqual(proc.returncode, 0, failed[-6000:] + "\n" + proc.stdout[-1500:] + proc.stderr[-3000:])
             self.assertIn("PASS", proc.stdout)
             with open(results, encoding="utf-8") as f:
                 done = json.load(f)

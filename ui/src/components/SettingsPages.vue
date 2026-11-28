@@ -1,13 +1,16 @@
 <script setup lang="ts">
 // Settings as pages, on top of the shared OuiSettings (one section shown, side list when wide, last page remembered,
 // #<id> deep links). Added here: under 700 px the list and the page take turns (a page has a Back button), focus moves
-// to the page's heading when a page is opened, and a page with an invalid field is flagged in the list.
+// to the page's heading when a page is opened, and a page with an invalid field is flagged in the list. `home` maps
+// the id of a group inside a page (an older page id) to its page: a link or #<id> naming it opens that page at the group.
 import Button from "primevue/button";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { OuiIcon, OuiSettings, type OuiSettingsSection } from "@orca-plugins/ui-foundation/src/components";
 import { chevronRight } from "@orca-plugins/ui-foundation/src/icons";
 
-const props = defineProps<{ sections: OuiSettingsSection[]; navLabel: string; backLabel: string; errorLabel: string }>();
+const props = defineProps<{ sections: OuiSettingsSection[]; navLabel: string; backLabel: string; errorLabel: string; home?: Record<string, string> }>();
+const pageOf = (id: string): string => props.home?.[id] ?? id;
+const known = (id: string): boolean => props.sections.some((s) => s.id === pageOf(id));
 const inner = ref<{ select: (id: string) => void }>();
 const wrap = ref<HTMLElement>();
 const current = ref("");
@@ -30,21 +33,22 @@ function read(): void {
   }
 }
 
-function focusHeading(): void {
-  const h = wrap.value?.querySelector<HTMLElement>(`#${CSS.escape(current.value)} .oui-panel-title`);
+function focusHeading(group = current.value): void {
+  const h = wrap.value?.querySelector<HTMLElement>(`#${CSS.escape(group)} .oui-panel-title`);
   if (!h) return;
   h.tabIndex = -1;
   h.focus();
 }
 const afterRender = (fn: () => void): void => void nextTick(() => requestAnimationFrame(() => { read(); fn(); }));
 
-/** Open a page from code (a deep link): shown at once, also when narrow, with focus on its heading. */
+/** Open a page from code (a deep link): shown at once, also when narrow, with focus on its heading (a group's id: on
+ *  that group's heading, which scrolls it into view). */
 function select(id: string): void {
-  inner.value?.select(id);
+  inner.value?.select(pageOf(id));
   open.value = true;
-  afterRender(focusHeading);
+  afterRender(() => focusHeading(id));
 }
-defineExpose({ select });
+defineExpose({ select, current });
 
 function onClick(event: MouseEvent): void {
   if (!(event.target as HTMLElement).closest(".oui-settings-link")) return;
@@ -59,12 +63,14 @@ function back(): void {
 // #<page id> in the address (OuiSettings selects it): open that page, also when narrow.
 function onHash(): void {
   const id = decodeURIComponent(location.hash.slice(1));
-  if (props.sections.some((s) => s.id === id)) select(id);
+  if (known(id)) select(id);
 }
 let watcher: MutationObserver | undefined;
 onMounted(() => {
   read();
-  if (props.sections.some((s) => s.id === decodeURIComponent(location.hash.slice(1)))) open.value = true;
+  const hash = decodeURIComponent(location.hash.slice(1));
+  if (hash !== pageOf(hash) && known(hash)) select(hash);   // OuiSettings knows only the page ids
+  else if (known(hash)) open.value = true;
   window.addEventListener("hashchange", onHash);
   // ponytail: rescans on every DOM change under Settings; cheap at a few hundred nodes, debounce if a page grows large
   watcher = new MutationObserver(read);

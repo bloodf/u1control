@@ -57,7 +57,7 @@ async function send() {
 }
 </script>
 <template>
-  <OuiPanel :icon="terminal" aria-labelledby="console-h" :meta="targetKnown ? printerName : t('console.noTarget')" :hint="t('console.help')" hint-id="console-help" :hint-label="t('console.title')" data-test="console">
+  <OuiPanel :icon="terminal" aria-labelledby="console-h" :meta="targetKnown ? undefined : t('console.noTarget')" :hint="t('console.help')" hint-id="console-help" :hint-label="t('console.title')" data-test="console">
     <template #title><span id="console-h">{{ t('console.title') }}</span></template>
     <template #actions>
       <Button severity="secondary" text size="small" :label="t('console.clear')" :disabled="!lines.length" data-test="console-clear" @click="clear" />

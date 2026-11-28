@@ -190,50 +190,30 @@ class PresetMatchTests(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.storage, filmatch.MATCHES_FILE)))
 
 
-class OfdTests(PresetMatchTests):
-    """The Open Filament Database: off by default and never contacted then; on, its proposals are added from the index
-    kept in Spooler's folder (Spooler installed) or U1 Control's own, read again once a day."""
+class NoOfdTests(PresetMatchTests):
+    """The Open Filament Database is gone from U1 Control: a settings file that still has ofd_enabled loads, nothing asks
+    for OFD's address, and a preset an earlier version installed into its own OFD bundle and remembered still resolves."""
 
-    def setUp(self):
-        super().setUp()
-        self.calls = []
-        with open(os.path.join(ROOT, "tests", "fixtures", "ofd_index.json"), "rb") as f:
-            body = f.read()
-
-        def get(url, headers=None):
-            self.calls.append(url)
-            return 200, body, {}
-        original = self.ns["filmatch"]._ofd_get
-        self.ns["filmatch"]._ofd_get = get
-        self.addCleanup(setattr, self.ns["filmatch"], "_ofd_get", original)
-        self.store = self.ns["settings"].Store(path=os.path.join(self.storage, "settings.json"))
-        self.polymaker = [{"vendor": "Polymaker", "type": "PLA", "sub_type": "Matte"} if h["index"] == self.pla else None for h in self.heads]
-
-    def test_off_by_default(self):
-        self.assertFalse(self.store.effective()["ofd_enabled"])
-        self.assertTrue(self.store.effective()["show_preset_match"])     # shown unless switched off
-        self.assertFalse(self.store.update({"show_preset_match": False})["show_preset_match"])
-        self.assertFalse(self.store.update({"show_preset_match": "no"})["show_preset_match"])   # not a bool: ignored
-        self.assertEqual(self.ns["ofd_status"](self.store, refresh=True), {"on": False})
-        matches = self.ns["preset_matches"]({**self.view, "rfid": self.polymaker}, None, ofd=False)
-        self.assertTrue(matches and all(m["ofd"] == [] for m in matches))
-        self.assertEqual(self.calls, [])
+    def test_old_setting_loads_and_is_dropped(self):
+        path = os.path.join(self.storage, "settings.json")
+        os.makedirs(self.storage, exist_ok=True)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({"ofd_enabled": True, "show_preset_match": False}, f)
+        effective = self.ns["settings"].Store(path=path).effective()
+        self.assertNotIn("ofd_enabled", effective)
+        self.assertFalse(effective["show_preset_match"])
         self.assertNotIn(filmatch.OFD_ORIGIN, self.ns["network_grants"](type("Cap", (), {})()))
+        self.assertNotIn("ofd_status", self.ns)
+        self.assertNotIn("install_ofd", self.ns)
 
-    def test_on(self):
-        self.store.update({"ofd_enabled": True})
-        state = self.ns["ofd_status"](self.store)
-        self.assertEqual((state["on"], state["error"]), (True, ""))
-        self.assertTrue(os.path.exists(os.path.join(self.storage, filmatch.OFD_DIR, filmatch.OFD_INDEX)))   # no Spooler: own folder
-        row = next(m for m in self.ns["preset_matches"]({**self.view, "rfid": self.polymaker}, None, ofd=True) if m["head"] == self.pla)
-        self.assertIn("Polymaker For Production Matte PLA (OFD)", [c["name"] for c in row["ofd"]])
-        self.assertEqual(len(self.calls), 1)
-        self.ns["ofd_status"](self.store, refresh=True)
-        self.assertEqual(len(self.calls), 2)
-        os.makedirs(self.spooler, exist_ok=True)
-        with open(os.path.join(self.spooler, "spooler_settings.json"), "w", encoding="utf-8") as f:
-            f.write("{}")
-        self.assertEqual(self.ns["ofd_folder"](), os.path.join(self.spooler, filmatch.OFD_DIR))   # Spooler's, shared
+    def test_earlier_ofd_pick_still_resolves(self):
+        own = "_local/u1control_ofd/Polymaker Draft PLA (OFD)"
+        self.orca = fakes.install_orca(filament_names=NAMES + [own], storage=self.storage)
+        self.ns = fakes.load_wheel(self.artifact)
+        self.ns["pick_preset"](self.view, None, self.pla, own)
+        row = next(m for m in self.ns["preset_matches"](self.view, None) if m["head"] == self.pla)
+        self.assertEqual((row["name"], row["source"]), (own, "remembered"))
+        self.assertNotIn("ofd", row)
 
 
 if __name__ == "__main__":

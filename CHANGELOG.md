@@ -2,9 +2,33 @@
 
 ## [Unreleased]
 
+<<<<<<< HEAD
 ### Fixed
 
 - **U1 Control no longer keeps macOS busy during a print.** The dot on the Printing status pulsed for ever, and on macOS a never-ending animation makes WindowServer redraw OrcaSlicer's window every frame, even while another OrcaSlicer tab is showing: about 30% of WindowServer's CPU and most of the Mac's GPU, plus about 20% GPU in OrcaSlicer's own graphics process. The dot now stays still while printing; "Printing" and the progress show the print is live.
+=======
+## [0.23.0] - 2026-11-28
+
+### Changed
+
+- **Shared UI foundation 5.14.0.** Toasts appear bottom-right, a plain click on a file only looks at it (tick it, or Ctrl/Cmd-click, to select), the preset line shows a warning mark for an unsure pick instead of a score, and Requirements has one **Check again**.
+- **Toolhead cards show the preset by its plain name.** The OrcaSlicer preset block shows only its name, without `Spooler/`, `_local/spooler/` or the `@printer` suffix, and **Change**. The score chip and the reasons line are gone; an automatic pick that was a close call gets one warning icon that says so in words. **Picked by hand** and **Automatic** work as before.
+- **The part cooling and auxiliary fans sit side by side.** In **Temperatures & fans** the two fan setters are in two columns, with the top cover fan readings in two columns under them; a narrow widget still puts them in one column.
+- **Spools are picked by colour first.** A toolhead's spool chooser is the shared colour picker: one swatch per colour, material chips that start at the head's material, a search, and **No spool** to unlink. A colour with several spools opens a short list of them, fullest first. 
+- **Settings has five pages instead of nine.** General (mode, automations, language, theme, clock), Printing (print setup, printer print options), Connection & Spoolman, Printer (calibration, firmware settings, restarts) and About (version, links, requirements). Links and `#` addresses to the old pages open the page that holds them now. Save is off until something changed and the save bar shows only on General and Connection, or on any page while a change waits. Mode is one switch, automation choices read as words ("Auto"), the print setup texts sit behind **When it runs** and **With printer agents**, the requirements have one **Check again** and say Ready / Missing / Not checked, each calibration has its own icon and a line on what it does, and About links what's new, the documentation, issues and licences. The permanently off "Unload when done" row is gone (it is chosen per toolhead in the print setup pop-up).
+- **Shorter toolhead cards.** The spool line names the spool and leaves the grams to the bar above it. The feeder line shows only when something is off ("Filament at the inlet, not loaded", "Waiting for filament at the inlet"); the pressure advance line reads "Pressure advance 0.02 · Standard nozzle" and keeps **Save to spool**. **Edit** and **Read tag** are labelled buttons. An empty head shows "No filament" in the middle with **Load** as its one main action, and no **Unload**. The Toolheads header only speaks up when the Spoolman list is retrying, failed or being refreshed. In **Unload several**, **Cancel** has a close icon.
+- **The toolhead Edit form picks colours from your spools.** One swatch per colour of your Spoolman spools, then any other colour from the system picker or as a typed hex code.
+- **The Stock tab is called Spools.** Its header says how many spools and when they were read, without plugin names or versions, and the "Spooler shares no stock list" banner is gone. **Link to T1** shows on the row under the pointer or with the keyboard focus (always on touch screens), and the whole row links too; **Linked** stays visible. Empty spools say **Empty** in red and sort last; **Use first** follows the name. No spools, and a failed read, are a centred message without the Link-to panel; a failure offers **Try again** and **Open Settings**. On a narrow page the four Link-to targets sit in one row. A list of more than 300 spools draws only the rows in view.
+- **Files tab.** Print files no longer carry a G-code tag on every row; the tag appears only in a folder with more than one kind of file. Time-lapses are spelled the same in the folder tree and their card, the card's own Refresh is gone (the page's Refresh reads them again), and a time-lapse row shows the print's name, with the file name as its tooltip.
+
+### Fixed
+
+- **A temperature that is too high is refused, never lowered to the limit.** Typing 999 into a heater field and leaving it no longer turns it into 320 °C (110 °C for the bed) with Set still on: the number stays as typed, the field says it is out of range and Set stays off. The same holds for the speed field.
+
+### Removed
+
+- **Open Filament Database.** U1 Control no longer offers Open Filament Database presets on the toolhead cards and no longer asks for access to it; the setting is gone from Settings > Connection. Spooler's **Add spool** is where Open Filament Database lives now. A settings file that still has the old option loads as before, and a preset picked earlier, including one U1 Control installed from the Open Filament Database, keeps resolving offline.
+>>>>>>> origin/main
 
 ## [0.22.1] - 2026-11-28
 
