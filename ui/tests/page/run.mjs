@@ -2948,11 +2948,13 @@ test('printer screen in a narrow window: after the camera, before the console; a
   assert(Math.abs(a.x - 240) <= 1 && Math.abs(a.y - 160) <= 1, 'the centre of the picture: ' + JSON.stringify(a));
 `, { size: [480, 900] });
 
-for (const size of [[1280, 800], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
+for (const size of [[1280, 800], [1400, 900], [1920, 1080]]) test(`dashboard: at ${size.join('x')} no widget of the default layout clips or scrolls inside`, DASH_JS + `
   await READY();
   const bad = qa('.oui-dash-cell').map(c => [c.dataset.widget, q('.oui-panel-body', c)]).filter(([, b]) => b && (b.scrollHeight > b.clientHeight + 1 || b.scrollWidth > b.clientWidth + 1))
     .map(([id, b]) => id + ' ' + b.scrollHeight + '/' + b.clientHeight);
   eq(bad, [], 'every widget fits');
+  const out = ['temps', 'heads'].flatMap(id => { const c = cell(id), r = c.getBoundingClientRect(); return qa('.tf-fans > *, .tf-cover > div, button', c).filter(e => e.getBoundingClientRect().width && e.getBoundingClientRect().right > r.right + 1).map(e => id + ' ' + e.className); });
+  eq(out, [], 'fan setters, cover readouts and Change buttons stay inside their widget');
 `, { size });
 
 
