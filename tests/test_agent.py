@@ -119,7 +119,7 @@ class PushTests(unittest.TestCase):
         self.assertEqual((trays[0]["tray_type"], trays[0]["tray_color"], trays[0]["tray_info_idx"]), ("PLA", "FF0000FF", "OFhmxnYw"))   # Snapmaker PLA Basic
         self.assertEqual(trays[1]["tray_type"], "PETG")
         self.assertEqual(trays[2]["tray_slot_placeholder"], "1")
-        self.assertEqual(trays[3]["tray_type"], "PLA MATTE")
+        self.assertEqual(trays[3]["tray_type"], "PLA")
         self.assertEqual(trays[3]["tray_color"], "000000FF")
 
     def test_toolheads_reach_orcaslicers_filament_parser(self):
@@ -152,9 +152,46 @@ class PushTests(unittest.TestCase):
 
     def test_tray_type(self):
         self.assertEqual(agent.tray_type("PLA", "Basic"), "PLA")
-        self.assertEqual(agent.tray_type("pla", "SnapSpeed"), "PLA HIGH SPEED")
+        self.assertEqual(agent.tray_type("pla", "SnapSpeed"), "PLA")
         self.assertEqual(agent.tray_type("PETG", "CF"), "PETG-CF")
         self.assertEqual(agent.tray_type("", ""), "PLA")
+
+    def test_finish_sub_types_keep_the_base_material_for_sync(self):
+        for sub in ("SnapSpeed", "HS", "High Speed", "Matte", "Silk", "Wood", "Marble", "Basic", "NONE"):
+            with self.subTest(sub=sub):
+                self.assertEqual(agent.tray_type("PLA", sub), "PLA")
+        for kind in ("PLA HIGH SPEED", "PLA-HS", "PLA HS", "PLA MATTE", "PLA SILK", "PLA-SILK", "PLA WOOD"):
+            with self.subTest(kind=kind):
+                self.assertEqual(agent.tray_type(kind), "PLA")
+
+    def test_fibre_sub_types_stay_distinct_without_repeating_the_suffix(self):
+        for kind, sub, want in (("PLA", "CF", "PLA-CF"), ("PETG", "GF", "PETG-GF"),
+                                ("PA12", "CF10", "PA12-CF"), ("PPS", "GF20", "PPS-GF"),
+                                ("PA12-CF", "CF10", "PA12-CF"), ("PLA-CF", "CF", "PLA-CF"),
+                                ("PETG-GF", "GF30", "PETG-GF")):
+            with self.subTest(kind=kind, sub=sub):
+                self.assertEqual(agent.tray_type(kind, sub), want)
+        for kind in ("PLA-CF", "PETG", "ABS", "TPU", "UNKNOWN"):
+            with self.subTest(kind=kind):
+                self.assertEqual(agent.tray_type(kind, "Matte"), kind)
+
+    def test_sync_keeps_variant_presets_and_spooler_ids_with_a_base_tray_type(self):
+        for kind, sub, family in (("PLA", "SnapSpeed", "PLA High Speed"), ("PLA", "HS", "PLA High Speed"),
+                                  ("PLA", "Matte", "PLA Matte"), ("PLA", "Silk", "PLA Silk"),
+                                  ("PLA", "Wood", "PLA"), ("PLA HIGH SPEED", "", "PLA High Speed"),
+                                  ("PLA-HS", "", "PLA High Speed"), ("PLA MATTE", "", "PLA Matte"),
+                                  ("PLA SILK", "", "PLA Silk"), ("PLA WOOD", "", "PLA"),
+                                  ("", "", "PLA"), ("   ", "", "PLA")):
+            with self.subTest(kind=kind, sub=sub):
+                head = {"index": 1, "loaded": True, "vendor": "Generic", "type": kind,
+                        "sub_type": sub, "colour": "#123456"}
+                original = dict(head)
+                tray = agent.ams_block([head])["ams"]["ams"][0]["tray"][0]
+                self.assertEqual((tray["id"], tray["tray_type"], tray["tray_color"]), ("1", "PLA", "123456FF"))
+                self.assertEqual(tray["tray_info_idx"], agent.GENERIC_IDS[family])
+                tray = agent.ams_block([head], lambda h: "SPL00000000AB")["ams"]["ams"][0]["tray"][0]
+                self.assertEqual((tray["tray_type"], tray["tray_info_idx"]), ("PLA", "SPL00000000AB"))
+                self.assertEqual(head, original)   # the page and preset matcher still see the original sub-type
 
 
 class CommandTests(unittest.TestCase):
@@ -691,6 +728,7 @@ class PluginAgentTests(unittest.TestCase):
         Generic id of their material. The links come from Spoolman at connect, without the tab."""
         import threading
         import types
+        self.fake.task["filament_sub_type"][0] = "SnapSpeed"
         name = "_local/spooler/Acme PLA #5 @Snapmaker U1"
         mine = {"name": name, "bundle_id": "spooler", "vendor": "Acme", "colour": "#00FF00"}
         self.ns["filament_catalog"] = lambda: ([mine], "Snapmaker U1")

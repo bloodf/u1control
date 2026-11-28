@@ -57,7 +57,8 @@ LIGHT_ON, LIGHT_OFF = "SET_LED LED=cavity_led WHITE=1 SYNC=0", "SET_LED LED=cavi
 # Material -> OrcaFilamentLibrary family (MRA map_filament_type_to_generic_id).
 FILAMENT_FAMILIES = {
     "PLA": "PLA", "PLA-CF": "PLA-CF", "PLA SILK": "PLA Silk", "PLA HIGH SPEED": "PLA High Speed",
-    "PLA MATTE": "PLA Matte", "ABS": "ABS", "ASA": "ASA", "PETG": "PETG", "PET": "PETG", "PCTG": "PCTG",
+    "PLA MATTE": "PLA Matte", "PLA-HS": "PLA High Speed", "PLA HS": "PLA High Speed", "PLA-SILK": "PLA Silk",
+    "ABS": "ABS", "ASA": "ASA", "PETG": "PETG", "PET": "PETG", "PCTG": "PCTG",
     "PA": "PA", "PA-CF": "PA-CF", "PPA-CF": "PPA-CF", "PPA-GF": "PPA-GF", "PC": "PC", "PVA": "PVA",
     "HIPS": "HIPS", "BVOH": "BVOH", "TPU": "TPU",
 }
@@ -79,11 +80,17 @@ class JobError(RuntimeError):
 # ---------------------------------------------------------------- status push
 
 def tray_type(ftype, sub_type=""):
-    """SPA combine_filament_type: 'PLA' + 'Matte' -> 'PLA MATTE'; brand sub-types ('Basic') add nothing."""
-    base, sub = str(ftype or "").strip().upper(), str(sub_type or "").strip().upper()
+    """SPA combine_filament_type (OrcaSlicer #16300): finishes keep the base type, CF/GF change it."""
+    base, sub = " ".join(str(ftype or "").split()).upper(), str(sub_type or "").strip().upper()
     if not base:
         return "PLA"
-    return base + _SUB_TYPES.get(sub, "")
+    if base in ("PLA HIGH SPEED", "PLA-HS", "PLA HS", "PLA MATTE", "PLA SILK", "PLA-SILK", "PLA WOOD"):
+        base = "PLA"
+    fibre = re.fullmatch(r"(CF|GF)[0-9]*", sub)
+    if fibre:
+        suffix = "-" + fibre.group(1)
+        return base if base.endswith(suffix) else base + suffix
+    return base
 
 
 def material_family(material):
@@ -115,8 +122,15 @@ def snapmaker_filament_id(head):
     return SNAPMAKER_IDS.get(key, "")
 
 
-def generic_filament_id(material):
-    """filament_id of the material's "Generic <family> @System" preset, or ""."""
+def generic_filament_id(material, sub_type=""):
+    """filament_id of the material's "Generic <family> @System" preset, keeping its finish, or ""."""
+    material, sub = " ".join(str(material or "").split()).upper(), str(sub_type or "").strip().upper()
+    if re.fullmatch(r"(?:CF|GF)[0-9]*", sub):
+        material = tray_type(material, sub)
+    else:
+        suffix = _SUB_TYPES.get(sub, "")
+        if suffix and not material.endswith(suffix):
+            material += suffix
     return filmatch.generic_filament_id(material, FILAMENT_FAMILIES)
 
 
@@ -135,12 +149,13 @@ def ams_block(heads, preferred=None):
         tray = {"id": str(h["index"]), "tag_uid": "0000000000000000"}
         if h.get("loaded"):
             bits |= 1 << h["index"]
-            material = tray_type(h.get("type"), h.get("sub_type"))
+            kind = str(h.get("type") or "").strip() or "PLA"
+            material = tray_type(kind, h.get("sub_type"))
             colour = _rgba(h.get("colour"))
             colours = [_rgba(c) for c in h.get("colours") or []] or [colour]
             tray.update(tray_type=material, tray_color=colour, cols=colours, ctype=1, remain=-1,
                         tray_info_idx=(preferred(h) if preferred else "") or snapmaker_filament_id(h)
-                        or generic_filament_id(material))
+                        or generic_filament_id(kind, h.get("sub_type")))
         else:
             tray.update(tray_info_idx="", tray_type="", tray_color="00000000", tray_slot_placeholder="1")
         trays.append(tray)

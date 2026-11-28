@@ -7,6 +7,10 @@
 - **Apply to project filaments sets the slot colours on an OrcaSlicer that allows it.** OrcaSlicer 2.5 doesn't let a plugin change a filament slot's colour, so the colours were left as they were. When OrcaSlicer has `orca.host.preset.filament.set_slot_color` (proposed in OrcaSlicer/OrcaSlicer#17114), each slot now gets its preset first and then the toolhead's colour, the way picking a colour in the sidebar does. Without it nothing changes: presets are applied and the message still says to set the colours by hand.
 - **A slot's colour comes from its Spoolman spool first.** Apply to project filaments takes the colour of the spool bound to the toolhead, then the RFID tag's, then the one the printer reports, so a head whose colour was never set on the printer (reported as white) still gets its spool's colour, the same spool its Spooler preset was picked for.
 
+### Fixed
+
+- **Filament sync reports PLA finishes as PLA.** SnapSpeed/High Speed, Matte, Silk and Wood keep the base material for OrcaSlicer's compatibility checks, following OrcaSlicer #16300. The original sub-type still chooses the Snapmaker or Generic preset, and a linked Spooler preset keeps its id. CF/GF remain distinct materials, including fibre loadings such as CF10, without repeating a suffix already in the material name.
+
 ### Changed
 
 - **Choosing a spool for a toolhead is instant.** The spool list is kept (in memory and in the plugin's storage, `spool_cache.json`): a new tab or a restart shows the last list at once, marked "saved list, updating" until Spoolman answers, then the usual re-read replaces it. Linking a spool no longer reads the whole Spoolman list first when the spool is already in it (a restart used to make the first link wait for that read: 1.0 s became 0.4 s with a simulated slow Spoolman), and the page shows the new link at once, putting the old one back if the printer or Spoolman refuses. Spooler's **Assign** from the Stock tab skips its extra Spoolman read the same way.
