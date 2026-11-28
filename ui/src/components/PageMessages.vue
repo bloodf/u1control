@@ -3,7 +3,7 @@ import { computed } from 'vue';
 import Button from 'primevue/button';
 import { OuiBanner, OuiIcon } from '@orca-plugins/ui-foundation/src/components';
 import { refresh, settings } from '@orca-plugins/ui-foundation/src/icons';
-import { s, openSettings, tracker, hello, printerName, statusAge, controlsOff, busy, STALE_STATUS_S } from '../app/store';
+import { s, openSettings, tracker, hello, printerName, printing, statusAge, controlsOff, busy, STALE_STATUS_S } from '../app/store';
 import { t, fmt } from '../core/i18n';
 
 // What the whole page has to say, once, under the page header of the open tab (App.vue moves it there): why the printer's controls are off (no
@@ -20,6 +20,7 @@ import { t, fmt } from '../core/i18n';
 // role="note" for static banners itself). Until then the role is overridden here and on static banners (role="note").
 const offline = computed(() => s.phase === 'unreachable' || !!s.offline);
 const firstRun = computed(() => s.phase === 'noTarget' && s.tab === 'dash');   // the Dashboard says it itself, with the way out
+const neverAnswered = computed(() => s.phase === 'unreachable' && !s.status && s.tab === 'dash');   // and this one too
 const waiting = computed(() => [...tracker.pending.values()].filter(p => p.key !== 'spools'));
 const addr = computed(() => s.info?.address ?? '');
 // One reason at a time, in this order (offline, no printer, connecting, no status yet, stale); busy can join stale.
@@ -38,7 +39,8 @@ const close = computed(() => t('common.close'));
     <!-- Why the controls are off. Offline and unreachable are announced at once (assertive), as before 0.9.0; the
          other reasons politely. Both regions stay in the page so what appears in them is announced. -->
     <div class="u1-live" aria-live="assertive" data-test="target-alert">
-      <OuiBanner :show="show.offline" id="heads-why" role="none" data-test="heads-why" tone="error" dismissible :dismiss-key="`offline:${addr}`" :close-label="close" :title="t('target.offline.title')">
+      <!-- A printer that never answered is said by the Dashboard itself, in the page: hidden there, kept mounted. -->
+      <OuiBanner :show="show.offline" :id="neverAnswered ? undefined : 'heads-why'" :style="neverAnswered ? 'display: none' : undefined" role="none" :data-test="neverAnswered ? undefined : 'heads-why'" tone="error" dismissible :dismiss-key="`offline:${addr}`" :close-label="close" :title="t('target.offline.title')">
         {{ t('target.offline.body', { printer: printerName, error: s.offline || s.error }) }}
         <template #actions><Button size="small" severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button></template>
       </OuiBanner>
@@ -52,15 +54,20 @@ const close = computed(() => t('common.close'));
           <Button size="small" severity="secondary" :label="t('common.retry')" @click="hello()"><template #icon><OuiIcon :icon="refresh" :size="14" /></template></Button>
         </template>
       </OuiBanner>
-        <OuiBanner :show="show.connecting" id="heads-why" role="none" tone="neutral" :title="t('target.connecting')"
-                   dismissible :dismiss-key="`connecting:${addr}`" :close-label="close" />
+        <!-- Connecting is said by the app bar's state and the cards' skeletons: here only as the reason the controls
+             point at, for a screen reader. -->
+        <p v-if="show.connecting" id="heads-why" class="oui-sr">{{ t('target.connecting') }}</p>
         <OuiBanner :show="show.noStatus" id="heads-why" role="none" tone="neutral" :title="t('reason.waiting')"
                    dismissible :dismiss-key="`no-status:${addr}`" :close-label="close" />
         <!-- The age ticks every second: it is kept out of the announcement (the app bar's state says it too). -->
         <OuiBanner :show="show.stale" role="none" tone="warn" :title="t('target.staleTitle')" data-test="stale"
                    dismissible :dismiss-key="`stale:${addr}`" :close-label="close">
           <span class="u1-stale-age" aria-hidden="true">{{ t('target.staleAge', { age: fmt.ago(s.statusAt / 1000, s.now / 1000) }) }}</span></OuiBanner>
-        <OuiBanner :show="show.busy" id="heads-why" role="none" data-test="heads-why" tone="info" dismissible :dismiss-key="`busy:${addr}`" :close-label="close" :title="t('reason.busy') + t('common.period')">{{ t('busy.body') }}</OuiBanner>
+        <!-- A print is the normal case: while one runs the reason is kept for the controls that point at it, and not
+             drawn. Busy without a print (loading, calibrating) is shown. -->
+        <div :class="{ 'oui-sr': printing }" :inert="printing || undefined" data-test="busy-wrap">
+          <OuiBanner :show="show.busy" id="heads-why" role="none" data-test="heads-why" tone="info" dismissible :dismiss-key="`busy:${addr}`" :close-label="close" :title="t('reason.busy') + t('common.period')">{{ t('busy.body') }}</OuiBanner>
+        </div>
     </div>
     <section class="notices" :aria-label="t('msg.region')">
       <!-- Commands still waiting for the printer: announced, never drawn in the page flow. A box that appeared and

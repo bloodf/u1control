@@ -51,6 +51,9 @@ export const s = reactive({
   scrOn: false,
   /** The widgets on the Dashboard's open layout: the camera and the screen stream only while theirs is there. */
   widgets: [] as string[],
+  /** Whether the camera's and the screen's cards are in view: a card scrolled away is not streamed to. */
+  camSeen: true,
+  scrSeen: true,
   screen: '',
   screenError: '',
   stock: null as StockView | null,
@@ -71,7 +74,7 @@ export const tracker = new Tracker(
   (key, params) => t(key, params),
 );
 export const run = (o: RunOptions) => tracker.run(o);
-bridge.setErrorSink(e => tracker.notify('error', t('msg.plugin', { error: message(e) })));
+bridge.setErrorSink(e => tracker.notify('error', message(e)));
 
 export const printerName = computed(() => s.info?.printer || 'U1');
 /** The firmware in words ("Official firmware 2.0.0"), for the Dashboard's page header. */
@@ -302,7 +305,7 @@ function onMessage(m: any): void {
     case 'rfid': rfidHandlers.forEach(h => h(m)); break;
     case 'selection_changed': void hello(); break;
     case 'show_tab': if (m.tab === 'settings') openSettings('print-setup'); break;   // the print setup's "Plugin settings"
-    case 'reply': if (m.error) tracker.notify('error', t('msg.plugin', { error: String(m.error) })); break;
+    case 'reply': if (m.error) tracker.notify('error', String(m.error)); break;
   }
 }
 const configHandlers = new Set<(m: Config) => void>();
@@ -314,7 +317,7 @@ export const onRfid = (h: (m: any) => void) => { rfidHandlers.add(h); return () 
 const stockShown = () => !s.hidden && (s.tab === 'dash' || s.tab === 'stock');
 export function lease(): void {
   const vis = !s.hidden && s.tab === 'dash';
-  bridge.post({ type: 'lease', camera: s.camOn && vis && s.widgets.includes('camera'), screen: s.scrOn && vis && s.widgets.includes('screen'), stock: stockShown() && stockVisible.value });
+  bridge.post({ type: 'lease', camera: s.camOn && vis && s.camSeen && s.widgets.includes('camera'), screen: s.scrOn && vis && s.scrSeen && s.widgets.includes('screen'), stock: stockShown() && stockVisible.value });
 }
 
 export function start(): () => void {

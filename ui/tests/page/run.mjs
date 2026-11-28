@@ -34,6 +34,7 @@ async function connect(kind, gen) {
   await until(() => last('hello'), 'hello sent');
   await reply(last('hello'), {firmware: {kind: kind || 'stock', version: '1'}, address: 'u1:80', printer: 'Bench U1', generation: gen || 1, limits: {hotend: 320, bed: 110}});
 }
+const EXPERT = dash => post({type: 'config', mode: 'expert', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'expert', ...(dash === undefined ? {} : {dashboard: dash})}});
 async function tab(name) { await click(q('[data-tab="' + name + '"]')); }
 async function pick(root, label) {
   assert(root, 'select to open'); await reveal(root); root.click(); await until(() => q('.p-select-overlay') && !q('.p-select-overlay[class*="enter-active"]'), 'select overlay open');
@@ -267,32 +268,45 @@ test('park: only the head on the carriage offers Park, and it asks first', `
   await until(() => !q('[data-park]'), 'no Park while printing');
 `);
 
-test('temperatures & fans: chamber, drivers and fan readings; part and aux fan set only when idle', `
+test('temperatures & fans: the chamber, only the drivers that report, and the four fans set where they are read', `
   await connect();
-  const drivers = [['X', 45, 'ok'], ['Y', null, null], ['Z', null, 'otpw'], ['T1', null, 'ok'], ['T2', null, 'ot'], ['T3', null, null], ['T4', null, null]]
+  const drivers = [['X', 45, 'ok'], ['Y', null, null], ['Z', 71, 'otpw'], ['T1', null, 'ok'], ['T2', null, 'ot'], ['T3', null, null], ['T4', null, null]]
     .map(([name, temp, state]) => ({name, temp, state}));
-  await post({type: 'status', data: VIEW({chamber: 38.4, fan: 0.5, aux_fan: 0.25, drivers, purifier: {fitted: true, exhaust: 0.6, inner: 0}})});
+  await post({type: 'status', data: VIEW({chamber: 38.4, fan: 0.5, aux_fan: 0.25, drivers, features: ['cover_fan'], purifier: {fitted: true, mode: 3, recirculating: true, exhaust: 0, inner: 0.3}})});
   const card = byTest('temps-fans');
   assert(card && text(card).includes('Temperatures & fans'), 'the panel is on the Dashboard');
-  const kv = label => { const dt = qa('dt', card).find(d => text(d) === label); return dt ? text(dt.nextElementSibling) : null; };
-  eq([kv('Chamber'), kv('X driver'), kv('Y driver'), kv('Z driver'), kv('T1 driver'), kv('T2 driver')],
-     ['38 °C', '45 °C', '—', 'Hot (warning)', 'OK', 'Overheated'], 'temperatures and driver states');
-  eq([kv('Top cover exhaust fan'), kv('Top cover recirculation fan')], ['60 %', '0 %'], 'top-cover fan readings');
-  assert(text(card).includes('50 %') && text(card).includes('25 %'), 'part and aux fan readings');
-  const fanGrid = q('.tf-fans', card), fanRows = qa('.oui-control-row', fanGrid);
-  eq(fanRows.length, 2, 'part and aux fans in one two-column grid');
-  if (fanGrid.clientWidth >= 460) eq(fanRows[0].getBoundingClientRect().top, fanRows[1].getBoundingClientRect().top, 'side by side where there is room');
+  assert(text(byTest('tf-chamber')).includes('38 °C'), 'the chamber is a reading of its own: ' + text(byTest('tf-chamber')));
+  const drv = n => { const el = q('[data-driver="' + n + '"]', card); return el ? text(q('dd', el)) : null; };
+  eq([drv('X'), drv('Y'), drv('Z'), drv('T1'), drv('T2'), drv('T3')], ['45 °C', null, '71 °C Hot (warning)', null, 'Overheated', null],
+     'only the drivers that read a temperature or warn; "OK" alone is not a reading');
+  assert(!text(byTest('tf-drivers')).includes('—'), 'no row of dashes: ' + text(byTest('tf-drivers')));
+  const now = id => text(q('[data-fan="' + id + '"] .tf-fan-now', card));
+  eq(['part', 'aux', 'exhaust', 'inner'].map(now), ['50 %', '25 %', '0 %', '30 %'], 'each of the four fans says what it runs at');
+  const at = qa('[data-fan]', card).map(e => e.getBoundingClientRect());
+  assert(at[1].left >= at[0].right - 1 && at[3].left >= at[2].right - 1 && at[2].top >= at[0].bottom - 1, 'two fans a row at the default width: ' + JSON.stringify(at.map(r => [Math.round(r.left), Math.round(r.top)])));
+  assert(!q('#fan-exhaust', byTest('controls')) && !q('#fan-inner', byTest('controls')), 'no fan is set from Controls any more');
+  assert(q('#fan-exhaust').disabled && text(q('#fan-exhaust-why')).includes('recirculates'), 'the exhaust is held while the cover recirculates, and says so: ' + text(q('#fan-exhaust-why')));
+  eq(q('#fan-exhaust').getAttribute('aria-describedby'), 'fan-exhaust-why', 'its field points at the reason');
+  await type(q('#fan-inner'), '40');
+  await click(q('[data-focus-key="fan-inner"]'));
+  eq(cmds('cover_fan').map(m => m.args), [{fan: 'inner', percent: 40}], 'a top-cover fan is set beside its reading');
+  await reply(last('cmd', 'cover_fan'), true);
   const set = id => q('[data-focus-key="tf-' + id + '"]');
   assert(set('part').disabled, 'Set waits for a value');
   await type(q('#tf-part'), '40');
   await click(set('part'));
   eq(cmds('fan').map(m => m.args), [{fan: 'part', percent: 40}], 'part fan sent');
   await reply(last('cmd', 'fan'), true);
-  await post({type: 'status', data: VIEW({busy: true, state: 'printing', drivers})});
+  await post({type: 'status', data: VIEW({drivers: drivers.map(d => ({...d, temp: null, state: null}))})});
+  assert(text(byTest('tf-drivers')).includes('Motors off') && !qa('[data-driver]', card).length, 'motors off: one line, not seven dashes: ' + text(byTest('tf-drivers')));
+  await post({type: 'status', data: VIEW({busy: true, state: 'printing', drivers, purifier: {fitted: true, exhaust: 0.6, inner: 0}})});
   await until(() => q('#tf-aux').disabled, 'fan fields off while printing');
   assert(set('aux').disabled && set('aux').getAttribute('aria-describedby') === 'heads-why', 'Set off, pointing at the reason');
+  assert(!q('#fan-exhaust') && now('exhaust') === '60 %', 'a printer without the command for them shows the cover fans as readings');
   eq(cmds('fan').length, 1, 'nothing more sent');
-`);
+  await post({type: 'status', data: VIEW({purifier: {fitted: false}})});
+  assert(!q('[data-fan="exhaust"]', card) && !q('[data-fan="inner"]', card), 'no top cover: no cover fans');
+`, { size: [1400, 900] });
 
 test('busy machine disables guided commands; unload-when-done has no row; E-stop stays', `
   await connect();
@@ -500,10 +514,11 @@ test('settings draft survives mode switch; Saved needs the plugin answer', `
 
 test('console routes M112 to the urgent path and shows replies', `
   await connect();
+  await EXPERT();
   await type(q('#console-cmd'), 'm112');
   await press('Enter');
   await until(dialogOpen, 'M112 asks like the E-stop button');
-  assert(btn('Stop now (E-stop)', dialogEl()), 'explicit confirm label');
+  assert(btn('Stop now', dialogEl()), 'explicit confirm label');
   await yes();
   eq(cmds('emergency_stop').length, 1, 'urgent path');
   eq(cmds('gcode'), [], 'not queued as G-code');
@@ -1028,8 +1043,8 @@ test('U01/U12: destructive dialogs name both answers; E-stop apart from Cancel',
   await no();
   eq(cmds('cancel'), [], 'Keep printing sends nothing');
   await click(byTest('estop'));
-  assert(btn('Stop now (E-stop)', dialogEl()) && btn('Go back', dialogEl()), 'E-stop dialog labels');
-  assert(!dialogText().includes('Klipper will halt'), 'plain language (U10)');
+  assert(btn('Stop now', dialogEl()) && btn('Go back', dialogEl()), 'E-stop dialog labels');
+  assert(!/Klipper|E-stop|[(]/.test(dialogText()), 'plain language, nothing in brackets (U10): ' + dialogText());
   await no();
   assert(byTest('estop').closest('.oui-appbar') && !byTest('cancel').closest('.oui-appbar'), 'E-stop in its own group, in the app bar, away from Cancel');
 `);
@@ -1100,7 +1115,7 @@ test('E-stop: in the app bar and usable on every tab; while connecting it is sho
     assert(r.width > 0 && r.height > 0 && document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)?.closest('[data-test="estop"]') === b, name + ': E-stop visible and on top');
   }
   await click(byTest('estop'));
-  assert(btn('Stop now (E-stop)', dialogEl()), 'asks first, from the Settings tab too');
+  assert(btn('Stop now', dialogEl()), 'asks first, from the Settings tab too');
   await yes();
   eq(cmds('emergency_stop').length, 1, 'sent from the Settings tab');
 `);
@@ -1181,11 +1196,20 @@ test('stale status: the banner is announced once; its ticking age is kept out of
 test('U03: known target offline keeps E-stop on the urgent path; other commands off', `
   await until(() => last('hello'));
   await fail(last('hello'), 'the U1 did not answer in 5 s');
-  assert(text(byTest('target-alert')).includes('U1 unreachable'), 'unreachable, not "no target"');
-  eq(byTest('target-alert').getAttribute('aria-live'), 'assertive', 'unreachable is announced at once, as before 0.9.0');
+  // A printer that never answered: the Dashboard is one panel saying so, with the way out, not a page of empty cards.
+  const panel = byTest('unreachable');
+  assert(panel && text(panel).includes('U1 unreachable') && text(panel).includes('did not answer in 5 s'), 'unreachable, not "no target": ' + text(panel));
+  eq(panel.getAttribute('role'), 'alert', 'unreachable is announced at once, as before 0.9.0');
+  assert(q('#heads-why') === panel && qa('#heads-why').length === 1, 'the reason is said once, by the panel');
+  eq([byTest('job-card'), byTest('temps-fans'), byTest('controls'), q('.oui-dash-grid')], [null, null, null, null], 'no dashboard of empty cards');
+  assert(btn('Try again', panel) && btn('Open Settings', panel), 'both ways out');
+  eq([byTest('pause'), byTest('cancel')], [null, null], 'no print known: nothing to pause or cancel');
+  await tab('files');
+  assert(text(byTest('target-alert')).includes('U1 unreachable') && byTest('target-alert').getAttribute('aria-live') === 'assertive', 'on another tab the banner says it, assertively');
   eq(q('#heads-why').closest('[aria-live]'), byTest('target-alert'), 'the reason is in the assertive region');
   eq(q('#heads-why').getAttribute('role'), 'none', 'the banner does not add a second live region');
-  eq([byTest('pause'), byTest('cancel')], [null, null], 'no print known: nothing to pause or cancel');
+  eq(qa('#heads-why').length, 1, 'still said once');
+  await tab('dash');
   assert(byTest('sync').disabled && byTest('sync').getAttribute('aria-describedby') === 'heads-why', 'normal commands off, pointing at the reason');
   assert(!byTest('estop').disabled, 'E-stop available for the known target');
   await click(byTest('estop'));
@@ -1312,7 +1336,7 @@ test('X04: host language pt_BR gives Portuguese, including safety dialogs', `
   assert(btn('Cancelar impressão', dialogEl()) && btn('Continuar imprimindo', dialogEl()), 'cancel dialog in pt-BR');
   await no();
   await click(byTest('estop'));
-  assert(btn('Parar agora (E-stop)', dialogEl()) && btn('Voltar', dialogEl()), 'E-stop dialog in pt-BR');
+  assert(btn('Parar agora', dialogEl()) && btn('Voltar', dialogEl()), 'E-stop dialog in pt-BR');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1366,7 +1390,7 @@ test('i18n: host language de_DE gives de, including safety dialogs and errors', 
   assert(btn('Druck abbrechen', dialogEl()) && btn('Weiterdrucken', dialogEl()), 'cancel dialog in de');
   await no();
   await click(byTest('estop'));
-  assert(btn('Jetzt stoppen (Not-Aus)', dialogEl()) && btn('Zurück', dialogEl()), 'E-stop dialog in de');
+  assert(btn('Jetzt stoppen', dialogEl()) && btn('Zurück', dialogEl()), 'E-stop dialog in de');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1385,7 +1409,7 @@ test('i18n: host language es_ES gives es, including safety dialogs and errors', 
   assert(btn('Cancelar impresión', dialogEl()) && btn('Seguir imprimiendo', dialogEl()), 'cancel dialog in es');
   await no();
   await click(byTest('estop'));
-  assert(btn('Detener ahora (parada de emergencia)', dialogEl()) && btn('Volver', dialogEl()), 'E-stop dialog in es');
+  assert(btn('Detener ahora', dialogEl()) && btn('Volver', dialogEl()), 'E-stop dialog in es');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1404,7 +1428,7 @@ test('i18n: host language zh_CN gives zh-CN, including safety dialogs and errors
   assert(btn('取消打印', dialogEl()) && btn('不取消', dialogEl()), 'cancel dialog in zh-CN');
   await no();
   await click(byTest('estop'));
-  assert(btn('立即停止（紧急停止）', dialogEl()) && btn('返回', dialogEl()), 'E-stop dialog in zh-CN');
+  assert(btn('立即停止', dialogEl()) && btn('返回', dialogEl()), 'E-stop dialog in zh-CN');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1423,7 +1447,7 @@ test('i18n: host language pl_PL gives pl, including safety dialogs and errors', 
   assert(btn('Anuluj druk', dialogEl()) && btn('Drukuj dalej', dialogEl()), 'cancel dialog in pl');
   await no();
   await click(byTest('estop'));
-  assert(btn('Zatrzymaj teraz (E-stop)', dialogEl()) && btn('Wróć', dialogEl()), 'E-stop dialog in pl');
+  assert(btn('Zatrzymaj teraz', dialogEl()) && btn('Wróć', dialogEl()), 'E-stop dialog in pl');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -1442,7 +1466,7 @@ test('i18n: host language cs_CZ gives cs, including safety dialogs and errors', 
   assert(btn('Zrušit tisk', dialogEl()) && btn('Pokračovat v tisku', dialogEl()), 'cancel dialog in cs');
   await no();
   await click(byTest('estop'));
-  assert(btn('Zastavit hned (E-stop)', dialogEl()) && btn('Zpět', dialogEl()), 'E-stop dialog in cs');
+  assert(btn('Zastavit hned', dialogEl()) && btn('Zpět', dialogEl()), 'E-stop dialog in cs');
   await no();
   await fail(last('cmd', 'spools') || {id: -1}, 'x');
   await click(byTest('pause'));
@@ -2343,19 +2367,28 @@ test('camera: save the picture on screen', `
   await until(() => toasts().includes('Saved to'), 'says where it was saved');
 `);
 
-test('camera: frame rate choice starts at the stored rate, is sent to the plugin and says its limits', `
+test('camera: the frame rate is a setting of its widget, starts at the stored rate, is sent to the plugin and says its limits', `
   await connect();
   await post({type: 'status', data: VIEW()});
   await post({type: 'config', mode: 'automagic', stored: {}, version: '0.7.0', spooler: {}, automations: [], settings: {mode: 'automagic', camera_fps: 10}});
-  eq(byTest('cam-fps'), null, 'no choice while the camera is off');
+  eq(byTest('cam-fps'), null, 'no rate in the card header');
   await click(byTest('camera'));
-  const sel = byTest('cam-fps');
-  assert(sel && text(sel).includes('10 fps'), 'shows the stored rate: ' + text(sel));
-  eq(q('[role=combobox]', sel).getAttribute('aria-describedby'), 'cam-fps-help', 'the combobox itself is described by its help');
-  assert(text(q('#cam-fps-help')).includes('can be lower'), 'does not promise the rate: ' + text(q('#cam-fps-help')));
-  await pick(sel, '30 fps');
-  eq(last('camera_fps'), {type: 'camera_fps', value: 30}, 'choice sent to the plugin');
-  assert(text(byTest('cam-fps')).includes('30 fps'), 'choice kept on screen');
+  await post({type: 'frame', image: ${JSON.stringify(PIXEL)}});
+  await until(() => q('.oui-camera-overlay'), 'live');
+  assert(text(q('.oui-camera-overlay')).includes('10 fps'), 'the picture says the stored rate: ' + text(q('.oui-camera-overlay')));
+  assert(text(q('#cam-fps-help')).includes('can be lower') && !text(q('#cam-fps-help')).includes('30'), 'does not promise the rate: ' + text(q('#cam-fps-help')));
+  eq(last('camera_fps'), undefined, 'nothing sent while the rate is the stored one');
+  await click(byTest('dash-edit'));
+  await click(q('[data-settings="camera"]'));
+  const sel = q('[data-setting="fps"]', byTest('dash-settings'));
+  assert(text(sel).includes('10 fps'), 'the setting starts at the stored rate: ' + text(sel));
+  await pick(sel, '15 fps');
+  await click(byTest('dash-save'));
+  await until(() => last('camera_fps'), 'choice sent to the plugin');
+  eq(last('camera_fps'), {type: 'camera_fps', value: 15}, 'the rate chosen');
+  const layout = last('dashboard').value;
+  eq(layout.layouts[layout.active].items.find(i => i.id === 'camera').cfg, {fps: 15}, 'kept with the layout');
+  assert(text(q('.oui-camera-overlay')).includes('15 fps'), 'and said over the picture');
 `);
 
 test('settings: says whether the process preset runs the toolhead choice and when its pop-up opens', `
@@ -2449,8 +2482,11 @@ test('requirements: printer screen stays on stock firmware, off, with its reason
   await connect('stock');
   await post({type: 'status', data: VIEW()});
   assert(byTest('screen-card'), 'the card is not hidden on stock firmware');
-  assert(byTest('screen-show').disabled, 'Show screen is off');
-  assert(text(byTest('screen-card')).includes('Needs the U1 Extended Firmware'), 'one-line reason: ' + text(byTest('screen-card')));
+  eq(byTest('screen-show'), null, 'no Show screen that cannot work');
+  assert(text(byTest('screen-card')).includes('Needs the U1 Extended Firmware') && !text(byTest('screen-card')).includes('>'), 'one-line reason, without a path to follow by hand: ' + text(byTest('screen-card')));
+  await click(byTest('screen-req'));
+  await until(() => q('#requirements') && q('#requirements').getClientRects().length, 'the button opens the requirements');
+  await tab('dash');
   await post({type: 'selection_changed'});
   await connect('extended');
   await post({type: 'status', data: VIEW()});
@@ -2931,13 +2967,14 @@ test('settings: About links the changes, the documentation, issues and licences;
 `);
 // U1: what the shared dashboard scenarios need to know about this page.
 const DASH_PLUGIN = `
-const STORE = dash => post({type: 'config', mode: 'automagic', stored: {}, version: 't', spooler: {}, automations: [], settings: {mode: 'automagic', dashboard: dash}});
-async function READY(dash) { await connect(); if (dash !== undefined) await STORE(dash); await post({type: 'status', data: VIEW()}); }
+// The shared scenarios arrange every widget, the console too: an expert's dashboard (the console is on the default only in Expert mode).
+const STORE = dash => EXPERT(dash);
+async function READY(dash) { await connect(); await STORE(dash); await post({type: 'status', data: VIEW()}); }
 const DEFAULT_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'screen', 'console'];
 const DEFAULT_ORDER = ['job', 'temps', 'controls', 'heads', 'camera', 'screen', 'console'];
 const ALL_IDS = ['job', 'heads', 'temps', 'controls', 'camera', 'console', 'screen', 'files', 'ace'];
-const MOVER = 'camera', MOVER_FROM = '6 / span 3 | 8 / span 8', MOVE_COLS = -3, MOVER_TO = '9 / span 3 | 8 / span 8';
-const CAM_W = 3, CAM_H = 8, TEMPS = 'temps', CONSOLE_LEAST = 'span 3 | span 5';
+const MOVER = 'camera', MOVER_FROM = '6 / span 4 | 9 / span 7', MOVE_COLS = -3, MOVER_TO = '9 / span 4 | 9 / span 7';
+const CAM_W = 4, CAM_H = 7, TEMPS = 'temps', CONSOLE_LEAST = 'span 3 | span 5';
 const OLD_DEFAULT = [{id: 'job', x: 0, y: 0, w: 12, h: 3}, {id: 'heads', x: 0, y: 3, w: 12, h: 10}, {id: 'controls', x: 0, y: 13, w: 8, h: 6},
   {id: 'camera', x: 8, y: 13, w: 4, h: 6}, {id: 'temps', x: 0, y: 19, w: 8, h: 7}, {id: 'screen', x: 8, y: 19, w: 4, h: 7}, {id: 'console', x: 0, y: 26, w: 12, h: 7}];
 const MINE_CAMERA = '9 / span 4 | 14 / span 8';
@@ -2945,7 +2982,7 @@ const MINE_CAMERA = '9 / span 4 | 14 / span 8';
 const DEFAULT_016 = [{id: 'job', x: 0, y: 0, w: 6, h: 2}, {id: 'heads', x: 0, y: 2, w: 6, h: 14}, {id: 'controls', x: 6, y: 0, w: 6, h: 4},
   {id: 'temps', x: 6, y: 4, w: 3, h: 8}, {id: 'camera', x: 9, y: 4, w: 3, h: 8}, {id: 'screen', x: 6, y: 12, w: 6, h: 4}, {id: 'console', x: 0, y: 16, w: 12, h: 6}];
 // Narrow, a fan's field goes under its name instead of beside it.
-const TEMPS_COMPACT = () => { const c = qa('.oui-control-row-control', cell('temps')); return c.length > 0 && c.every(e => e.getBoundingClientRect().top >= e.parentElement.firstElementChild.getBoundingClientRect().bottom - 1); };
+const TEMPS_COMPACT = () => { const c = qa('.tf-fan-set', cell('temps')); return c.length > 0 && c.every(e => e.getBoundingClientRect().top >= e.parentElement.firstElementChild.getBoundingClientRect().bottom - 1); };
 `;
 const CONSOLE_CHECK = `
   assert(q('#console-cmd', cell('console')) && q('[role=log]', cell('console')), 'the command line and its log');
@@ -3185,7 +3222,7 @@ test('dashboard: 0.16.0\'s untouched default gets the arranged one; with multiAC
   eq(place(MOVER), MOVER_FROM, 'camera at its new place');
   await post({type: 'status', data: {...VIEW(), ace: {mode: 'multi', swapping: false, heads: {'0': [0, 1]}, units: []}}});
   await settle();
-  eq(place('ace'), '1 / span 5 | 19 / span 6', 'filament units under the toolheads');
+  eq(place('ace'), '1 / span 5 | 26 / span 6', 'filament units under the toolheads');
   eq(place(MOVER), MOVER_FROM, 'nothing else moved');
 `);
 const SCREEN_SHOWN = `
@@ -3195,6 +3232,7 @@ const SCREEN_SHOWN = `
 `;
 test('printer screen on the dashboard: bottom row beside the camera; a click on the picture is sent in its own pixels', DASH_JS + `
   await connect('extended');
+  await EXPERT();
   await post({type: 'status', data: VIEW()});
 ` + SCREEN_SHOWN + `
   const r = id => cell(id).getBoundingClientRect(), s = r('screen'), cam = r('camera'), c = r('console');
@@ -3215,6 +3253,7 @@ test('printer screen on the dashboard: bottom row beside the camera; a click on 
 
 test('printer screen in a narrow window: after the camera, before the console; a click is sent in the picture pixels', DASH_JS + `
   await connect('extended');
+  await EXPERT();
   await post({type: 'status', data: VIEW()});
 ` + SCREEN_SHOWN + `
   assert(q('.oui-dash-grid[data-narrow]'), 'one column');
@@ -3335,6 +3374,184 @@ test('spool chooser with 2000 spools: opens at once with one swatch per colour; 
   assert(!long.some(d => d > 250), 'no long main-thread block: ' + long.map(Math.round));
   await press('Escape'); await settle();
 `);
+// ------------------------------------------------------------------ 2026-11 UX review: the Dashboard
+test('an out-of-range temperature or speed stays as typed when the field is left: refused, never turned into the limit', `
+  await connect('stock', 7);
+  await post({type: 'status', data: VIEW()});
+  await type(q('#temp-1'), '999');
+  await press('Tab');
+  assert(q('#temp-1').value.includes('999'), 'the typed value stays when the field is left, it is not made 320: ' + q('#temp-1').value);
+  assert(q('[data-set="1"]').disabled, 'Set stays off for 999 °C');
+  assert(text(q('#temp-why-1')).includes('320'), 'and the row says the limit: ' + text(q('#temp-why-1')));
+  await type(q('#temp-bed'), '500');
+  await press('Tab');
+  assert(q('#temp-bed').value.includes('500') && q('[data-set="bed"]').disabled && text(q('#temp-why-bed')).includes('110'), 'the bed too: ' + q('#temp-bed').value);
+  await type(q('#speed'), '999');
+  await press('Tab');
+  assert(q('#speed').value.includes('999') && q('[data-focus-key="speed"]').disabled && text(q('#speed-why')).includes('10 to 300'), 'and the speed: ' + q('#speed').value);
+  await type(q('#temp-1'), '-5');
+  await press('Tab');
+  assert(q('[data-set="1"]').disabled, 'a negative target is refused as well');
+  eq([cmds('temperature').length, cmds('speed').length, dialogOpen()], [0, 0, false], 'nothing sent, nothing asked');
+`);
+
+test('printer errors and a power cut are said in words, never as the record the printer sent', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW({exceptions: [{code: 522, level: 2, msg: 'filament_entangle'}, {code: 7}, {level: 2, extra: {a: 1}}, {code: 522, level: 2, msg: 'filament_entangle'}],
+    power_loss: true, reprint: {file: 'gcodes/sub/part.gcode', layer: 41}})});
+  const ex = byTest('exceptions');
+  eq(qa('li', ex).map(text), ['Filament entangle (code 522)', 'Error code 7', 'An error it doesn’t describe. Look at the printer’s screen.'], 'one line an error, the same one said once');
+  assert(!/[{}"]|level/.test(text(ex)), 'no record on screen: ' + text(ex));
+  const pl = text(byTest('power-loss'));
+  assert(pl.includes('part.gcode stopped at layer 41.') && !/[{}"]|Options|gcodes\\//.test(pl), 'the power cut names the file and the layer: ' + pl);
+  await post({type: 'status', data: VIEW({power_loss: true, reprint: {something: [1, 2]}})});
+  assert(!/[{}\\[\\]]/.test(text(byTest('power-loss'))) && qa('button', byTest('power-loss')).length === 2, 'a record it cannot read adds nothing: ' + text(byTest('power-loss')));
+`);
+
+test('camera and printer screen are not streamed to while their card is scrolled out of view', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  const show = async el => { el.scrollIntoView({block: 'center'}); await settle(); };
+  await show(byTest('camera'));
+  await click(byTest('camera'));
+  await until(() => last('lease').camera === true, 'in view: the camera is asked for');
+  window.scrollTo(0, 0);
+  await until(() => last('lease').camera === false, 'scrolled away: no more pictures are asked for');
+  assert(q('.oui-camera').dataset.state !== 'off', 'the camera stays on for when it is back in view');
+  await show(q('.oui-camera'));
+  await until(() => last('lease').camera === true, 'back in view: asked for again');
+  await click(byTest('camera'));
+  await show(byTest('screen-show'));
+  await click(byTest('screen-show'));
+  await until(() => last('lease').screen === true, 'in view: the screen is asked for');
+  window.scrollTo(0, 0);
+  await until(() => last('lease').screen === false && last('lease').camera === false, 'scrolled away: neither is asked for');
+`, { size: [600, 700] });
+
+test('default layout: every card is as tall as its rows; the console only in Expert mode; the old default moves to it', `
+  const cell = id => q('.oui-dash-cell[data-widget="' + id + '"]');
+  const place = id => cell(id).style.gridColumn + ' | ' + cell(id).style.gridRow;
+  const ids = () => qa('.oui-dash-cell').map(c => c.dataset.widget);
+  const cfg = (mode, dash) => post({type: 'config', mode, stored: {}, version: 't', spooler: {}, automations: [], settings: {mode, ...(dash ? {dashboard: dash} : {})}});
+  await connect('extended');
+  await post({type: 'status', data: VIEW()});
+  await cfg('automagic');
+  eq(ids(), ['job', 'heads', 'temps', 'controls', 'camera', 'screen'], 'Automagic: no G-code console on the default');
+  eq([place('camera'), place('screen')], ['6 / span 7 | 9 / span 10', '6 / span 4 | 19 / span 7'], 'its rows go to the camera and the screen');
+  await cfg('expert');
+  eq(ids(), ['job', 'heads', 'temps', 'controls', 'camera', 'screen', 'console'], 'Expert: the console is on the default');
+  eq([place('job'), place('heads'), place('temps'), place('controls'), place('camera'), place('screen'), place('console')],
+     ['1 / span 5 | 1 / span 4', '1 / span 5 | 5 / span 21', '6 / span 3 | 1 / span 8', '9 / span 4 | 1 / span 8', '6 / span 4 | 9 / span 7', '10 / span 3 | 9 / span 7', '6 / span 7 | 16 / span 10'], 'the default places');
+  // rows are 32 px with 12 px between them: a card of n rows is 44 n - 12 px high unless its content stretched it
+  const high = id => Math.round(cell(id).getBoundingClientRect().height);
+  eq([high('job'), high('temps'), high('controls'), high('camera'), high('screen')], [164, 340, 340, 296, 296], 'no card stretches the row of its neighbours');
+  const cam = q('.oui-camera', cell('camera')).getBoundingClientRect();
+  assert(cam.width >= cell('camera').getBoundingClientRect().width - 2, 'the 16:9 camera box fills its cell: ' + Math.round(cam.width) + ' x ' + Math.round(cam.height));
+  await cfg('expert', {v: 1, active: 0, layouts: [{name: 'Default', items: [{id: 'job', x: 0, y: 0, w: 5, h: 4}, {id: 'heads', x: 0, y: 4, w: 5, h: 14}, {id: 'temps', x: 5, y: 0, w: 3, h: 7},
+    {id: 'controls', x: 8, y: 0, w: 4, h: 7}, {id: 'camera', x: 5, y: 7, w: 3, h: 8}, {id: 'screen', x: 8, y: 7, w: 4, h: 8}, {id: 'console', x: 5, y: 15, w: 7, h: 6}]}]});
+  eq([place('heads'), place('camera')], ['1 / span 5 | 5 / span 21', '6 / span 4 | 9 / span 7'], 'a layout still as the last default gets the new one');
+`, { size: [1400, 900] });
+
+test('status block: a print that ended says what it took and offers Print again; a failure says why; an idle printer leads to the files', `
+  await connect();
+  await post({type: 'status', data: VIEW({state: 'complete', filename: 'sub/part.gcode', progress: 1, layer: 110, total_layers: 110, total_duration: 4500, message: 'Printer is ready'})});
+  const card = byTest('job-card');
+  assert(!q('[role=progressbar]', card) && !text(card).includes('100'), 'no full bar for a print that ended: ' + text(card));
+  assert(/Took\\s*1 h 15 min/.test(text(card)) && /Layers\\s*110/.test(text(card)), 'how long it took and its layers: ' + text(card));
+  assert(text(byTest('job-name')) === 'sub/part.gcode' && !text(card).includes('Bench U1'), 'named by its file, not by the printer again');
+  await click(byTest('print-again'));
+  assert(dialogText().includes('part.gcode') && dialogText().includes('Bench U1'), 'asks first, like Print on the Files tab: ' + dialogText());
+  await yes();
+  eq(cmds('print_file').map(m => m.args), [{path: 'gcodes/sub/part.gcode'}], 'the same file is printed again');
+  await reply(last('cmd', 'print_file'), true);
+  await post({type: 'status', data: VIEW({state: 'error', filename: 'part.gcode', message: 'Heater extruder not heating at expected rate', layer: 3, total_layers: 110, machine_state: 'ABNORMAL', busy: true})});
+  const err = byTest('job-error');
+  assert(err && text(err) === 'Heater extruder not heating at expected rate' && err.scrollWidth <= err.clientWidth + 1, 'the printer’s message whole, not cut: ' + text(err));
+  assert(getComputedStyle(err).color !== getComputedStyle(byTest('job-name')).color, 'in the error colour, not as plain text');
+  assert(!/Machine|abnormal/i.test(text(card)), 'no firmware state name: ' + text(card));
+  assert(byTest('print-again').disabled && byTest('print-again').getAttribute('aria-describedby') === 'heads-why', 'Print again waits for an idle printer, with the reason');
+  await post({type: 'status', data: VIEW()});
+  eq(text(byTest('job-name')), 'Ready to print', 'idle: what it is ready for');
+  assert(!byTest('print-again') && !text(card).includes('No print is running'), 'idle: ' + text(card));
+  await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING'})});
+  eq(text(byTest('job-name')), 'Leveling the bed', 'what the machine does is said in words');
+  await post({type: 'status', data: VIEW({busy: true, machine_state: 'SOME_NEW_STATE'})});
+  assert(!/some new state|Machine/i.test(text(card)), 'a state without words is left out: ' + text(card));
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, filename: 'part.gcode', progress: 0.4, layer: 41, total_layers: 110, machine_state: 'PRINTING'})});
+  assert(q('[role=progressbar]', card) && text(card).includes('Layer 41 of 110') && !/Machine|printing ·/.test(text(card)), 'printing: bar and layer, no "Machine: printing": ' + text(card));
+  await post({type: 'status', data: VIEW()});
+  await click(byTest('choose-file'));
+  eq(q('[data-tab="files"]').getAttribute('aria-selected'), 'true', 'Choose a file opens the Files tab');
+`);
+
+test('controls: the top cover says its mode and Apply waits for a different one; a cover that is not fitted has no control', `
+  await connect('extended');
+  await post({type: 'status', data: VIEW({purifier: {fitted: true, mode: 3, recirculating: true}})});
+  const row = () => byTest('cover-row'), apply = () => q('[data-focus-key="purifier"]');
+  assert(text(q('.oui-control-row-value', row())) === 'Keep warm' && text(byTest('cover-mode')).includes('Keep warm'), 'the current mode is the row value and the choice shown: ' + text(row()));
+  assert(apply().disabled, 'nothing to apply while the choice is the current mode');
+  await pick(byTest('cover-mode'), 'Strong cooling');
+  assert(!apply().disabled, 'another mode can be applied');
+  await click(apply());
+  eq(cmds('purifier').map(m => m.args), [{mode: 'strong'}], 'sent');
+  await reply(last('cmd', 'purifier'), true);
+  await post({type: 'status', data: VIEW({purifier: {fitted: true, mode: 1}})});
+  assert(text(q('.oui-control-row-value', row())) === 'Strong cooling' && apply().disabled, 'the mode this page set is shown, and Apply rests: ' + text(row()));
+  await post({type: 'selection_changed'});
+  await connect('extended');
+  await post({type: 'status', data: VIEW({purifier: {fitted: true, mode: 0}})});
+  assert(text(q('.oui-control-row-value', row())) === 'Idle' && apply().disabled, 'idle is said too: ' + text(row()));
+  await post({type: 'status', data: VIEW({purifier: {fitted: false}})});
+  assert(text(row()).includes('Not detected') && !byTest('cover-mode') && !apply(), 'not fitted: the row says so, without a control: ' + text(row()));
+  const v = q('.oui-control-row-value', row());
+  assert(v.scrollWidth <= v.clientWidth + 1, 'and the text is not cut');
+`);
+
+test('camera: off offers Start inside the picture box; an error is plain words with Try again; a lost printer keeps the last picture, named as that', `
+  await connect();
+  await post({type: 'status', data: VIEW()});
+  const box = () => q('.oui-camera');
+  assert(text(box()).includes('Camera off') && box().contains(byTest('camera')) && text(byTest('camera')) === 'Start camera', 'off: Start camera in the box: ' + text(box()));
+  assert(!text(box()).includes('only runs'), 'no sentence about how it works: ' + text(box()));
+  await click(byTest('camera'));
+  await post({type: 'camera_error', error: 'HTTP Error 502: Bad Gateway'});
+  assert(text(box()).includes('Camera unavailable') && !/502|HTTP|Gateway/.test(text(box())), 'an error in plain words, without the transport text: ' + text(box()));
+  await click(byTest('cam-retry'));
+  assert(text(box()).includes('Starting the camera') && last('lease').camera === true, 'Try again starts it anew: ' + text(box()));
+  await post({type: 'frame', image: ${JSON.stringify(PIXEL)}});
+  await until(() => q('.oui-camera-overlay'), 'live');
+  assert(text(q('.oui-camera-overlay')).includes('Live') && !byTest('cam-last'), 'live while the printer answers');
+  await post({type: 'offline', error: 'timed out'});
+  assert(byTest('cam-last') && text(byTest('cam-last')) === 'Last picture' && !text(q('.oui-camera-overlay')).includes('Live'), 'the printer went away: the last picture, not live: ' + text(q('.oui-camera-overlay')));
+  assert(box().dataset.stale !== undefined, 'and it is drawn as old');
+`);
+
+test('unreachable, busy, connecting, plugin errors and the Spooler suggestion are each said once, in plain words', `
+  await until(() => last('hello'));
+  assert(q('#heads-why') && q('#heads-why').classList.contains('oui-sr') && !q('.oui-banner'), 'connecting: no banner, the reason is kept for the controls that point at it');
+  await connect();
+  await post({type: 'config', mode: 'expert', stored: {}, version: 't', spooler: {installed: false, url: 'https://example.invalid/spooler'}, automations: [], settings: {mode: 'expert'}});
+  await post({type: 'status', data: VIEW({state: 'printing', busy: true, filename: 'a.gcode'})});
+  const wrap = byTest('busy-wrap');
+  assert(wrap.classList.contains('oui-sr') && wrap.contains(q('#heads-why')) && text(q('#heads-why')).includes('busy'), 'a print is the normal case: the busy reason is kept, not drawn');
+  eq(byTest('cancel').getAttribute('aria-describedby'), null, 'Cancel is on');
+  eq(q('[data-load="0"]').getAttribute('aria-describedby'), 'heads-why', 'and what is off still points at the reason');
+  await post({type: 'status', data: VIEW({busy: true, machine_state: 'BED_LEVELING'})});
+  assert(!wrap.classList.contains('oui-sr') && byTest('heads-why').getClientRects().length, 'busy without a print is shown');
+  await post({type: 'status', data: VIEW()});
+  await post({type: 'reply', id: 99999, error: 'boom'});
+  assert(toasts().includes('boom') && !toasts().includes('U1 Control'), 'a plugin error without the plugin’s own name in front: ' + toasts());
+  const hint = byTest('spooler-dash'), get = byTest('spooler-get');
+  assert(get && get.getAttribute('href') === 'https://example.invalid/spooler' && text(get) === 'Get Spooler', 'Get Spooler is a button of the suggestion');
+  assert(!text(hint).includes('https://') && !text(hint).trim().endsWith(':'), 'no bare address in the sentence: ' + text(hint));
+  assert(!text(q('.oui-panel-head', byTest('console')) || byTest('console')).includes('Bench U1'), 'the console does not name the printer again');
+  await post({type: 'selection_changed'});
+  await until(() => sent().filter(m => m.type === 'hello').length === 2);
+  await fail(last('hello'), 'Select a Snapmaker U1 printer, or set "host" in the plugin config.', {no_target: true});
+  const first = byTest('target-banner');
+  assert(text(first).includes('No U1 selected') && !/host|Details/.test(text(first)), 'no printer: said once, without the config key: ' + text(first));
+`);
+
 // ------------------------------------------------------------------ runner
 const workers = Number(process.env.WORKERS ?? 4);
 if (!Number.isSafeInteger(workers) || workers < 1) throw new Error('WORKERS must be a positive integer');

@@ -27,6 +27,31 @@ export function parseSpeed(raw: unknown): number | null {
   return Number.isFinite(v) && v >= 10 && v <= 300 ? Math.round(v) : null;
 }
 
+/** A printer error (exception_manager) as the page can say it: the printer's own short text and its code, when it
+ *  gives them. The record itself is never shown. */
+export function exceptionParts(x: unknown): { name: string; code: string } {
+  const o = (x && typeof x === 'object' ? x : { msg: x }) as Record<string, unknown>;
+  const pick = (keys: string[]) => keys.map(k => o[k]).find(v => (typeof v === 'string' && !!v.trim()) || typeof v === 'number');
+  const name = String(pick(['msg', 'message', 'description', 'desc', 'name']) ?? '').replace(/[_\s]+/g, ' ').trim();
+  return { name: name ? name[0].toUpperCase() + name.slice(1) : '', code: String(pick(['code', 'id']) ?? '').trim() };
+}
+
+/** What a power cut interrupted (print_task_config.reprint_info): the file's name and the layer, when the printer says them. */
+export function reprintParts(x: unknown): { file: string; layer: number | null } {
+  const o = (x && typeof x === 'object' ? x : {}) as Record<string, unknown>;
+  const file = ['file', 'filename', 'file_name', 'file_path', 'path'].map(k => o[k]).find(v => typeof v === 'string' && !!v.trim()) as string | undefined;
+  const layer = ['layer', 'current_layer', 'print_layer'].map(k => o[k]).find(v => typeof v === 'number' && Number.isFinite(v)) as number | undefined;
+  return { file: file ? file.trim().split(/[\\/]/).pop() ?? '' : '', layer: layer ?? null };
+}
+
+/** The top cover's mode as the printer reports it (purifier.py: 0 idle, 1 cooling, 2 and 3 recirculation). Cooling
+ *  doesn't say whether it is the strong or the weak one. '' when unknown. */
+export function coverMode(mode: unknown): 'idle' | 'cooling' | 'keep-warm' | '' {
+  if (mode === 0 || mode === 'idle') return 'idle';
+  if (mode === 1) return 'cooling';
+  return mode === 2 || mode === 3 || mode === 'keep-warm' ? 'keep-warm' : '';
+}
+
 export const family = (t: unknown): string => ((String(t ?? '').match(/[A-Za-z]+/) || [''])[0]).toUpperCase();
 
 export interface SetupFilament { index: number; type: string; colour?: string; weight?: number; nozzle?: string }

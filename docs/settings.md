@@ -44,14 +44,15 @@ plugin uses the same file. Change them on the **Settings** page of the U1 Contro
 
 | Key | Default | Choices | Meaning |
 |---|---|---|---|
-| `camera_fps` | `5` | 5 / 10 / 15 / 30 | Most camera pictures a second U1 Control asks the printer for. Set it on the camera card of the Dashboard. |
+| `camera_fps` | `5` | 2 / 5 / 10 / 15 | Most camera pictures a second U1 Control asks the printer for. Set it in the camera widget's settings (Dashboard > Edit layout). A stored 30, offered before 0.23, counts as 15. |
 
 It is a ceiling, not a promise. U1 Control fetches the printer's camera picture one at a time and passes
 each one to OrcaSlicer's web view before asking for the next. On the official firmware the printer renews
 that picture (`/server/files/camera/monitor.jpg`) at its own pace, which U1 Control can't change; asking
 more often than that shows the same picture again. The Extended Firmware's `/webcam/snapshot.jpg` can
-change faster. The rate you see also depends on the Wi-Fi and the computer, so 30 fps is often not
-reached.
+change faster. The rate you see also depends on the Wi-Fi and the computer, so the chosen rate is not
+always reached. While nothing prints, U1 Control asks at most twice a second whatever the setting: little
+moves then, and every picture costs the printer and OrcaSlicer work.
 
 A picture that hasn't changed since the last one is not sent to the page again. After two unchanged
 pictures in a row U1 Control asks half as often, down to once a second, and asks twice as often again
