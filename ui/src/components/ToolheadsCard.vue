@@ -2,22 +2,19 @@
 import { computed, ref } from 'vue';
 import Button from 'primevue/button';
 import { OuiEmpty, OuiIcon, OuiPanel } from '@orca-plugins/ui-foundation/src/components';
-import { download, toolhead, upload } from '@orca-plugins/ui-foundation/src/icons';
+import { download, toolhead, upload, x } from '@orca-plugins/ui-foundation/src/icons';
 import HeadCard from './HeadCard.vue';
 import { s, run, tracker, guidedWhy } from '../app/store';
 import { ask } from '../core/dialog';
 import { t } from '../core/i18n';
 import { loadable, unloadable } from '../core/spool-level';
 
-// One visible spool source per screen (X03): when Spooler's stock uses the same Spoolman, say so.
+// The header says something about the Spoolman list only when it is not the usual fresh list: retrying, failed, or a saved
+// copy being updated. Where it comes from is in Settings > Requirements.
 const source = computed(() => {
   if (s.spoolsRetrying) return t('sm.retrying');
   if (s.spoolsError) return t('heads.source.error', { error: s.spoolsError });
-  const n = s.spools.length;
-  if (s.spoolsStale && n) return t('heads.source.cached', { n });
-  if (!s.spoolsLoaded) return '';
-  if (s.stock?.spooler.state === 'active' && s.stock.same_spoolman === true) return t('heads.source.same', { n });
-  return s.spoolsVia === 'moonraker' ? t('heads.source.printer', { n }) : t('heads.source.direct', { n });
+  return s.spoolsStale && s.spools.length ? t('heads.source.cached', { n: s.spools.length }) : '';
 });
 
 // Load or unload several heads in one go, as the printer's screen does (the plugin sends its AUTO_FEEDING_BATCH
@@ -60,13 +57,13 @@ async function go() {
 <template>
   <OuiPanel class="u1-heads" :icon="toolhead" tone="magenta" aria-labelledby="heads-h">
     <template #title><span id="heads-h">{{ t('heads.title') }}</span></template>
-    <template #meta><span data-test="spool-source" :title="source">{{ source }}</span></template>
+    <template v-if="source" #meta><span data-test="spool-source" :title="source">{{ source }}</span></template>
     <template v-if="s.status && (count('load') > 1 || count('unload') > 1)" #actions>
       <template v-for="m in (['load', 'unload'] as const)" :key="m">
         <Button v-if="mode === m || (!mode && count(m) > 1)" size="small" severity="secondary" :label="mode === m ? t('common.cancel') : t(K[m].start)"
                 :disabled="running || (!mode && !!guidedWhy)" :aria-describedby="!mode && guidedWhy ? 'heads-why' : undefined" :aria-expanded="mode === m"
                 aria-controls="heads-many" :data-test="m + '-many'" @click="mode === m ? (mode = null) : open(m)">
-          <template #icon><OuiIcon :icon="m === 'load' ? download : upload" :size="14" /></template></Button>
+          <template #icon><OuiIcon :icon="mode === m ? x : m === 'load' ? download : upload" :size="14" /></template></Button>
       </template>
     </template>
     <div v-if="s.status && mode" id="heads-many" class="u1-many" role="group" :aria-label="t(K[mode].pick)" data-test="many-bar">
