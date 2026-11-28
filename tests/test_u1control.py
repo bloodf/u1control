@@ -655,6 +655,40 @@ class PluginTests(unittest.TestCase):
                                     "set them by hand"])
         self.assertIn("colours weren't changed", ns["sync_message"](done, problems))
 
+    def test_sync_project_sets_colours_through_set_slot_color(self):
+        # OrcaSlicer with set_slot_color (OrcaSlicer#17114): the preset goes in without a colour, then the slot's
+        # project colour is set on its own; an alpha byte is dropped and a refused colour leaves the preset in.
+        orca, ns = self.load(filament_names=["Generic PETG @U1", "Polymaker PLA @U1", "Generic PLA @U1"])
+        colours = []
+
+        def set_slot_color(slot, cs, gradient=False):
+            if slot == 4:
+                raise ValueError("slot 4 does not resolve")
+            colours.append((slot, cs))
+        orca.host.preset.filament.set_slot_color = set_slot_color
+        heads = u1.summarize(self.fake.status())["heads"]
+        tags = [{"vendor": "Polymaker", "type": "PLA", "sub_type": "", "colour": "#00ff00cc"}, None, None, None]
+        done, problems = ns["sync_project"](heads, tags, {})
+        self.assertEqual([(slot, values) for slot, _, values in orca.filament_calls], [(1, {}), (2, {}), (4, {})])
+        self.assertEqual(colours[0], (1, ["#00FF00"]))
+        self.assertEqual(colours[1], (2, ["#FFFFFF"]))
+        self.assertEqual(len(done), 3)
+        self.assertEqual(problems, ["filament 4: slot 4 does not resolve"])
+
+    def test_sync_project_takes_the_bound_spools_colour_first(self):
+        # T2 reports white (its colour never set on the printer) but holds the black spool bound in Spoolman.
+        orca, ns = self.load(filament_names=["Generic PETG @U1", "Polymaker PLA @U1", "Generic PLA @U1"])
+        colours = []
+        orca.host.preset.filament.set_slot_color = lambda slot, cs, gradient=False: colours.append((slot, cs))
+        heads = u1.summarize(self.fake.status())["heads"]
+        tags = [{"vendor": "Polymaker", "type": "PLA", "sub_type": "", "colour": "#00FF00"}, None, None, None]
+        spools = {1: {"id": 7, "colour": "#000000"}, 3: {"id": 8, "colour": None}}
+        done, problems = ns["sync_project"](heads, tags, {}, bound=spools.get)
+        self.assertEqual(problems, [])
+        self.assertEqual(dict(colours)[1], ["#00FF00"])   # no spool: the tag's colour
+        self.assertEqual(dict(colours)[2], ["#000000"])   # the spool's black, not the head's white
+        self.assertEqual(dict(colours)[4], [heads[3]["colour"]])   # spool without a colour: the head's
+
     def test_sync_project_uses_the_spools_linked_user_preset(self):
         meta = {"My PETG": {"is_user": True}, "Not mine": {}, "Other printer": {"is_user": True, "is_compatible": False},
                 "_local/spooler/Acme PLA @U1": {"is_user": True, "bundle_id": "spooler"}}
