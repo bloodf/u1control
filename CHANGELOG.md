@@ -2,15 +2,6 @@
 
 ## [Unreleased]
 
-### Added
-
-- **Apply to project filaments sets the slot colours on an OrcaSlicer that allows it.** OrcaSlicer 2.5 doesn't let a plugin change a filament slot's colour, so the colours were left as they were. When OrcaSlicer has `orca.host.preset.filament.set_slot_color` (proposed in OrcaSlicer/OrcaSlicer#17114), each slot now gets its preset first and then the toolhead's colour, the way picking a colour in the sidebar does. Without it nothing changes: presets are applied and the message still says to set the colours by hand.
-- **A slot's colour comes from its Spoolman spool first.** Apply to project filaments takes the colour of the spool bound to the toolhead, then the RFID tag's, then the one the printer reports, so a head whose colour was never set on the printer (reported as white) still gets its spool's colour, the same spool its Spooler preset was picked for.
-
-### Fixed
-
-- **Filament sync reports PLA finishes as PLA.** SnapSpeed/High Speed, Matte, Silk and Wood keep the base material for OrcaSlicer's compatibility checks, following OrcaSlicer #16300. The original sub-type still chooses the Snapmaker or Generic preset, and a linked Spooler preset keeps its id. CF/GF remain distinct materials, including fibre loadings such as CF10, without repeating a suffix already in the material name.
-
 ### Changed
 
 - **Toolhead cards show the preset by its plain name.** The OrcaSlicer preset block shows only its name, without `Spooler/`, `_local/spooler/` or the `@printer` suffix, and **Change**. The score chip and the reasons line are gone; an automatic pick that was a close call gets one warning icon that says so in words. **Picked by hand** and **Automatic** work as before.
@@ -20,6 +11,21 @@
 ### Removed
 
 - **Open Filament Database.** U1 Control no longer offers Open Filament Database presets on the toolhead cards and no longer asks for access to it; the setting is gone from Settings > Connection. Spooler's **Add spool** is where Open Filament Database lives now. A settings file that still has the old option loads as before, and a preset picked earlier, including one U1 Control installed from the Open Filament Database, keeps resolving offline.
+
+## [0.22.0] - 2026-11-28
+
+### Added
+
+- **Apply to project filaments sets the slot colours on an OrcaSlicer that allows it.** OrcaSlicer 2.5 doesn't let a plugin change a filament slot's colour, so the colours were left as they were. When OrcaSlicer has `orca.host.preset.filament.set_slot_color` (proposed in OrcaSlicer/OrcaSlicer#17114), each slot now gets its preset first and then the toolhead's colour, the way picking a colour in the sidebar does. Without it nothing changes: presets are applied and the message still says to set the colours by hand.
+- **A slot's colour comes from its Spoolman spool first.** Apply to project filaments takes the colour of the spool bound to the toolhead, then the RFID tag's, then the one the printer reports, so a head whose colour was never set on the printer (reported as white) still gets its spool's colour, the same spool its Spooler preset was picked for.
+
+### Fixed
+
+- **A download from the printer can't fill the disk.** **Save** on the Files page stops at 4 GB (a time-lapse is tens of MB): a file the printer announces as bigger is refused before anything is written, and one that streams past the limit is stopped and its `.part` file removed. The message names the file and the limit ("big.mp4 is larger than 4 GB; nothing was saved"). Other printer answers were already capped.
+- **A pasted API key with a line break works and stays one header.** Spaces, tabs, line breaks and other control characters are removed from the printer's API key before use. Before, the plain requests failed on such a key, and the websocket call (emergency stop, camera) wrote the part after the line break as a header of its own.
+- **Filament sync reports PLA finishes as PLA.** SnapSpeed/High Speed, Matte, Silk and Wood keep the base material for OrcaSlicer's compatibility checks, following OrcaSlicer #16300. The original sub-type still chooses the Snapmaker or Generic preset, and a linked Spooler preset keeps its id. CF/GF remain distinct materials, including fibre loadings such as CF10, without repeating a suffix already in the material name.
+
+### Changed
 
 - **Choosing a spool for a toolhead is instant.** The spool list is kept (in memory and in the plugin's storage, `spool_cache.json`): a new tab or a restart shows the last list at once, marked "saved list, updating" until Spoolman answers, then the usual re-read replaces it. Linking a spool no longer reads the whole Spoolman list first when the spool is already in it (a restart used to make the first link wait for that read: 1.0 s became 0.4 s with a simulated slow Spoolman), and the page shows the new link at once, putting the old one back if the printer or Spoolman refuses. Spooler's **Assign** from the Stock tab skips its extra Spoolman read the same way.
 
@@ -32,8 +38,6 @@
 
 ### Fixed
 
-- **A download from the printer can't fill the disk.** **Save** on the Files page stops at 4 GB (a time-lapse is tens of MB): a file the printer announces as bigger is refused before anything is written, and one that streams past the limit is stopped and its `.part` file removed. The message names the file and the limit ("big.mp4 is larger than 4 GB; nothing was saved"). Other printer answers were already capped.
-- **A pasted API key with a line break works and stays one header.** Spaces, tabs, line breaks and other control characters are removed from the printer's API key before use. Before, the plain requests failed on such a key, and the websocket call (emergency stop, camera) wrote the part after the line break as a header of its own.
 - **The spool chooser no longer holds the page with a large Spoolman inventory.** With thousands of spools, opening a toolhead's spool list drew every spool (about a second each time, far longer in OrcaSlicer), and every status refresh rebuilt all four lists even while closed. The list now draws only the spools in view and is rebuilt only when the spools, the search or the head's material change: 2000 spools open in about 30 ms instead of 1 s. Shared UI foundation 5.12.0.
 - **A toolhead's preset match reads the sub-type from its Spoolman spool.** When the printer reports only the material (PETG, with no sub-type or just Basic), the toolhead card and Apply to project filaments now take words such as Matte or Silk from the name of the spool bound to that toolhead: a spool named "Filament Hub PETG Matte White" gets its Matte preset (with "matte" counted as a word of the spool) instead of a plain one. A sub-type the printer or tag reports still wins, and presets picked by hand are remembered under the same keys as before.
 
